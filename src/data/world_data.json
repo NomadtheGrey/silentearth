@@ -1,0 +1,80 @@
+{
+  "items": {
+    "TIMBER": {
+      "id": "TIMBER",
+      "name": "Withered Timber",
+      "description": "Brittle, grey wood that still holds structural integrity.",
+      "category": "wood",
+      "rarity": 0.6,
+      "icon": "sticks"
+    },
+    "MUD": {
+      "id": "MUD",
+      "name": "Damp Mud",
+      "description": "Thick, viscous silt perfect for binding materials.",
+      "category": "earth",
+      "rarity": 0.4,
+      "icon": "mud"
+    },
+    "ROOTS": {
+      "id": "ROOTS",
+      "name": "Fibrous Roots",
+      "description": "Tough, stringy roots that can be used as primitive cordage.",
+      "category": "fiber",
+      "rarity": 0.3,
+      "icon": "roots"
+    },
+    "BONE": {
+      "id": "BONE",
+      "name": "Primal Bone",
+      "description": "Bleached remains found deep within the silt. Exceptionally hard.",
+      "category": "rare",
+      "rarity": 0,
+      "icon": "bone"
+    },
+    "MUSHROOM": {
+      "id": "MUSHROOM",
+      "name": "Fungal Cap",
+      "description": "A fleshy, red cap that tastes of iron and rot.",
+      "category": "food",
+      "rarity": 0.2,
+      "icon": "mushroom"
+    },
+    "STONE": {
+      "id": "STONE",
+      "name": "Chipped Quartz",
+      "description": "Hard-edged stones that can cut through tough roots.",
+      "category": "geology",
+      "rarity": 0.3,
+      "icon": "stone"
+    },
+    "SPORES": {
+      "id": "SPORES",
+      "name": "Luminous Spores",
+      "description": "Microscopic specks of biological potential. They thrum with a faint, green light.",
+      "category": "life",
+      "rarity": 0,
+      "icon": "spores"
+    }
+  },
+  "structures": {
+    "LEAN_TO": {
+      "id": "LEAN_TO",
+      "name": "Primitive Lean-to",
+      "costs": { "TIMBER": 5, "ROOTS": 2 },
+      "description": "A crude shelter of wood and vine. Barely keeps the resonance out."
+    },
+    "WATTLE_HUT": {
+      "id": "WATTLE_HUT",
+      "name": "Wattle-and-Daub Hut",
+      "costs": { "TIMBER": 12, "MUD": 10, "ROOTS": 5 },
+      "description": "A sturdy dome of woven branches plastered with thick river mud."
+    },
+    "MOSS_CRADLE": {
+      "id": "MOSS_CRADLE",
+      "name": "Moss Cradle",
+      "costs": { "SPORES": 3, "MUD": 4 },
+      "description": "A cultivated plot of earth where the overgrowth is encouraged to reclaim the silt."
+    }
+  }
+}
