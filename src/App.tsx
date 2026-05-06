@@ -5,24 +5,20 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { User, Skull, Pickaxe, Map as MapIcon, Hammer, Axe, Trees as Wood, Package, Tent, ChevronRight, Music } from 'lucide-react';
 import { 
   TILE_WIDTH, 
   TILE_HEIGHT, 
-  TileType, 
-  ItemType, 
-  StructureType, 
-  THEME,
-  WORLD_SIZE,
-  INITIAL_RESOURCES
+  TileType
 } from './constants';
 import { WorldTile, WorldItem, Structure, GameState, GridPos, Point, WorldData } from './types';
+import { useAtmosphere } from './hooks/useAtmosphere';
+import { gridToScreen, calculateDepth } from './utils/isoMath';
 import { GrittyFilter, GlobalNoise } from './components/Effects';
 import { IsometricTile } from './components/IsometricTile';
-import { AmbientAudio } from './components/AmbientAudio';
 import { NatureAsset } from './components/NatureAsset';
 import { StructureAsset } from './components/StructureAsset';
 import { CharacterAvatar } from './components/CharacterAvatar';
+import { HUD } from './components/hud';
 import { generateWorld } from './services/worldGenerator';
 import worldDataRaw from './data/world_data.json';
 
@@ -35,7 +31,6 @@ const VIEWPORT_H = 480;
 export default function App() {
   const [zoom, setZoom] = useState(1);
   const [hoveredPos, setHoveredPos] = useState<GridPos | null>(null);
-  const [isObjectivesOpen, setIsObjectivesOpen] = useState(true);
 
   const handleWheel = (e: React.WheelEvent) => {
     setZoom(prev => {
@@ -54,7 +49,7 @@ export default function App() {
   const [audioStarted, setAudioStarted] = useState(false);
   const [statusMessage, setStatusMessage] = useState("The woods are watching. Tread lightly.");
 
-  const audioRef = React.useRef<{ init: () => void }>(null);
+  const { init: initAudio } = useAtmosphere();
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -65,10 +60,8 @@ export default function App() {
 
   const handleTileClick = (q: number, r: number) => {
     if (isAudioEnabled && !audioStarted) {
-      if ((window as any).initGameAudio) {
-        (window as any).initGameAudio();
-        setAudioStarted(true);
-      }
+      initAudio();
+      setAudioStarted(true);
     }
     setSelectedPos({ q, r });
     setGameState(prev => ({ ...prev, playerPos: { q, r } }));
@@ -76,17 +69,17 @@ export default function App() {
     setStatusMessage(`Scrambling through the mud to ${q}, ${r}...`);
   };
 
-  const isPlayerAtSelected = () => {
+  const isPlayerAtSelected = useCallback(() => {
     return selectedPos?.q === gameState.playerPos.q && selectedPos?.r === gameState.playerPos.r;
-  };
+  }, [selectedPos, gameState.playerPos]);
 
-  const isNearWorkstation = (pos: GridPos) => {
+  const isNearWorkstation = useCallback((pos: GridPos) => {
     return gameState.items.some(i => 
       worldData.items[i.type]?.isWorkstation && 
       Math.abs(i.pos.q - pos.q) <= 1 && 
       Math.abs(i.pos.r - pos.r) <= 1
     );
-  };
+  }, [gameState.items]);
 
   const craftHand = (recipeId: string) => {
     const costs: Record<string, number> = recipeId === 'TWINED_CORDAGE' ? { 'TENDER_VINES': 2 } : { 'SNAP_WOOD': 2 };
@@ -252,7 +245,6 @@ export default function App() {
     <div className="relative w-full h-screen bg-[#121612] overflow-hidden font-mono text-[#f0ead6]" onWheel={handleWheel}>
       <GrittyFilter />
       <GlobalNoise />
-      <AmbientAudio resonance={resonance} isEnabled={isAudioEnabled} onInit={() => setAudioStarted(true)} />
       
       {/* Background Ambience */}
       <div className="absolute inset-0 opacity-10 pointer-events-none" style={{ backgroundImage: 'radial-gradient(circle at 50% 50%, #2d3822, transparent)' }}></div>
@@ -265,15 +257,15 @@ export default function App() {
           className="w-full h-full drop-shadow-[0_20px_50px_rgba(0,0,0,0.5)] cursor-default"
           style={{ overflow: 'visible', pointerEvents: 'auto' }}
         >
-          <motion.g 
+            <motion.g 
             id="camera-group"
             animate={{ 
               x: cameraTransform.x, 
               y: cameraTransform.y,
               scale: zoom
             }}
-            transition={{ type: "spring", stiffness: 300, damping: 35, mass: 0.5 }}
-            style={{ filter: 'url(#tile-blend)', transformOrigin: `${VIEWPORT_W/2}px ${VIEWPORT_H/2}px`, pointerEvents: 'auto' }}
+            transition={{ type: "spring", stiffness: 450, damping: 45, mass: 0.5 }}
+            style={{ transformOrigin: `${VIEWPORT_W/2}px ${VIEWPORT_H/2}px`, pointerEvents: 'auto' }}
           >
             {/* Unified Render Pipeline with Depth Sorting */}
             {useMemo(() => {
@@ -288,22 +280,26 @@ export default function App() {
               });
 
               // Pre-render tiles independently first for background stability
-              const tileElements = gameState.tiles.map(tile => (
-                 <IsometricTile 
-                  key={tile.id}
-                  q={tile.pos.q}
-                  r={tile.pos.r}
-                  type={tile.type}
-                  isSelected={selectedPos?.q === tile.pos.q && selectedPos?.r === tile.pos.r}
-                  isHovered={hoveredPos?.q === tile.pos.q && hoveredPos?.r === tile.pos.r}
-                  onClick={() => handleTileClick(tile.pos.q, tile.pos.r)}
-                  onMouseEnter={() => setHoveredPos(tile.pos)}
-                  onMouseLeave={() => setHoveredPos(prev => prev?.q === tile.pos.q && prev?.r === tile.pos.r ? null : prev)}
-                />
-              ));
+              const tileElements = (
+                <g id="tiles-layer" style={{ filter: 'url(#ink-stipple)' }}>
+                  {gameState.tiles.map(tile => (
+                    <IsometricTile 
+                      key={tile.id}
+                      q={tile.pos.q}
+                      r={tile.pos.r}
+                      type={tile.type}
+                      isSelected={selectedPos?.q === tile.pos.q && selectedPos?.r === tile.pos.r}
+                      isHovered={hoveredPos?.q === tile.pos.q && hoveredPos?.r === tile.pos.r}
+                      onClick={() => handleTileClick(tile.pos.q, tile.pos.r)}
+                      onMouseEnter={() => setHoveredPos(tile.pos)}
+                      onMouseLeave={() => setHoveredPos(prev => prev?.q === tile.pos.q && prev?.r === tile.pos.r ? null : prev)}
+                    />
+                  ))}
+                </g>
+              );
 
               // Render occupants (nature, structures, avatar) with depth sorting
-              const occupants = [
+              const occupantList = [
                 ...gameState.tiles.map(tile => ({
                   type: 'nature',
                   id: `nature-${tile.id}`,
@@ -333,42 +329,44 @@ export default function App() {
               return (
                 <>
                   {tileElements}
-                  {occupants.map(occ => {
-                    if (occ.type === 'nature') {
-                      const item = itemsByPos[`${occ.q}-${occ.r}`];
-                      const isHovered = hoveredPos?.q === occ.q && hoveredPos?.r === occ.r;
-                      const isCloseEnough = Math.abs(gameState.playerPos.q - occ.q) <= 1 && Math.abs(gameState.playerPos.r - occ.r) <= 1;
-                      
-                      return (
-                        <NatureAsset 
-                          key={occ.id} 
-                          q={occ.q} 
-                          r={occ.r} 
-                          type={occ.data.type} 
-                          itemType={item?.type}
-                          isHarvestingAllowed={isHovered && isCloseEnough}
-                          onHarvest={() => harvest(item)}
-                          onMouseEnter={() => setHoveredPos(occ.data.pos)}
-                          onMouseLeave={() => setHoveredPos(prev => prev?.q === occ.q && prev?.r === occ.r ? null : prev)}
-                          worldData={worldData}
-                        />
-                      );
-                    }
-                    if (occ.type === 'structure') {
-                       return (
-                        <StructureAsset 
-                          key={occ.id} 
-                          q={occ.q} 
-                          r={occ.r} 
-                          structure={occ.data as Structure} 
-                        />
-                      );
-                    }
-                    return <CharacterAvatar key="avatar" pos={occ.data} />;
-                  })}
+                  <g id="occupants-layer" style={{ filter: 'url(#ink-stipple)' }}>
+                    {occupantList.map(occ => {
+                      if (occ.type === 'nature') {
+                        const item = itemsByPos[`${occ.q}-${occ.r}`];
+                        const isHovered = hoveredPos?.q === occ.q && hoveredPos?.r === occ.r;
+                        const isCloseEnough = Math.abs(gameState.playerPos.q - occ.q) <= 1 && Math.abs(gameState.playerPos.r - occ.r) <= 1;
+                        
+                        return (
+                          <NatureAsset 
+                            key={occ.id} 
+                            q={occ.q} 
+                            r={occ.r} 
+                            type={occ.data.type} 
+                            itemType={item?.type}
+                            isHarvestingAllowed={isHovered && isCloseEnough}
+                            onHarvest={() => harvest(item)}
+                            onMouseEnter={() => setHoveredPos(occ.data.pos)}
+                            onMouseLeave={() => setHoveredPos(prev => prev?.q === occ.q && prev?.r === occ.r ? null : prev)}
+                            worldData={worldData}
+                          />
+                        );
+                      }
+                      if (occ.type === 'structure') {
+                         return (
+                          <StructureAsset 
+                            key={occ.id} 
+                            q={occ.q} 
+                            r={occ.r} 
+                            structure={occ.data as Structure} 
+                          />
+                        );
+                      }
+                      return <CharacterAvatar key="avatar" q={occ.q} r={occ.r} character={occ.data} />;
+                    })}
+                  </g>
                 </>
               );
-            }, [gameState, hoveredPos, selectedPos, zoom])}
+            }, [gameState, hoveredPos, selectedPos, zoom, harvest])}
           </motion.g>
         </svg>
 
@@ -401,11 +399,11 @@ export default function App() {
                   <circle 
                     cx={screenX} 
                     cy={screenY} 
-                    r="320" 
+                    r={resonance * 1.5 + 80}
                     fill="none"
                     stroke="#f0ead6"
-                    strokeWidth="1"
-                    strokeDasharray="2 12"
+                    strokeWidth="0.5"
+                    strokeDasharray="2 4"
                     opacity="0.1"
                   />
                   {/* Warm center glow */}
@@ -431,249 +429,30 @@ export default function App() {
         </div>
       </div>
 
-      {/* UI - Minimal Floating Overlay */}
-      <div className="absolute inset-0 pointer-events-none p-10 z-40 overflow-hidden">
-        {/* TOP ROW: Identity & Observation (Left), Inventory (Center), System (Right) */}
-        <div className="flex justify-between items-start w-full">
-          {/* Identity & Observation */}
-          <div className="pointer-events-auto flex flex-col gap-4 w-[240px]">
-            <div className="bg-[#121212]/95 backdrop-blur-xl p-6 border-l-2 border-[#f0ead6]/30 shadow-2xl">
-              <h1 className="text-2xl font-bold uppercase tracking-[0.3em] text-[#f0ead6] leading-none mb-1">Silent Earth</h1>
-              <p className="text-[8px] uppercase tracking-[0.4em] opacity-40">Protocol: Cycle 04</p>
-              
-              {/* Reserved slot for Observation to prevent jumping */}
-              <div className="h-16 mt-4 pt-4 border-t border-[#f0ead6]/10 flex flex-col justify-start">
-                <AnimatePresence mode="wait">
-                  {hoveredInfo ? (
-                    <motion.div 
-                      key="observation"
-                      initial={{ opacity: 0, x: -5 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      exit={{ opacity: 0, x: -5 }}
-                    >
-                      <p className="text-[7px] uppercase tracking-widest opacity-40 font-bold mb-1">Observation</p>
-                      <p className="text-[10px] font-black uppercase text-[#f0ead6] truncate">
-                         {hoveredInfo.item ? worldData.items[hoveredInfo.item.type]?.name : worldData.tiles[hoveredInfo.tile?.type || '']?.name || 'Unknown'}
-                      </p>
-                      <p className="text-[7px] opacity-40 mt-1 uppercase font-bold">
-                         Sector {hoveredPos?.q}, {hoveredPos?.r}
-                      </p>
-                    </motion.div>
-                  ) : (
-                    <motion.p 
-                      key="no-obs"
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 0.2 }}
-                      className="text-[7px] uppercase tracking-[0.2em] italic self-center mt-2"
-                    >
-                      Scanning Terrain...
-                    </motion.p>
-                  )}
-                </AnimatePresence>
-              </div>
-            </div>
-
-            {/* Field Guide - Stable positioning below fixed Observation slot */}
-            <div className="bg-[#121212]/90 backdrop-blur-md p-5 border border-[#f0ead6]/05 border-l-2 border-[#f0ead6]/20">
-              <p className="text-[7px] uppercase tracking-widest opacity-30 font-bold mb-3">Field Guide: Terrain Classifications</p>
-              <div className="grid grid-cols-1 gap-3">
-                {Object.entries(worldData.tiles).map(([id, tile]) => (
-                  <div key={id} className="flex items-center gap-3">
-                    <div className="w-2.5 h-2.5 border border-white/10" style={{ backgroundColor: tile.color }} />
-                    <div className="flex flex-col">
-                      <span className="text-[8px] font-black uppercase leading-none text-[#f0ead6]/80">{tile.name}</span>
-                      <span className="text-[6px] uppercase opacity-40 mt-0.5">{tile.description}</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {/* Center: Inventory Panel */}
-          <div className="pointer-events-auto flex flex-col items-center pt-2">
-            <div className="bg-[#121212]/95 backdrop-blur-xl px-1 py-1 border border-[#f0ead6]/10 flex items-center shadow-2xl">
-               <div className="flex bg-[#121212] border border-[#f0ead6]/05 p-3 gap-6 shadow-inner">
-                  {Object.entries(gameState.inventory).filter(([_, amt]) => (amt as number) > 0).length === 0 && (
-                    <span className="text-[7px] uppercase tracking-[0.3em] opacity-20 px-10 py-1 font-bold">Cargo Hold Empty</span>
-                  )}
-                  {Object.entries(gameState.inventory).map(([id, amt]) => {
-                    if (amt === 0) return null;
-                    const item = worldData.items[id];
-                    return (
-                      <div key={id} className="flex flex-col items-center min-w-[50px] border-r last:border-0 border-[#f0ead6]/05 px-4 last:pr-2 first:pl-2">
-                        <span className="text-[10px] font-black text-[#f0ead6]">{amt}</span>
-                        <span className="text-[6px] opacity-30 uppercase tracking-widest mt-1 font-bold">{item?.name || id}</span>
-                      </div>
-                    );
-                  })}
-               </div>
-            </div>
-          </div>
-
-          {/* System Control & Current Ops (Right) */}
-          <div className="pointer-events-auto flex flex-col items-end gap-4 w-[240px]">
-             {/* Protocols / Objectives - Moved here to prevent overlap */}
-             <div className="bg-[#121212]/95 backdrop-blur-xl p-5 border-r-2 border-[#f0ead6]/30 shadow-2xl w-full">
-                <h3 className="text-[9px] font-black text-[#f0ead6] mb-3 uppercase tracking-widest flex items-center justify-end gap-2">
-                   Current Ops <Package size={10} className="text-[#6a1a1a]" />
-                </h3>
-                <ul className="text-[8px] space-y-2 opacity-50 uppercase tracking-tighter text-right">
-                   <li>Harvest heavy oak & vines for refined structures</li>
-                   <li>Locate an Old Stump for stable construction</li>
-                </ul>
-             </div>
-
-             <div className="bg-[#121212]/95 backdrop-blur-xl p-4 border-r-2 border-[#6a1a1a]/50 shadow-2xl flex flex-col items-end w-full">
-                <div className="flex justify-between w-full items-center mb-2">
-                  <span className="text-[8px] uppercase text-[#6a1a1a] font-black tracking-[0.1em]">Signal Resonance</span>
-                  <span className="text-[11px] font-black text-[#f0ead6]">{Math.round(resonance)}%</span>
-                </div>
-                <div className="w-full h-1 bg-[#121212] border border-[#f0ead6]/10 overflow-hidden">
-                  <motion.div 
-                    className="h-full bg-gradient-to-r from-transparent to-[#6a1a1a]"
-                    animate={{ width: `${resonance}%`, opacity: [0.3, 0.8, 0.3] }}
-                    transition={{ opacity: { duration: 2, repeat: Infinity } }}
-                  />
-                </div>
-                <div className="mt-3 flex gap-2 w-full">
-                  <button 
-                    onClick={() => {
-                      if (!audioStarted && (window as any).initGameAudio) {
-                        (window as any).initGameAudio();
-                        setAudioStarted(true);
-                      }
-                      setIsAudioEnabled(!isAudioEnabled);
-                    }}
-                    className={`flex-1 py-1.5 text-[8px] uppercase font-black tracking-[0.1em] flex items-center justify-center gap-2 border transition-all ${
-                      isAudioEnabled ? "bg-[#f0ead6] text-[#121212] border-[#f0ead6]" : "bg-[#121212]/80 text-[#f0ead6]/40 border-[#f0ead6]/10"
-                    }`}
-                  >
-                    <Music size={10} /> {isAudioEnabled ? "Audio ON" : "Audio OFF"}
-                  </button>
-                  <div className="bg-[#f0ead6]/05 border border-[#f0ead6]/10 px-2 py-1 flex items-center justify-center">
-                    <span className="text-[6px] uppercase opacity-30 font-bold">x{Math.floor(zoom * 10) / 10}</span>
-                  </div>
-                </div>
-             </div>
-          </div>
-        </div>
-
-        <div className="absolute bottom-10 left-10 right-10 flex justify-between items-end">
-          {/* Controls & Intent */}
-          <div className="flex flex-col gap-4 w-[280px]">
-             {/* Manual */}
-             <div className="bg-[#121212]/40 backdrop-blur-sm p-4 border border-[#f0ead6]/05 pointer-events-auto">
-                <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[7px] uppercase opacity-40 font-bold">
-                   <span>[L-Click]</span> <span className="text-right">Move</span>
-                   <span>[H-Key]</span> <span className="text-right">Harvest</span>
-                   <span>[Wheel]</span> <span className="text-right">Zoom</span>
-                </div>
-             </div>
-          </div>
-
-          {/* Cinematic Comms Feed - Centered Overlay */}
-          <div className="absolute left-1/2 -translate-x-1/2 bottom-0 mb-8 pointer-events-none w-full max-w-xl text-center">
-             <AnimatePresence mode="wait">
-                <motion.p 
-                  key={statusMessage}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 0.8, y: 0 }}
-                  exit={{ opacity: 0, y: -10 }}
-                  className="text-[12px] text-[#f0ead6] font-medium leading-relaxed italic tracking-wide"
-                  style={{ textShadow: '0 2px 10px rgba(0,0,0,0.8)' }}
-                >
-                  "{statusMessage}"
-                </motion.p>
-             </AnimatePresence>
-          </div>
-
-          {/* Action Context Menu */}
-          <div className="w-[320px]">
-            {selectedPos && (
-              <motion.div 
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="pointer-events-auto bg-[#121212]/95 backdrop-blur-xl border border-[#f0ead6]/10 p-6 shadow-2xl relative"
-              >
-                <div className="absolute top-0 left-0 w-full h-[1px] bg-gradient-to-r from-transparent via-[#f0ead6]/20 to-transparent" />
-                
-                <div className="flex items-center justify-between mb-5">
-                  <div className="flex flex-col">
-                    <span className="text-[7px] uppercase font-bold opacity-30">Coordinate</span>
-                    <span className="text-xs font-black text-[#f0ead6]">{selectedPos.q} : {selectedPos.r}</span>
-                  </div>
-                  {isPlayerAtSelected() ? (
-                    <div className="flex items-center gap-2 px-2 py-1 bg-[#6a1a1a]/20 border border-[#6a1a1a]/40">
-                      <div className="w-1.5 h-1.5 bg-[#6a1a1a] animate-pulse" />
-                      <span className="text-[8px] font-black text-[#6a1a1a] uppercase">Stationed</span>
-                    </div>
-                  ) : (
-                    <span className="text-[8px] opacity-40 italic tracking-widest uppercase animate-pulse">Relocating...</span>
-                  )}
-                </div>
-                
-                <div className="flex flex-col gap-3">
-                  {/* Quick Refine */}
-                  <div className="grid grid-cols-2 gap-2 pb-3 border-b border-[#f0ead6]/05">
-                    <button 
-                      onClick={() => craftHand('TWINED_CORDAGE')}
-                      disabled={!isPlayerAtSelected() || (gameState.inventory['TENDER_VINES'] || 0) < 2}
-                      className="group flex flex-col items-center border border-[#f0ead6]/10 bg-[#f0ead6]/05 p-2 hover:bg-[#f0ead6]/10 disabled:opacity-20 transition-all"
-                    >
-                      <span className="text-[8px] font-black uppercase text-[#f0ead6]">Twine Cord</span>
-                      <span className="text-[6px] opacity-30 mt-1 uppercase">2x Vines</span>
-                    </button>
-                    <button 
-                      onClick={() => craftHand('DRY_KINDLING')}
-                      disabled={!isPlayerAtSelected() || (gameState.inventory['SNAP_WOOD'] || 0) < 2}
-                      className="group flex flex-col items-center border border-[#f0ead6]/10 bg-[#f0ead6]/05 p-2 hover:bg-[#f0ead6]/10 disabled:opacity-20 transition-all"
-                    >
-                      <span className="text-[8px] font-black uppercase text-[#f0ead6]">Refine Wood</span>
-                      <span className="text-[6px] opacity-30 mt-1 uppercase">2x Snap</span>
-                    </button>
-                  </div>
-
-                  {/* Structural Build */}
-                  <div className="flex flex-col gap-2 max-h-[220px] overflow-y-auto pr-2 custom-scrollbar">
-                    {Object.values(worldData.structures).map(struct => {
-                       const isCreekTile = gameState.tiles.find(t => t.pos.q === selectedPos.q && t.pos.r === selectedPos.r)?.type === TileType.SHALLOW_CREEK;
-                       const needsStump = struct.requiresWorkstation && !isNearWorkstation(selectedPos);
-                       const isBlocked = isCreekTile || needsStump;
-
-                       return (
-                        <button 
-                          key={struct.id}
-                          disabled={!isPlayerAtSelected() || isBlocked}
-                          onClick={() => build(struct.id)}
-                          className="flex flex-col items-start border border-[#f0ead6]/20 bg-transparent px-4 py-3 hover:bg-[#f0ead6]/05 active:bg-[#f0ead6]/10 disabled:opacity-20 transition-all group"
-                        >
-                          <div className="flex items-center gap-3 w-full">
-                            <Hammer size={12} className="opacity-40 group-hover:opacity-100" />
-                            <span className="text-[10px] font-black uppercase tracking-wider">{struct.name}</span>
-                            {isBlocked && (
-                               <span className="ml-auto text-[7px] text-[#6a1a1a] font-bold uppercase">
-                                 {isCreekTile ? "Waterlogged" : "Need Stump"}
-                               </span>
-                            )}
-                          </div>
-                          <div className="text-[7px] uppercase mt-2 font-bold flex gap-2 flex-wrap">
-                            {Object.entries(struct.costs).map(([rid, amt]) => (
-                               <span key={rid} className={`flex items-center gap-1 ${(gameState.inventory[rid] || 0) >= amt ? "text-[#f0ead6]/40" : "text-[#6a1a1a]"}`}>
-                                 {amt} {worldData.items[rid]?.name || rid}
-                               </span>
-                            ))}
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              </motion.div>
-            )}
-          </div>
-        </div>
-      </div>
+      {/* UI - Minimal Floating Overlay - MOVED TO HUD */}
+      <HUD 
+        gameState={gameState}
+        worldData={worldData}
+        hoveredPos={hoveredPos}
+        hoveredInfo={hoveredInfo}
+        selectedPos={selectedPos}
+        statusMessage={statusMessage}
+        resonance={resonance}
+        zoom={zoom}
+        isAudioEnabled={isAudioEnabled}
+        audioStarted={audioStarted}
+        onAudioToggle={() => {
+          if (!audioStarted) {
+            initAudio();
+            setAudioStarted(true);
+          }
+          setIsAudioEnabled(!isAudioEnabled);
+        }}
+        onCraft={craftHand}
+        onBuild={build}
+        isPlayerAtSelected={isPlayerAtSelected()}
+        isNearWorkstation={isNearWorkstation}
+      />
     </div>
   );
 }

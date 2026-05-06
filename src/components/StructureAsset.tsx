@@ -6,6 +6,7 @@
 import React from 'react';
 import { TILE_WIDTH, TILE_HEIGHT, THEME } from '../constants';
 import { Structure } from '../types';
+import { gridToScreen } from '../utils/isoMath';
 
 interface StructureAssetProps {
   q: number;
@@ -14,19 +15,23 @@ interface StructureAssetProps {
 }
 
 export const StructureAsset: React.FC<StructureAssetProps> = ({ q, r, structure: s }) => {
-  const x = (q - r) * (TILE_WIDTH / 2);
-  const y = (q + r) * (TILE_HEIGHT / 2);
+  const { x, y } = gridToScreen(q, r);
 
   return (
-    <g transform={`translate(${x + TILE_WIDTH/4}, ${y - TILE_HEIGHT/2})`} style={{ filter: 'url(#ink-stipple)' }}>
+    <g transform={`translate(${x + TILE_WIDTH/4}, ${y - TILE_HEIGHT/2})`}>
+       {/* Structure Shadow */}
+       <ellipse cx="16" cy="35" rx="12" ry="4" fill="black" opacity="0.2" style={{ filter: 'blur(4px)' }} />
+
        {s.type === 'LEAN_TO' ? (
          <g opacity="0.9">
+           <path d="M 0,32 L 16,0 L 32,32 Z" fill="url(#stipple-pattern)" opacity="0.2" />
            <path d="M 0,32 L 16,0 L 32,32" fill="none" stroke={THEME.colors.ink} strokeWidth="3" />
            <path d="M 4,32 L 16,8 L 28,32" fill="none" stroke={THEME.colors.nicotine} strokeWidth="1" opacity="0.4" />
          </g>
        ) : s.type === 'WATTLE_HUT' ? (
          <g opacity="1">
            <path d="M 0,32 Q 0,0 16,0 Q 32,0 32,32 Z" fill={THEME.colors.mud} stroke={THEME.colors.ink} strokeWidth="2" />
+           <path d="M 0,32 Q 0,0 16,0 Q 32,0 32,32 Z" fill="url(#stipple-pattern)" opacity="0.3" style={{ mixBlendMode: 'multiply' }} />
            <path d="M 6,32 Q 6,10 16,10 Q 26,10 26,32" fill="none" stroke={THEME.colors.ink} strokeWidth="0.5" opacity="0.3" />
            <rect x="12" y="22" width="8" height="10" fill={THEME.colors.coal} />
          </g>

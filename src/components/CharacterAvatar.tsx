@@ -8,21 +8,24 @@ import { motion } from 'motion/react';
 import { GridPos } from '../types';
 import { TILE_WIDTH, TILE_HEIGHT, THEME } from '../constants';
 
+import { gridToScreen } from '../utils/isoMath';
+
 interface CharacterAvatarProps {
-  pos: GridPos;
+  q: number;
+  r: number;
+  character: GridPos;
 }
 
-export const CharacterAvatar: React.FC<CharacterAvatarProps> = ({ pos }) => {
-  const x = (pos.q - pos.r) * (TILE_WIDTH / 2);
-  const y = (pos.q + pos.r) * (TILE_HEIGHT / 2);
+export const CharacterAvatar: React.FC<CharacterAvatarProps> = ({ q, r }) => {
+  const { x, y } = gridToScreen(q, r);
 
   return (
     <motion.g 
       animate={{ x, y }}
-      transition={{ type: "spring", stiffness: 120, damping: 20 }}
+      transition={{ type: "spring", stiffness: 600, damping: 45 }}
       className="pointer-events-none"
     >
-      <g transform={`translate(${TILE_WIDTH / 2 - 10}, ${-36})`} style={{ filter: 'url(#ink-stipple)' }}>
+      <g transform={`translate(${TILE_WIDTH / 2 - 10}, ${-36})`}>
         {/* Soft shadow */}
         <ellipse cx="10" cy="38" rx="8" ry="2.5" fill="rgba(0,0,0,0.4)" />
         

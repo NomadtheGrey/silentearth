@@ -1,35 +1,18 @@
-# Silent Earth: World Design Worksheet
+# WORLD_GUIDE.md: THE VISION OF SILENT EARTH
 
-This document serves as the shared direction for the "Silent Earth" project. It tracks design philosophy, world mechanics, and terminology to ensure consistency.
+## THE MOOD: "THE WOODS ARE WATCHING"
+Silent Earth is not a survival game; it is a ritual. The atmosphere should feel heavy, ancient, and indifferent to the player's presence. There is no bright sun here, only the filtered, sickly light through a canopy that has seen too many cycles.
 
-## 1. Aesthetic Philosophy: "The Whispering Wilds"
-*   **Temperate & Overgrown:** A focus on deep greens, muted earth tones, and the dappled light of a dense forest canopy.
-*   **Tactile Sound:** The sound of snapping dry wood, the squelch of mossy mud, and the rush of distant water.
-*   **Brutalist UI:** Sharp edges, mono fonts, and high-density information arrays, contrasting with the chaotic organic nature of the forest.
+## THE AESTHETIC: 1970s OCCULT HORROR
+Inspired by low-budget folk horror and ink-on-paper illustrations.
+- **Palette**: Coal, Bone, Mud, and Dried Blood. High contrast, low saturation.
+- **Texture**: Gritty, grainy, and "stippled." Everything should look like it was drawn with a dying technical pen on parchment.
+- **Relief**: Elements should feel carved or raised (the "Bone Relief" effect), giving the world a tactile, etched quality.
 
-## 2. Terminology & Taxonomy
-*   **The Silent Wilds:** A temperate, high-humidity forest characterized by its lack of large-scale animal noise and its dense, moss-heavy floor.
-*   **Terrain Classifications (Tiles):**
-    *   **Dense Thicket:** Standard forest floor with high brush density. Source of kindling and fiber.
-    *   **Damp Hollow:** Wet, low-lying basins where organic matter collects. High yield for Moss and Peat.
-    *   **Tangled Deepwood:** The oldest parts of the forest. Massive, gnarled roots and heavy Oak.
-    *   **Shallow Creek:** Thick, winding waterways. Primary source of Silt, Stone, and Bone fragments.
-    *   **Mineral Crust:** Dry, chalky shelves of salt and bone-dust. High resonance.
-*   **The Resonance:** The ambient "spirit" or atmospheric pressure of the wilds. High resonance correlates with denser fog and heightened sensory feedback.
+## THE MECHANICS OF ATMOSPHERE
+- **Resonance**: The air itself vibrates. As the player gathers materials or builds markers, the "Resonance" increases, manifesting as visual tremors and deepening audio drones.
+- **Procedural Wind**: A constant, brown-noise gale that never truly stops. It is the breath of the Earth.
+- **The Flora**: Heavy Oaks that look like twisted limbs. Vines like strangling cords. Stumps that act as altars for "Workstations."
 
-## 3. Core Mechanics
-*   **Procedural Generation (Simplex Architecture):** The Silent Wilds is generated using multi-layered Simplex Noise. This provides smooth, continuous terrain flow while maintaining the "patchy" untamed look.
-*   **Whittaker-Inspired Biomes:** Tiles are assigned based on intersecting noise values (Moisture vs Elevation).
-*   **Warped & Eroded Waterways (Option #1):** Creeks are no longer simple mathematical lines. They use **Domain Warping** (shifting noise space with other noise) to create organic, irregular paths and avoid parallel artifacts.
-*   **Topographical Flow:** Water placement is biased byElevation; creeks naturally gravitate towards valleys (low-noise zones) and thin out in the "uplands."
-*   **Mineral "Salt" Layer:** New tile type appearing at moisture-boundary intersections where rugged terrain occurs.
-*   **Tool Gating:** Refining materials requires a **Garden Trowel** (for silt/clay) or a **Hand-Axe** (for heavy timbers).
-*   **Resonant Harvesting:** Certain items (Oak, Vines) require multiple steps (Tug, Stomp) to harvest.
-*   **Structural Anchoring:** Larger builds (Cottages) require proximity to an **Old Stump** (Workstation).
-
-## 4. Planned Expansions & Vision Discussions
-*   **[ ] Fog of War:** Discussing how visibility should be restricted in dense brush.
-*   **[ ] Dynamic Weather:** Implementing "Grey Rain" or "Thick Fog".
-*   **[ ] Passive Wildlife:** Small forest creatures (Lichen-Crabs, Silt-Hoppers).
-*   **[ ] Discovery Sites:** Ancient Monoliths and Sunken Altars.
-*   **[ ] Advanced Fluids:** Adding ripple effects and flow direction to the Shallow Creeks.
+## THE PLAYER'S ROLE
+A lone observer—or perhaps a technician of the occult—mapping sector by sector, gathering "Snap Wood" and "Tender Vines" to construct structures that might, eventually, signal a way out (or a way deeper in).

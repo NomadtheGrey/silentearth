@@ -4,8 +4,9 @@
  */
 
 import React from 'react';
-import { TileType, ItemType, TILE_WIDTH, TILE_HEIGHT, THEME } from '../constants';
+import { TileType, TILE_WIDTH, TILE_HEIGHT, THEME } from '../constants';
 import { WorldData } from '../types';
+import { gridToScreen } from '../utils/isoMath';
 
 interface NatureAssetProps {
   q: number;
@@ -30,8 +31,9 @@ export const NatureAsset: React.FC<NatureAssetProps> = ({
   const detailNoise = (Math.sin(q * 1.5 + 3.4) * Math.cos(r * 1.5 + 4.5) + 1) / 2;
   const seed = (q * 17 + r * 23) % 100;
   
-  const x = (q - r) * (TILE_WIDTH / 2) + TILE_WIDTH / 2;
-  const y = (q + r) * (TILE_HEIGHT / 2) + TILE_HEIGHT / 2;
+  const { x: baseX, y: baseY } = gridToScreen(q, r);
+  const x = baseX + TILE_WIDTH / 2;
+  const y = baseY + TILE_HEIGHT / 2;
   
   const variant = seed % 3;
   
@@ -53,7 +55,6 @@ export const NatureAsset: React.FC<NatureAssetProps> = ({
   return (
     <g 
       transform={`translate(${x}, ${y})`} 
-      style={{ filter: 'url(#ink-stipple)' }} 
       className={itemType ? "pointer-events-auto cursor-pointer" : "pointer-events-none"}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
@@ -79,7 +80,7 @@ export const NatureAsset: React.FC<NatureAssetProps> = ({
                 <g>
                   <path d="M 0,35 L 0,0 M 0,0 L -8,-15 M 0,0 L 8,-15" fill="none" stroke={itemType === 'DOWNED_OAK' ? THEME.colors.coal : THEME.colors.ink} strokeWidth={itemType === 'DOWNED_OAK' ? "3.5" : "2"} />
                   {/* Live Foliage */}
-                  <circle cx="0" cy="-10" r="14" fill={THEME.colors.moss} opacity="0.6" style={{ filter: 'url(#ink-stipple)' }} />
+                  <circle cx="0" cy="-10" r="14" fill={THEME.colors.moss} opacity="0.6" />
                   <circle cx="-10" cy="-5" r="10" fill={THEME.colors.moss} opacity="0.4" />
                   <circle cx="10" cy="-5" r="10" fill={THEME.colors.moss} opacity="0.4" />
                   <path d="M -5,10 Q 0,0 5,10" fill="none" stroke={THEME.colors.moss} strokeWidth="4" opacity="0.4" />
@@ -171,7 +172,7 @@ export const NatureAsset: React.FC<NatureAssetProps> = ({
       {/* Manual Harvest UI Logic */}
       {itemType && isHarvestingAllowed && (
         <g transform="translate(-22, -45)" style={{ pointerEvents: 'none' }}>
-          <rect width="44" height="14" fill={THEME.colors.bone} stroke={THEME.colors.ink} rx="1" style={{ filter: 'url(#rough-edge)' }} />
+          <rect width="44" height="14" fill={THEME.colors.bone} stroke={THEME.colors.ink} rx="1" />
           <text x="22" y="10" textAnchor="middle" fill={THEME.colors.ink} fontSize="7" fontWeight="900">
             {worldData.items[itemType]?.harvestAction ? `${worldData.items[itemType].harvestAction} [H]` : 'HARVEST [H]'}
           </text>
