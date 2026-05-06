@@ -1,28 +1,41 @@
 {
   "items": {
-    "TIMBER": {
-      "id": "TIMBER",
-      "name": "Withered Timber",
-      "description": "Brittle, grey wood that still holds structural integrity.",
+    "SNAP_WOOD": {
+      "id": "SNAP_WOOD",
+      "name": "Snap-Wood",
+      "description": "Brittle framing and kindling found throughout the silt.",
       "category": "wood",
       "rarity": 0.6,
-      "icon": "sticks"
+      "icon": "sticks",
+      "secondaryDrops": [
+        { "type": "SPORES", "chance": 0.25, "message": "A cloud of luminescent spores clings to your sleeves. Potency gathered." }
+      ]
     },
-    "MUD": {
-      "id": "MUD",
-      "name": "Damp Mud",
-      "description": "Thick, viscous silt perfect for binding materials.",
-      "category": "earth",
+    "RIVER_SLUDGE": {
+      "id": "RIVER_SLUDGE",
+      "name": "River Silt",
+      "description": "Fine mineral particles gathered from the creek bed. Useful as a binder.",
+      "category": "minerals",
       "rarity": 0.4,
-      "icon": "mud"
+      "icon": "vial",
+      "secondaryDrops": [
+        { "type": "BONE", "chance": 0.15, "message": "Your fingers brush against a calcified fragment in the silt." }
+      ]
     },
-    "ROOTS": {
-      "id": "ROOTS",
-      "name": "Fibrous Roots",
-      "description": "Tough, stringy roots that can be used as primitive cordage.",
+    "TENDER_VINES": {
+      "id": "TENDER_VINES",
+      "name": "Tender-Vines",
+      "description": "Primary binding and lashing for all structural work.",
       "category": "fiber",
       "rarity": 0.3,
-      "icon": "roots"
+      "icon": "roots",
+      "harvestAction": "TUG",
+      "harvestStep": 0.5,
+      "struggleMessage": "You tug against the stubborn fibers... They groan but hold.",
+      "successMessage": "The vines finally snap free.",
+      "secondaryDrops": [
+        { "type": "SPORES", "chance": 0.25, "message": "A cloud of luminescent spores clings to your sleeves. Potency gathered." }
+      ]
     },
     "BONE": {
       "id": "BONE",
@@ -32,21 +45,54 @@
       "rarity": 0,
       "icon": "bone"
     },
-    "MUSHROOM": {
-      "id": "MUSHROOM",
-      "name": "Fungal Cap",
-      "description": "A fleshy, red cap that tastes of iron and rot.",
-      "category": "food",
+    "PEAT_MOSS": {
+      "id": "PEAT_MOSS",
+      "name": "Peat Moss",
+      "description": "Spongy insulation and flooring that drinks up dampness.",
+      "category": "insulation",
       "rarity": 0.2,
-      "icon": "mushroom"
+      "icon": "mushroom",
+      "secondaryDrops": [
+        { "type": "SPORES", "chance": 0.25, "message": "A cloud of luminescent spores clings to your sleeves. Potency gathered." }
+      ]
     },
-    "STONE": {
-      "id": "STONE",
-      "name": "Chipped Quartz",
-      "description": "Hard-edged stones that can cut through tough roots.",
+    "RIVER_STONE": {
+      "id": "RIVER_STONE",
+      "name": "River Stone",
+      "description": "Smooth basalt shaped by moving water. Useful for grinding or weighing.",
       "category": "geology",
       "rarity": 0.3,
-      "icon": "stone"
+      "icon": "stone",
+      "secondaryDrops": [
+        { "type": "BONE", "chance": 0.05, "message": "A calcified fragment is embedded in the stone." }
+      ]
+    },
+    "SALT_CRYSTAL": {
+      "id": "SALT_CRYSTAL",
+      "name": "Silt-Salt",
+      "description": "Sharp, grey mineral deposits found where moisture has evaporated. High potency.",
+      "category": "minerals",
+      "rarity": 0.2,
+      "icon": "vial",
+      "secondaryDrops": [
+        { "type": "SPORES", "chance": 0.4, "message": "The crystals hum as they crumble, releasing dense spores." }
+      ]
+    },
+    "DOWNED_OAK": {
+      "id": "DOWNED_OAK",
+      "name": "Downed Oak",
+      "description": "Heavy structural logs that form the skeleton of true shelters. Hard to process.",
+      "category": "heavy_wood",
+      "rarity": 0.1,
+      "icon": "sticks",
+      "harvestAction": "STOMP",
+      "harvestStep": 0.34,
+      "struggleMessage": "Stomping down on the heavy oak. Your legs ache as the wood splinters slowly.",
+      "successMessage": "The heavy log yields a structural piece.",
+      "secondaryDrops": [
+        { "type": "SPORES", "chance": 0.25, "message": "A cloud of luminescent spores clings to your sleeves." },
+        { "type": "DRY_KINDLING", "chance": 0.2, "message": "You recover some dry splinters from the core." }
+      ]
     },
     "SPORES": {
       "id": "SPORES",
@@ -55,26 +101,103 @@
       "category": "life",
       "rarity": 0,
       "icon": "spores"
+    },
+    "STUMP": {
+      "id": "STUMP",
+      "name": "Old Stump",
+      "description": "A solid, ancient anchor in the earth. Serves as a reliable workstation.",
+      "category": "utility",
+      "rarity": 0.04,
+      "icon": "sticks",
+      "isWorkstation": true,
+      "successMessage": "The Old Stump is solid as a boulder. It will serve as a stable workstation."
+    },
+    "TWINED_CORDAGE": {
+      "id": "TWINED_CORDAGE",
+      "name": "Twined Cordage",
+      "description": "Hand-woven fibers, essential for complex bindings.",
+      "category": "refined",
+      "rarity": 0,
+      "icon": "roots"
+    },
+    "DRY_KINDLING": {
+      "id": "DRY_KINDLING",
+      "name": "Dry Kindling",
+      "description": "Small, dry splinters of snap-wood used to start fire or as precise shims.",
+      "category": "refined",
+      "rarity": 0,
+      "icon": "sticks"
     }
   },
   "structures": {
     "LEAN_TO": {
       "id": "LEAN_TO",
       "name": "Primitive Lean-to",
-      "costs": { "TIMBER": 5, "ROOTS": 2 },
-      "description": "A crude shelter of wood and vine. Barely keeps the resonance out."
+      "costs": { "SNAP_WOOD": 8, "TENDER_VINES": 3 },
+      "description": "A crude shelter of snap-wood and vine. Barely keeps the resonance out."
     },
     "WATTLE_HUT": {
       "id": "WATTLE_HUT",
       "name": "Wattle-and-Daub Hut",
-      "costs": { "TIMBER": 12, "MUD": 10, "ROOTS": 5 },
-      "description": "A sturdy dome of woven branches plastered with thick river mud."
+      "costs": { "DOWNED_OAK": 4, "RIVER_SLUDGE": 12, "TENDER_VINES": 8 },
+      "description": "A sturdy dome of oak-frame and vine, plastered with thick river silt."
     },
     "MOSS_CRADLE": {
       "id": "MOSS_CRADLE",
       "name": "Moss Cradle",
-      "costs": { "SPORES": 3, "MUD": 4 },
-      "description": "A cultivated plot of earth where the overgrowth is encouraged to reclaim the silt."
+      "costs": { "SPORES": 3, "RIVER_SLUDGE": 4, "PEAT_MOSS": 6 },
+      "description": "A cultivated plot where moss and spores reclaim the silt."
+    },
+    "WOVEN_COTTAGE": {
+      "id": "WOVEN_COTTAGE",
+      "name": "Woven Cottage",
+      "costs": { "DOWNED_OAK": 10, "TWINED_CORDAGE": 6, "PEAT_MOSS": 15, "RIVER_STONE": 4 },
+      "description": "A refined home using stable oak and heavy cordage. Requires workstation stability.",
+      "requiresWorkstation": true
+    },
+    "GARDEN_TROWEL": {
+      "id": "GARDEN_TROWEL",
+      "name": "Garden Trowel",
+      "costs": { "SNAP_WOOD": 4, "TWINED_CORDAGE": 2, "RIVER_STONE": 2 },
+      "description": "A crude digging tool. Required for deep extraction from mud and silt.",
+      "requiresWorkstation": true
+    }
+  },
+  "tiles": {
+    "dense_thicket": {
+      "id": "dense_thicket",
+      "name": "Dense Thicket",
+      "description": "Low-lying brush and saplings. Yields Kindling and Fiber.",
+      "color": "#2a3d2a",
+      "spawnRates": { "SNAP_WOOD": 0.6, "TENDER_VINES": 0.2, "PEAT_MOSS": 0.2 }
+    },
+    "damp_hollow": {
+      "id": "damp_hollow",
+      "name": "Damp Hollow",
+      "description": "A wet basin where water collects in the silt. Yields Moss and Clay.",
+      "color": "#232b1c",
+      "spawnRates": { "PEAT_MOSS": 0.6, "RIVER_SLUDGE": 0.3, "RIVER_STONE": 0.1 }
+    },
+    "tangled_deepwood": {
+      "id": "tangled_deepwood",
+      "name": "Tangled Deepwood",
+      "description": "The oldest, densest part of the forest. Heavy with Oak and Brambles.",
+      "color": "#20291a",
+      "spawnRates": { "TENDER_VINES": 0.5, "DOWNED_OAK": 0.4, "SNAP_WOOD": 0.1 }
+    },
+    "shallow_creek": {
+      "id": "shallow_creek",
+      "name": "Shallow Creek",
+      "description": "A fast-moving waterway. Source of stones and silt.",
+      "color": "#1a2626",
+      "spawnRates": { "RIVER_STONE": 0.5, "RIVER_SLUDGE": 0.4, "BONE": 0.1 }
+    },
+    "mineral_crust": {
+      "id": "mineral_crust",
+      "name": "Mineral Crust",
+      "description": "A dry, chalky shelf of salt and bone-fragments. Very high resonance.",
+      "color": "#4a4a42",
+      "spawnRates": { "SALT_CRYSTAL": 0.7, "BONE": 0.2, "RIVER_STONE": 0.1 }
     }
   }
 }

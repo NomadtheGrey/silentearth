@@ -35,6 +35,12 @@ export interface Structure {
   progress: number; // 0 to 1
 }
 
+export interface SecondaryDrop {
+  type: string;
+  chance: number;
+  message: string;
+}
+
 export interface ItemDef {
   id: string;
   name: string;
@@ -42,6 +48,20 @@ export interface ItemDef {
   category: string;
   rarity: number;
   icon?: string;
+  isWorkstation?: boolean;
+  harvestAction?: string;
+  harvestStep?: number;
+  struggleMessage?: string;
+  successMessage?: string;
+  secondaryDrops?: SecondaryDrop[];
+}
+
+export interface TileDef {
+  id: string;
+  name: string;
+  description: string;
+  color: string;
+  spawnRates: Record<string, number>; // ItemType -> Weight
 }
 
 export interface StructureDef {
@@ -49,11 +69,13 @@ export interface StructureDef {
   name: string;
   costs: Record<string, number>;
   description: string;
+  requiresWorkstation?: boolean;
 }
 
 export interface WorldData {
   items: Record<string, ItemDef>;
   structures: Record<string, StructureDef>;
+  tiles: Record<string, TileDef>;
 }
 
 export interface GameState {

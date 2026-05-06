@@ -3,13 +3,18 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+export const WORLD_SIZE = 24;
+export const INITIAL_RESOURCES = 180;
+
 export const TILE_WIDTH = 64;
 export const TILE_HEIGHT = 32;
 
 export enum TileType {
-  ROTTED_WOOD = 'rotted_wood',
-  DAMP_MUD = 'damp_mud',
-  OVERGROWTH = 'overgrowth',
+  DENSE_THICKET = 'dense_thicket',
+  DAMP_HOLLOW = 'damp_hollow',
+  TANGLED_DEEPWOOD = 'tangled_deepwood',
+  SHALLOW_CREEK = 'shallow_creek',
+  MINERAL_CRUST = 'mineral_crust'
 }
 
 export type ItemType = string;

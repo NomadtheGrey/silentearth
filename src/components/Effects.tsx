@@ -48,7 +48,7 @@ export const GrittyFilter = () => (
         <feTurbulence type="fractalNoise" baseFrequency="0.6" numOctaves="3" result="noise" />
         <feColorMatrix type="saturate" values="0" />
         <feComponentTransfer>
-          <feFuncA type="linear" slope="0.1" />
+          <feFuncA type="linear" slope="0.05" />
         </feComponentTransfer>
       </filter>
     </defs>
