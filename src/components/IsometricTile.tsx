@@ -130,9 +130,9 @@ export const IsometricTile: React.FC<TileProps> = ({
         <path 
           d={`M ${TILE_WIDTH/3},${TILE_HEIGHT/2} q 2,-8 4,0 m 6,-2 q 2,-8 4,0`} 
           fill="none" 
-          stroke={THEME.colors.moss} 
-          strokeWidth="1" 
-          opacity="0.4" 
+          stroke={THEME.colors.leafLight} 
+          strokeWidth="1.2" 
+          opacity="0.6" 
         />
       )}
     </g>

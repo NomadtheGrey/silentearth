@@ -72,35 +72,57 @@ export const ActionMenu: React.FC<ActionMenuProps> = ({
           </button>
         </div>
 
-        <div className="flex flex-col gap-2 max-h-[220px] overflow-y-auto pr-2 custom-scrollbar">
+        <div className="flex flex-col gap-2 max-h-[240px] overflow-y-auto pr-1 custom-scrollbar">
           {(Object.values(worldData.structures) as StructureDef[]).map(struct => {
              const tileAtPos = gameState.tiles.find(t => t.pos.q === selectedPos.q && t.pos.r === selectedPos.r);
              const isCreekTile = tileAtPos?.type === TileType.SHALLOW_CREEK;
              const needsStump = struct.requiresWorkstation && !isNearWorkstation(selectedPos);
              const isBlocked = isCreekTile || needsStump;
+             const canAfford = Object.entries(struct.costs).every(([rid, amt]) => (gameState.inventory[rid] || 0) >= (amt as number));
+             const isConstructible = isPlayerAtSelected && !isBlocked && canAfford;
 
              return (
               <button 
                 key={struct.id}
-                disabled={!isPlayerAtSelected || isBlocked}
+                disabled={!isConstructible}
                 onClick={() => onBuild(struct.id)}
-                className="flex flex-col items-start border border-[#f0ead6]/20 bg-transparent px-4 py-3 hover:bg-[#f0ead6]/05 active:bg-[#f0ead6]/10 disabled:opacity-20 transition-all group"
+                className="flex flex-col items-start border border-[#f0ead6]/20 bg-transparent px-3 py-2.5 hover:bg-[#f0ead6]/05 active:bg-[#f0ead6]/10 disabled:opacity-30 transition-all group w-full text-left"
               >
-                <div className="flex items-center gap-3 w-full text-left">
-                  <Hammer size={12} className="opacity-40 group-hover:opacity-100" />
-                  <span className="text-[10px] font-black uppercase tracking-wider">{struct.name}</span>
-                  {isBlocked && (
-                     <span className="ml-auto text-[7px] text-[#6a1a1a] font-bold uppercase">
-                       {isCreekTile ? "Waterlogged" : "Need Stump"}
+                <div className="flex items-center gap-2 w-full">
+                  <Hammer size={12} className={isConstructible ? "text-[#f0ead6] opacity-80 group-hover:opacity-100" : "opacity-30"} />
+                  <span className="text-[10px] font-black uppercase tracking-wider text-[#f0ead6]">{struct.name}</span>
+                  {isBlocked ? (
+                     <span className="ml-auto text-[7px] text-[#a82424] font-bold uppercase tracking-wider">
+                       {isCreekTile ? "Waterlogged" : "Need Workstation"}
+                     </span>
+                  ) : !canAfford ? (
+                     <span className="ml-auto text-[7px] text-[#d4b768] font-bold uppercase tracking-wider opacity-80">
+                       Need Materials
+                     </span>
+                  ) : (
+                     <span className="ml-auto text-[7px] text-[#86ae53] font-black uppercase tracking-wider animate-pulse">
+                       Erect Shelter [Build]
                      </span>
                   )}
                 </div>
+
+                {/* Structure Description */}
+                <p className="text-[7px] text-[#f0ead6]/60 mt-1 leading-snug font-medium">
+                  {struct.description}
+                </p>
+
+                {/* Costs */}
                 <div className="text-[7px] uppercase mt-2 font-bold flex gap-2 flex-wrap">
-                  {Object.entries(struct.costs).map(([rid, amt]) => (
-                     <span key={rid} className={`flex items-center gap-1 ${(gameState.inventory[rid] || 0) >= amt ? "text-[#f0ead6]/40" : "text-[#6a1a1a]"}`}>
-                       {amt as number} {worldData.items[rid]?.name || rid}
-                     </span>
-                  ))}
+                  {Object.entries(struct.costs).map(([rid, amt]) => {
+                     const has = gameState.inventory[rid] || 0;
+                     const req = amt as number;
+                     const isEnough = has >= req;
+                     return (
+                       <span key={rid} className={`flex items-center gap-1 ${isEnough ? "text-[#86ae53]" : "text-[#a82424]"}`}>
+                         {has}/{req} {worldData.items[rid]?.name || rid}
+                       </span>
+                     );
+                  })}
                 </div>
               </button>
             );

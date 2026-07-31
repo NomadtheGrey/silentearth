@@ -195,6 +195,12 @@ export default function App() {
       return;
     }
 
+    const existingStruct = gameState.structures.find(s => s.pos.q === selectedPos.q && s.pos.r === selectedPos.r);
+    if (existingStruct) {
+      setStatusMessage("A structure already stands on this tile.");
+      return;
+    }
+
     if (structDef.requiresWorkstation && !isNearWorkstation(selectedPos)) {
       setStatusMessage(`Constructing a ${structDef.name} requires the stability of a nearby workstation.`);
       return;
@@ -202,7 +208,7 @@ export default function App() {
 
     setGameState(prev => {
       for (const [resId, amt] of Object.entries(structDef.costs)) {
-        if ((prev.inventory[resId] || 0) < amt) {
+        if ((prev.inventory[resId] || 0) < (amt as number)) {
           setStatusMessage(`Missing resources for ${structDef.name}.`);
           return prev;
         }
@@ -210,7 +216,7 @@ export default function App() {
 
       const newInventory = { ...prev.inventory };
       for (const [resId, amt] of Object.entries(structDef.costs)) {
-        newInventory[resId] -= amt;
+        newInventory[resId] -= (amt as number);
       }
 
       const newStructure: Structure = {
@@ -220,6 +226,9 @@ export default function App() {
         progress: 1
       };
 
+      // Clear any raw unharvested item on this tile to make room for the structure
+      const newItems = prev.items.filter(i => !(i.pos.q === selectedPos.q && i.pos.r === selectedPos.r));
+
       let newTiles = prev.tiles;
       if (type === 'MOSS_CRADLE') {
         newTiles = prev.tiles.map(t => 
@@ -228,6 +237,8 @@ export default function App() {
           : t
         );
         setStatusMessage("The cradle hums. Green life surges through the forest.");
+      } else if (type === 'LEAN_TO') {
+        setStatusMessage("Primitive Lean-to complete! Snapped branches and vine lashings form a cozy, thatched wilderness shelter.");
       } else {
         setStatusMessage(`${structDef.name} complete.`);
       }
@@ -235,6 +246,7 @@ export default function App() {
       return {
         ...prev,
         inventory: newInventory,
+        items: newItems,
         structures: [...prev.structures, newStructure],
         tiles: newTiles
       };

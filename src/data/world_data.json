@@ -133,8 +133,8 @@
     "LEAN_TO": {
       "id": "LEAN_TO",
       "name": "Primitive Lean-to",
-      "costs": { "SNAP_WOOD": 8, "TENDER_VINES": 3 },
-      "description": "A crude shelter of snap-wood and vine. Barely keeps the resonance out."
+      "costs": { "SNAP_WOOD": 6, "TENDER_VINES": 3, "PEAT_MOSS": 2 },
+      "description": "A crude wilderness shelter built from snapped branches, bound with vine lashings, and thatched with insulating peat moss."
     },
     "WATTLE_HUT": {
       "id": "WATTLE_HUT",
@@ -168,35 +168,35 @@
       "id": "dense_thicket",
       "name": "Dense Thicket",
       "description": "Low-lying brush and saplings. Yields Kindling and Fiber.",
-      "color": "#2a3d2a",
+      "color": "#243322",
       "spawnRates": { "SNAP_WOOD": 0.6, "TENDER_VINES": 0.2, "PEAT_MOSS": 0.2 }
     },
     "damp_hollow": {
       "id": "damp_hollow",
       "name": "Damp Hollow",
       "description": "A wet basin where water collects in the silt. Yields Moss and Clay.",
-      "color": "#232b1c",
+      "color": "#1d261a",
       "spawnRates": { "PEAT_MOSS": 0.6, "RIVER_SLUDGE": 0.3, "RIVER_STONE": 0.1 }
     },
     "tangled_deepwood": {
       "id": "tangled_deepwood",
       "name": "Tangled Deepwood",
       "description": "The oldest, densest part of the forest. Heavy with Oak and Brambles.",
-      "color": "#20291a",
+      "color": "#182216",
       "spawnRates": { "TENDER_VINES": 0.5, "DOWNED_OAK": 0.4, "SNAP_WOOD": 0.1 }
     },
     "shallow_creek": {
       "id": "shallow_creek",
       "name": "Shallow Creek",
       "description": "A fast-moving waterway. Source of stones and silt.",
-      "color": "#1a2626",
+      "color": "#16282b",
       "spawnRates": { "RIVER_STONE": 0.5, "RIVER_SLUDGE": 0.4, "BONE": 0.1 }
     },
     "mineral_crust": {
       "id": "mineral_crust",
       "name": "Mineral Crust",
       "description": "A dry, chalky shelf of salt and bone-fragments. Very high resonance.",
-      "color": "#4a4a42",
+      "color": "#45453b",
       "spawnRates": { "SALT_CRYSTAL": 0.7, "BONE": 0.2, "RIVER_STONE": 0.1 }
     }
   }

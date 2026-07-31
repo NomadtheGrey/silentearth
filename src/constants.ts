@@ -23,12 +23,18 @@ export type StructureType = string;
 export const THEME = {
   colors: {
     ink: '#0a0a0a',
-    moss: '#2d3822',
-    nicotine: '#cbb06d',
-    blood: '#4a0e0e',
-    mud: '#2b1e16',
-    parchment: '#dfd3b6',
-    bone: '#f0ead6',
-    coal: '#1a1a1a',
+    moss: '#4a6833',
+    leaf: '#5c823d',
+    leafLight: '#86ae53',
+    leafDark: '#2d451e',
+    wood: '#734b29',
+    bark: '#4a2e18',
+    nicotine: '#d4b768',
+    blood: '#a82424',
+    mud: '#3a281c',
+    parchment: '#e8ddc1',
+    bone: '#f5efe0',
+    coal: '#1f1f1f',
+    sprout: '#96c257',
   }
 };

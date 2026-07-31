@@ -23,10 +23,41 @@ export const StructureAsset: React.FC<StructureAssetProps> = ({ q, r, structure:
        <ellipse cx="16" cy="35" rx="12" ry="4" fill="black" opacity="0.2" style={{ filter: 'blur(4px)' }} />
 
        {s.type === 'LEAN_TO' ? (
-         <g opacity="0.9">
-           <path d="M 0,32 L 16,0 L 32,32 Z" fill="url(#stipple-pattern)" opacity="0.2" />
-           <path d="M 0,32 L 16,0 L 32,32" fill="none" stroke={THEME.colors.ink} strokeWidth="3" />
-           <path d="M 4,32 L 16,8 L 28,32" fill="none" stroke={THEME.colors.nicotine} strokeWidth="1" opacity="0.4" />
+         <g opacity="1">
+           {/* Interior Shadow Cavity */}
+           <path d="M 4,32 Q 16,12 28,32 Z" fill={THEME.colors.coal} opacity="0.85" />
+           
+           {/* Soft Moss & Parchment Bedding under shelter */}
+           <ellipse cx="16" cy="30" rx="9" ry="3.5" fill={THEME.colors.parchment} opacity="0.7" stroke={THEME.colors.ink} strokeWidth="0.5" />
+           <ellipse cx="14" cy="29" rx="6" ry="2" fill={THEME.colors.sprout} opacity="0.8" />
+           
+           {/* Slanted Back Wall Ridge Sticks */}
+           <path d="M 6,28 L 26,28 M 8,22 L 24,22 M 11,16 L 21,16" stroke={THEME.colors.wood} strokeWidth="2" strokeLinecap="round" />
+           <path d="M 6,28 L 26,28 M 8,22 L 24,22 M 11,16 L 21,16" stroke={THEME.colors.ink} strokeWidth="0.5" strokeLinecap="round" opacity="0.5" />
+
+           {/* Thatched Moss and Bough Covering */}
+           <path d="M 3,32 Q 16,6 29,32 Z" fill={THEME.colors.moss} opacity="0.9" stroke={THEME.colors.ink} strokeWidth="0.75" />
+           <circle cx="9" cy="24" r="5.5" fill={THEME.colors.leaf} />
+           <circle cx="23" cy="24" r="5.5" fill={THEME.colors.leaf} />
+           <circle cx="16" cy="18" r="6" fill={THEME.colors.leafLight} stroke={THEME.colors.ink} strokeWidth="0.5" />
+           <circle cx="16" cy="12" r="4.5" fill={THEME.colors.sprout} />
+           <circle cx="11" cy="15" r="3.5" fill={THEME.colors.leaf} />
+           <circle cx="21" cy="15" r="3.5" fill={THEME.colors.leaf} />
+
+           {/* Primary Wooden A-Frame Crossing Poles */}
+           <path d="M 2,34 L 20,4" stroke={THEME.colors.wood} strokeWidth="3" strokeLinecap="round" />
+           <path d="M 2,34 L 20,4" stroke={THEME.colors.ink} strokeWidth="0.75" strokeLinecap="round" opacity="0.7" />
+           
+           <path d="M 30,34 L 12,4" stroke={THEME.colors.wood} strokeWidth="3" strokeLinecap="round" />
+           <path d="M 30,34 L 12,4" stroke={THEME.colors.ink} strokeWidth="0.75" strokeLinecap="round" opacity="0.7" />
+
+           {/* Lashings at top intersection */}
+           <path d="M 13,8 Q 16,5 19,8 Q 16,11 13,8" fill="none" stroke={THEME.colors.nicotine} strokeWidth="2.5" />
+           <path d="M 13,8 Q 16,5 19,8 Q 16,11 13,8" fill="none" stroke={THEME.colors.ink} strokeWidth="0.5" />
+           
+           {/* Base Anchor Stakes */}
+           <circle cx="2" cy="33" r="1.5" fill={THEME.colors.bark} stroke={THEME.colors.ink} strokeWidth="0.5" />
+           <circle cx="30" cy="33" r="1.5" fill={THEME.colors.bark} stroke={THEME.colors.ink} strokeWidth="0.5" />
          </g>
        ) : s.type === 'WATTLE_HUT' ? (
          <g opacity="1">
