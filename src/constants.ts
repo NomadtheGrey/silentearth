@@ -3,23 +3,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-export const WORLD_SIZE = 24;
-export const INITIAL_RESOURCES = 180;
-
-export const TILE_WIDTH = 64;
-export const TILE_HEIGHT = 32;
-
-export enum TileType {
-  DENSE_THICKET = 'dense_thicket',
-  DAMP_HOLLOW = 'damp_hollow',
-  TANGLED_DEEPWOOD = 'tangled_deepwood',
-  SHALLOW_CREEK = 'shallow_creek',
-  MINERAL_CRUST = 'mineral_crust'
-}
-
-export type ItemType = string;
-export type StructureType = string;
-
 export const THEME = {
   colors: {
     ink: '#0a0a0a',
@@ -36,5 +19,31 @@ export const THEME = {
     bone: '#f5efe0',
     coal: '#1f1f1f',
     sprout: '#96c257',
-  }
+  },
 };
+
+/** World chunk edge length in meters. */
+export const CHUNK_SIZE = 32;
+/** Ground plane subdivisions per chunk edge (vertex-color resolution). */
+export const GROUND_SEGMENTS = 16;
+/**
+ * Streaming radius in chunks (Chebyshev distance). Radius 3 = a 7x7 grid,
+ * ~224 m across — neighboring zones are already generated and blending in
+ * long before the player reaches them.
+ */
+export const STREAM_RADIUS_CHUNKS = 3;
+/** Scatter placement attempts per chunk (kept by local biome density). */
+export const BASE_SCATTER_PER_CHUNK = 40;
+/** Walk speed, meters per second. No terrain speed modifier in landing 1:
+ *  swamp navigation difficulty is undecided and must not be invented. */
+export const PLAYER_SPEED = 5;
+/** First-person eye height in meters. */
+export const PLAYER_EYE_HEIGHT = 1.7;
+/** Third-person overhead follow offset (above + behind the witch). */
+export const THIRD_PERSON_OFFSET = { x: 0, y: 16, z: 10 };
+/** Default world seed (a string; any string is a valid seed). */
+export const DEFAULT_SEED = 'silent-earth-001';
+/** Keys that toggle the camera. Both work; V is the documented one. */
+export const CAMERA_TOGGLE_KEYS = ['v', 'c'];
+/** Movement keys (WASD). */
+export const MOVE_KEYS = ['w', 'a', 's', 'd'];
