@@ -10,12 +10,13 @@
  * caller renders as children.
  *
  * The witch face is the popup toy from the task: her prototype look
- * (CharacterAvatar) beside the dialog text. Expressions are a later
+ * (WitchPortrait, built on CharacterAvatar) beside the dialog text. Expressions are a later
  * landing; this shows the neutral face only, via `showWitch`.
  */
 
 import type { ReactNode } from 'react';
-import { CharacterAvatar } from './CharacterAvatar';
+import { WitchPortrait } from './WitchPortrait';
+import { UI_THEMES, type UiThemeName } from './themes';
 
 export interface PopupProps {
   /** Whether the dialog is shown. Caller-owned. */
@@ -23,10 +24,12 @@ export interface PopupProps {
   title: string;
   /** Body content, supplied by the caller. */
   children?: ReactNode;
-  /** Show the witch's face beside the dialog. Default false. */
+  /** Show the witch's portrait beside the dialog. Default false. */
   showWitch?: boolean;
   /** Called when the dialog is dismissed. Optional. */
   onClose?: () => void;
+  /** Look for the dialog. Default "hearth" (firelit). */
+  theme?: UiThemeName;
 }
 
 export function Popup({
@@ -35,10 +38,12 @@ export function Popup({
   children,
   showWitch = false,
   onClose,
+  theme = 'hearth',
 }: PopupProps) {
   if (!open) {
     return null;
   }
+  const t = UI_THEMES[theme];
   return (
     <div
       role="dialog"
@@ -46,19 +51,17 @@ export function Popup({
       aria-label={title}
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
     >
-      <div className="flex max-w-lg items-start gap-3 rounded bg-stone-900 p-4 text-stone-100 shadow-xl">
-        {showWitch ? (
-          <CharacterAvatar size={60} className="shrink-0" />
-        ) : null}
+      <div className={'flex max-w-lg items-start gap-4 rounded p-4 ' + t.panel}>
+        {showWitch ? <WitchPortrait size={84} /> : null}
         <div className="min-w-0 flex-1">
           <div className="mb-2 flex items-center justify-between gap-2">
-            <h2 className="text-base font-semibold">{title}</h2>
+            <h2 className={'text-base font-semibold ' + t.heading}>{title}</h2>
             {onClose ? (
               <button
                 type="button"
                 onClick={onClose}
                 aria-label="Close dialog"
-                className="rounded bg-stone-700 px-2 py-1 text-sm hover:bg-stone-600"
+                className={'rounded px-2 py-1 text-sm ' + t.button}
               >
                 Close
               </button>

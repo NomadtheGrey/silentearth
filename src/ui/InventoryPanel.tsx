@@ -11,6 +11,8 @@
  */
 
 import type { InventoryItem } from './types';
+import { UI_THEMES, type UiThemeName } from './themes';
+import { VineDivider } from './WitchyArt';
 
 export interface InventoryPanelProps {
   items: InventoryItem[];
@@ -22,6 +24,8 @@ export interface InventoryPanelProps {
   capacityText?: string;
   /** Called when the panel is closed. Optional. */
   onClose?: () => void;
+  /** Look for the panel. Default "mire" (gathering / the world outside). */
+  theme?: UiThemeName;
 }
 
 export function InventoryPanel({
@@ -30,32 +34,32 @@ export function InventoryPanel({
   onSelectItem,
   capacityText,
   onClose,
+  theme = 'mire',
 }: InventoryPanelProps) {
+  const t = UI_THEMES[theme];
   return (
-    <section
-      aria-label="Inventory"
-      className="rounded bg-stone-900/90 p-3 text-stone-100 shadow-lg"
-    >
-      <div className="mb-2 flex items-center justify-between gap-2">
-        <h2 className="text-base font-semibold">Inventory</h2>
+    <section aria-label="Inventory" className={'rounded p-3 ' + t.panel}>
+      <div className="mb-1 flex items-center justify-between gap-2">
+        <h2 className={'text-base font-semibold ' + t.heading}>Inventory</h2>
         {onClose ? (
           <button
             type="button"
             onClick={onClose}
             aria-label="Close inventory"
-            className="rounded bg-stone-700 px-2 py-1 text-sm hover:bg-stone-600"
+            className={'rounded px-2 py-1 text-sm ' + t.button}
           >
             Close
           </button>
         ) : null}
       </div>
+      <VineDivider className="mb-2" />
 
       {capacityText ? (
-        <p className="mb-2 text-sm text-stone-400">{capacityText}</p>
+        <p className={'mb-2 text-sm ' + t.muted}>{capacityText}</p>
       ) : null}
 
       {items.length === 0 ? (
-        <p className="italic text-stone-400">Nothing carried yet.</p>
+        <p className={'italic ' + t.muted}>Nothing carried yet.</p>
       ) : (
         <ul className="flex flex-col gap-1">
           {items.map((item) => {
@@ -68,15 +72,13 @@ export function InventoryPanel({
                   aria-pressed={selected}
                   className={
                     'flex w-full items-baseline justify-between gap-2 rounded px-2 py-1 text-left ' +
-                    (selected
-                      ? 'bg-amber-800/60 outline outline-1 outline-amber-500'
-                      : 'hover:bg-stone-800')
+                    (selected ? t.selected : 'hover:bg-stone-800')
                   }
                 >
                   <span>
                     {item.name}
                     {item.note ? (
-                      <span className="ml-2 text-sm text-stone-400">
+                      <span className={'ml-2 text-sm ' + t.muted}>
                         {item.note}
                       </span>
                     ) : null}

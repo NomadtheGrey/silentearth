@@ -13,12 +13,15 @@
  */
 
 import type { CameraPerspective } from './types';
+import { UI_THEMES, type UiThemeName } from './themes';
 
 export interface CameraToggleProps {
   /** Current perspective, owned by the caller. */
   perspective: CameraPerspective;
   /** Called when the player picks a perspective. */
   onChange?: (perspective: CameraPerspective) => void;
+  /** Accent look for the active button. Default "mire". */
+  theme?: UiThemeName;
 }
 
 const OPTIONS: Array<{ value: CameraPerspective; label: string }> = [
@@ -26,12 +29,17 @@ const OPTIONS: Array<{ value: CameraPerspective; label: string }> = [
   { value: 'third', label: 'Third-person overhead' },
 ];
 
-export function CameraToggle({ perspective, onChange }: CameraToggleProps) {
+export function CameraToggle({
+  perspective,
+  onChange,
+  theme = 'mire',
+}: CameraToggleProps) {
+  const t = UI_THEMES[theme];
   return (
     <div
       role="group"
       aria-label="Camera perspective"
-      className="flex gap-1 rounded bg-black/50 p-1"
+      className={'flex gap-1 rounded p-1 ' + t.overlay}
     >
       {OPTIONS.map((option) => {
         const active = option.value === perspective;
@@ -43,7 +51,7 @@ export function CameraToggle({ perspective, onChange }: CameraToggleProps) {
             onClick={() => onChange?.(option.value)}
             className={
               'rounded px-3 py-1 text-sm text-stone-100 ' +
-              (active ? 'bg-amber-700' : 'bg-stone-700 hover:bg-stone-600')
+              (active ? t.active : 'bg-stone-700 hover:bg-stone-600')
             }
           >
             {option.label}

@@ -14,6 +14,8 @@
  */
 
 import type { CraftingRecipe } from './types';
+import { UI_THEMES, type UiThemeName } from './themes';
+import { WitchMark } from './WitchyArt';
 
 export interface CraftingMenuProps {
   recipes: CraftingRecipe[];
@@ -25,6 +27,8 @@ export interface CraftingMenuProps {
   onCraft?: (id: string) => void;
   /** Called when the menu is closed. Optional. */
   onClose?: () => void;
+  /** Look for the menu. Default "hearth" (firelit making). */
+  theme?: UiThemeName;
 }
 
 export function CraftingMenu({
@@ -33,20 +37,24 @@ export function CraftingMenu({
   onSelectRecipe,
   onCraft,
   onClose,
+  theme = 'hearth',
 }: CraftingMenuProps) {
+  const t = UI_THEMES[theme];
   return (
-    <section
-      aria-label="Crafting"
-      className="rounded bg-stone-900/90 p-3 text-stone-100 shadow-lg"
-    >
+    <section aria-label="Crafting" className={'rounded p-3 ' + t.panel}>
       <div className="mb-2 flex items-center justify-between gap-2">
-        <h2 className="text-base font-semibold">Crafting</h2>
+        <h2
+          className={'flex items-center gap-2 text-base font-semibold ' + t.heading}
+        >
+          <WitchMark />
+          Crafting
+        </h2>
         {onClose ? (
           <button
             type="button"
             onClick={onClose}
             aria-label="Close crafting menu"
-            className="rounded bg-stone-700 px-2 py-1 text-sm hover:bg-stone-600"
+            className={'rounded px-2 py-1 text-sm ' + t.button}
           >
             Close
           </button>
@@ -54,7 +62,7 @@ export function CraftingMenu({
       </div>
 
       {recipes.length === 0 ? (
-        <p className="italic text-stone-400">
+        <p className={'italic ' + t.muted}>
           No recipes yet — recipes arrive from the Systems lane.
         </p>
       ) : (
@@ -66,9 +74,7 @@ export function CraftingMenu({
                 key={recipe.id}
                 className={
                   'rounded px-2 py-2 ' +
-                  (selected
-                    ? 'bg-amber-800/60 outline outline-1 outline-amber-500'
-                    : 'bg-stone-800/60')
+                  (selected ? t.selected : 'bg-stone-800/60')
                 }
               >
                 <button
@@ -89,7 +95,7 @@ export function CraftingMenu({
                     <li key={index}>
                       {ingredient.name}
                       {ingredient.amountText ? (
-                        <span className="ml-2 text-stone-400">
+                        <span className={'ml-2 ' + t.muted}>
                           {ingredient.amountText}
                         </span>
                       ) : null}
@@ -97,7 +103,7 @@ export function CraftingMenu({
                   ))}
                 </ul>
                 {recipe.availabilityNote ? (
-                  <p className="mt-1 text-sm text-stone-400">
+                  <p className={'mt-1 text-sm ' + t.muted}>
                     {recipe.availabilityNote}
                   </p>
                 ) : null}
@@ -105,7 +111,10 @@ export function CraftingMenu({
                   type="button"
                   disabled={!recipe.canCraft}
                   onClick={() => onCraft?.(recipe.id)}
-                  className="mt-2 rounded bg-amber-700 px-3 py-1 text-sm disabled:cursor-not-allowed disabled:opacity-40 hover:bg-amber-600"
+                  className={
+                    'mt-2 rounded px-3 py-1 text-sm disabled:cursor-not-allowed disabled:opacity-40 ' +
+                    t.primary
+                  }
                 >
                   Craft
                 </button>

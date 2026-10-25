@@ -17,16 +17,24 @@
 
 import type { ReactNode } from 'react';
 import type { NeedSlot } from './types';
+import { UI_THEMES, type UiThemeName } from './themes';
 
 export interface HudShellProps {
   /** Slots a real survival system provides. Empty = awaiting systems. */
   needSlots?: NeedSlot[];
   /** Caller-composed content inside the shell (panels, toggles, etc.). */
   children?: ReactNode;
+  /** Look for the overlay pill. Default "mire" (the world outside). */
+  theme?: UiThemeName;
   className?: string;
 }
 
-export function HudShell({ needSlots = [], children, className }: HudShellProps) {
+export function HudShell({
+  needSlots = [],
+  children,
+  theme = 'mire',
+  className,
+}: HudShellProps) {
   return (
     <div
       className={
@@ -36,7 +44,10 @@ export function HudShell({ needSlots = [], children, className }: HudShellProps)
       <div className="pointer-events-auto flex items-start justify-between gap-2 p-2">
         <div
           aria-label="Needs"
-          className="flex flex-wrap items-center gap-2 rounded bg-black/50 px-3 py-2 text-sm text-stone-200"
+          className={
+            'flex flex-wrap items-center gap-2 rounded px-3 py-2 text-sm text-stone-200 ' +
+            UI_THEMES[theme].overlay
+          }
         >
           {needSlots.length === 0 ? (
             <span className="italic text-stone-400">

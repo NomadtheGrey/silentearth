@@ -10,6 +10,12 @@
 
 export { CharacterAvatar } from './CharacterAvatar';
 export type { CharacterAvatarProps } from './CharacterAvatar';
+export { WitchPortrait } from './WitchPortrait';
+export type { WitchPortraitProps } from './WitchPortrait';
+export { WitchMark, VineDivider } from './WitchyArt';
+export type { WitchyArtProps } from './WitchyArt';
+export { UI_THEMES } from './themes';
+export type { UiThemeName, UiTheme } from './themes';
 export { HudShell } from './HudShell';
 export type { HudShellProps } from './HudShell';
 export { InventoryPanel } from './InventoryPanel';
