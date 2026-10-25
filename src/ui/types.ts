@@ -41,6 +41,24 @@ export interface InventoryItem {
   note?: string;
 }
 
+/**
+ * One action in an in-place context menu. The label, hint, and
+ * availability are caller-supplied; this type carries no logic.
+ */
+export interface ContextAction {
+  id: string;
+  label: string;
+  /** Short hint shown beside the label, if any. */
+  hint?: string;
+  /** Whether the action is currently unavailable, caller-decided. */
+  disabled?: boolean;
+  /** Why an action is unavailable, in the caller's words. Optional. */
+  disabledNote?: string;
+}
+
+/** Tone for object feedback text. Colours the chip only. */
+export type FeedbackTone = 'gain' | 'info' | 'blocked';
+
 /** One ingredient line in a crafting recipe. Amounts are caller-supplied. */
 export interface RecipeIngredient {
   name: string;

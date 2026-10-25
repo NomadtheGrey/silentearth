@@ -16,6 +16,18 @@ export { WitchMark, VineDivider } from './WitchyArt';
 export type { WitchyArtProps } from './WitchyArt';
 export { UI_THEMES } from './themes';
 export type { UiThemeName, UiTheme } from './themes';
+export { WorldAnchor } from './WorldAnchor';
+export type { WorldAnchorProps } from './WorldAnchor';
+export { InteractionPrompt } from './InteractionPrompt';
+export type { InteractionPromptProps } from './InteractionPrompt';
+export { ContextMenu } from './ContextMenu';
+export type { ContextMenuProps } from './ContextMenu';
+export { ObjectFeedback } from './ObjectFeedback';
+export type { ObjectFeedbackProps } from './ObjectFeedback';
+export { InteractionProgress } from './InteractionProgress';
+export type { InteractionProgressProps } from './InteractionProgress';
+export { WitchHealth } from './WitchHealth';
+export type { WitchHealthProps } from './WitchHealth';
 export { HudShell } from './HudShell';
 export type { HudShellProps } from './HudShell';
 export { InventoryPanel } from './InventoryPanel';
@@ -32,4 +44,6 @@ export type {
   InventoryItem,
   RecipeIngredient,
   CraftingRecipe,
+  ContextAction,
+  FeedbackTone,
 } from './types';
