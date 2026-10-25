@@ -3,7 +3,8 @@
  * SPDX-License-Identifier: Apache-2.0
  *
  * Three.js scene manager for Silent Earth landing 1: chunk streaming,
- * placeholder scatter rendering, switchable cameras, and a placeholder
+ * harvest-source scatter rendering (shapes from src/game/objects.ts),
+ * procedural per-biome ground textures, switchable cameras, and a placeholder
  * witch character mesh (capsule + hat — NOT art, a stand-in so the
  * third-person camera has something to follow).
  *
@@ -20,6 +21,10 @@ import * as THREE from 'three';
 import { bus } from './events';
 import type { WorldGen } from './worldgen';
 import { PlayerController } from './player';
+import { marshWeight } from './biomes';
+import { SOURCE_FOR_KIND } from './objects';
+import type { MeshShape } from './objects';
+import { createBiomeTexture, TEXTURE_REPEAT } from './terrain';
 import {
   CHUNK_SIZE,
   GROUND_SEGMENTS,
@@ -27,7 +32,7 @@ import {
   PLAYER_EYE_HEIGHT,
   THIRD_PERSON_OFFSET,
 } from '../constants';
-import type { ScatterKind } from '../types';
+import type { BiomeId, ScatterKind } from '../types';
 
 interface KindRender {
   /** Shared geometry (baked orientation: logs lie along X, discs lie flat). */
@@ -65,96 +70,103 @@ function lyingCylinder(
   return geo;
 }
 
-/** Placeholder primitives. Colors are stand-ins, not final art direction. */
-const KIND_RENDER: Record<ScatterKind, KindRender> = {
-  vine: {
-    geometry: (() => {
-      const g = new THREE.CylinderGeometry(0.03, 0.05, 1.4, 5);
-      g.rotateZ(0.35);
-      return g;
-    })(),
-    material: lambert(0x4a6b2f),
-    baseY: 0.7,
-  },
-  bush: {
-    geometry: new THREE.IcosahedronGeometry(0.7, 0),
-    material: lambert(0x3f5a2c),
-    baseY: 0.45,
-  },
-  log: {
-    geometry: lyingCylinder(0.22, 0.26, 2.2),
-    material: lambert(0x5a4028),
-    baseY: 0.24,
-  },
-  bogPatch: {
-    geometry: flatDisc(1.4),
-    material: lambert(0x241d16),
-    baseY: 0,
-  },
-  standingWater: {
-    geometry: flatDisc(1.2),
-    material: lambert(0x2a4a5a, 0.75),
-    baseY: 0,
-  },
-  tree: {
-    geometry: new THREE.CylinderGeometry(0.18, 0.28, 1.6, 6),
-    material: lambert(0x4a2e18),
-    baseY: 0.8,
-    extra: {
-      geometry: new THREE.ConeGeometry(1.3, 2.2, 7),
-      material: lambert(0x2f4a26),
-      y: 2.4,
-    },
-  },
-  snapWood: {
-    geometry: (() => {
+/** Ground-cover disc radii per kind (disc-shaped sources only). */
+const DISC_RADIUS: Partial<Record<ScatterKind, number>> = {
+  bogPatch: 1.4,
+  standingWater: 1.2,
+  peatMoss: 0.9,
+  riverSilt: 1.0,
+};
+
+/** One shared geometry per mesh shape, built from the source descriptors
+ *  in src/game/objects.ts (fill-in landing, 2026-10-25). Landing 1's
+ *  placeholder primitives are replaced by these: distinct silhouettes
+ *  per source (stump, reed, bog tuft, oak log, ...) with source colors. */
+function geometryForShape(shape: MeshShape, kind: ScatterKind): THREE.BufferGeometry {
+  switch (shape) {
+    case 'bush':
+      return new THREE.IcosahedronGeometry(0.7, 1);
+    case 'stick': {
       const g = new THREE.CylinderGeometry(0.05, 0.07, 1.1, 5);
       g.rotateZ(0.3);
       return g;
-    })(),
-    material: lambert(0x7a5a34),
-    baseY: 0.55,
-  },
-  tenderVines: {
-    geometry: (() => {
-      const g = new THREE.CylinderGeometry(0.02, 0.03, 1.0, 4);
-      g.rotateZ(-0.4);
+    }
+    case 'vine': {
+      const g = new THREE.CylinderGeometry(0.03, 0.05, 1.2, 5);
+      g.rotateZ(0.35);
       return g;
-    })(),
-    material: lambert(0x6a8a3a),
-    baseY: 0.5,
-  },
-  peatMoss: {
-    geometry: flatDisc(0.9, 10),
-    material: lambert(0x4a6b2f),
-    baseY: 0,
-  },
-  riverSilt: {
-    geometry: flatDisc(1.0, 10),
-    material: lambert(0x6b5b43),
-    baseY: 0,
-  },
-  riverStone: {
-    geometry: new THREE.DodecahedronGeometry(0.28, 0),
-    material: lambert(0x8a8a86),
-    baseY: 0.15,
-  },
-  bone: {
-    geometry: new THREE.BoxGeometry(0.5, 0.12, 0.12),
-    material: lambert(0xe8e0cc),
-    baseY: 0.08,
-  },
-  saltCrystal: {
-    geometry: new THREE.OctahedronGeometry(0.3, 0),
-    material: lambert(0xd8e8e8),
-    baseY: 0.2,
-  },
-  downedOak: {
-    geometry: lyingCylinder(0.35, 0.4, 3.0),
-    material: lambert(0x3a2818),
-    baseY: 0.38,
-  },
-};
+    }
+    case 'log':
+      return lyingCylinder(0.22, 0.26, 2.2);
+    case 'oakLog':
+      return lyingCylinder(0.35, 0.4, 3.0);
+    case 'tree':
+      return new THREE.CylinderGeometry(0.18, 0.28, 1.6, 6);
+    case 'stump':
+      return new THREE.CylinderGeometry(0.45, 0.55, 0.6, 8);
+    case 'reed':
+      return new THREE.CylinderGeometry(0.02, 0.05, 1.3, 4);
+    case 'grassTuft':
+      return new THREE.ConeGeometry(0.6, 0.7, 5);
+    case 'bogTuft': {
+      const g = new THREE.SphereGeometry(0.7, 8, 6);
+      g.scale(1, 0.4, 1);
+      return g;
+    }
+    case 'disc':
+      return flatDisc(DISC_RADIUS[kind] ?? 1.0, 12);
+    case 'stone':
+      return new THREE.DodecahedronGeometry(0.28, 0);
+    case 'crystal':
+      return new THREE.OctahedronGeometry(0.3, 0);
+    case 'bone':
+      return new THREE.BoxGeometry(0.5, 0.12, 0.12);
+  }
+}
+
+/** Extra primitive geometry for composite shapes (canopy / stump top /
+ *  reed seed-head), keyed by shape. */
+function extraGeometryForShape(shape: MeshShape): THREE.BufferGeometry | null {
+  switch (shape) {
+    case 'tree':
+      return new THREE.ConeGeometry(1.3, 2.2, 7);
+    case 'stump':
+      return flatDisc(0.42, 8);
+    case 'reed':
+      return new THREE.ConeGeometry(0.12, 0.4, 5);
+    default:
+      return null;
+  }
+}
+
+/** Render table derived from the harvest-source definitions, so mesh and
+ *  data can never drift apart: change a source in objects.ts and its
+ *  in-world shape follows. One geometry + material per kind, shared by
+ *  all instances (the InstancedMesh perf model is unchanged). */
+const KIND_RENDER: Record<ScatterKind, KindRender> = (() => {
+  const table = {} as Record<ScatterKind, KindRender>;
+  for (const [kind, source] of Object.entries(SOURCE_FOR_KIND) as [
+    ScatterKind,
+    (typeof SOURCE_FOR_KIND)[ScatterKind],
+  ][]) {
+    const extraGeo = extraGeometryForShape(source.mesh.shape);
+    table[kind] = {
+      geometry: geometryForShape(source.mesh.shape, kind),
+      material: lambert(source.mesh.color, kind === 'standingWater' ? 0.75 : 1),
+      baseY: source.mesh.baseY,
+      ...(extraGeo && source.mesh.extraColor !== undefined && source.mesh.extraY !== undefined
+        ? {
+            extra: {
+              geometry: extraGeo,
+              material: lambert(source.mesh.extraColor),
+              y: source.mesh.extraY,
+            },
+          }
+        : {}),
+    };
+  }
+  return table;
+})();
 
 interface LoadedChunk {
   group: THREE.Group;
@@ -173,6 +185,10 @@ export class WorldRenderer {
   private gen: WorldGen;
   private player: PlayerController;
   private disposed = false;
+  /** One shared procedural ground texture per biome (+ marsh), built from
+   *  the current world seed. Cached, never per-chunk, so texture cost
+   *  stays flat no matter how many chunks stream in. */
+  private groundTextures = new Map<string, THREE.DataTexture>();
 
   constructor(
     container: HTMLElement,
@@ -226,9 +242,43 @@ export class WorldRenderer {
     this.loop();
   }
 
+  /** Ground detail texture for a chunk: the dominant biome's procedural
+   *  texture, or the marsh texture when marsh ground character dominates
+   *  the chunk center. The vertex-color blend underneath still carries
+   *  the continuous biome transition; this is the detail layer on top. */
+  private groundTextureFor(cx: number, cz: number): THREE.DataTexture {
+    const centerX = cx * CHUNK_SIZE + CHUNK_SIZE / 2;
+    const centerZ = cz * CHUNK_SIZE + CHUNK_SIZE / 2;
+    const fields = this.gen.fieldsAt(centerX, centerZ);
+    const id: BiomeId | 'marsh' =
+      marshWeight(fields) > 0.5 ? 'marsh' : this.gen.weightsAt(centerX, centerZ).dominant;
+    const cached = this.groundTextures.get(id);
+    if (cached) return cached;
+    const tex = createBiomeTexture(id, this.gen.seed);
+    const dataTex = new THREE.DataTexture(
+      tex.data,
+      tex.width,
+      tex.height,
+      THREE.RGBAFormat,
+    );
+    dataTex.wrapS = THREE.RepeatWrapping;
+    dataTex.wrapT = THREE.RepeatWrapping;
+    dataTex.repeat.set(TEXTURE_REPEAT, TEXTURE_REPEAT);
+    dataTex.colorSpace = THREE.SRGBColorSpace;
+    dataTex.needsUpdate = true;
+    this.groundTextures.set(id, dataTex);
+    return dataTex;
+  }
+
+  private disposeGroundTextures(): void {
+    for (const tex of this.groundTextures.values()) tex.dispose();
+    this.groundTextures.clear();
+  }
+
   /** Swap the world generator (seed change): drop all chunks, re-stream. */
   setWorldGen(gen: WorldGen): void {
     this.gen = gen;
+    this.disposeGroundTextures();
     for (const [key, loaded] of this.chunks) {
       this.disposeLoaded(loaded);
       this.chunks.delete(key);
@@ -248,6 +298,7 @@ export class WorldRenderer {
     cancelAnimationFrame(this.raf);
     window.removeEventListener('resize', this.onResize);
     this.setWorldGen(this.gen); // clears chunks (also disposes meshes)
+    this.disposeGroundTextures();
     this.renderer.dispose();
     this.renderer.domElement.remove();
   }
@@ -297,7 +348,10 @@ export class WorldRenderer {
     groundGeo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
     const ground = new THREE.Mesh(
       groundGeo,
-      new THREE.MeshLambertMaterial({ vertexColors: true }),
+      new THREE.MeshLambertMaterial({
+        vertexColors: true,
+        map: this.groundTextureFor(cx, cz),
+      }),
     );
     ground.position.set(originX + CHUNK_SIZE / 2, 0, originZ + CHUNK_SIZE / 2);
     group.add(ground);

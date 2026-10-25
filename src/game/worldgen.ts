@@ -15,7 +15,7 @@
  * weights only. Terrain height is a later decision, not a placeholder.
  */
 
-import { BIOMES, createFields, weightsAt, groundColorAt } from './biomes';
+import { BIOMES, createFields, weightsAt, groundColorAt, marshWeight } from './biomes';
 import type { Fields } from './biomes';
 import { mulberry32, deriveSeed } from './seed';
 import { CHUNK_SIZE, BASE_SCATTER_PER_CHUNK, GROUND_SEGMENTS } from '../constants';
@@ -35,6 +35,8 @@ const SCATTER_KINDS: ScatterKind[] = [
   'vine', 'bush', 'log', 'bogPatch', 'standingWater', 'tree',
   'snapWood', 'tenderVines', 'peatMoss', 'riverSilt', 'riverStone',
   'bone', 'saltCrystal', 'downedOak',
+  // Fill-in landing (2026-10-25): stump, reed, marshGrass, bogGrowth.
+  'stump', 'reed', 'marshGrass', 'bogGrowth',
 ];
 
 export function createWorldGen(seed: string): WorldGen {
@@ -63,6 +65,24 @@ export function createWorldGen(seed: string): WorldGen {
         density += weights.weights[biome.id] * biome.density;
       }
       if (rand() > Math.min(1, density)) continue;
+      // Marsh overlay (fill-in landing): marsh is ground character, not a
+      // biome, so it does not enter the biome mixes above. Where marsh
+      // character is strong, a share of scatter becomes reeds (the marsh
+      // harvest) or marsh grass (ground cover) instead of the blended mix.
+      // Still fully seeded: the decision consumes the chunk's rand stream.
+      const mw = marshWeight(fields);
+      if (mw > 0.05 && rand() < mw * 0.45) {
+        const marshKind: ScatterKind = rand() < 0.6 ? 'reed' : 'marshGrass';
+        objects.push({
+          kind: marshKind,
+          x,
+          z,
+          y: 0,
+          scale: 0.7 + rand() * 0.7,
+          rotY: rand() * Math.PI * 2,
+        });
+        continue;
+      }
       // Blended mix: each biome contributes its object mix by its weight.
       const mix = new Map<ScatterKind, number>();
       let total = 0;

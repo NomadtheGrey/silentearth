@@ -34,8 +34,12 @@ export interface BiomeWeights {
 /** Scatter object kinds. Kinds with an item-vocabulary counterpart map:
  *  snapWood -> SNAP_WOOD, tenderVines -> TENDER_VINES, peatMoss -> PEAT_MOSS,
  *  riverSilt -> RIVER_SLUDGE, riverStone -> RIVER_STONE, bone -> BONE,
- *  saltCrystal -> SALT_CRYSTAL, downedOak -> DOWNED_OAK. The rest
- *  (vine, bush, log, bogPatch, standingWater, tree) are pure scenery. */
+ *  saltCrystal -> SALT_CRYSTAL, downedOak -> DOWNED_OAK, stump -> STUMP.
+ *  The rest (vine, bush, log, bogPatch, standingWater, tree, reed,
+ *  marshGrass, bogGrowth) are sources or ground character whose yields are
+ *  defined in src/game/objects.ts; standingWater and bogPatch yield
+ *  nothing — they are ground character, not harvest sources.
+ *  Fill-in landing (2026-10-25) added stump, reed, marshGrass, bogGrowth. */
 export type ScatterKind =
   | 'vine'
   | 'bush'
@@ -50,7 +54,11 @@ export type ScatterKind =
   | 'riverStone'
   | 'bone'
   | 'saltCrystal'
-  | 'downedOak';
+  | 'downedOak'
+  | 'stump'
+  | 'reed'
+  | 'marshGrass'
+  | 'bogGrowth';
 
 /** One placed scatter object in a chunk. y is its base height above ground. */
 export interface ScatterObject {
