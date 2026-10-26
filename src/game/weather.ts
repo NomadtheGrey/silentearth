@@ -19,9 +19,10 @@
  *   (gen.weightsAt), not a hard zone label — biomes blend, so
  *   weather blends. Same weights, same weather: weatherAt is a
  *   pure function of (seed, x, z), so seed reproducibility holds.
- * - No time-varying weather yet (no fronts, gusts, or day/night
- *   cycle): v1 weather is spatial, not temporal. Time variation is
- *   a later landing, not smuggled in here.
+ * - Time variation now exists as an INPUT axis (see SEASON AXIS
+ *   below): seasonalWeatherAt adds the time-of-year trend +
+ *   fronts on top of the biome profiles. No clock advances it
+ *   yet — the progression rate is Adam's open call (below).
  *
  * CONSUMERS (Systems + UI):
  * - Query: weatherAt(gen, x, z) — call it on 'player:moved' or
@@ -32,17 +33,22 @@
  *   the query, not the event: the event says "the weather regime
  *   changed", the query says "to what, exactly".
  *
- * SEASON AXIS (Adam, 2026-10-26, PINNED ruling — recorded here
- * for the future season work, NOT a change to the profiles
- * below): the game STARTS in September-ish (mild), and cold
- * BUILDS toward a November equivalent. v1 weather is spatial-
- * only (no clock, no time-varying weather), so no season axis
- * is implemented yet — when one lands, it starts mild and
- * deepens cold toward November; it must NOT re-tune these
- * per-biome profiles by itself (the brief is explicit: this
- * ruling is a constraint for when the season + health work
- * lands, not a change to current profiles). The hunger→health
- * gate tied to this axis lives in hunger.ts.
+ * SEASON AXIS (Adam, 2026-10-26 — model update, two axes
+ * combined, not either/or): weather is SEMI-REALISTIC, biome-
+ * based AND time-of-year based. The per-biome profiles below
+ * stand as one axis; seasonalWeatherAt adds the time axis on
+ * top. The game STARTS in September-ish (mild), and cold BUILDS
+ * toward a November equivalent — the same biome in November is
+ * worse than the same biome in September. Patterns read as
+ * plausible weather (seasonal trend + moving fronts + cold
+ * snaps), not random or arcade: everything below is
+ * deterministic from (seed, position, month), never Math.random.
+ * OPEN QUESTION — FLAGGED, NOT INVENTED (Adam's call): season
+ * progression rate — how fast in-game time moves September
+ * toward November. The axis takes month as an INPUT and never
+ * advances it; no clock exists yet, and none is smuggled in
+ * here. The hunger→health gate tied to this axis lives in
+ * hunger.ts.
  *
  * HOOKS, NOT BUILT (Adam's brief, explicit):
  * - Shelter modifier: the housing system does not exist yet, but
@@ -62,6 +68,7 @@
 
 import type { WorldGen } from './worldgen';
 import type { BiomeId } from '../types';
+import { hashSeed } from './seed';
 
 /** Wind in m/s, rain as 0..1 intensity, harshness as 0..1 exposure weight. */
 export interface WeatherProfile {
@@ -122,6 +129,91 @@ export function weatherAt(gen: WorldGen, x: number, z: number): CurrentWeather {
     harshness += w * profile.harshness;
   }
   return { wind, rain, harshness, dominant, weights };
+}
+
+/**
+ * TIME-OF-YEAR AXIS (Adam, 2026-10-26 — model update; all
+ * numbers below LANE-DECIDED starting tunables for Adam's pin
+ * pass, NOT pinned). Month is continuous (9.0 = Sep 1, 9.5 =
+ * mid-Sep, 11.0 = Nov 1). Two pattern layers, both deterministic:
+ *
+ * 1. SEASONAL TREND (cold builds Sep → Nov): cold(month) runs
+ *    0 at September to 1 at November and stays 1 past it
+ *    (deeper winter past November is future work, not invented
+ *    here — the ruling covers Sep → Nov). At full cold, harshness
+ *    moves COLD_HARSHNESS_BLEND of the way toward 1.0, wind rises
+ *    by COLD_WIND_GAIN, and rain moves COLD_RAIN_BLEND of the way
+ *    toward 1.0. So November's REGIME is worse everywhere — but
+ *    see layer 2 for why a single November day can still read
+ *    milder than a stormy September day (that is weather, not a
+ *    dial).
+ * 2. FRONTS (moving weather, not noise): a slow traveling sine
+ *    wave over (position, month), phased per world seed, so
+ *    fronts sweep across the map over weeks and read as broad
+ *    systems, not per-spot dice. Wave ±1 shifts harshness by
+ *    FRONT_HARSHNESS, wind by FRONT_WIND, rain by FRONT_RAIN —
+ *    small against the trend, so fronts texture the season
+ *    without overturning it on average. Cold snaps are the
+ *    wave's peaks landing on high cold: trend + peak together.
+ *
+ * DETERMINISM: same seed + same position + same month = same
+ * weather, always. No Math.random anywhere here, same rule as
+ * worldgen. The biome mix (dominant, weights) does NOT change
+ * with season — only wind/rain/harshness do.
+ */
+export const SEASON_START_MONTH = 9;
+export const SEASON_COLD_MONTH = 11;
+export const COLD_HARSHNESS_BLEND = 0.4;
+export const COLD_WIND_GAIN = 0.25;
+export const COLD_RAIN_BLEND = 0.3;
+export const FRONT_HARSHNESS = 0.08;
+export const FRONT_WIND = 1.5;
+export const FRONT_RAIN = 0.08;
+export const FRONT_X = 0.004;
+export const FRONT_Z = 0.003;
+export const FRONT_TIME = 1.7;
+
+/** Seasonal cold at a month: 0 in September, 1 by November. */
+export function seasonCold(month: number): number {
+  return Math.min(1, Math.max(0, (month - SEASON_START_MONTH) / (SEASON_COLD_MONTH - SEASON_START_MONTH)));
+}
+
+/** Seasonal weather: biome blend + time-of-year trend + fronts. */
+export interface SeasonalWeather extends CurrentWeather {
+  /** The month input this reading came from. */
+  month: number;
+  /** Seasonal cold factor at that month (0..1). */
+  cold: number;
+  /** Front wave value at (position, month) (-1..1). */
+  front: number;
+}
+
+export function seasonalWeatherAt(
+  gen: WorldGen,
+  x: number,
+  z: number,
+  month: number = SEASON_START_MONTH,
+): SeasonalWeather {
+  const base = weatherAt(gen, x, z);
+  const cold = seasonCold(month);
+  // String() is load-bearing: WorldGen.seed is typed string, but
+  // createWorldGen stores the caller's value verbatim, and probes
+  // + callers pass numbers (12345) — hashSeed on a number would
+  // loop zero times (no .length) and return the same basis for
+  // every seed, collapsing all fronts to one phase. Coercing
+  // keeps the phase genuinely per-seed either way.
+  const phase = ((hashSeed(String(gen.seed)) % 1000) / 1000) * Math.PI * 2;
+  const front = Math.sin(x * FRONT_X + z * FRONT_Z + month * FRONT_TIME + phase);
+  const harshness = Math.min(
+    1,
+    Math.max(0, base.harshness + (1 - base.harshness) * cold * COLD_HARSHNESS_BLEND + front * FRONT_HARSHNESS),
+  );
+  const wind = Math.max(0, base.wind * (1 + cold * COLD_WIND_GAIN) + front * FRONT_WIND);
+  const rain = Math.min(
+    1,
+    Math.max(0, base.rain + (1 - base.rain) * cold * COLD_RAIN_BLEND + front * FRONT_RAIN),
+  );
+  return { ...base, wind, rain, harshness, month, cold, front };
 }
 
 /**
@@ -245,6 +337,13 @@ export interface PositionExposureModifiers {
   shelterQuery?: ShelterQuery;
   /** Worn garments, or a direct multiplier. Omitted = unclothed (1). */
   clothing?: number | readonly GarmentId[];
+  /**
+   * Time-of-year month for the seasonal axis (default: the start
+   * month, September). Omitted = game-start weather. The future
+   * clock system passes the live month here; nothing advances
+   * it in the meantime (progression rate is Adam's open call).
+   */
+  month?: number;
 }
 
 /**
@@ -284,7 +383,7 @@ export function exposureAtPosition(
   z: number,
   modifiers: PositionExposureModifiers = {},
 ): number {
-  const weather = weatherAt(gen, x, z);
+  const weather = seasonalWeatherAt(gen, x, z, modifiers.month ?? SEASON_START_MONTH);
   const shelter = modifiers.shelterQuery?.(x, z) ?? 1;
   return exposureAt(weather, { shelter, clothing: modifiers.clothing });
 }
