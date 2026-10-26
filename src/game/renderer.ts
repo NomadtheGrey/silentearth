@@ -42,6 +42,8 @@ import { FIRE_DEFS } from './fire';
 import { shelterState, HOUSE_DEFS } from './shelter';
 import { loomState } from './loomState';
 import { pileState } from './pileState';
+import { SkyRig } from './sky';
+import { SEASON_START_MONTH, seasonalWeatherAt } from './weather';
 import { createBiomeTexture, TEXTURE_REPEAT } from './terrain';
 import {
   CHUNK_SIZE,
@@ -148,6 +150,15 @@ export class WorldRenderer {
    * the placed-group unsubscribe list (same dispose path).
    */
   private pileGroup: THREE.Group | null = null;
+  /**
+   * Sky rig (Adam 2026-10-26): dome + sun + moon + stars + clouds
+   * + the lights they drive. Owns the day/night time driver (see
+   * sky.ts) — the renderer just feeds it dt + seasonal weather.
+   */
+  private sky: SkyRig | null = null;
+  /** Stored so the sky rig can drive them (were anonymous before). */
+  private sunLight: THREE.DirectionalLight | null = null;
+  private hemiLight: THREE.HemisphereLight | null = null;
   /** Accumulated time for flame flicker (loop-driven). */
   private flameTime = 0;
   private worldTickAcc = 0;
@@ -228,10 +239,17 @@ export class WorldRenderer {
     // Dim October light: the woods are watching, not sunbathing.
     this.scene.fog = new THREE.FogExp2(0x1a2018, 0.008);
     this.scene.background = new THREE.Color(0x1a2018);
-    this.scene.add(new THREE.HemisphereLight(0x9aa88a, 0x2a2018, 0.9));
-    const sun = new THREE.DirectionalLight(0xd8d0b0, 0.8);
-    sun.position.set(40, 60, 20);
-    this.scene.add(sun);
+    this.hemiLight = new THREE.HemisphereLight(0x9aa88a, 0x2a2018, 0.9);
+    this.scene.add(this.hemiLight);
+    this.sunLight = new THREE.DirectionalLight(0xd8d0b0, 0.8);
+    this.sunLight.position.set(40, 60, 20);
+    this.scene.add(this.sunLight);
+    // Sky with content (Adam 2026-10-26): replaces the flat
+    // background color as the visible sky (the background color
+    // stays only as a fallback behind the dome). The rig drives
+    // these same lights from the sun/moon, so light follows the
+    // bodies by construction.
+    this.sky = new SkyRig(this.scene, this.camera, this.sunLight, this.hemiLight, String(gen.seed));
 
     // The witch herself: detailed procedural figure (dress, bodice,
     // shawl, head, brimmed hat, arms, boots — models.ts), still
@@ -294,6 +312,11 @@ export class WorldRenderer {
     pileState.clear();
     this.rebuildPileGroup();
     this.gen = wrapGenWithState(gen);
+    // A new world gets a new sky: fresh stars for the seed + the
+    // cycle restarts at dawn. Skipped on the dispose path
+    // (disposed is already true there) — dispose() removes the
+    // rig itself below instead of rebuilding it.
+    if (!this.disposed) this.sky?.setSeed(String(gen.seed));
     this.proximity.setGen(this.gen);
     this.disposeGroundTextures();
     for (const [key, loaded] of this.chunks) {
@@ -321,6 +344,8 @@ export class WorldRenderer {
     cancelAnimationFrame(this.raf);
     window.removeEventListener('resize', this.onResize);
     this.setWorldGen(this.gen); // clears chunks (also disposes meshes)
+    this.sky?.dispose();
+    this.sky = null;
     this.disposeGroundTextures();
     this.renderer.dispose();
     this.renderer.domElement.remove();
@@ -860,6 +885,16 @@ export class WorldRenderer {
       );
       this.camera.lookAt(this.player.x, 0, this.player.z);
     }
+
+    // Sky: day/night driver + sun/moon/stars/clouds + lights.
+    // Month stays the season-start input (no calendar yet — see
+    // sky.ts); weather is the seasonal query at her position.
+    this.sky?.update(dt, {
+      month: SEASON_START_MONTH,
+      weather: seasonalWeatherAt(this.gen, this.player.x, this.player.z, SEASON_START_MONTH),
+      playerX: this.player.x,
+      playerZ: this.player.z,
+    });
 
     this.renderer.render(this.scene, this.camera);
   };
