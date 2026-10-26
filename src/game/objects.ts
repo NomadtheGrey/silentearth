@@ -98,7 +98,11 @@
 
 import type { BiomeId, ScatterKind } from '../types';
 
-/** Item ids: src/data/world_data.json, plus CLAY (see header note). */
+/** Item ids: src/data/world_data.json, plus CLAY (see header note) and
+ *  the Adam-named ground materials DIRT / MUD / GRASS (2026-10-26:
+ *  she can harvest nearly anyplace, even just dirt, mud, grass — the
+ *  materials ARE the harvest, not a mapping onto an older item).
+ *  Their uses (thatch, daub, etc.) are Systems' business, not set here. */
 export type ItemId =
   | 'SNAP_WOOD'
   | 'TENDER_VINES'
@@ -111,7 +115,10 @@ export type ItemId =
   | 'SPORES'
   | 'DRY_KINDLING'
   | 'STUMP'
-  | 'CLAY';
+  | 'CLAY'
+  | 'DIRT'
+  | 'MUD'
+  | 'GRASS';
 
 /**
  * Tool ladder stages for tool-gated yields (the garden trowel and its
@@ -248,8 +255,19 @@ export type HarvestYieldOutcome =
  * prompt, or change inventory — the later harvest system does that,
  * using these numbers.
  */
+/**
+ * The harvestable shape harvestYieldForTool accepts: a scatter source
+ * (HarvestSourceDef) OR a ground material (GroundMaterialDef). Ground
+ * materials are always harvestable and never anchors, so they satisfy
+ * this shape with harvestable true and anchor omitted.
+ */
+export type HarvestableSource = Pick<
+  HarvestSourceDef,
+  'harvestable' | 'permitTier' | 'bonusChance' | 'anchor'
+>;
+
 export function harvestYieldForTool(
-  source: HarvestSourceDef,
+  source: HarvestableSource,
   tier: ToolTier | null,
 ): HarvestYieldOutcome {
   if (!source.harvestable || source.permitTier === null) {
@@ -759,3 +777,63 @@ export const SOURCE_FOR_KIND: Record<ScatterKind, HarvestSourceDef> =
 export function harvestableSources(): HarvestSourceDef[] {
   return SOURCES.filter((s) => s.harvestable);
 }
+
+/**
+ * GROUND MATERIALS (Adam, 2026-10-26: she can harvest nearly anyplace
+ * — even just dirt, mud, grass). These are NOT scatter objects: they
+ * have no kind, no mesh, no chunk placement. They are the ground under
+ * her feet, determined by terrain at her position (see proximity.ts).
+ * Existence is Adam's; permits + amounts are LANE-DECIDED under the
+ * deciding brief, and marked so. All three are BASIC materials, so all
+ * three are hand-permitted: she scoops dirt, pulls grass, and lifts mud
+ * with no tool at all, and better tools only recover more of what is
+ * there (general pattern: hand 1 + 25% →2, trowel 2 + 25% →3, spade /
+ * axe-trowel 3 + 25% →4, spade-axe 4 + 25% →5, trundle 5 + 25% →6).
+ * No secondary yields: ground is everywhere, so a spore drop on every
+ * handful would flood the economy — ground gives exactly its material.
+ * Their uses are Systems' business, not set here.
+ */
+export interface GroundMaterialDef {
+  id: 'dirt' | 'mud' | 'grass';
+  name: string;
+  description: string;
+  harvestable: true;
+  permitTier: PermitTier;
+  primaryYield: ItemId;
+}
+
+export const GROUND_MATERIALS: GroundMaterialDef[] = [
+  {
+    id: 'dirt',
+    name: 'Dirt',
+    description:
+      'Dry earth, scooped from anywhere that is not wet or grassy — the ' +
+      'default ground underfoot. Basic, hand-gathered.',
+    harvestable: true,
+    permitTier: 'hand',
+    primaryYield: 'DIRT',
+  },
+  {
+    id: 'mud',
+    name: 'Mud',
+    description:
+      'Wet earth from mire, bog, creek edges, and marsh ground — soft, ' +
+      'heavy, and close kin to silt as a binder. Basic, hand-gathered.',
+    harvestable: true,
+    permitTier: 'hand',
+    primaryYield: 'MUD',
+  },
+  {
+    id: 'grass',
+    name: 'Grass',
+    description:
+      'Open-ground grass from meadow and oldfield ground — pulled by the ' +
+      'handful for thatch, bedding, and binding. Basic, hand-gathered.',
+    harvestable: true,
+    permitTier: 'hand',
+    primaryYield: 'GRASS',
+  },
+];
+
+export const GROUND_MATERIAL_BY_ID: Record<string, GroundMaterialDef> =
+  Object.fromEntries(GROUND_MATERIALS.map((g) => [g.id, g]));

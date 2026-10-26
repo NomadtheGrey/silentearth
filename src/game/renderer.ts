@@ -24,6 +24,7 @@ import { PlayerController } from './player';
 import { marshWeight } from './biomes';
 import { SOURCE_FOR_KIND } from './objects';
 import type { MeshShape } from './objects';
+import { ProximityTracker } from './proximity';
 import { createBiomeTexture, TEXTURE_REPEAT } from './terrain';
 import {
   CHUNK_SIZE,
@@ -190,6 +191,11 @@ export class WorldRenderer {
   private witch: THREE.Group;
   private gen: WorldGen;
   private player: PlayerController;
+  /** Proximity tracker: engine-owned, subscribes to 'player:moved' and
+   *  emits 'harvest:inRange' for the UI lane's harvest buttons. It is
+   *  mechanics, not presentation — the renderer only hosts it so no
+   *  App.tsx wiring (and no claim) is needed to get it running. */
+  private proximity: ProximityTracker;
   private disposed = false;
   /** One shared procedural ground texture per biome (+ marsh), built from
    *  the current world seed. Cached, never per-chunk, so texture cost
@@ -203,6 +209,7 @@ export class WorldRenderer {
   ) {
     this.gen = gen;
     this.player = player;
+    this.proximity = new ProximityTracker(gen);
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.setSize(container.clientWidth, container.clientHeight);
@@ -284,6 +291,7 @@ export class WorldRenderer {
   /** Swap the world generator (seed change): drop all chunks, re-stream. */
   setWorldGen(gen: WorldGen): void {
     this.gen = gen;
+    this.proximity.setGen(gen);
     this.disposeGroundTextures();
     for (const [key, loaded] of this.chunks) {
       this.disposeLoaded(loaded);
@@ -301,6 +309,7 @@ export class WorldRenderer {
 
   dispose(): void {
     this.disposed = true;
+    this.proximity.dispose();
     cancelAnimationFrame(this.raf);
     window.removeEventListener('resize', this.onResize);
     this.setWorldGen(this.gen); // clears chunks (also disposes meshes)
