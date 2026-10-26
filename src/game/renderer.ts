@@ -33,6 +33,9 @@ import {
   wrapGenWithState,
 } from './harvestState';
 import { terrainSpeedAt } from './movement';
+import { fireState } from './fireState';
+import { FIRE_DEFS } from './fire';
+import { shelterState, HOUSE_DEFS } from './shelter';
 import { createBiomeTexture, TEXTURE_REPEAT } from './terrain';
 import {
   CHUNK_SIZE,
@@ -209,6 +212,18 @@ export class WorldRenderer {
   /** Spawned-object meshes (spawned logs + growing saplings):
    *  rebuilt on every world tick, only for loaded chunks. */
   private spawnedGroup: THREE.Group | null = null;
+  /**
+   * Player-placed meshes (fires + houses): rebuilt on placement
+   * and lighting events, NOT chunk-filtered — placed entities
+   * are few and free-placed anywhere, so they all render.
+   * Flame meshes carry userData.flame + userData.phase and pulse
+   * in the loop (see flameTime).
+   */
+  private placedGroup: THREE.Group | null = null;
+  /** Unsubscribes for the placed-group rebuild events (below). */
+  private unsubPlaced: (() => void)[] = [];
+  /** Accumulated time for flame flicker (loop-driven). */
+  private flameTime = 0;
   private worldTickAcc = 0;
   private disposed = false;
   /** One shared procedural ground texture per biome (+ marsh), built from
@@ -251,6 +266,16 @@ export class WorldRenderer {
       this.unloadChunk(p.cx, p.cz);
       this.loadChunk(p.cx, p.cz);
     });
+    // Placed-group rebuild on placement + lighting: a new fire or
+    // house appears, and a lit fire gains its flame. Lighting
+    // PROGRESS needs no rebuild (only lit state changes meshes).
+    const rebuild = (): void => this.rebuildPlacedGroup();
+    this.unsubPlaced.push(
+      bus.on('fire:placed', rebuild),
+      bus.on('fire:lit', rebuild),
+      bus.on('shelter:placed', rebuild),
+    );
+    this.rebuildPlacedGroup();
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.setSize(container.clientWidth, container.clientHeight);
@@ -335,6 +360,11 @@ export class WorldRenderer {
     // state (and felled stumps, saplings, cleared spots) does not
     // carry over.
     harvestState.clear();
+    // A new seed is a new world: placed fires + houses do not
+    // carry over either (they belong to the old world's map).
+    fireState.clear();
+    shelterState.clear();
+    this.rebuildPlacedGroup();
     this.gen = wrapGenWithState(gen);
     this.proximity.setGen(this.gen);
     this.disposeGroundTextures();
@@ -357,6 +387,8 @@ export class WorldRenderer {
     this.disposed = true;
     this.unsubHarvestCompleted?.();
     this.unsubHarvestCompleted = null;
+    for (const unsub of this.unsubPlaced) unsub();
+    this.unsubPlaced = [];
     this.proximity.dispose();
     cancelAnimationFrame(this.raf);
     window.removeEventListener('resize', this.onResize);
@@ -543,6 +575,149 @@ export class WorldRenderer {
     }
     harvestState.processDueSpawns(now, this.gen);
     this.rebuildSpawnedGroup();
+    // Friction lighting display: waits that elapsed become 'ready'
+    // (the rub itself checks the clock, so this is display only).
+    fireState.advanceLighting(now);
+  }
+
+  /**
+   * Flame mesh for a lit fire: outer orange cone + inner yellow
+   * core, flickering in the loop via userData.flame/phase. Phase
+   * is a position hash (no Math.random — render-only, but the
+   * habit keeps seeded determinism arguments clean).
+   */
+  private flameMesh(x: number, z: number, baseY: number, scale: number): THREE.Group {
+    const flame = new THREE.Group();
+    const outer = new THREE.Mesh(
+      new THREE.ConeGeometry(0.28 * scale, 0.8 * scale, 7),
+      new THREE.MeshBasicMaterial({ color: 0xff6a00 }),
+    );
+    outer.position.y = 0.4 * scale;
+    const inner = new THREE.Mesh(
+      new THREE.ConeGeometry(0.15 * scale, 0.45 * scale, 7),
+      new THREE.MeshBasicMaterial({ color: 0xffd23f }),
+    );
+    inner.position.y = 0.22 * scale;
+    flame.add(outer, inner);
+    flame.position.y = baseY;
+    flame.userData.flame = true;
+    flame.userData.phase = Math.abs(Math.sin(x * 12.9898 + z * 78.233)) * Math.PI * 2;
+    return flame;
+  }
+
+  /** Rebuild all player-placed meshes (fires + houses). */
+  private rebuildPlacedGroup(): void {
+    if (this.placedGroup) {
+      this.scene.remove(this.placedGroup);
+      this.placedGroup.traverse((obj) => {
+        if (obj instanceof THREE.Mesh) {
+          obj.geometry.dispose();
+          const mat = obj.material;
+          if (Array.isArray(mat)) mat.forEach((m) => m.dispose());
+          else mat.dispose();
+        }
+      });
+      this.placedGroup = null;
+    }
+    const group = new THREE.Group();
+    const box = (
+      w: number,
+      h: number,
+      d: number,
+      color: number,
+      px: number,
+      py: number,
+      pz: number,
+      ry = 0,
+      rx = 0,
+    ): THREE.Mesh => {
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), lambert(color));
+      mesh.position.set(px, py, pz);
+      mesh.rotation.y = ry;
+      mesh.rotation.x = rx;
+      return mesh;
+    };
+    const cyl = (
+      rt: number,
+      rb: number,
+      h: number,
+      color: number,
+      px: number,
+      py: number,
+      pz: number,
+      seg = 10,
+    ): THREE.Mesh => {
+      const mesh = new THREE.Mesh(new THREE.CylinderGeometry(rt, rb, h, seg), lambert(color));
+      mesh.position.set(px, py, pz);
+      return mesh;
+    };
+    for (const fire of fireState.snapshot()) {
+      const fg = new THREE.Group();
+      fg.position.set(fire.x, 0, fire.z);
+      const lit = fire.lit && FIRE_DEFS[fire.type].flameWhenLit;
+      if (fire.type === 'campfire') {
+        for (let i = 0; i < 5; i++) {
+          const a = (i / 5) * Math.PI * 2;
+          fg.add(box(0.22, 0.18, 0.22, 0x8a8a86, Math.cos(a) * 0.55, 0.09, Math.sin(a) * 0.55, a));
+        }
+        const log1 = cyl(0.06, 0.06, 1.1, 0x6b4a2f, 0, 0.16, 0);
+        log1.rotation.z = Math.PI / 2;
+        log1.rotation.y = 0.5;
+        const log2 = cyl(0.06, 0.06, 1.1, 0x6b4a2f, 0, 0.16, 0);
+        log2.rotation.z = Math.PI / 2;
+        log2.rotation.y = -0.5;
+        fg.add(log1, log2);
+        if (lit) fg.add(this.flameMesh(fire.x, fire.z, 0.25, 1));
+      } else if (fire.type === 'hearth') {
+        fg.add(box(1.3, 0.5, 1.3, 0x8a8a86, 0, 0.25, 0));
+        fg.add(box(0.9, 0.1, 0.9, 0x2b2b2b, 0, 0.55, 0));
+        if (lit) fg.add(this.flameMesh(fire.x, fire.z, 0.6, 1.1));
+      } else if (fire.type === 'kiln') {
+        fg.add(cyl(0.7, 0.8, 1.2, 0xb08968, 0, 0.6, 0));
+        const dome = new THREE.Mesh(new THREE.SphereGeometry(0.7, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2), lambert(0xb08968));
+        dome.position.y = 1.2;
+        fg.add(dome);
+        if (lit) fg.add(this.flameMesh(fire.x, fire.z, 1.9, 0.7));
+      } else {
+        fg.add(cyl(0.85, 0.95, 0.4, 0x6e6e6a, 0, 0.2, 0));
+        fg.add(cyl(0.55, 0.65, 2.2, 0x5a5a58, 0, 1.5, 0));
+        if (lit) fg.add(this.flameMesh(fire.x, fire.z, 2.6, 0.8));
+      }
+      group.add(fg);
+    }
+    for (const house of shelterState.snapshot()) {
+      const def = HOUSE_DEFS[house.type];
+      const f = def.footprint;
+      const hg = new THREE.Group();
+      hg.position.set(house.x, 0, house.z);
+      if (house.type === 'leanTo') {
+        hg.add(cyl(0.07, 0.07, 2.2, 0x6b4a2f, -f / 2, 1.1, 0));
+        hg.add(cyl(0.07, 0.07, 2.2, 0x6b4a2f, f / 2, 1.1, 0));
+        hg.add(box(f + 0.4, 0.12, 1.6, 0x8a7a4a, 0, 1.9, 0, 0, -0.5));
+      } else if (house.type === 'thatchHut') {
+        hg.add(cyl(f / 2, f / 2, 1.6, 0xcbb59a, 0, 0.8, 0, 12));
+        const roof = new THREE.Mesh(new THREE.ConeGeometry(f / 2 + 0.3, 1.5, 12), lambert(0x8a7a4a));
+        roof.position.y = 2.35;
+        hg.add(roof);
+      } else if (house.type === 'wovenCottage') {
+        hg.add(box(f, 2.2, f * 0.8, 0xd8c9a8, 0, 1.1, 0));
+        const roof = new THREE.Mesh(new THREE.ConeGeometry(f * 0.75, 1.4, 4), lambert(0x8a7a4a));
+        roof.position.y = 2.9;
+        roof.rotation.y = Math.PI / 4;
+        hg.add(roof);
+        hg.add(box(0.8, 1.6, 0.1, 0x4a3220, 0, 0.8, (f * 0.8) / 2 + 0.01));
+      } else {
+        hg.add(box(f, 2.6, f * 0.85, 0x7a5a38, 0, 1.3, 0));
+        const roof = new THREE.Mesh(new THREE.ConeGeometry(f * 0.72, 1.6, 4), lambert(0x5a3d24));
+        roof.position.y = 3.4;
+        roof.rotation.y = Math.PI / 4;
+        hg.add(roof);
+        hg.add(box(0.9, 1.8, 0.1, 0x3a2812, 0, 0.9, (f * 0.85) / 2 + 0.01));
+      }
+      group.add(hg);
+    }
+    this.scene.add(group);
+    this.placedGroup = group;
   }
 
   /** Rebuild the spawned-object meshes for currently loaded chunks:
@@ -623,6 +798,18 @@ export class WorldRenderer {
     if (this.worldTickAcc >= 2) {
       this.worldTickAcc = 0;
       this.worldTick();
+    }
+
+    // Flame flicker: every flame mesh pulses around its base
+    // scale, out of phase by position so fires don't sync.
+    this.flameTime += dt;
+    if (this.placedGroup) {
+      this.placedGroup.traverse((obj) => {
+        if (obj.userData.flame) {
+          const s = 1 + 0.18 * Math.sin(this.flameTime * 13 + (obj.userData.phase as number));
+          obj.scale.set(s, 1 + 0.25 * Math.sin(this.flameTime * 17 + (obj.userData.phase as number)), s);
+        }
+      });
     }
 
     // Witch mesh follows the player; hidden in first-person.

@@ -78,6 +78,7 @@ import {
 } from './objects';
 import { harvestState, scatterTargetId } from './harvestState';
 import { weatherAt, type CurrentWeather } from './weather';
+import { shelterState, shelterAt } from './shelter';
 
 export { scatterTargetId };
 import type { WorldGen } from './worldgen';
@@ -229,6 +230,8 @@ export class ProximityTracker {
   private lastPitch = 0;
   /** Dominant biome of the last emitted 'weather:changed'. */
   private lastWeatherDominant: string | null = null;
+  /** Shelter multiplier of the last emitted 'shelter:changed'. */
+  private lastShelterMultiplier: number | null = null;
   private unsubscribes: (() => void)[] = [];
 
   constructor(gen: WorldGen, subscribe = true) {
@@ -351,6 +354,18 @@ export class ProximityTracker {
     if (weather.dominant !== this.lastWeatherDominant) {
       this.lastWeatherDominant = weather.dominant;
       bus.emit('weather:changed', weather);
+    }
+    // Shelter event (MVP fire + shelters round, Adam 2026-10-26):
+    // same change-only pattern as weather. The multiplier comes
+    // from REAL placed houses via the live shelter query — at
+    // her placed house (within SHELTER_RADIUS) she reads that
+    // house's multiplier, else 1. houseId is the nearest
+    // sheltering house, else null. Systems/UI read exposure from
+    // exposureAtPosition; this event is the change signal.
+    const shelter = shelterAt(this.lastX, this.lastZ, shelterState.snapshot());
+    if (shelter.multiplier !== this.lastShelterMultiplier) {
+      this.lastShelterMultiplier = shelter.multiplier;
+      bus.emit('shelter:changed', shelter);
     }
     return targets;
   }

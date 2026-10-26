@@ -20,6 +20,8 @@
  */
 
 import type { BiomeId, CameraMode } from '../types';
+import type { FireType, LightingMethod } from './fire';
+import type { HouseType } from './shelter';
 import type { PermitTier } from './objects';
 
 export interface EventMap {
@@ -168,6 +170,41 @@ export interface EventMap {
     dominant: BiomeId;
     weights: Record<BiomeId, number>;
   };
+  /**
+   * A fire entity was placed (fireState.placeFire). Free
+   * placement — no cost or gate at this layer (Systems + UI own
+   * recipes/gating). Renderer rebuilds the placed group from this.
+   */
+  'fire:placed': { id: string; type: FireType; x: number; z: number };
+  /**
+   * Lighting progressed on an unlit fire: flint clicks so far
+   * (phase null), or friction phase ('waiting' until the wait
+   * ends, then 'ready'). Renderer does not need this (only lit
+   * state changes meshes); UI shows progress from it.
+   */
+  'fire:lighting': {
+    id: string;
+    type: FireType;
+    method: LightingMethod;
+    clicks: number;
+    phase: 'waiting' | 'ready' | null;
+  };
+  /** A fire lit, by flint or friction. Renderer shows its flame. */
+  'fire:lit': { id: string; type: FireType; x: number; z: number; method: LightingMethod };
+  /**
+   * A house was placed (shelterState.placeHouse). Free placement
+   * — no zone/plot gate. Renderer rebuilds the placed group; the
+   * shelter query reads live state, so no re-wiring is needed.
+   */
+  'shelter:placed': { id: string; type: HouseType; x: number; z: number };
+  /**
+   * Shelter state at her position changed (tracker, change-only,
+   * like weather:changed): multiplier from real placed houses
+   * (1 = unsheltered), houseId of the nearest sheltering house
+   * or null. First recompute always emits (multiplier starts
+   * null, so the initial state always differs).
+   */
+  'shelter:changed': { multiplier: number; houseId: string | null };
 }
 
 type Handler<E> = (payload: E) => void;
