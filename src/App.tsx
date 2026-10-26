@@ -481,6 +481,16 @@
  *   at count 0, returns on pickup). Quantity choice: one per
  *   press, per the brief and Systems' V1 note — unless Adam
  *   corrects it.
+ * - BELOW-PERMIT WORDING, LIVE (Adam, 2026-10-26 — "below
+ *   permit" too vague): a below-permit harvest failure now
+ *   reads "Needs {Tool}." (e.g. downed oak → "Needs
+ *   Axe-Trowel.") instead of "Harvest failed: below-permit."
+ *   The failed event carries no permit info, so the shell
+ *   reads the source's permitTier from SOURCE_BY_ID and maps
+ *   the tier to its tool item for displayNameFor; a lookup
+ *   miss falls back to the old wording. Other failure
+ *   reasons untouched; 'permit-tbd' stays as-is (no tool
+ *   decided there yet). App.tsx only.
  * POINTER DISCIPLINE: overlays are pointer-events-none except the
  * small interactive pieces (HUD buttons, panels, harvest buttons),
  * so world clicks — including the first-person mouse-capture click
@@ -505,6 +515,7 @@ import {
 } from './game/fireState';
 import { loomState } from './game/loomState';
 import { pileState, type PileTarget } from './game/pileState';
+import { SOURCE_BY_ID, type ToolTier } from './game/objects';
 import type { FireType } from './game/fire';
 import {
   shelterState,
@@ -614,6 +625,35 @@ interface ProgressItem {
   label: string;
   x: number;
   y: number;
+}
+
+// BELOW-PERMIT WORDING (Adam, 2026-10-26 — "below permit" is too
+// vague): a below-permit failure names the required tool instead
+// of the code word. The failed event carries no permit info, so
+// the shell reads the source's permitTier from SOURCE_BY_ID
+// (keyed by the same sourceId the tracker puts on the target)
+// and maps the tier to its tool item for displayNameFor. A
+// lookup miss, a 'hand' permit, or 'TBD' falls back to the old
+// wording rather than inventing a tool — 'hand' can never be
+// below-permit in practice (it is the lowest stage) and 'TBD'
+// fails as 'permit-tbd', not here. The wording names the tool
+// with no verb, so it reads right for both Harvest and Remove
+// presses, which share this handler.
+const PERMIT_TIER_TO_ITEM: Record<ToolTier, string> = {
+  trowel: ITEMS.gardenTrowel,
+  sharpTrowel: ITEMS.sharpTrowel,
+  spade: ITEMS.spade,
+  axeTrowel: ITEMS.axeTrowel,
+  spadeAxe: ITEMS.spadeAxe,
+  trundleTool: ITEMS.trundleTool,
+};
+
+function belowPermitText(sourceId: string): string {
+  const permit = SOURCE_BY_ID[sourceId]?.permitTier;
+  if (permit && permit !== 'hand' && permit !== 'TBD') {
+    return `Needs ${displayNameFor(PERMIT_TIER_TO_ITEM[permit])}.`;
+  }
+  return 'Harvest failed: below-permit.';
 }
 
 function formatWeights(weights: BiomeWeights): string {
@@ -1370,7 +1410,9 @@ export default function App() {
       const text =
         p.reason === 'inventory-full' && p.yields.length > 0
           ? `Pack full — ${p.yields.map((y) => `${y.item} × ${y.quantity}`).join(', ')} didn't fit.`
-          : `Harvest failed: ${p.reason}.`;
+          : p.reason === 'below-permit'
+            ? belowPermitText(p.sourceId)
+            : `Harvest failed: ${p.reason}.`;
       showFeedback(text, 'blocked', anchor.x, anchor.y);
     });
     const offProgress = bus.on('harvest:progress', (p) => {
