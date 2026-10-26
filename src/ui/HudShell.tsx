@@ -13,6 +13,13 @@
  * has not ruled is rendered. With no `needSlots`, the needs row says
  * plainly that it awaits the survival systems, instead of showing
  * invented health / warmth / dryness bars.
+ *
+ * POINTER RULE (wiring fix, 2026-10-26): the content area below
+ * the needs row is pointer-events-none, not auto. An auto content
+ * area would swallow clicks across the whole screen — including
+ * the click that captures the mouse in first-person. Interactive
+ * children (panels, buttons) re-enable pointer events on their own
+ * containers; the shell itself never blocks the world.
  */
 
 import type { ReactNode } from 'react';
@@ -65,7 +72,7 @@ export function HudShell({
           )}
         </div>
       </div>
-      <div className="pointer-events-auto flex-1">{children}</div>
+      <div className="pointer-events-none flex-1">{children}</div>
     </div>
   );
 }

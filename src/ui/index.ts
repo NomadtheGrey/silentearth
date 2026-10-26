@@ -54,6 +54,11 @@ export { HarvestButton } from './HarvestButton';
 export type { HarvestButtonProps } from './HarvestButton';
 export { ProximityHarvestButtons } from './ProximityHarvestButtons';
 export type { ProximityHarvestButtonsProps } from './ProximityHarvestButtons';
+export { projectWorldToScreen } from './worldProjection';
+export type {
+  ProjectionInput,
+  ProjectedPoint,
+} from './worldProjection';
 export { HudShell } from './HudShell';
 export type { HudShellProps } from './HudShell';
 export { InventoryPanel } from './InventoryPanel';
