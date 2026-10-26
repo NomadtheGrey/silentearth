@@ -64,6 +64,24 @@
  * this round; clue/background details are future content.
  * No exact spot is named here either, per that rule.
  *
+ * NOVEMBER ANCHOR (verified 2026-10-26, Fort Wayne Int'l
+ * 1991–2020 NOAA normals): November mean high 49.4°F, mean
+ * low 32.8°F. Adam's recollection (nights ~35°F, days ~50°F
+ * highs) tracks within ~2°F — use ~50°F days / ~35°F nights
+ * as the November reference for the semi-realistic temperate
+ * weather (nights a touch warmer than the strict normal is
+ * fine; consistent 50s daytime is exactly normal). This is a
+ * REFERENCE ANCHOR for weather patterns, not a hard pin on
+ * every day's temperature — fronts and cold snaps still vary
+ * around it. It changes NO numbers today: the model carries
+ * no temperature field (wind/rain/harshness only), so the
+ * anchor constrains FUTURE temperature mapping — November
+ * days ~50°F, nights ~35°F, and the September start must read
+ * warmer than this, consistent with the Sep → Nov cold trend
+ * already modeled. The station is in-region (Fort Wayne =
+ * northern Indiana, inside the pinned region), so the anchor
+ * is grounded, not arbitrary.
+ *
  * HOOKS, NOT BUILT (Adam's brief, explicit):
  * - Shelter modifier: the housing system does not exist yet, but
  *   its HOOK SHAPE is now set (Adam, 2026-10-26, PINNED):
