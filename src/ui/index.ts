@@ -80,6 +80,8 @@ export { CameraToggle } from './CameraToggle';
 export type { CameraToggleProps } from './CameraToggle';
 export { TouchControls } from './TouchControls';
 export type { TouchControlsProps } from './TouchControls';
+export { LocationChip } from './LocationChip';
+export type { LocationChipProps } from './LocationChip';
 export {
   OptionsModal,
   FONT_OPTIONS,
