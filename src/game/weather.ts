@@ -34,11 +34,15 @@
  *
  * HOOKS, NOT BUILT (Adam's brief, explicit):
  * - Shelter modifier (lean-to and up — the housing system does not
- *   exist yet) and clothes modifier (garment types TBD) are
- *   DOCUMENTED INPUTS to exposureAt, defaulting to unsheltered /
- *   unclothed (multiplier 1 = no protection) until those systems
- *   land and supply real values. No shelter or clothes mechanics
- *   are invented here — only the socket they will plug into.
+ *   exist yet) is a DOCUMENTED INPUT to exposureAt, defaulting to
+ *   unsheltered (multiplier 1) until housing lands with values.
+ * - Clothes modifier: the INPUT SHAPE is now specified (garment
+ *   table + multiplicative stacking, Marlowe-decided values in
+ *   GARMENT_PROTECTION), but the clothes system itself is not
+ *   built — no worn list exists yet, so callers default to no
+ *   clothes (0%) until Systems' clothes work lands and the shell
+ *   passes what she wears. No garment items, recipes, or wardrobe
+ *   mechanics are invented here — only the table + socket.
  */
 
 import type { WorldGen } from './worldgen';
@@ -106,31 +110,121 @@ export function weatherAt(gen: WorldGen, x: number, z: number): CurrentWeather {
 }
 
 /**
- * Future exposure inputs — HOOKS, not mechanics. Housing will
- * supply shelter (lean-to and up) and garments will supply
- * clothing; each is a 0..1 protection multiplier (1 = no
- * protection, 0 = fully protected). Until those systems land,
- * callers omit them and exposure reads as unsheltered/unclothed.
+ * Exposure elements: the axes clothing protects against. Rain,
+ * wind, and cold come from the weather; wet is ground water
+ * (marsh/bog) soaking through. v1 weather profiles carry wind +
+ * rain + a single harshness, so the elements below are the
+ * CLOTHING axes — the per-element split lives in the garment
+ * table, not in the biome profiles.
+ */
+export type ExposureElement = 'rain' | 'wind' | 'cold' | 'wet';
+
+/** Per-element protection percentages, 0..1 (fraction blocked). */
+export type ElementPercentages = Partial<Record<ExposureElement, number>>;
+
+/** Per-element remaining exposure, 0..1 (1 = unprotected). */
+export type ElementRemaining = Record<ExposureElement, number>;
+
+/** Garment ids for the clothes-modifier input. */
+export type GarmentId =
+  | 'cloak'
+  | 'shawl'
+  | 'pointyHat'
+  | 'mossyMittens'
+  | 'bogBoots';
+
+/**
+ * Garment protection table — MARLOWE-DECIDED starting values
+ * (Adam, 2026-10-26, via the weather brief update; for Adam's pin
+ * pass, NOT Adam-pinned). Percentages are per garment, per
+ * element, as fractions blocked:
+ * - Cloak: rain 40%, wind 30%.
+ * - Shawl: cold 30%.
+ * - Pointy Hat: rain 15%.
+ * - Mossy Mittens: cold 15%.
+ * - Bog boots: wet 40% — PLUS the less-slow travel effect in
+ *   movement.ts (the two effects are separate: wet protection
+ *   here, speed mitigation there).
+ * Full kit combined (multiplicative, see clothingRemaining):
+ * rain ~49%, wind 30%, cold ~41%, wet 40%.
+ */
+export const GARMENT_PROTECTION: Record<GarmentId, ElementPercentages> = {
+  cloak: { rain: 0.4, wind: 0.3 },
+  shawl: { cold: 0.3 },
+  pointyHat: { rain: 0.15 },
+  mossyMittens: { cold: 0.15 },
+  bogBoots: { wet: 0.4 },
+};
+
+/**
+ * Remaining exposure per element for a worn set. STACKING
+ * (Marlowe-decided): multiplicative per element — each worn
+ * garment reduces the REMAINING exposure by its percentage, so
+ * returns diminish and protection never reaches 100% (every
+ * factor stays above 0). Duplicates are ignored: a garment is
+ * worn or it is not, wearing it twice is not wearing two.
+ * No clothes worn → every element remains 1 (0% protection).
+ */
+export function clothingRemaining(worn: readonly GarmentId[]): ElementRemaining {
+  const remaining: ElementRemaining = { rain: 1, wind: 1, cold: 1, wet: 1 };
+  for (const garment of new Set(worn)) {
+    const protection = GARMENT_PROTECTION[garment];
+    for (const element of Object.keys(protection) as ExposureElement[]) {
+      remaining[element] *= 1 - (protection[element] ?? 0);
+    }
+  }
+  return remaining;
+}
+
+/**
+ * Single clothing multiplier for a worn set: the MEAN of the four
+ * element remainings. Combination rule (lane-decided, flagged):
+ * v1 harshness is a single number, so a single multiplier is
+ * needed, and the mean keeps every element's voice without
+ * letting four multiplied axes over-count one harshness (a
+ * product would credit a lone cloak with ~58% off). Systems
+ * needing element-specific logic later (wetness/cold meters)
+ * read clothingRemaining directly instead of this mean.
+ */
+export function clothingMultiplier(worn: readonly GarmentId[]): number {
+  const remaining = clothingRemaining(worn);
+  return (remaining.rain + remaining.wind + remaining.cold + remaining.wet) / 4;
+}
+
+/**
+ * Exposure modifiers. Shelter is the separate STATIONARY
+ * modifier (housing system, values TBD — housing is not built).
+ * Clothing is the TRAVELING modifier, as either a worn garment
+ * list (table-driven, preferred) or a direct 0..1 multiplier
+ * (kept for callers that already computed one). Until Systems'
+ * clothes system lands and the shell passes a worn list, callers
+ * omit clothing and exposure reads as unclothed (0%).
  */
 export interface ExposureModifiers {
   /** Housing protection multiplier, 0..1. Omitted = unsheltered (1). */
   shelter?: number;
-  /** Clothing protection multiplier, 0..1. Omitted = unclothed (1). */
-  clothing?: number;
+  /** Worn garments, or a direct multiplier. Omitted = unclothed (1). */
+  clothing?: number | readonly GarmentId[];
 }
 
 /**
  * Effective exposure harshness: weather harshness reduced by
- * whatever protection the (future) shelter and clothing systems
- * report. Today both default to 1, so exposure == harshness.
- * Systems' survival math should read exposureAt, not raw
- * harshness, so shelter/clothes land without a call-site change.
+ * shelter (stationary) and clothing (traveling). Today both
+ * default to 1, so exposure == harshness. Systems' survival math
+ * should read exposureAt, not raw harshness, so shelter/clothes
+ * land without a call-site change.
  */
 export function exposureAt(
   weather: WeatherProfile,
   modifiers: ExposureModifiers = {},
 ): number {
   const shelter = modifiers.shelter ?? 1;
-  const clothing = modifiers.clothing ?? 1;
+  const clothingValue = modifiers.clothing;
+  const clothing =
+    clothingValue === undefined
+      ? 1
+      : typeof clothingValue === 'number'
+        ? clothingValue
+        : clothingMultiplier(clothingValue);
   return weather.harshness * shelter * clothing;
 }

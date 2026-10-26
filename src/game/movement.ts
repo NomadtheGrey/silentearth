@@ -32,7 +32,10 @@
  * controller takes a BogBootsQuery — () => boolean, worn or not
  * — defaulting to no boots (full slow) until Systems' clothes
  * work lands and the shell wires it. No boot item, recipe, or
- * wardrobe mechanics are invented here.
+ * wardrobe mechanics are invented here. Note the boots' SECOND
+ * effect lives elsewhere: bog boots also give wet 40% exposure
+ * protection in weather.ts's garment table (GARMENT_PROTECTION) —
+ * speed mitigation here, wet protection there, same garment.
  *
  * TERRAIN INPUT (wired, not a query for the shell): the renderer
  * wires the terrain query itself (it owns both the generator and
