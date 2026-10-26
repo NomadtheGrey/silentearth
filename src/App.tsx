@@ -432,6 +432,17 @@
  *   needs a button or a key, follow-up); if piles should
  *   outrank ground outright, that is a one-line priority
  *   change for Adam's call.
+ * - PILE BRIDGE OUT (DEV sequencing plan, 2026-10-26): the
+ *   shell's 'pile:pickup-requested' grant bridge is removed
+ *   (App.tsx only). The touch USE handler STILL emits
+ *   'pile:pickup-requested' { pileId } — the emit stays, only
+ *   the shell granter goes. GAP, STATED PLAINLY: until
+ *   Systems' listener lands, the emit has no granter and USE
+ *   pile pickup does nothing on WIP; Systems' listener
+ *   (built, held) lands only after DEV signals this removal,
+ *   and this landing's report is that signal. Two granters
+ *   on one event would double-fire feedback and saves, so
+ *   the listener must never land while the bridge lives.
  * - STUMP INDICATION, LIVE (Adam, 2026-10-26): a
  *   workstation-gated recipe that cannot be crafted for
  *   station reasons now reads "Needs a tree stump to work
@@ -579,7 +590,7 @@ import {
   PersonalInventory,
   displayNameFor,
 } from './systems/inventory';
-import { grantFromPile, dropFromInventory } from './systems/piles';
+import { dropFromInventory } from './systems/piles';
 import { executeCraft } from './systems/crafting-execution';
 import {
   HungerState,
@@ -1287,51 +1298,6 @@ export default function App() {
     const offPiles = bus.on('piles:inRange', ({ piles: inRange }) => {
       setPiles(inRange);
     });
-    // PILE PICKUP BRIDGE (Adam, 2026-10-26 — see the header):
-    // the shell owns the 'pile:pickup-requested' grant FOR NOW
-    // because no Systems listener exists at this tip (Systems
-    // built the grant pieces — grantFromPile() + pileState.take()
-    // — but nothing subscribes to the event yet). The bridge
-    // reuses Systems' own grant function, so no grant logic is
-    // invented here: grant what fits, take exactly that much
-    // from the pile (partial: the remainder stays, never
-    // vanishes or duplicates), refresh + save + feedback like
-    // any other inventory change. When Systems' own listener
-    // lands, THIS bridge comes out — two granters on one event
-    // would double-fire feedback and saves. A stale or missing
-    // pile grants nothing.
-    const offPilePickup = bus.on('pile:pickup-requested', ({ pileId }) => {
-      const pile = pileState.get(pileId);
-      if (!pile) return;
-      const grant = grantFromPile(
-        { item: pile.item, quantity: pile.quantity, x: pile.x, z: pile.z },
-        inventory,
-      );
-      if (grant.granted <= 0) {
-        const anchor = projectAnchor(pile.x, pile.z, 'scatter');
-        if (anchor) {
-          showFeedback(
-            `Pack full — no room for ${displayNameFor(pile.item)}.`,
-            'blocked',
-            anchor.x,
-            anchor.y,
-          );
-        }
-        return;
-      }
-      pileState.take(pileId, grant.granted);
-      refreshInventory();
-      saveNow();
-      const anchor = projectAnchor(pile.x, pile.z, 'scatter');
-      if (anchor) {
-        showFeedback(
-          `Picked up ${grant.granted} ${displayNameFor(pile.item)}.`,
-          'gain',
-          anchor.x,
-          anchor.y,
-        );
-      }
-    });
     // The shell's one harvest outcome listener (see the header):
     // presses resolve through it into the shell's inventory, and
     // its completed/failed/progress events drive the feedback below.
@@ -1471,7 +1437,6 @@ export default function App() {
       offLooked();
       offInRange();
       offPiles();
-      offPilePickup();
       offCompleted();
       offFailed();
       offProgress();
