@@ -25,6 +25,23 @@
  * = tall trees, dappled light. New flora is SCENERY ONLY — no new
  * harvestable items; meadow/forest growth yields existing items (the
  * kinds they share with other biomes) or nothing.
+ *
+ * WETLAND-RICH REGION (Adam, 2026-10-26 — location criterion,
+ * "maybe", directional not pinned): the setting should be
+ * someplace where marsh and swampy bogs MAKE SENSE — a
+ * wetland-rich temperate region, sitting with the temperate
+ * ruling (not tropical, not frigid). Marsh/bog prevalence must
+ * read as REGIONAL (the region itself is marshy), not as rare
+ * anomalous pockets. Specific region still TBD — nothing here
+ * names one. MEASURED, NOT RETUNED (2026-10-26, probe seed
+ * 12345, ±3000 m grid, step 64, 8836 samples): the existing
+ * fields already satisfy the criterion, so NO field parameter
+ * changed — marshWeight mean 0.236, >0.3 on 32.6% of the map,
+ * >0.1 on 54.8%; wet biomes dominate 37.1% (mirewood 25.0%
+ * alone — the single largest share — deepBog 6.5%,
+ * creekBottom 5.6%); spawn itself is mirewood. If a future
+ * seed or field retune breaks this regional reading, that is
+ * the number to restore, not a new pocket to sprinkle.
  */
 
 import { makeNoise2D } from 'fast-simplex-noise';
