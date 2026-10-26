@@ -13,6 +13,7 @@
  * arrive from the Systems lane, instead of inventing a recipe list.
  */
 
+import { useState } from 'react';
 import type { CraftingRecipe } from './types';
 import { UI_THEMES, type UiThemeName } from './themes';
 import { WitchMark } from './WitchyArt';
@@ -29,7 +30,14 @@ export interface CraftingMenuProps {
    * scroll (no tabs). When provided, the menu renders these
    * sections (skipping any with no recipes) instead of the flat
    * list; `recipes` still feeds the empty state. The caller owns
-   * the grouping — this menu never invents one.
+   * the grouping — this menu never invents one. Sections render
+   * as a collapsed-by-default ACCORDION (Adam, 2026-10-26):
+   * all headers visible, none open on entry; tapping a header
+   * expands it and collapses any other open section (one open
+   * at a time); each header carries its readiness count
+   * ("{title} — {craftable} of {total} craftable", computed
+   * from the recipes' existing canCraft flags) so a collapsed
+   * section hides nothing important.
    */
   sections?: CraftingMenuSection[];
   /** Caller-supplied nearby-stations line, e.g. "Nearby stations: workstation, loom". */
@@ -60,6 +68,11 @@ export function CraftingMenu({
   theme = 'hearth',
 }: CraftingMenuProps) {
   const t = UI_THEMES[theme];
+  // ACCORDION state (presentation only, menu-internal): which
+  // section is open, if any. null = all collapsed, which is the
+  // entry state — the menu remounts when reopened, so every
+  // entry starts collapsed. The caller never manages this.
+  const [openSection, setOpenSection] = useState<string | null>(null);
   const closeBtn = comfortable
     ? 'rounded px-3 py-2 text-sm min-h-[44px] ' + t.button
     : 'rounded px-2 py-1 text-sm ' + t.button;
@@ -169,16 +182,41 @@ export function CraftingMenu({
         </p>
       ) : sections !== undefined ? (
         <div className="flex flex-col gap-4">
-          {shownSections.map((section) => (
-            <div key={section.title}>
-              <h3 className={'text-sm font-semibold ' + t.heading}>
-                {section.title}
-              </h3>
-              <ul className="mt-1 flex flex-col gap-2">
-                {section.recipes.map(renderRecipe)}
-              </ul>
-            </div>
-          ))}
+          {shownSections.map((section) => {
+            const open = openSection === section.title;
+            const craftable = section.recipes.filter(
+              (recipe) => recipe.canCraft,
+            ).length;
+            return (
+              <div key={section.title}>
+                <button
+                  type="button"
+                  aria-expanded={open}
+                  onClick={() =>
+                    setOpenSection((current) =>
+                      current === section.title ? null : section.title,
+                    )
+                  }
+                  className={
+                    'flex w-full items-center justify-between gap-2 text-left text-sm font-semibold ' +
+                    t.heading +
+                    (comfortable ? ' min-h-[44px]' : '')
+                  }
+                >
+                  <span>
+                    {section.title} — {craftable} of{' '}
+                    {section.recipes.length} craftable
+                  </span>
+                  <span aria-hidden="true">{open ? '▾' : '▸'}</span>
+                </button>
+                {open ? (
+                  <ul className="mt-1 flex flex-col gap-2">
+                    {section.recipes.map(renderRecipe)}
+                  </ul>
+                ) : null}
+              </div>
+            );
+          })}
         </div>
       ) : (
         <ul className="flex flex-col gap-2">{recipes.map(renderRecipe)}</ul>
