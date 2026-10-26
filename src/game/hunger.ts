@@ -11,6 +11,18 @@
  * Until Systems lands the query, both consumers default to
  * unhungry (no slowdown, no lockout).
  *
+ * HUNGER → HEALTH GATE (Adam, 2026-10-26, PINNED ruling):
+ * hunger does NOT affect Health until it gets cold — at least
+ * a November equivalent (see the season axis in weather.ts).
+ * BEFORE that threshold, hunger effects are slowdown + lockout
+ * ONLY, no health effect. The health system itself is NOT built
+ * yet, so this is a CONSTRAINT on its future design, not a
+ * current behavior change — and current behavior already
+ * complies: nothing in the engine's hunger handling touches
+ * health at all (slowdown in player.ts, lockout in harvest.ts,
+ * nothing else). When the health system lands, it must gate
+ * any hunger→health link behind the cold/November threshold.
+ *
  * STAGE VOCABULARY — ALIGNED WITH SYSTEMS (correction, 2026-10-26):
  * Systems owns the meter and its stage (src/systems/hunger.ts,
  * HungerState.stage()), and its literals are 'fed' | 'hungry' |

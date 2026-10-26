@@ -32,6 +32,18 @@
  *   the query, not the event: the event says "the weather regime
  *   changed", the query says "to what, exactly".
  *
+ * SEASON AXIS (Adam, 2026-10-26, PINNED ruling — recorded here
+ * for the future season work, NOT a change to the profiles
+ * below): the game STARTS in September-ish (mild), and cold
+ * BUILDS toward a November equivalent. v1 weather is spatial-
+ * only (no clock, no time-varying weather), so no season axis
+ * is implemented yet — when one lands, it starts mild and
+ * deepens cold toward November; it must NOT re-tune these
+ * per-biome profiles by itself (the brief is explicit: this
+ * ruling is a constraint for when the season + health work
+ * lands, not a change to current profiles). The hunger→health
+ * gate tied to this axis lives in hunger.ts.
+ *
  * HOOKS, NOT BUILT (Adam's brief, explicit):
  * - Shelter modifier: the housing system does not exist yet, but
  *   its HOOK SHAPE is now set (Adam, 2026-10-26, PINNED):
