@@ -35,11 +35,13 @@
  *   TBD): trowel = base 1 + chance of +1; spade / axe-trowel (both
  *   middles, same tier) = base 2 + chance of +1; spade-axe = base 3 +
  *   chance of +1; trundle-tool = base 4 + chance of +1. Each tier's
- *   base rises by 1, with a chance of +1 bonus on top. The ONE unnamed
- *   number is the bonus chance percentage: it is modeled as the named
- *   parameter CLAY_BONUS_CHANCE_TBD, never invented here. Sharp trowel
- *   is not named in Adam's table; it holds the trowel amount (base 1)
- *   pending his word — flagged, not silently settled.
+ *   base rises by 1, with a chance of +1 bonus on top. BONUS CHANCE
+ *   (Adam, 2026-10-26, starting value — "maybe", so tunable): 25%,
+ *   UNIFORM at every tier, as the single named constant
+ *   CLAY_BONUS_CHANCE = 0.25 — one place to change it, never scattered
+ *   per tier. Sharp trowel is not named in Adam's table; it holds the
+ *   trowel amount (base 1, same 25% bonus) pending his word — flagged,
+ *   not silently settled.
  *   Clay stays out of every OTHER source; only silt ground yields it.
  * - No other quantities are invented: the prototype carries no
  *   per-harvest amounts, so other sources carry item ids + secondary
@@ -98,17 +100,18 @@ export function toolTierRank(tier: ToolTier | null): number {
 }
 
 /**
- * The bonus chance for the +1 clay bonus, as a NAMED parameter awaiting
- * Adam's pin pass. It is the string 'TBD' on purpose: the one number
- * Adam did not name must not be invented, guessed, or defaulted in code.
+ * The bonus chance for the +1 clay bonus (Adam, 2026-10-26, starting
+ * value — "maybe"): 25%, uniform at every tier. A SINGLE named constant
+ * on purpose: tune it in this one place and every tier follows; it is
+ * never copied per tier, so the table cannot drift apart by accident.
  */
-export const CLAY_BONUS_CHANCE_TBD = 'TBD' as const;
+export const CLAY_BONUS_CHANCE = 0.25;
 
 /** One tier's clay yield: guaranteed base + a chance of a +1 bonus. */
 export interface ClayYieldTier {
   base: number;
   bonus: number;
-  bonusChance: typeof CLAY_BONUS_CHANCE_TBD;
+  bonusChance: number;
 }
 
 /**
@@ -118,11 +121,11 @@ export interface ClayYieldTier {
  * trowel amount (base 1) pending his word — see the header note.
  */
 export const CLAY_YIELD_BY_TIER_GROUP: ClayYieldTier[] = [
-  { base: 1, bonus: 1, bonusChance: CLAY_BONUS_CHANCE_TBD },
-  { base: 1, bonus: 1, bonusChance: CLAY_BONUS_CHANCE_TBD },
-  { base: 2, bonus: 1, bonusChance: CLAY_BONUS_CHANCE_TBD },
-  { base: 3, bonus: 1, bonusChance: CLAY_BONUS_CHANCE_TBD },
-  { base: 4, bonus: 1, bonusChance: CLAY_BONUS_CHANCE_TBD },
+  { base: 1, bonus: 1, bonusChance: CLAY_BONUS_CHANCE },
+  { base: 1, bonus: 1, bonusChance: CLAY_BONUS_CHANCE },
+  { base: 2, bonus: 1, bonusChance: CLAY_BONUS_CHANCE },
+  { base: 3, bonus: 1, bonusChance: CLAY_BONUS_CHANCE },
+  { base: 4, bonus: 1, bonusChance: CLAY_BONUS_CHANCE },
 ];
 
 /** Clay yield for a tool, or null when she has no tool (no clay yield).
@@ -361,8 +364,9 @@ export const SOURCES: HarvestSourceDef[] = [
       'Silt ground also yields clay through the NORMAL harvest interaction ' +
       '(Adam, 2026-10-26 — no separate dig verb): trowel 1 (+chance 1), ' +
       'spade / axe-trowel 2 (+chance 1), spade-axe 3 (+chance 1), ' +
-      'trundle-tool 4 (+chance 1); the bonus chance percentage is TBD ' +
-      'for Adam\'s pin pass. Silt ground is the ONLY source that yields clay.',
+      'trundle-tool 4 (+chance 1); the bonus chance is 25% at every ' +
+      'tier (CLAY_BONUS_CHANCE, starting value). Silt ground is the ' +
+      'ONLY source that yields clay.',
     harvestable: true,
     primaryYield: 'RIVER_SLUDGE',
     secondaryYields: [
