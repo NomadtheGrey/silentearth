@@ -15,6 +15,10 @@
  *
  * Rendering cost is kept low with InstancedMesh: one instanced mesh per
  * scatter kind per chunk, sharing one geometry + material per kind.
+ * Scatter geometry is built in src/game/models.ts (detailed merged
+ * procedural models, vertex-colored): composite kinds that used to
+ * need a second instanced mesh for their extra primitive now render
+ * as ONE merged mesh, so draw calls per chunk stay flat or fall.
  */
 
 import * as THREE from 'three';
@@ -23,7 +27,7 @@ import type { WorldGen } from './worldgen';
 import { PlayerController } from './player';
 import { marshWeight } from './biomes';
 import { SOURCE_FOR_KIND } from './objects';
-import type { MeshShape } from './objects';
+import { buildKindGeometry, buildWitch, vertexLambert } from './models';
 import { ProximityTracker } from './proximity';
 import {
   harvestState,
@@ -48,11 +52,15 @@ import {
 import type { BiomeId, ScatterKind } from '../types';
 
 interface KindRender {
-  /** Shared geometry (baked orientation: logs lie along X, discs lie flat). */
+  /**
+   * Shared merged geometry (baked orientation: logs lie along X,
+   * discs lie flat; former extra primitives — canopy, stump top,
+   * seed-head — are merged in at (extraY - baseY), so the old
+   * `obj.y + baseY * s` placement still lands them correctly).
+   */
   geometry: THREE.BufferGeometry;
+  /** Shared vertex-colored material (white; geometry carries color). */
   material: THREE.Material;
-  /** Extra instances for composite kinds (tree = trunk + canopy). */
-  extra?: { geometry: THREE.BufferGeometry; material: THREE.Material; y: number };
   /** Base height of the instance above ground (before scatter y). */
   baseY: number;
 }
@@ -66,122 +74,27 @@ function lambert(color: number, opacity = 1): THREE.MeshLambertMaterial {
   return mat;
 }
 
-function flatDisc(radius: number, segments = 12): THREE.CircleGeometry {
-  const geo = new THREE.CircleGeometry(radius, segments);
-  geo.rotateX(-Math.PI / 2);
-  return geo;
-}
-
-function lyingCylinder(
-  radiusTop: number,
-  radiusBottom: number,
-  length: number,
-  lean = 0,
-): THREE.CylinderGeometry {
-  const geo = new THREE.CylinderGeometry(radiusTop, radiusBottom, length, 7);
-  geo.rotateZ(Math.PI / 2 + lean);
-  return geo;
-}
-
-/** Ground-cover disc radii per kind (disc-shaped sources only). */
-const DISC_RADIUS: Partial<Record<ScatterKind, number>> = {
-  bogPatch: 1.4,
-  standingWater: 1.2,
-  peatMoss: 0.9,
-  riverSilt: 1.0,
-};
-
 /** One shared geometry per mesh shape, built from the source descriptors
  *  in src/game/objects.ts (fill-in landing, 2026-10-25). Landing 1's
  *  placeholder primitives are replaced by these: distinct silhouettes
  *  per source (stump, reed, bog tuft, oak log, ...) with source colors. */
-function geometryForShape(shape: MeshShape, kind: ScatterKind): THREE.BufferGeometry {
-  switch (shape) {
-    case 'bush':
-      return new THREE.IcosahedronGeometry(0.7, 1);
-    case 'stick': {
-      const g = new THREE.CylinderGeometry(0.05, 0.07, 1.1, 5);
-      g.rotateZ(0.3);
-      return g;
-    }
-    case 'vine': {
-      const g = new THREE.CylinderGeometry(0.03, 0.05, 1.2, 5);
-      g.rotateZ(0.35);
-      return g;
-    }
-    case 'log':
-      return lyingCylinder(0.22, 0.26, 2.2);
-    case 'oakLog':
-      return lyingCylinder(0.35, 0.4, 3.0);
-    case 'tree':
-      return new THREE.CylinderGeometry(0.18, 0.28, 1.6, 6);
-    case 'stump':
-      return new THREE.CylinderGeometry(0.45, 0.55, 0.6, 8);
-    case 'reed':
-      return new THREE.CylinderGeometry(0.02, 0.05, 1.3, 4);
-    case 'grassTuft':
-      return new THREE.ConeGeometry(0.6, 0.7, 5);
-    case 'bogTuft': {
-      const g = new THREE.SphereGeometry(0.7, 8, 6);
-      g.scale(1, 0.4, 1);
-      return g;
-    }
-    case 'disc':
-      return flatDisc(DISC_RADIUS[kind] ?? 1.0, 12);
-    case 'stone':
-      return new THREE.DodecahedronGeometry(0.28, 0);
-    case 'crystal':
-      return new THREE.OctahedronGeometry(0.3, 0);
-    case 'bone':
-      return new THREE.BoxGeometry(0.5, 0.12, 0.12);
-    case 'flower':
-      return new THREE.SphereGeometry(0.18, 6, 5);
-    case 'tallTree':
-      return new THREE.CylinderGeometry(0.22, 0.34, 3.2, 6);
-  }
-}
-
-/** Extra primitive geometry for composite shapes (canopy / stump top /
- *  reed seed-head), keyed by shape. */
-function extraGeometryForShape(shape: MeshShape): THREE.BufferGeometry | null {
-  switch (shape) {
-    case 'tree':
-      return new THREE.ConeGeometry(1.3, 2.2, 7);
-    case 'stump':
-      return flatDisc(0.42, 8);
-    case 'reed':
-      return new THREE.ConeGeometry(0.12, 0.4, 5);
-    case 'tallTree':
-      return new THREE.ConeGeometry(1.8, 3.0, 7);
-    default:
-      return null;
-  }
-}
-
 /** Render table derived from the harvest-source definitions, so mesh and
- *  data can never drift apart: change a source in objects.ts and its
- *  in-world shape follows. One geometry + material per kind, shared by
- *  all instances (the InstancedMesh perf model is unchanged). */
+ *  data can never drift apart: change a source color in objects.ts
+ *  and its detailed model follows (models.ts builds from those
+ *  colors). One merged geometry + vertex-colored material per kind,
+ *  shared by all instances — the InstancedMesh perf model is
+ *  unchanged, and former extra primitives now ride inside the one
+ *  geometry instead of a second instanced mesh. */
 const KIND_RENDER: Record<ScatterKind, KindRender> = (() => {
   const table = {} as Record<ScatterKind, KindRender>;
   for (const [kind, source] of Object.entries(SOURCE_FOR_KIND) as [
     ScatterKind,
     (typeof SOURCE_FOR_KIND)[ScatterKind],
   ][]) {
-    const extraGeo = extraGeometryForShape(source.mesh.shape);
     table[kind] = {
-      geometry: geometryForShape(source.mesh.shape, kind),
-      material: lambert(source.mesh.color, kind === 'standingWater' ? 0.75 : 1),
+      geometry: buildKindGeometry(source.mesh, kind),
+      material: vertexLambert(kind === 'standingWater' ? 0.75 : 1),
       baseY: source.mesh.baseY,
-      ...(extraGeo && source.mesh.extraColor !== undefined && source.mesh.extraY !== undefined
-        ? {
-            extra: {
-              geometry: extraGeo,
-              material: lambert(source.mesh.extraColor),
-              y: source.mesh.extraY,
-            },
-          }
-        : {}),
     };
   }
   return table;
@@ -299,25 +212,11 @@ export class WorldRenderer {
     sun.position.set(40, 60, 20);
     this.scene.add(sun);
 
-    // Placeholder witch: capsule body + cone hat + head. Visible in
+    // The witch herself: detailed procedural figure (dress, bodice,
+    // shawl, head, brimmed hat, arms, boots — models.ts), still
+    // placeholder-grade-plus, NOT final art. Visible in
     // third-person, hidden in first-person (you are the witch there).
-    this.witch = new THREE.Group();
-    const body = new THREE.Mesh(
-      new THREE.CapsuleGeometry(0.35, 0.9, 4, 8),
-      new THREE.MeshLambertMaterial({ color: 0x5a3a5a }),
-    );
-    body.position.y = 0.95;
-    const hat = new THREE.Mesh(
-      new THREE.ConeGeometry(0.42, 0.7, 8),
-      new THREE.MeshLambertMaterial({ color: 0x2a1a2a }),
-    );
-    hat.position.y = 1.85;
-    const head = new THREE.Mesh(
-      new THREE.SphereGeometry(0.22, 8, 8),
-      new THREE.MeshLambertMaterial({ color: 0xd8c0a0 }),
-    );
-    head.position.y = 1.5;
-    this.witch.add(body, hat, head);
+    this.witch = buildWitch();
     this.scene.add(this.witch);
 
     window.addEventListener('resize', this.onResize);
@@ -488,28 +387,9 @@ export class WorldRenderer {
       mesh.instanceMatrix.needsUpdate = true;
       group.add(mesh);
       meshes.push(mesh);
-      if (render.extra) {
-        const extra = new THREE.InstancedMesh(
-          render.extra.geometry,
-          render.extra.material,
-          objs.length,
-        );
-        objs.forEach((obj, i) => {
-          const s =
-            obj.scale *
-            (harvestState.isRegrowing(scatterTargetId(cx, cz, obj), now)
-              ? SHRINK_SCALE
-              : 1);
-          dummy.position.set(obj.x, obj.y + render.extra!.y * s, obj.z);
-          dummy.rotation.set(0, obj.rotY, 0);
-          dummy.scale.setScalar(s);
-          dummy.updateMatrix();
-          extra.setMatrixAt(i, dummy.matrix);
-        });
-        extra.instanceMatrix.needsUpdate = true;
-        group.add(extra);
-        meshes.push(extra);
-      }
+      // No extra branch: former extra primitives (canopy, stump
+      // top, seed-head) are merged into the one kind geometry
+      // (models.ts), so one instanced mesh carries the whole model.
     }
 
     this.scene.add(group);
@@ -661,31 +541,56 @@ export class WorldRenderer {
       fg.position.set(fire.x, 0, fire.z);
       const lit = fire.lit && FIRE_DEFS[fire.type].flameWhenLit;
       if (fire.type === 'campfire') {
-        for (let i = 0; i < 5; i++) {
-          const a = (i / 5) * Math.PI * 2;
+        // Stone ring (7 stones, not 5), ash bed, three crossed logs.
+        for (let i = 0; i < 7; i++) {
+          const a = (i / 7) * Math.PI * 2;
           fg.add(box(0.22, 0.18, 0.22, 0x8a8a86, Math.cos(a) * 0.55, 0.09, Math.sin(a) * 0.55, a));
         }
+        fg.add(box(0.9, 0.05, 0.9, 0x2b2b2b, 0, 0.03, 0));
         const log1 = cyl(0.06, 0.06, 1.1, 0x6b4a2f, 0, 0.16, 0);
         log1.rotation.z = Math.PI / 2;
         log1.rotation.y = 0.5;
         const log2 = cyl(0.06, 0.06, 1.1, 0x6b4a2f, 0, 0.16, 0);
         log2.rotation.z = Math.PI / 2;
         log2.rotation.y = -0.5;
-        fg.add(log1, log2);
+        const log3 = cyl(0.05, 0.05, 1.0, 0x5a4028, 0, 0.26, 0);
+        log3.rotation.z = Math.PI / 2;
+        log3.rotation.y = 1.1;
+        fg.add(log1, log2, log3);
         if (lit) fg.add(this.flameMesh(fire.x, fire.z, 0.25, 1));
       } else if (fire.type === 'hearth') {
+        // Stone base, side pillars, mantel, dark firebox opening,
+        // inner logs — a hearth, not a slab.
         fg.add(box(1.3, 0.5, 1.3, 0x8a8a86, 0, 0.25, 0));
-        fg.add(box(0.9, 0.1, 0.9, 0x2b2b2b, 0, 0.55, 0));
+        fg.add(box(0.25, 0.9, 1.3, 0x7a7a76, -0.55, 0.95, 0));
+        fg.add(box(0.25, 0.9, 1.3, 0x7a7a76, 0.55, 0.95, 0));
+        fg.add(box(1.4, 0.15, 1.4, 0x7a7a76, 0, 1.45, 0));
+        fg.add(box(0.9, 0.7, 0.1, 0x1a1a1a, 0, 0.85, 0.61));
+        const hlog = cyl(0.06, 0.06, 0.8, 0x6b4a2f, 0, 0.6, 0.3);
+        hlog.rotation.z = Math.PI / 2;
+        fg.add(hlog);
         if (lit) fg.add(this.flameMesh(fire.x, fire.z, 0.6, 1.1));
       } else if (fire.type === 'kiln') {
+        // Firing chamber: base slab, body, dome, stoke-hole opening,
+        // brick band around the middle.
+        fg.add(cyl(0.85, 0.9, 0.15, 0x8a8a86, 0, 0.08, 0));
         fg.add(cyl(0.7, 0.8, 1.2, 0xb08968, 0, 0.6, 0));
         const dome = new THREE.Mesh(new THREE.SphereGeometry(0.7, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2), lambert(0xb08968));
         dome.position.y = 1.2;
         fg.add(dome);
+        fg.add(cyl(0.78, 0.78, 0.12, 0x9a7a5a, 0, 0.6, 0));
+        fg.add(box(0.4, 0.5, 0.1, 0x1a1a1a, 0, 0.35, 0.78));
         if (lit) fg.add(this.flameMesh(fire.x, fire.z, 1.9, 0.7));
       } else {
+        // Bloomery: stone base, tapering shaft, top rim, stoke-hole,
+        // slag pile at the foot.
         fg.add(cyl(0.85, 0.95, 0.4, 0x6e6e6a, 0, 0.2, 0));
         fg.add(cyl(0.55, 0.65, 2.2, 0x5a5a58, 0, 1.5, 0));
+        fg.add(cyl(0.6, 0.6, 0.12, 0x4a4a48, 0, 2.6, 0));
+        fg.add(box(0.35, 0.45, 0.1, 0x1a1a1a, 0, 0.5, 0.62));
+        const slag = new THREE.Mesh(new THREE.ConeGeometry(0.3, 0.25, 7), lambert(0x3a3a38));
+        slag.position.set(0.7, 0.12, 0.4);
+        fg.add(slag);
         if (lit) fg.add(this.flameMesh(fire.x, fire.z, 2.6, 0.8));
       }
       group.add(fg);
@@ -699,11 +604,21 @@ export class WorldRenderer {
         hg.add(cyl(0.07, 0.07, 2.2, 0x6b4a2f, -f / 2, 1.1, 0));
         hg.add(cyl(0.07, 0.07, 2.2, 0x6b4a2f, f / 2, 1.1, 0));
         hg.add(box(f + 0.4, 0.12, 1.6, 0x8a7a4a, 0, 1.9, 0, 0, -0.5));
+        // Bedroll under the roof + stick back wall.
+        const bed = cyl(0.14, 0.14, 1.2, 0x6a5a3a, 0, 0.14, 0.3);
+        bed.rotation.z = Math.PI / 2;
+        hg.add(bed);
+        for (let i = -1; i <= 1; i++) {
+          hg.add(cyl(0.04, 0.04, 1.7, 0x6b4a2f, i * (f / 3), 0.85, -0.7));
+        }
       } else if (house.type === 'thatchHut') {
         hg.add(cyl(f / 2, f / 2, 1.6, 0xcbb59a, 0, 0.8, 0, 12));
         const roof = new THREE.Mesh(new THREE.ConeGeometry(f / 2 + 0.3, 1.5, 12), lambert(0x8a7a4a));
         roof.position.y = 2.35;
         hg.add(roof);
+        hg.add(box(0.7, 1.3, 0.1, 0x3a2812, 0, 0.65, f / 2 + 0.01));
+        hg.add(box(0.9, 0.1, 0.5, 0x8a8a86, 0, 0.05, f / 2 + 0.25));
+        hg.add(cyl(0.09, 0.09, 0.3, 0x1a1a1a, 0, 3.1, 0));
       } else if (house.type === 'wovenCottage') {
         hg.add(box(f, 2.2, f * 0.8, 0xd8c9a8, 0, 1.1, 0));
         const roof = new THREE.Mesh(new THREE.ConeGeometry(f * 0.75, 1.4, 4), lambert(0x8a7a4a));
@@ -711,6 +626,11 @@ export class WorldRenderer {
         roof.rotation.y = Math.PI / 4;
         hg.add(roof);
         hg.add(box(0.8, 1.6, 0.1, 0x4a3220, 0, 0.8, (f * 0.8) / 2 + 0.01));
+        // Windows + wattle bands around the wall.
+        hg.add(box(0.5, 0.5, 0.06, 0x2a2018, -f / 4, 1.3, (f * 0.8) / 2 + 0.01));
+        hg.add(box(0.5, 0.5, 0.06, 0x2a2018, f / 4, 1.3, (f * 0.8) / 2 + 0.01));
+        hg.add(box(f + 0.06, 0.08, f * 0.8 + 0.06, 0xb09a6a, 0, 0.6, 0));
+        hg.add(box(f + 0.06, 0.08, f * 0.8 + 0.06, 0xb09a6a, 0, 1.7, 0));
       } else {
         hg.add(box(f, 2.6, f * 0.85, 0x7a5a38, 0, 1.3, 0));
         const roof = new THREE.Mesh(new THREE.ConeGeometry(f * 0.72, 1.6, 4), lambert(0x5a3d24));
@@ -718,12 +638,19 @@ export class WorldRenderer {
         roof.rotation.y = Math.PI / 4;
         hg.add(roof);
         hg.add(box(0.9, 1.8, 0.1, 0x3a2812, 0, 0.9, (f * 0.85) / 2 + 0.01));
+        // Windows, porch posts, chimney.
+        hg.add(box(0.5, 0.5, 0.06, 0x2a2018, -f / 4, 1.5, (f * 0.85) / 2 + 0.01));
+        hg.add(box(0.5, 0.5, 0.06, 0x2a2018, f / 4, 1.5, (f * 0.85) / 2 + 0.01));
+        hg.add(cyl(0.07, 0.07, 2.2, 0x6b4a2f, -f / 3, 1.1, (f * 0.85) / 2 + 0.4));
+        hg.add(cyl(0.07, 0.07, 2.2, 0x6b4a2f, f / 3, 1.1, (f * 0.85) / 2 + 0.4));
+        hg.add(box(0.5, 1.0, 0.5, 0x8a8a86, f / 3, 3.6, -f / 4));
       }
       group.add(hg);
     }
     for (const loom of loomState.snapshot()) {
       // Upright weaving frame: two posts, a top beam, warp
-      // threads, and a half-woven band — a loom, not furniture.
+      // threads, a half-woven band, a shuttle on the band, a
+      // diagonal brace, and a cloth roll at the foot.
       const lg = new THREE.Group();
       lg.position.set(loom.x, 0, loom.z);
       lg.add(cyl(0.06, 0.06, 1.6, 0x6b4a2f, -0.7, 0.8, 0));
@@ -733,6 +660,13 @@ export class WorldRenderer {
         lg.add(box(0.02, 1.1, 0.02, 0xd8c9a8, -0.6 + i * 0.2, 1.05, 0));
       }
       lg.add(box(1.3, 0.5, 0.05, 0x8a7a5a, 0, 0.75, 0));
+      lg.add(box(0.3, 0.08, 0.08, 0x4a3220, 0.2, 0.75, 0.06));
+      const brace = cyl(0.04, 0.04, 1.4, 0x6b4a2f, 0.7, 0.7, -0.3);
+      brace.rotation.x = 0.6;
+      lg.add(brace);
+      const roll = cyl(0.12, 0.12, 1.0, 0x8a7a5a, 0, 0.12, 0.35);
+      roll.rotation.z = Math.PI / 2;
+      lg.add(roll);
       group.add(lg);
     }
     this.scene.add(group);
@@ -785,23 +719,8 @@ export class WorldRenderer {
       });
       mesh.instanceMatrix.needsUpdate = true;
       group.add(mesh);
-      if (treeRender.extra) {
-        const extra = new THREE.InstancedMesh(
-          treeRender.extra.geometry,
-          treeRender.extra.material,
-          saplings.length,
-        );
-        saplings.forEach((sapling, i) => {
-          const s = 0.3 + 0.7 * harvestState.saplingGrowth(sapling, now);
-          dummy.position.set(sapling.x, treeRender.extra!.y * s, sapling.z);
-          dummy.rotation.set(0, 0, 0);
-          dummy.scale.setScalar(s);
-          dummy.updateMatrix();
-          extra.setMatrixAt(i, dummy.matrix);
-        });
-        extra.instanceMatrix.needsUpdate = true;
-        group.add(extra);
-      }
+      // No extra branch: the sapling canopy rides inside the merged
+      // tree geometry (models.ts), scaled with the trunk.
     }
     this.scene.add(group);
     this.spawnedGroup = group;
