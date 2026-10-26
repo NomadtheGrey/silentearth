@@ -27,7 +27,7 @@ import type { WorldGen } from './worldgen';
 import { PlayerController } from './player';
 import { marshWeight } from './biomes';
 import { SOURCE_FOR_KIND } from './objects';
-import { buildKindGeometry, buildWitch, vertexLambert } from './models';
+import { buildKindGeometry, buildUmbrella, buildWitch, vertexLambert } from './models';
 import { ProximityTracker } from './proximity';
 import {
   harvestState,
@@ -122,6 +122,8 @@ export class WorldRenderer {
   private raf = 0;
   private chunks = new Map<string, LoadedChunk>();
   private witch: THREE.Group;
+  /** Carried umbrella graphic (models.ts), attached to the witch. */
+  private umbrella: THREE.Group;
   private gen: WorldGen;
   private player: PlayerController;
   /** Proximity tracker: engine-owned, subscribes to 'player:moved' and
@@ -258,9 +260,32 @@ export class WorldRenderer {
     // third-person, hidden in first-person (you are the witch there).
     this.witch = buildWitch();
     this.scene.add(this.witch);
+    // Carried umbrella (Adam 2026-10-26): held in her right hand,
+    // canopy beside the hat, slight outward tilt. Attached to the
+    // witch group, so it inherits third-person-only visibility
+    // (hidden in first-person, where you are the witch). Default
+    // hidden — the shell drives it via setCarriesUmbrella (below).
+    this.umbrella = buildUmbrella();
+    this.umbrella.visible = false;
+    this.umbrella.position.set(0.58, 1.08, 0.05);
+    this.umbrella.rotation.z = -0.12;
+    this.witch.add(this.umbrella);
 
     window.addEventListener('resize', this.onResize);
     this.loop();
+  }
+
+  /**
+   * Carried-umbrella visibility (Adam 2026-10-26). The shell calls
+   * this when the inventory changes, passing Systems'
+   * carriesUmbrella(inventory): the graphic shows exactly when an
+   * umbrella is carried — no equip step, and duplicates do not
+   * stack, so the shell passes a plain boolean and one graphic is
+   * all there ever is. App-side driving is UI's follow-up; until
+   * the shell calls this, the umbrella stays hidden (default).
+   */
+  setCarriesUmbrella(carried: boolean): void {
+    if (this.umbrella) this.umbrella.visible = carried;
   }
 
   /** Ground detail texture for a chunk: the dominant biome's procedural

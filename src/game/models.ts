@@ -45,6 +45,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { ScatterKind } from '../types';
 import type { MeshSpec } from './objects';
+import { hashSeed, mulberry32 } from './seed';
 
 /** Ground-cover disc radii per kind (disc-shaped sources only). */
 const DISC_RADIUS: Partial<Record<ScatterKind, number>> = {
@@ -415,5 +416,110 @@ export function buildWitch(): THREE.Group {
   // Boots peeking under the hem.
   add(new THREE.BoxGeometry(0.16, 0.12, 0.28), 0x2a1a12, [0.14, 0.06, 0.1]);
   add(new THREE.BoxGeometry(0.16, 0.12, 0.28), 0x2a1a12, [-0.14, 0.06, 0.1]);
+  return g;
+}
+
+/**
+ * The witch's carried umbrella (Adam 2026-10-26 — the last umbrella
+ * piece; Systems' recipe + UI's icon already landed). Ragged/witchy,
+ * NOT pristine, and it matches the UI icon's read: a scalloped moss
+ * canopy (#5c823d) over a stone-grey (#78716c) shaft with a hooked
+ * handle. The edge is ragged by construction: 12 panels whose rim
+ * radii/droops jitter from a FIXED seed (same umbrella in every
+ * world — a personal item, not worldgen), plus one torn panel whose
+ * two rim points pull in short and droop low, and one faded-brown
+ * patch panel among the moss tones.
+ *
+ * Group-local coords, grip at the origin: shaft 0 → 1.25, canopy
+ * dome above it (apex 1.57), hook curving below the grip. The
+ * renderer places the group at her right hand and owns visibility
+ * (setCarriesUmbrella): the graphic shows exactly when an umbrella
+ * is in inventory (Systems' rule — no equip state, duplicates do
+ * not stack, so one graphic regardless of count). Attached to the
+ * witch group, it inherits third-person-only visibility: hidden in
+ * first-person, where you are the witch. Visual only — no mechanic,
+ * no hitbox, no gameplay field.
+ */
+export function buildUmbrella(): THREE.Group {
+  const g = new THREE.Group();
+  const rng = mulberry32(hashSeed('silent-earth-umbrella'));
+
+  const PANELS = 12;
+  const SHAFT_TOP = 1.25;
+  const APEX_Y = 1.57;
+  const MID_Y = 1.47;
+  const MOSS = [0x5c823d, 0x4a6b31, 0x6b9448];
+  const PATCH = 0x6b5a3a;
+
+  // One rim point per panel boundary (shared between neighbors, so
+  // no cracks between panels); raggedness lives in the radii/droops.
+  const rimR: number[] = [];
+  const rimDroop: number[] = [];
+  const torn = Math.floor(rng() * PANELS);
+  const patch = Math.floor(rng() * PANELS);
+  for (let j = 0; j < PANELS; j++) {
+    rimR.push(0.55 * (0.92 + rng() * 0.16));
+    rimDroop.push(rng() * 0.05);
+  }
+  // The tear: one panel's two rim points pull in short and droop low.
+  rimR[torn] *= 0.8;
+  rimR[(torn + 1) % PANELS] *= 0.8;
+  rimDroop[torn] += 0.1;
+  rimDroop[(torn + 1) % PANELS] += 0.1;
+
+  const positions: number[] = [];
+  const colors: number[] = [];
+  const push = (p: Vec3, color: number): void => {
+    positions.push(...p);
+    const c = new THREE.Color(color);
+    colors.push(c.r, c.g, c.b);
+  };
+  for (let i = 0; i < PANELS; i++) {
+    const a0 = (i / PANELS) * Math.PI * 2;
+    const a1 = ((i + 1) / PANELS) * Math.PI * 2;
+    const j0 = i;
+    const j1 = (i + 1) % PANELS;
+    const color = i === patch ? PATCH : MOSS[Math.floor(rng() * MOSS.length)];
+    const apex: Vec3 = [0, APEX_Y, 0];
+    const midL: Vec3 = [Math.cos(a0) * rimR[j0] * 0.62, MID_Y, Math.sin(a0) * rimR[j0] * 0.62];
+    const midR: Vec3 = [Math.cos(a1) * rimR[j1] * 0.62, MID_Y, Math.sin(a1) * rimR[j1] * 0.62];
+    const rimL: Vec3 = [Math.cos(a0) * rimR[j0], SHAFT_TOP - rimDroop[j0], Math.sin(a0) * rimR[j0]];
+    const rimRr: Vec3 = [Math.cos(a1) * rimR[j1], SHAFT_TOP - rimDroop[j1], Math.sin(a1) * rimR[j1]];
+    // Dome curve: apex fan, then the skirt quad as two triangles.
+    push(apex, color);
+    push(midL, color);
+    push(midR, color);
+    push(midL, color);
+    push(rimL, color);
+    push(rimRr, color);
+    push(midL, color);
+    push(rimRr, color);
+    push(midR, color);
+  }
+  const canopyGeo = new THREE.BufferGeometry();
+  canopyGeo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  canopyGeo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+  const canopy = new THREE.Mesh(
+    canopyGeo,
+    new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide }),
+  );
+  g.add(canopy);
+
+  // Shaft + hooked handle + finial tip, stone grey like the icon.
+  const shaft = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.022, 0.022, SHAFT_TOP, 6),
+    meshMat(0x78716c),
+  );
+  shaft.position.set(0, SHAFT_TOP / 2, 0);
+  g.add(shaft);
+  const hookCurve = new THREE.QuadraticBezierCurve3(
+    new THREE.Vector3(0, 0.02, 0),
+    new THREE.Vector3(0, -0.26, 0),
+    new THREE.Vector3(0.13, -0.15, 0),
+  );
+  g.add(new THREE.Mesh(new THREE.TubeGeometry(hookCurve, 8, 0.016, 6), meshMat(0x78716c)));
+  const tip = new THREE.Mesh(new THREE.SphereGeometry(0.03, 6, 6), meshMat(0x78716c));
+  tip.position.set(0, APEX_Y + 0.03, 0);
+  g.add(tip);
   return g;
 }
