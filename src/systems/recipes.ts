@@ -641,11 +641,13 @@ const DRAFT_RECIPES: Recipe[] = [
       'so workstation stands for the single-station recipe; if ' +
       'Adam wants the weave split out, a woven cover (loom) + ' +
       'umbrella assembly (workstation) split is the shape. ' +
-      'Mechanic (umbrella.ts, NOT a worn bonus): rain ' +
-      'protection 35% (starting value, pin pass) while carried ' +
-      'in inventory — no equip step, multiplicative with worn ' +
-      'clothes (full kit + umbrella rain ~67%). The umbrella ' +
-      'counts against personal capacity like any ordinary item.',
+      'Mechanic (umbrella.ts, NOT a worn bonus): precipitation ' +
+      'protection 60% (REVISED starting value, pin pass — ' +
+      'supersedes the earlier 35% rain-only value; covers rain ' +
+      '+ sleet/etc.) while carried in inventory — no equip ' +
+      'step, multiplicative with worn clothes (full kit + ' +
+      'umbrella precipitation ~80%). The umbrella counts ' +
+      'against personal capacity like any ordinary item.',
   },
 
   // --- Receptacles. Clay is reserved for pottery / bricks / maybe tools
