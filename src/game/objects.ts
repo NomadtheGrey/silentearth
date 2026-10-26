@@ -31,13 +31,20 @@
  *   normal harvest interaction on silt ground (creek beds, damp
  *   hollows). No fuss over different verbs, no separate dig action.
  *   It is gated and scaled by tool, following the tool ladder's "more
- *   of whatever it does" shape: trowel → a little clay, better tool →
- *   more clay. Quantities are TBD — Adam pinned "a little" vs "more"
- *   only, so this file carries the tier SCALING SHAPE and no numbers.
+ *   of whatever it does" shape. QUANTITIES (Adam, 2026-10-26, no longer
+ *   TBD): trowel = base 1 + chance of +1; spade / axe-trowel (both
+ *   middles, same tier) = base 2 + chance of +1; spade-axe = base 3 +
+ *   chance of +1; trundle-tool = base 4 + chance of +1. Each tier's
+ *   base rises by 1, with a chance of +1 bonus on top. The ONE unnamed
+ *   number is the bonus chance percentage: it is modeled as the named
+ *   parameter CLAY_BONUS_CHANCE_TBD, never invented here. Sharp trowel
+ *   is not named in Adam's table; it holds the trowel amount (base 1)
+ *   pending his word — flagged, not silently settled.
  *   Clay stays out of every OTHER source; only silt ground yields it.
- * - No quantities are invented: the prototype carries no per-harvest
- *   amounts, so sources carry item ids + secondary chances only. Amounts
- *   belong to the later harvest system / balancing pass, not here.
+ * - No other quantities are invented: the prototype carries no
+ *   per-harvest amounts, so other sources carry item ids + secondary
+ *   chances only. Amounts belong to the later harvest system /
+ *   balancing pass, not here.
  */
 
 import type { BiomeId, ScatterKind } from '../types';
@@ -74,8 +81,6 @@ export type ToolTier =
  * Clay tool-tier groups, lowest to highest. Each group is one rank:
  * spade and axe-trowel share a rank because they are alternative routes
  * to the same convergence (spade-axe), not one better than the other.
- * The harvest system scales the clay amount upward by rank; the
- * per-rank amounts are TBD for Adam's pin pass and are NOT in this file.
  */
 export const CLAY_TOOL_TIER_GROUPS: ToolTier[][] = [
   ['trowel'],
@@ -93,16 +98,50 @@ export function toolTierRank(tier: ToolTier | null): number {
 }
 
 /**
+ * The bonus chance for the +1 clay bonus, as a NAMED parameter awaiting
+ * Adam's pin pass. It is the string 'TBD' on purpose: the one number
+ * Adam did not name must not be invented, guessed, or defaulted in code.
+ */
+export const CLAY_BONUS_CHANCE_TBD = 'TBD' as const;
+
+/** One tier's clay yield: guaranteed base + a chance of a +1 bonus. */
+export interface ClayYieldTier {
+  base: number;
+  bonus: number;
+  bonusChance: typeof CLAY_BONUS_CHANCE_TBD;
+}
+
+/**
+ * Clay yield per tier group, in CLAY_TOOL_TIER_GROUPS order (Adam,
+ * 2026-10-26): base rises by 1 per tier, +1 bonus on top at every tier.
+ * Sharp trowel (group 1) is not named in Adam's table, so it holds the
+ * trowel amount (base 1) pending his word — see the header note.
+ */
+export const CLAY_YIELD_BY_TIER_GROUP: ClayYieldTier[] = [
+  { base: 1, bonus: 1, bonusChance: CLAY_BONUS_CHANCE_TBD },
+  { base: 1, bonus: 1, bonusChance: CLAY_BONUS_CHANCE_TBD },
+  { base: 2, bonus: 1, bonusChance: CLAY_BONUS_CHANCE_TBD },
+  { base: 3, bonus: 1, bonusChance: CLAY_BONUS_CHANCE_TBD },
+  { base: 4, bonus: 1, bonusChance: CLAY_BONUS_CHANCE_TBD },
+];
+
+/** Clay yield for a tool, or null when she has no tool (no clay yield).
+ *  Pure lookup data, not a harvest system. */
+export function clayYieldForTool(tier: ToolTier | null): ClayYieldTier | null {
+  const rank = toolTierRank(tier);
+  if (rank < 0) return null;
+  return CLAY_YIELD_BY_TIER_GROUP[rank];
+}
+
+/**
  * A tool-gated yield: present only when she holds at least the required
- * tool, and scaled upward along the tier groups. `quantityPerTier` is
- * deliberately the string 'TBD', not a number — inventing amounts here
- * would pre-empt Adam's pin pass.
+ * tool, and scaled upward along the tier groups via yieldByTierGroup.
  */
 export interface ToolGatedYield {
   item: ItemId;
   requiresTool: ToolTier;
   tierGroups: ToolTier[][];
-  quantityPerTier: 'TBD';
+  yieldByTierGroup: ClayYieldTier[];
 }
 
 /** A prototype-carried secondary drop: item + chance + prototype message. */
@@ -320,9 +359,10 @@ export const SOURCES: HarvestSourceDef[] = [
     description:
       'Fine mineral particles gathered from the creek bed. Useful as a binder. ' +
       'Silt ground also yields clay through the NORMAL harvest interaction ' +
-      '(Adam, 2026-10-26 — no separate dig verb): have the trowel, get a ' +
-      'little clay; better tool, more clay, up the tool ladder. Per-tier ' +
-      'amounts TBD. Silt ground is the ONLY source that yields clay.',
+      '(Adam, 2026-10-26 — no separate dig verb): trowel 1 (+chance 1), ' +
+      'spade / axe-trowel 2 (+chance 1), spade-axe 3 (+chance 1), ' +
+      'trundle-tool 4 (+chance 1); the bonus chance percentage is TBD ' +
+      'for Adam\'s pin pass. Silt ground is the ONLY source that yields clay.',
     harvestable: true,
     primaryYield: 'RIVER_SLUDGE',
     secondaryYields: [
@@ -337,7 +377,7 @@ export const SOURCES: HarvestSourceDef[] = [
         item: 'CLAY',
         requiresTool: 'trowel',
         tierGroups: CLAY_TOOL_TIER_GROUPS,
-        quantityPerTier: 'TBD',
+        yieldByTierGroup: CLAY_YIELD_BY_TIER_GROUP,
       },
     ],
     provenance: 'prototype',
