@@ -9,27 +9,33 @@
  * chunks, seed), WitchHealth unwired (awaiting health system),
  * InventoryPanel on the real PersonalInventory, CraftingMenu on
  * the real Systems recipes + canCraft + executeCraft (the helper
- * App wiring is meant to call, which also moves the held tool),
+ * App wiring is meant to call, which also reports the owned tool),
  * ProximityHarvestButtons subscribed to 'harvest:inRange' with
  * world-to-screen projection, and the CameraTransition overlay on
  * 'camera:switched'.
  *
  * WHAT IS DELIBERATELY NOT HERE (read before extending):
- * - Harvest outcome feedback: the bus carries NO 'harvest:completed'
- *   or failure event yet, and no Systems listener consumes
- *   'harvest:requested' (the bus comment says outcome is the next
- *   step). The feedback display path IS in place below (feedbacks
- *   state rendered through WorldAnchor + ObjectFeedback, positioned
- *   by the same projection), but it stays empty until Background
- *   registers those events and Systems consumes the request — this
- *   file invents no yields and shows no fake "you got X". Pressing
- *   a harvest button emits 'harvest:requested' and nothing else.
- * - Station presence: no station-presence source exists (stumps are
- *   anchors, not proximity targets), so crafting runs with station
- *   context null. Recipes with an unstated or 'hand' station pass
- *   anywhere, as the engine defines; recipes requiring a specific
- *   station correctly report a station mismatch until a presence
- *   source lands. Nothing here pretends she stands at a station.
+ * - Harvest outcome: the shell owns exactly ONE outcome listener
+ *   (createHarvestOutcomeListener, boot effect, disposed on
+ *   unmount — a second one would double-grant). It is fed the
+ *   shell's inventory and the owned-tool tier query, so presses
+ *   resolve through Background's outcome order (range re-check,
+ *   permit, multi-step progress, yields, capacity, depletion).
+ *   Feedback below renders ONLY what those events carry:
+ *   'harvest:completed' yields as carried, 'harvest:failed'
+ *   reasons as carried (with attempted yields named on
+ *   'inventory-full' only, as the event defines), and
+ *   'harvest:progress' fractions as carried. Nothing here
+ *   invents a yield, a reason, or a progress value.
+ * - Station presence: crafting checks the real presence query
+ *   (stationPresence on the current generator at her position,
+ *   mapped through stationContextForPresence). A stump within
+ *   harvest range means 'workstation'; anything else reads as
+ *   unavailable — no placeholder stations are invented, and other
+ *   stations (wheel, loom, kiln, hearth) correctly stay
+ *   unavailable until they exist. The raw generator is used
+ *   because stumps are never depleted, so it gives the same
+ *   stump set as the renderer's depletion-wrapped generator.
  * - Inventory capacity mode: PersonalInventory requires a
  *   largeBasketMode, and replace-vs-stack is still Adam's open
  *   question. Systems solved the wiring side of it explicitly:
@@ -43,12 +49,15 @@
  *   small one (a lone small basket always gives +25 either way),
  *   and the upgrade normally consumes the small basket, so the
  *   modes coincide right after the upgrade in normal play.
- * - Held tool: HeldToolState starts at hands (deliberate — ground
- *   is hand-permitted, clay needs a trowel). Crafting a ladder
- *   tool equips it via executeCraft, atomically after success;
- *   anything else leaves the held tool unchanged, and a failed
- *   craft touches neither inventory nor held tool. The HUD shows
- *   the held tool from that state, not from an invented slot.
+ * - Owned tool (Adam correction, 2026-10-26 — owning is
+ *   sufficient, no equipping): there is no held/equipped slot.
+ *   The owned tool is the highest-stage ladder tool present in
+ *   inventory ('none' when none), read fresh via owned-tool.ts.
+ *   Crafting a ladder tool owns it by putting it in inventory;
+ *   upgrading advances the owned tier by consuming its
+ *   predecessor. A failed craft touches neither inventory nor
+ *   owned tier. The HUD shows the owned tool from inventory,
+ *   not from an invented slot.
  * - Controllers untouched: no renderer/player edits in this round
  *   (facing ease and any controller change need a separate claim).
  *   The camera geometry below replicates the renderer from player
@@ -66,11 +75,16 @@
  * pointer-events-none for exactly this reason.
  */
 
-import React, { Fragment, useEffect, useRef, useState } from 'react';
+import React, { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { createWorldGen } from './game/worldgen';
 import { WorldRenderer } from './game/renderer';
 import { PlayerController } from './game/player';
 import { bus, type EventMap } from './game/events';
+import {
+  createHarvestOutcomeListener,
+  stationContextForPresence,
+  stationPresence,
+} from './game/harvest';
 import { BIOME_BY_ID } from './game/biomes';
 import {
   DEFAULT_SEED,
@@ -84,6 +98,7 @@ import { CameraToggle } from './ui/CameraToggle';
 import { InventoryPanel } from './ui/InventoryPanel';
 import { CraftingMenu } from './ui/CraftingMenu';
 import { ProximityHarvestButtons } from './ui/ProximityHarvestButtons';
+import { InteractionProgress } from './ui/InteractionProgress';
 import { ObjectFeedback } from './ui/ObjectFeedback';
 import { WorldAnchor } from './ui/WorldAnchor';
 import { CameraTransition } from './ui/CameraTransition';
@@ -100,7 +115,11 @@ import {
   createTemporaryWiringInventory,
   executeCraft,
 } from './systems/crafting-execution';
-import { HeldToolState, type HeldToolItem } from './systems/held-tool';
+import {
+  ownedTier,
+  ownedToolItem,
+  type OwnedToolItem,
+} from './systems/owned-tool';
 import { canCraft, type StationContext } from './systems/crafting';
 import { RECIPES } from './systems/recipes';
 
@@ -111,6 +130,15 @@ interface FeedbackItem {
   id: string;
   text: string;
   tone: FeedbackTone;
+  x: number;
+  y: number;
+}
+
+/** One in-progress multi-step harvest, anchored at its object. */
+interface ProgressItem {
+  targetId: string;
+  fraction: number;
+  label: string;
   x: number;
   y: number;
 }
@@ -138,18 +166,12 @@ export default function App() {
 
   // The shell owns the one personal inventory, built through
   // Systems' temporary wiring helper (see the header — placeholder
-  // mode until Adam rules on replace-vs-stack), and the one held
-  // tool state (starts at hands).
+  // mode until Adam rules on replace-vs-stack).
   const inventoryRef = useRef<PersonalInventory | null>(null);
   if (inventoryRef.current === null) {
     inventoryRef.current = createTemporaryWiringInventory();
   }
   const inventory = inventoryRef.current;
-  const heldToolRef = useRef<HeldToolState | null>(null);
-  if (heldToolRef.current === null) {
-    heldToolRef.current = new HeldToolState();
-  }
-  const heldTool = heldToolRef.current;
 
   const [seedInput, setSeedInput] = useState(DEFAULT_SEED);
   const [seed, setSeed] = useState(DEFAULT_SEED);
@@ -167,14 +189,16 @@ export default function App() {
     undefined,
   );
   const [craftNote, setCraftNote] = useState<string | null>(null);
-  const [heldItem, setHeldItem] = useState<HeldToolItem>(() =>
-    heldTool.current(),
+  const [ownedItem, setOwnedItem] = useState<OwnedToolItem>(() =>
+    ownedToolItem(inventory),
   );
   const [harvestTargets, setHarvestTargets] = useState<HarvestTarget[]>([]);
-  // Harvest outcome feedback. Empty until 'harvest:completed' /
-  // failure events exist on the bus (see the header) — rendered
-  // through WorldAnchor + ObjectFeedback the moment they do.
-  const [feedbacks] = useState<FeedbackItem[]>([]);
+  // Harvest outcome feedback + multi-step progress, rendered
+  // through WorldAnchor + ObjectFeedback / InteractionProgress.
+  // Populated only by the outcome events (see the header) — never
+  // by invented yields or progress.
+  const [feedbacks, setFeedbacks] = useState<FeedbackItem[]>([]);
+  const [progressItems, setProgressItems] = useState<ProgressItem[]>([]);
 
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>(() =>
     inventory
@@ -191,6 +215,8 @@ export default function App() {
 
   const busTargetsRef = useRef<BusHarvestTarget[]>([]);
   const transitionTimerRef = useRef<number | undefined>(undefined);
+  const feedbackCounterRef = useRef(0);
+  const feedbackTimersRef = useRef<Map<string, number>>(new Map());
 
   const refreshInventory = () => {
     setInventoryItems(
@@ -207,67 +233,96 @@ export default function App() {
     );
   };
 
-  // Re-project the last in-range targets from current player state.
-  // Reads refs only, so the boot effect's first-render copy stays
-  // valid: every camera change (move, look, switch, resize) flows
-  // through an event that calls this.
-  const recomputeAnchors = () => {
+  // Project one world point to a screen anchor. Reads refs only, so
+  // the boot effect's first-render copy stays valid. Ground points
+  // clamp to the screen edge (the ground at her feet is a direction,
+  // not a distant object); off-screen or behind-camera scatter
+  // points return null (dropping beats clamping onto the wrong
+  // object). Scatter anchors float ~1 m above the object's feet so
+  // the chip sits on the thing, not under it — a presentation
+  // offset, not a game fact.
+  const projectAnchor = (
+    x: number,
+    z: number,
+    kind: 'scatter' | 'ground',
+  ): { x: number; y: number } | null => {
     const player = playerRef.current;
     const container = containerRef.current;
-    if (!player || !container) return;
+    if (!player || !container) return null;
     const width = container.clientWidth;
     const height = container.clientHeight;
-    if (width === 0 || height === 0) return;
+    if (width === 0 || height === 0) return null;
+    const point = projectWorldToScreen({
+      worldX: x,
+      worldY: kind === 'ground' ? 0 : 1,
+      worldZ: z,
+      playerX: player.x,
+      playerZ: player.z,
+      pitch: player.pitch,
+      yaw: player.yaw,
+      mode: player.mode,
+      aspect: width / height,
+      eyeHeight: PLAYER_EYE_HEIGHT,
+      thirdOffset: THIRD_PERSON_OFFSET,
+    });
+    if (!point) return null;
+    if (kind === 'ground') {
+      return { x: clampPercent(point.x), y: clampPercent(point.y) };
+    }
+    if (point.x < 0 || point.x > 100 || point.y < 0 || point.y > 100) {
+      return null;
+    }
+    return point;
+  };
+
+  // Re-project the last in-range targets from current player state.
+  // Every camera change (move, look, switch, resize) flows through
+  // an event that calls this.
+  const recomputeAnchors = () => {
     const projected: HarvestTarget[] = [];
     for (const target of busTargetsRef.current) {
-      const isGround = target.kind === 'ground';
-      const point = projectWorldToScreen({
-        // Scatter buttons float ~1 m above the object's feet so the
-        // chip sits on the thing, not under it; ground anchors at
-        // the ground itself. Presentation offsets, not game facts.
-        worldX: target.x,
-        worldY: isGround ? 0 : 1,
-        worldZ: target.z,
-        playerX: player.x,
-        playerZ: player.z,
-        pitch: player.pitch,
-        yaw: player.yaw,
-        mode: player.mode,
-        aspect: width / height,
-        eyeHeight: PLAYER_EYE_HEIGHT,
-        thirdOffset: THIRD_PERSON_OFFSET,
-      });
-      if (!point) continue;
-      let anchorX = point.x;
-      let anchorY = point.y;
-      if (isGround) {
-        // Ground at her feet is a direction, not a distant object:
-        // clamp to the screen edge (bottom-centre in first-person
-        // when looking down) instead of dropping it.
-        anchorX = clampPercent(anchorX);
-        anchorY = clampPercent(anchorY);
-      } else if (
-        anchorX < 0 ||
-        anchorX > 100 ||
-        anchorY < 0 ||
-        anchorY > 100
-      ) {
-        // Off-screen scatter: drop the button rather than clamping
-        // it onto the wrong object.
-        continue;
-      }
+      const anchor = projectAnchor(target.x, target.z, target.kind);
+      if (!anchor) continue;
       projected.push({
         id: target.id,
         sourceId: target.sourceId,
         name: target.name,
         kind: target.kind,
-        anchorX,
-        anchorY,
+        anchorX: anchor.x,
+        anchorY: anchor.y,
         worldX: target.x,
         worldZ: target.z,
       });
     }
     setHarvestTargets(projected);
+  };
+
+  // Show a feedback chip for 4 seconds, then remove it. Caller-timed,
+  // as ObjectFeedback requires — the chip itself owns no timer.
+  const showFeedback = (text: string, tone: FeedbackTone, x: number, y: number) => {
+    const id = `fb-${feedbackCounterRef.current++}`;
+    setFeedbacks((current) => [...current, { id, text, tone, x, y }]);
+    const timer = window.setTimeout(() => {
+      setFeedbacks((current) => current.filter((item) => item.id !== id));
+      feedbackTimersRef.current.delete(id);
+    }, 4000);
+    feedbackTimersRef.current.set(id, timer);
+  };
+
+  // Anchor for an outcome event: the target's last known position
+  // when it is still in range, else her own position (e.g. a failed
+  // press on a target that already left range).
+  const anchorForOutcome = (
+    targetId: string,
+    kind: 'scatter' | 'ground',
+  ): { x: number; y: number } | null => {
+    const target = busTargetsRef.current.find((t) => t.id === targetId);
+    if (target) {
+      return projectAnchor(target.x, target.z, target.kind);
+    }
+    const player = playerRef.current;
+    if (!player) return null;
+    return projectAnchor(player.x, player.z, kind);
   };
 
   // Boot the world once. StrictMode double-mounts in dev only; the
@@ -308,6 +363,65 @@ export default function App() {
       busTargetsRef.current = targets;
       recomputeAnchors();
     });
+    // The shell's one harvest outcome listener (see the header):
+    // presses resolve through it into the shell's inventory, and
+    // its completed/failed/progress events drive the feedback below.
+    const unsubHarvestOutcome = createHarvestOutcomeListener({
+      gen: () => genRef.current,
+      inventory,
+      getToolTier: () => ownedTier(inventory),
+    });
+    const offCompleted = bus.on('harvest:completed', (p) => {
+      refreshInventory();
+      setProgressItems((current) =>
+        current.filter((item) => item.targetId !== p.targetId),
+      );
+      const anchor = anchorForOutcome(p.targetId, p.kind);
+      if (anchor) {
+        showFeedback(
+          p.yields.map((y) => `${y.item} × ${y.quantity}`).join(', '),
+          'gain',
+          anchor.x,
+          anchor.y,
+        );
+      }
+    });
+    const offFailed = bus.on('harvest:failed', (p) => {
+      setProgressItems((current) =>
+        current.filter((item) => item.targetId !== p.targetId),
+      );
+      const anchor = anchorForOutcome(p.targetId, p.kind);
+      if (!anchor) return;
+      const text =
+        p.reason === 'inventory-full' && p.yields.length > 0
+          ? `Pack full — ${p.yields.map((y) => `${y.item} × ${y.quantity}`).join(', ')} didn't fit.`
+          : `Harvest failed: ${p.reason}.`;
+      showFeedback(text, 'blocked', anchor.x, anchor.y);
+    });
+    const offProgress = bus.on('harvest:progress', (p) => {
+      const target = busTargetsRef.current.find(
+        (t) => t.id === p.targetId,
+      );
+      const anchor = target
+        ? projectAnchor(target.x, target.z, target.kind)
+        : null;
+      if (!anchor) return;
+      setProgressItems((current) => {
+        const rest = current.filter(
+          (item) => item.targetId !== p.targetId,
+        );
+        return [
+          ...rest,
+          {
+            targetId: p.targetId,
+            fraction: p.progress,
+            label: target.name,
+            x: anchor.x,
+            y: anchor.y,
+          },
+        ];
+      });
+    });
     const offLoaded = bus.on('world:chunkLoaded', () =>
       setChunkCount(renderer.loadedChunkCount),
     );
@@ -328,11 +442,19 @@ export default function App() {
     return () => {
       window.clearTimeout(timer);
       window.clearTimeout(transitionTimerRef.current);
+      for (const timeout of feedbackTimersRef.current.values()) {
+        window.clearTimeout(timeout);
+      }
+      feedbackTimersRef.current.clear();
       window.removeEventListener('resize', onResize);
       offCamera();
       offMoved();
       offLooked();
       offInRange();
+      offCompleted();
+      offFailed();
+      offProgress();
+      unsubHarvestOutcome();
       offLoaded();
       offUnloaded();
       player.dispose();
@@ -361,10 +483,17 @@ export default function App() {
     recomputeAnchors();
   };
 
-  // Station context: null — no station-presence source exists yet
-  // (see the header). Unstated/'hand' recipes pass; station recipes
-  // report their mismatch until presence lands.
-  const station: StationContext = null;
+  // Station context from the real presence query at her position
+  // (see the header): a stump within harvest range means
+  // 'workstation', otherwise null. Recomputed when she moves or
+  // the world regenerates; stumps are never depleted, so the raw
+  // generator gives the same stump set as the wrapped one.
+  const station: StationContext = useMemo(() => {
+    return stationContextForPresence(
+      stationPresence(genRef.current, position.x, position.z),
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [position.x, position.z, seed]);
 
   const craftingRecipes: CraftingRecipe[] = RECIPES.map((recipe) => {
     const check = canCraft(recipe, inventory, station);
@@ -396,14 +525,14 @@ export default function App() {
   const handleCraft = (recipeId: string) => {
     const recipe = RECIPES.find((candidate) => candidate.id === recipeId);
     if (!recipe) return;
-    const heldBefore = heldTool.current();
+    const ownedBefore = ownedToolItem(inventory);
     try {
-      const result = executeCraft(recipe, inventory, heldTool, station);
-      setHeldItem(result.held);
+      const result = executeCraft(recipe, inventory, station);
+      setOwnedItem(result.owned);
       setCraftNote(
         `Crafted ${result.output.item} × ${result.output.quantity}.` +
-          (result.held !== heldBefore
-            ? ` Now holding ${result.held}.`
+          (result.owned !== ownedBefore
+            ? ` Owned tool is now ${result.owned}.`
             : ''),
       );
     } catch (error) {
@@ -415,10 +544,11 @@ export default function App() {
   };
 
   const handleHarvest = (request: HarvestRequest) => {
-    // The press is the whole UI-side action: the bus comment says
-    // no listener grants items yet, so nothing here grants, counts,
-    // or previews an outcome. Outcome feedback arrives with the
-    // harvest outcome events (see the header).
+    // The press is the whole UI-side action: the outcome listener
+    // (boot effect) resolves it into items, failure, or progress,
+    // and the completed/failed/progress subscriptions above render
+    // the feedback. Nothing here grants, counts, or previews an
+    // outcome ahead of those events.
     bus.emit('harvest:requested', request);
   };
 
@@ -437,6 +567,16 @@ export default function App() {
           <Fragment key={feedback.id}>
             <WorldAnchor x={feedback.x} y={feedback.y}>
               <ObjectFeedback text={feedback.text} tone={feedback.tone} />
+            </WorldAnchor>
+          </Fragment>
+        ))}
+        {progressItems.map((item) => (
+          <Fragment key={item.targetId}>
+            <WorldAnchor x={item.x} y={item.y}>
+              <InteractionProgress
+                fraction={item.fraction}
+                label={item.label}
+              />
             </WorldAnchor>
           </Fragment>
         ))}
@@ -460,7 +600,7 @@ export default function App() {
             <p>Ground here: {biomeText}</p>
             <p>Chunks loaded: {chunkCount}</p>
             <p>Seed: {seed}</p>
-            <p>Tool: {heldItem}</p>
+            <p>Owned tool: {ownedItem}</p>
           </div>
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <button
