@@ -121,6 +121,17 @@
  *   and a fresh log is scheduled to spawn near trees after
  *   LOG_SPAWN_MS. Spawned logs harvest like fallen logs and, when
  *   taken, schedule their own replacement — the chain renews.
+ * - TREES FELL (Adam, 2026-10-26, PINNED — answers the flagged
+ *   fell-vs-shrink question with FELL): a harvested tree becomes
+ *   a STUMP at its spot (a workstation anchor like any other
+ *   stump), and a sapling grows into a new tree in a nearby clear
+ *   spot over SAPLING_GROWTH_MS. The remove action on a tree is
+ *   different: total removal, NO stump, and the ground stays
+ *   cleared (no saplings return there).
+ * - REMOVE on any plant marks its ground CLEARED (a cleared spot
+ *   within CLEARED_SPOT_RADIUS): no saplings return there. This is
+ *   the house-plot case. (Removed plants themselves never regrow,
+ *   as already pinned.)
  * - Ground NEVER shrinks, depletes, or regrows: always scoopable.
  *
  * BONUS ROLLS: rng defaults to Math.random. That is GAMEPLAY randomness,
@@ -206,6 +217,13 @@ export function stationPresence(
   x: number,
   z: number,
 ): { workstation: boolean } {
+  // Felled stumps count too — and this check must read state, not
+  // just the passed generator, because callers pass the RAW
+  // generator (App passes genRef.current) while felled stumps live
+  // in state until the wrapped generator adds them.
+  if (harvestState.felledStumpsInRange(x, z, HARVEST_RANGE)) {
+    return { workstation: true };
+  }
   const minCx = Math.floor((x - HARVEST_RANGE) / CHUNK_SIZE);
   const maxCx = Math.floor((x + HARVEST_RANGE) / CHUNK_SIZE);
   const minCz = Math.floor((z - HARVEST_RANGE) / CHUNK_SIZE);
@@ -404,8 +422,91 @@ export function createHarvestOutcomeListener(
       return;
     }
 
-    // --- Worldgen scatter: removed, range, source match, permit.
+    // --- Spawned trees (tree lifecycle): mature saplings are tree
+    // targets; immature ones are not targets at all (a stale press
+    // for one reads as regrowing). Harvest fells them (stump +
+    // new sapling nearby); remove clears them with no stump.
+    if (req.targetId.startsWith('spawned-tree:')) {
+      const sapling = state.spawnedTree(req.targetId);
+      if (!sapling) {
+        fail(req, 'removed');
+        return;
+      }
+      if (state.saplingGrowth(sapling, nowMs) < 1) {
+        fail(req, 'regrowing');
+        return;
+      }
+      if (Math.hypot(sapling.x - pos.x, sapling.z - pos.z) > HARVEST_RANGE) {
+        fail(req, 'out-of-range');
+        return;
+      }
+      const treeSource = SOURCE_BY_ID['standingTree'];
+      if (!treeSource) {
+        fail(req, 'target-mismatch');
+        return;
+      }
+      const treeOutcome = harvestYieldForTool(treeSource, tool);
+      if (isNotPermitted(treeOutcome)) {
+        fail(req, treeOutcome.reason);
+        return;
+      }
+      const treeYields = new Map<string, number>();
+      if (action === 'remove') {
+        mergeYields(
+          treeYields,
+          treeSource.primaryYield ?? '',
+          treeOutcome.base * REMOVE_YIELD_MULTIPLIER +
+            (rng() < treeOutcome.bonusChance ? treeOutcome.bonus : 0),
+        );
+        for (const secondary of treeSource.secondaryYields) {
+          mergeYields(treeYields, secondary.item, 1);
+        }
+      } else {
+        mergeYields(
+          treeYields,
+          treeSource.primaryYield ?? '',
+          treeOutcome.base + (rng() < treeOutcome.bonusChance ? treeOutcome.bonus : 0),
+        );
+        for (const secondary of treeSource.secondaryYields) {
+          if (rng() < secondary.chance) mergeYields(treeYields, secondary.item, 1);
+        }
+      }
+      treeYields.delete('');
+      const treeMerged = [...treeYields.entries()].map(([item, quantity]) => ({ item, quantity }));
+      if (treeMerged.reduce((sum, y) => sum + y.quantity, 0) > deps.inventory.free()) {
+        fail(req, 'inventory-full', treeMerged);
+        return;
+      }
+      for (const y of treeMerged) deps.inventory.add(y.item, y.quantity);
+      if (action === 'remove') {
+        state.removeSpawnedTree(req.targetId);
+        state.markCleared(sapling.x, sapling.z);
+      } else {
+        state.removeSpawnedTree(req.targetId);
+        state.fellTree(req.targetId, sapling.x, sapling.z, sapling.cx, sapling.cz, gen, nowMs);
+      }
+      bus.emit('harvest:completed', {
+        targetId: req.targetId,
+        sourceId: treeSource.id,
+        kind: 'scatter',
+        x: sapling.x,
+        z: sapling.z,
+        cx: sapling.cx,
+        cz: sapling.cz,
+        yields: treeMerged,
+        action,
+      });
+      return;
+    }
+
+    // --- Worldgen scatter: removed, felled, range, source match, permit.
     if (state.isRemoved(req.targetId)) {
+      fail(req, 'removed');
+      return;
+    }
+    if (state.isFelled(req.targetId)) {
+      // The tree is gone (a stump stands there now); a stale button
+      // for it reads as removed, not as a harvestable tree.
       fail(req, 'removed');
       return;
     }
@@ -468,6 +569,10 @@ export function createHarvestOutcomeListener(
       }
       for (const y of removeMerged) deps.inventory.add(y.item, y.quantity);
       state.remove(req.targetId);
+      // Intentional clearing marks the ground: no saplings return
+      // within CLEARED_SPOT_RADIUS — the house-plot case (Adam,
+      // 2026-10-26, PINNED). No stump is left, even for a tree.
+      state.markCleared(req.x, req.z);
       bus.emit('harvest:completed', {
         targetId: req.targetId,
         sourceId: req.sourceId,
@@ -538,7 +643,20 @@ export function createHarvestOutcomeListener(
       return;
     }
     for (const y of merged) deps.inventory.add(y.item, y.quantity);
-    if (source.renewal === 'spawn-near-trees') {
+    if (source.fellOnHarvest) {
+      // TREES FELL (Adam, 2026-10-26, PINNED): the tree becomes a
+      // stump at its spot, and a sapling is planted in a nearby
+      // clear spot (it grows into a tree over SAPLING_GROWTH_MS).
+      state.fellTree(
+        req.targetId,
+        req.x,
+        req.z,
+        Math.floor(req.x / CHUNK_SIZE),
+        Math.floor(req.z / CHUNK_SIZE),
+        gen,
+        nowMs,
+      );
+    } else if (source.renewal === 'spawn-near-trees') {
       // Logs are TAKEN, not shrunk: gone from this spot for good,
       // and a fresh log spawns near trees after LOG_SPAWN_MS.
       state.remove(req.targetId);

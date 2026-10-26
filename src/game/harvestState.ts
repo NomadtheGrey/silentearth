@@ -45,12 +45,17 @@
 import { CHUNK_SIZE } from '../constants';
 import { hashSeed } from './seed';
 import type { WorldGen } from './worldgen';
+import type { ScatterObject } from '../types';
 
 /** Lane-decided starting values — see the header. Not pinned. */
 export const REGROW_MS = 120_000;
 export const LOG_SPAWN_MS = 180_000;
 export const SHRINK_SCALE = 0.35;
 export const REMOVE_YIELD_MULTIPLIER = 3;
+/** A felled tree's sapling grows into a full tree over this long. */
+export const SAPLING_GROWTH_MS = 300_000;
+/** Intentionally cleared ground suppresses saplings within this far. */
+export const CLEARED_SPOT_RADIUS = 3.0;
 
 /**
  * Stable scatter target id, shared by the tracker, the outcome
@@ -92,7 +97,33 @@ interface PendingLogSpawn {
   seed: number;
 }
 
-/** World harvest state: shrink/regrow + removed + spawned logs. */
+/** A felled tree: its stump stands at the felling spot, permanently. */
+interface FelledEntry {
+  x: number;
+  z: number;
+  cx: number;
+  cz: number;
+}
+
+/** A sapling planted near a felled tree, growing into a full tree. */
+export interface Sapling {
+  /** 'spawned-tree:<x.toFixed(2)>,<z.toFixed(2)>' — never collides
+   *  with a scatter id, like spawned logs. */
+  id: string;
+  x: number;
+  z: number;
+  cx: number;
+  cz: number;
+  plantedAt: number;
+}
+
+interface ClearedSpot {
+  x: number;
+  z: number;
+}
+
+/** World harvest state: shrink/regrow + removed + spawned logs +
+ *  felled trees (stumps) + saplings + cleared spots. */
 export class HarvestState {
   private shrunk = new Map<string, ShrunkEntry>();
   private removed = new Set<string>();
@@ -100,6 +131,10 @@ export class HarvestState {
   private spawnedLogs = new Map<string, SpawnedLog>();
   private pendingSpawns: PendingLogSpawn[] = [];
   private spawnCounter = 0;
+  private felled = new Map<string, FelledEntry>();
+  private saplings = new Map<string, Sapling>();
+  private saplingCounter = 0;
+  private clearedSpots: ClearedSpot[] = [];
   private _version = 0;
 
   /** Bumped on every state change the renderer must redraw for
@@ -276,8 +311,163 @@ export class HarvestState {
     };
   }
 
+  // --- Felled trees, saplings, cleared ground (Adam, 2026-10-26) ---
+
+  /**
+   * Fell a tree: its stump stands at (x, z) permanently (a
+   * workstation anchor like any other stump — same reading as
+   * Adam's parenthetical), and a sapling is planted in a nearby
+   * clear spot. Returns the sapling, or null when no clear spot
+   * was found. The felled entry is keyed by the harvested target
+   * id (worldgen tree id, or sapling id for a felled sapling-tree),
+   * so a stale button for the felled tree reads as felled.
+   */
+  fellTree(
+    targetId: string,
+    x: number,
+    z: number,
+    cx: number,
+    cz: number,
+    gen: WorldGen,
+    now: number,
+  ): Sapling | null {
+    this.felled.set(targetId, { x, z, cx, cz });
+    this.progress.delete(targetId);
+    this._version++;
+    return this.plantSaplingNear(x, z, gen, now);
+  }
+
+  isFelled(targetId: string): boolean {
+    return this.felled.has(targetId);
+  }
+
+  /** Felled stumps in a chunk, as stump scatter objects. */
+  felledStumpsInChunk(cx: number, cz: number): ScatterObject[] {
+    const out: ScatterObject[] = [];
+    for (const entry of this.felled.values()) {
+      if (entry.cx === cx && entry.cz === cz) {
+        out.push({ kind: 'stump', x: entry.x, z: entry.z, y: 0, scale: 1, rotY: 0 });
+      }
+    }
+    return out;
+  }
+
+  /** Any felled stump within range of (x, z)? (station presence.) */
+  felledStumpsInRange(x: number, z: number, range: number): boolean {
+    for (const entry of this.felled.values()) {
+      if (Math.hypot(entry.x - x, entry.z - z) <= range) return true;
+    }
+    return false;
+  }
+
+  spawnedTree(id: string): Sapling | undefined {
+    return this.saplings.get(id);
+  }
+
+  /** All saplings (immature + mature), for the renderer. */
+  spawnedTreesSnapshot(): Sapling[] {
+    return [...this.saplings.values()];
+  }
+
+  /** Mature saplings (grown into full trees) within range, for the tracker. */
+  matureSaplingsInRange(x: number, z: number, range: number, now: number): Sapling[] {
+    const out: Sapling[] = [];
+    for (const sapling of this.saplings.values()) {
+      if (now < sapling.plantedAt + SAPLING_GROWTH_MS) continue;
+      if (Math.hypot(sapling.x - x, sapling.z - z) <= range) out.push(sapling);
+    }
+    return out;
+  }
+
+  /** Growth fraction of a sapling, 0 (just planted) to 1 (full tree). */
+  saplingGrowth(sapling: Sapling, now: number): number {
+    return Math.min(1, Math.max(0, (now - sapling.plantedAt) / SAPLING_GROWTH_MS));
+  }
+
+  /** Remove a sapling-tree from the saplings map (felled or removed). */
+  removeSpawnedTree(id: string): void {
+    if (this.saplings.delete(id)) this._version++;
+  }
+
+  /**
+   * Plant a sapling in a nearby clear spot: 3–9 m from (x, z) on
+   * golden-angle candidates, deterministic from (seed, spot,
+   * counter). A spot is clear when no worldgen object, felled
+   * stump, sapling, or spawned log sits within 1.5 m of it, and no
+   * intentionally cleared spot sits within CLEARED_SPOT_RADIUS.
+   * The felled stump itself is added before planting, so the
+   * sapling never lands on it. Returns null when all 16
+   * candidates are blocked (dense ground, or cleared ground).
+   */
+  plantSaplingNear(x: number, z: number, gen: WorldGen, now: number): Sapling | null {
+    const hash = hashSeed(`${gen.seed}|sapling:${x.toFixed(2)},${z.toFixed(2)}:${this.saplingCounter++}`);
+    for (let i = 0; i < 16; i++) {
+      const angle = (((hash + i * 137.5) % 360) * Math.PI) / 180;
+      const dist = 3 + (i % 6) * 1.2;
+      const sx = x + Math.cos(angle) * dist;
+      const sz = z + Math.sin(angle) * dist;
+      if (!this.isClearForSapling(sx, sz, gen)) continue;
+      const sapling: Sapling = {
+        id: `spawned-tree:${sx.toFixed(2)},${sz.toFixed(2)}`,
+        x: sx,
+        z: sz,
+        cx: Math.floor(sx / CHUNK_SIZE),
+        cz: Math.floor(sz / CHUNK_SIZE),
+        plantedAt: now,
+      };
+      this.saplings.set(sapling.id, sapling);
+      this._version++;
+      return sapling;
+    }
+    return null;
+  }
+
+  private isClearForSapling(sx: number, sz: number, gen: WorldGen): boolean {
+    for (const spot of this.clearedSpots) {
+      // Epsilon: the first candidate ring sits at exactly 3.0 m,
+      // and float error in cos/sin can read as 3.0000000000000004
+      // — just past the radius. Suppression is inclusive of the
+      // boundary, so the epsilon keeps the boundary blocked.
+      if (Math.hypot(spot.x - sx, spot.z - sz) <= CLEARED_SPOT_RADIUS + 1e-9) {
+        return false;
+      }
+    }
+    for (const entry of this.felled.values()) {
+      if (Math.hypot(entry.x - sx, entry.z - sz) <= 1.5) return false;
+    }
+    for (const sapling of this.saplings.values()) {
+      if (Math.hypot(sapling.x - sx, sapling.z - sz) <= 1.5) return false;
+    }
+    for (const log of this.spawnedLogs.values()) {
+      if (Math.hypot(log.x - sx, log.z - sz) <= 1.5) return false;
+    }
+    const minCx = Math.floor((sx - 1.5) / CHUNK_SIZE);
+    const maxCx = Math.floor((sx + 1.5) / CHUNK_SIZE);
+    const minCz = Math.floor((sz - 1.5) / CHUNK_SIZE);
+    const maxCz = Math.floor((sz + 1.5) / CHUNK_SIZE);
+    for (let cz = minCz; cz <= maxCz; cz++) {
+      for (let cx = minCx; cx <= maxCx; cx++) {
+        for (const obj of gen.generateChunk(cx, cz).objects) {
+          if (Math.hypot(obj.x - sx, obj.z - sz) <= 1.5) return false;
+        }
+      }
+    }
+    return true;
+  }
+
+  /**
+   * Mark ground intentionally cleared (a successful remove action):
+   * no saplings return within CLEARED_SPOT_RADIUS of (x, z).
+   * Cleared ground stays cleared — this is the house-plot case.
+   * (Removed plants themselves never regrow, as already pinned.)
+   */
+  markCleared(x: number, z: number): void {
+    this.clearedSpots.push({ x, z });
+  }
+
   /** Seed change / world reset: shrink, removed, progress, spawned
-   *  logs, and pending spawns all go. */
+   *  logs, pending spawns, felled stumps, saplings, and cleared
+   *  spots all go. */
   clear(): void {
     this.shrunk.clear();
     this.removed.clear();
@@ -285,6 +475,10 @@ export class HarvestState {
     this.spawnedLogs.clear();
     this.pendingSpawns = [];
     this.spawnCounter = 0;
+    this.felled.clear();
+    this.saplings.clear();
+    this.saplingCounter = 0;
+    this.clearedSpots = [];
     this._version++;
   }
 }
@@ -293,13 +487,16 @@ export class HarvestState {
 export const harvestState = new HarvestState();
 
 /**
- * A WorldGen view that filters permanently-removed objects out of
- * generated chunks. Shrunk objects are NOT filtered (they still
- * render, at SHRINK_SCALE) and regrowing objects are NOT filtered
- * here either — the tracker excludes regrowing targets, and the
- * renderer scales them. All other methods delegate untouched.
+ * A WorldGen view that applies harvest state to generated chunks:
+ * permanently-removed objects are filtered out, felled trees are
+ * filtered out (their stump stands instead — appended below), and
+ * felled stumps are appended as stump objects. Shrunk objects are
+ * NOT filtered (they still render, at SHRINK_SCALE) and regrowing
+ * objects are NOT filtered here either — the tracker excludes
+ * regrowing targets, and the renderer scales them. All other
+ * methods delegate untouched.
  */
-export function wrapGenWithRemoved(
+export function wrapGenWithState(
   base: WorldGen,
   state: HarvestState = harvestState,
 ): WorldGen {
@@ -307,12 +504,12 @@ export function wrapGenWithRemoved(
     ...base,
     generateChunk: (cx: number, cz: number) => {
       const chunk = base.generateChunk(cx, cz);
-      return {
-        ...chunk,
-        objects: chunk.objects.filter(
-          (obj) => !state.isRemoved(scatterTargetId(cx, cz, obj)),
-        ),
-      };
+      const objects = chunk.objects.filter((obj) => {
+        const id = scatterTargetId(cx, cz, obj);
+        return !state.isRemoved(id) && !state.isFelled(id);
+      });
+      objects.push(...state.felledStumpsInChunk(cx, cz));
+      return { ...chunk, objects };
     },
   };
 }

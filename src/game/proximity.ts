@@ -293,8 +293,34 @@ export class ProximityTracker {
           permitTier: logSource.permitTier,
         });
       }
-      scatter.sort((a, b) => a.distance - b.distance);
     }
+    // Mature saplings (tree lifecycle, Adam 2026-10-26): grown
+    // saplings are ordinary tree targets. Immature saplings are not
+    // targets at all — they render, growing, but cannot be harvested
+    // until mature (like regrowing plants, without a button).
+    const treeSource = SOURCE_BY_ID['standingTree'];
+    if (treeSource) {
+      for (const sapling of harvestState.matureSaplingsInRange(
+        this.lastX,
+        this.lastZ,
+        HARVEST_RANGE,
+        now,
+      )) {
+        const distance = Math.hypot(sapling.x - this.lastX, sapling.z - this.lastZ);
+        scatter.push({
+          id: sapling.id,
+          sourceId: treeSource.id,
+          kind: 'scatter',
+          x: sapling.x,
+          z: sapling.z,
+          distance,
+          name: treeSource.name,
+          primaryYield: treeSource.primaryYield ?? '',
+          permitTier: treeSource.permitTier,
+        });
+      }
+    }
+    scatter.sort((a, b) => a.distance - b.distance);
     const groundEligible =
       this.lastMode === 'first'
         ? this.lastPitch <= LOOK_DOWN_PITCH

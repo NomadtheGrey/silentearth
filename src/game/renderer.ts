@@ -28,8 +28,9 @@ import { ProximityTracker } from './proximity';
 import {
   harvestState,
   SHRINK_SCALE,
+  SAPLING_GROWTH_MS,
   scatterTargetId,
-  wrapGenWithRemoved,
+  wrapGenWithState,
 } from './harvestState';
 import { createBiomeTexture, TEXTURE_REPEAT } from './terrain';
 import {
@@ -204,10 +205,9 @@ export class WorldRenderer {
   private proximity: ProximityTracker;
   /** Unsubscribe for the harvest:completed chunk reload (below). */
   private unsubHarvestCompleted: (() => void) | null = null;
-  /** Spawned-log meshes (log-renewal system): rebuilt on the world
-   *  tick when harvest state changed, only for loaded chunks. */
+  /** Spawned-object meshes (spawned logs + growing saplings):
+   *  rebuilt on every world tick, only for loaded chunks. */
   private spawnedGroup: THREE.Group | null = null;
-  private lastHarvestVersion = -1;
   private worldTickAcc = 0;
   private disposed = false;
   /** One shared procedural ground texture per biome (+ marsh), built from
@@ -220,14 +220,15 @@ export class WorldRenderer {
     gen: WorldGen,
     player: PlayerController,
   ) {
-    // Removed filtering lives on the generator the renderer (and its
-    // proximity tracker) actually use: permanently-removed objects
-    // (remove action, taken logs) leave freshly generated chunks, so
-    // they stop rendering AND stop appearing as targets. Shrunk
+    // Harvest-state filtering lives on the generator the renderer
+    // (and its proximity tracker) actually use: permanently-removed
+    // objects (remove action, taken logs) and felled trees leave
+    // freshly generated chunks, so they stop rendering AND stop
+    // appearing as targets, while felled stumps are appended. Shrunk
     // objects are NOT filtered — they render at SHRINK_SCALE (see
     // loadChunk). The outcome listener (shell-owned, see
     // harvest.ts) marks state in the shared harvestState.
-    this.gen = wrapGenWithRemoved(gen);
+    this.gen = wrapGenWithState(gen);
     this.player = player;
     this.proximity = new ProximityTracker(this.gen);
     // Chunk reload on harvest completion: the harvested chunk is
@@ -322,9 +323,10 @@ export class WorldRenderer {
   /** Swap the world generator (seed change): drop all chunks, re-stream. */
   setWorldGen(gen: WorldGen): void {
     // A new seed is a new world: shrink/removed/progress/spawned
-    // state does not carry over.
+    // state (and felled stumps, saplings, cleared spots) does not
+    // carry over.
     harvestState.clear();
-    this.gen = wrapGenWithRemoved(gen);
+    this.gen = wrapGenWithState(gen);
     this.proximity.setGen(this.gen);
     this.disposeGroundTextures();
     for (const [key, loaded] of this.chunks) {
@@ -513,12 +515,13 @@ export class WorldRenderer {
   /**
    * World tick (every ~2 s, not every frame): regrow + log-spawn
    * bookkeeping. Regrown chunks reload (full-size meshes return);
-   * due log spawns are created near trees; spawned-log meshes
-   * rebuild when harvest state changed. The 2 s cadence is a
-   * rendering cadence, not a gameplay timer — regrow/spawn times
-   * themselves live in harvestState.ts, and a regrown plant is
-   * harvestable the moment its time passes even before its chunk
-   * reloads (the tracker checks state, not meshes).
+   * due log spawns are created near trees; spawned-object meshes
+   * rebuild (so growing saplings visibly grow). The 2 s cadence is
+   * a rendering cadence, not a gameplay timer — regrow/spawn/
+   * growth times themselves live in harvestState.ts, and a regrown
+   * plant or mature sapling is harvestable the moment its time
+   * passes even before its chunk reloads (the tracker checks
+   * state, not meshes).
    */
   private worldTick(): void {
     const now = Date.now();
@@ -530,14 +533,13 @@ export class WorldRenderer {
       }
     }
     harvestState.processDueSpawns(now, this.gen);
-    if (harvestState.version !== this.lastHarvestVersion) {
-      this.rebuildSpawnedGroup();
-    }
+    this.rebuildSpawnedGroup();
   }
 
-  /** Rebuild the spawned-log meshes for currently loaded chunks. */
+  /** Rebuild the spawned-object meshes for currently loaded chunks:
+   *  spawned logs (full-size) and saplings (tree mesh + canopy,
+   *  scaled 0.3 → 1.0 by growth over SAPLING_GROWTH_MS). */
   private rebuildSpawnedGroup(): void {
-    this.lastHarvestVersion = harvestState.version;
     if (this.spawnedGroup) {
       this.scene.remove(this.spawnedGroup);
       for (const child of this.spawnedGroup.children) {
@@ -546,15 +548,15 @@ export class WorldRenderer {
       this.spawnedGroup = null;
     }
     const group = new THREE.Group();
-    const render = KIND_RENDER['log'];
+    const dummy = new THREE.Object3D();
+    const logRender = KIND_RENDER['log'];
     const logs = harvestState
       .spawnedLogsSnapshot()
       .filter((log) => this.chunks.has(this.chunkKey(log.cx, log.cz)));
     if (logs.length > 0) {
-      const mesh = new THREE.InstancedMesh(render.geometry, render.material, logs.length);
-      const dummy = new THREE.Object3D();
+      const mesh = new THREE.InstancedMesh(logRender.geometry, logRender.material, logs.length);
       logs.forEach((log, i) => {
-        dummy.position.set(log.x, render.baseY, log.z);
+        dummy.position.set(log.x, logRender.baseY, log.z);
         dummy.rotation.set(0, 0, 0);
         dummy.scale.setScalar(1);
         dummy.updateMatrix();
@@ -562,6 +564,41 @@ export class WorldRenderer {
       });
       mesh.instanceMatrix.needsUpdate = true;
       group.add(mesh);
+    }
+    const now = Date.now();
+    const saplings = harvestState
+      .spawnedTreesSnapshot()
+      .filter((sapling) => this.chunks.has(this.chunkKey(sapling.cx, sapling.cz)));
+    if (saplings.length > 0) {
+      const treeRender = KIND_RENDER['tree'];
+      const mesh = new THREE.InstancedMesh(treeRender.geometry, treeRender.material, saplings.length);
+      saplings.forEach((sapling, i) => {
+        const s = 0.3 + 0.7 * harvestState.saplingGrowth(sapling, now);
+        dummy.position.set(sapling.x, treeRender.baseY * s, sapling.z);
+        dummy.rotation.set(0, 0, 0);
+        dummy.scale.setScalar(s);
+        dummy.updateMatrix();
+        mesh.setMatrixAt(i, dummy.matrix);
+      });
+      mesh.instanceMatrix.needsUpdate = true;
+      group.add(mesh);
+      if (treeRender.extra) {
+        const extra = new THREE.InstancedMesh(
+          treeRender.extra.geometry,
+          treeRender.extra.material,
+          saplings.length,
+        );
+        saplings.forEach((sapling, i) => {
+          const s = 0.3 + 0.7 * harvestState.saplingGrowth(sapling, now);
+          dummy.position.set(sapling.x, treeRender.extra!.y * s, sapling.z);
+          dummy.rotation.set(0, 0, 0);
+          dummy.scale.setScalar(s);
+          dummy.updateMatrix();
+          extra.setMatrixAt(i, dummy.matrix);
+        });
+        extra.instanceMatrix.needsUpdate = true;
+        group.add(extra);
+      }
     }
     this.scene.add(group);
     this.spawnedGroup = group;

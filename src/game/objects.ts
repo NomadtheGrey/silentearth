@@ -407,6 +407,13 @@ export interface HarvestSourceDef {
    * system); stones, bone, salt, and silt are not plants either.
    */
   removable?: boolean;
+  /**
+   * Tree lifecycle (Adam, 2026-10-26, PINNED): when true, a
+   * successful harvest FELLS the tree (it becomes a stump, and a
+   * sapling grows nearby) instead of the general shrink rule.
+   * Only standing trees set this.
+   */
+  fellOnHarvest?: boolean;
   /** 'prototype' = carried verbatim from world_data.json; 'draft' = new
    *  mapping chosen by this landing, awaiting Adam's pin pass. */
   provenance: 'prototype' | 'draft';
@@ -506,13 +513,17 @@ export const SOURCES: HarvestSourceDef[] = [
       'the existing wood vocabulary (SNAP_WOOD, wood for fire/building) ' +
       '— no new log item is invented here; if Adam wants whole-tree ' +
       'yields to differ from limb wood, that is a new item for him to ' +
-      'name. After harvest the tree SHRINKS and regrows like other ' +
-      'harvested things (general rule) — FLAG: an axe suggests ' +
-      'felling, but Adam\'s general rule says shrink; felling is NOT ' +
-      'silently picked here, the question is flagged for his call.',
+      'name. TREE LIFECYCLE (Adam, 2026-10-26, PINNED — fell, not ' +
+      'shrink): a harvested tree is FELLED — it becomes a stump ' +
+      '(a workstation anchor like any other stump, same reading as ' +
+      'Adam\'s parenthetical), and a sapling grows into a new tree ' +
+      'in a nearby clear spot over time. The remove action on a ' +
+      'tree is different: total removal, NO stump, and the ground ' +
+      'stays cleared (no saplings return there) — the house-plot case.',
     harvestable: true,
     permitTier: 'axeTrowel',
     removable: true,
+    fellOnHarvest: true,
     primaryYield: 'SNAP_WOOD',
     secondaryYields: [],
     provenance: 'draft',
