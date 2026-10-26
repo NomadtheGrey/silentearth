@@ -5,8 +5,19 @@
  * real inventory. No UI, no game files, no imports from src/game/*.
  *
  * ------------------------------------------------------------------
+ * CORRECTION (Adam, 2026-10-26) — NO EQUIPPING. This file was
+ * revised after the held-tool correction: owning the tool is
+ * sufficient to use it, so there is no held/equipped slot, no equip
+ * action, and no equip step after crafting. executeCraft takes NO
+ * held-tool argument anymore. The owned tier is read from the
+ * inventory after the craft (see ./owned-tool.ts): crafting a tool
+ * sets the owned tier by putting the tool in inventory, and
+ * upgrading advances it because the upgrade consumed its
+ * predecessor. The previous HeldToolState parameter and equip step
+ * are gone, and held-tool.ts is deleted in the same landing.
+ *
  * STEP 1 NOTE: the Trundle-Tool +50 pin is ALREADY LIVE and is NOT
- * redone here. It landed in the previous step (WIP 264c097,
+ * redone here. It landed earlier (WIP 264c097,
  * TRUNDLE_TOOL_BONUS = 50 in inventory.ts). This file builds on it
  * and changes no capacity number.
  *
@@ -38,19 +49,20 @@
  *    inventory untouched. A full pack therefore cannot eat
  *    ingredients — the failure the raw craft() path risks.
  *
- * 3. HELD TOOL FOLLOWS THE CRAFT, ATOMICALLY. Only after the craft
- *    succeeds, if the output is a ladder tool, the held tool becomes
- *    that output (HeldToolState.equip). Crafting a tool equips it;
- *    upgrading replaces the held tool, because the upgrade already
- *    consumed its predecessor in inventory. Crafting anything else
- *    leaves the held tool unchanged. A failed craft leaves BOTH the
- *    inventory and the held tool untouched, because equip happens
- *    strictly after success.
+ * 3. OWNED TIER FOLLOWS THE CRAFT, WITH NO EXTRA STEP. After a
+ *    successful craft, the result reports the owned tier, stage,
+ *    and stage name read fresh from the inventory (owned-tool.ts).
+ *    No state is updated by hand: a crafted tool is in inventory,
+ *    so it is owned; an upgraded tool replaced its predecessor in
+ *    inventory, so the tier advanced. Crafting anything else leaves
+ *    the owned tier exactly where it was. A failed craft leaves the
+ *    inventory — and therefore the owned tier — untouched.
  *
- * 4. NO HELD-TOOL GATE ON CRAFTING. Upgrade predecessors are
- *    inventory-based (crafting.ts), not held-based: crafting an
- *    upgrade does not require the predecessor to be the held tool,
- *    only to be in inventory. This helper adds no such gate.
+ * 4. NO OWNED-TOOL GATE ON CRAFTING. Upgrade predecessors are
+ *    inventory-based (crafting.ts), not owned-tier-based: crafting
+ *    an upgrade does not require owning any particular tier, only
+ *    holding the predecessor in inventory. This helper adds no
+ *    such gate.
  *
  * ------------------------------------------------------------------
  * TEMPORARY CONSTRUCTION PATH — READ BEFORE USING (grep marker:
@@ -88,12 +100,14 @@ import {
   type LargeBasketMode,
 } from './inventory';
 import {
-  isLadderTool,
+  ownedStage,
+  ownedStageName,
+  ownedTier,
+  ownedToolItem,
   type BackgroundToolTier,
   type HarvestStageName,
-  type HeldToolItem,
-  type HeldToolState,
-} from './held-tool';
+  type OwnedToolItem,
+} from './owned-tool';
 import type { CraftingStation, ItemId, Recipe } from './recipes';
 
 /**
@@ -105,13 +119,13 @@ export type StationInput = CraftingStation | CraftingStation[] | null;
 
 export interface CraftExecutionResult {
   output: { item: ItemId; quantity: number };
-  /** Held tool after the craft (unchanged unless a tool was made). */
-  held: HeldToolItem;
-  /** Background-compatible tier of the held tool, null for hands. */
+  /** Owned tool after the craft, read from inventory ('none' if none). */
+  owned: OwnedToolItem;
+  /** Background-compatible tier of the owned tool, null for none. */
   toolTier: BackgroundToolTier | null;
-  /** Harvest stage of the held tool (-1 hands, 0–3). */
+  /** Harvest stage of the owned tool (-1 none, 0–3). */
   harvestStage: number;
-  /** Plain-language tier name of the held tool. */
+  /** Plain-language tier name of the owned tool. */
   stageName: HarvestStageName;
 }
 
@@ -129,14 +143,14 @@ function describePresent(present: Set<CraftingStation>): string {
 /**
  * Run one craft against the real inventory, with station
  * requirements enforced from the input and capacity safety from
- * craftIntoInventory. Updates the held tool only on success.
- * Throws (inventory + held tool untouched) on a missing station,
- * an ingredient shortfall, or a capacity overflow.
+ * craftIntoInventory. Reports the owned tier read fresh from the
+ * inventory after the craft. Throws (inventory — and therefore
+ * owned tier — untouched) on a missing station, an ingredient
+ * shortfall, or a capacity overflow.
  */
 export function executeCraft(
   recipe: Recipe,
   inventory: PersonalInventory,
-  held: HeldToolState,
   station: StationInput = null,
 ): CraftExecutionResult {
   const present = presentStations(station);
@@ -170,17 +184,16 @@ export function executeCraft(
 
   const output = craftIntoInventory(recipe, inventory, engineStation);
 
-  // Held tool follows the craft, strictly after success.
-  if (isLadderTool(output.item)) {
-    held.equip(output.item);
-  }
-
+  // Owned tier is read from the inventory — no equip step, no
+  // separate state to update. A crafted tool is owned by virtue of
+  // being in inventory; an upgrade advanced the tier by consuming
+  // its predecessor.
   return {
     output,
-    held: held.current(),
-    toolTier: held.toolTier(),
-    harvestStage: held.harvestStage(),
-    stageName: held.stageName(),
+    owned: ownedToolItem(inventory),
+    toolTier: ownedTier(inventory),
+    harvestStage: ownedStage(inventory),
+    stageName: ownedStageName(inventory),
   };
 }
 
