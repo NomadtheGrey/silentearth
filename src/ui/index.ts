@@ -77,7 +77,7 @@ export type { HudShellProps } from './HudShell';
 export { InventoryPanel } from './InventoryPanel';
 export type { InventoryPanelProps } from './InventoryPanel';
 export { CraftingMenu } from './CraftingMenu';
-export type { CraftingMenuProps } from './CraftingMenu';
+export type { CraftingMenuProps, CraftingMenuSection } from './CraftingMenu';
 export { CameraToggle } from './CameraToggle';
 export type { CameraToggleProps } from './CameraToggle';
 export { TouchControls } from './TouchControls';

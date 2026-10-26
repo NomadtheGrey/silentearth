@@ -524,6 +524,19 @@
  *   to recipe.ingredients (execution removes ingredients AND
  *   upgradeFrom separately — listing it there would consume
  *   it twice). Station is not an ingredient line.
+ * - CRAFTING GROUPS, LIVE (Adam, 2026-10-26 — "group the
+ *   crafted items on the crafting screen"): SECTIONS in one
+ *   scroll, NOT tabs (the phone sheet already scrolls;
+ *   sections keep everything visible). 38 recipes, 6 groups
+ *   in this order — Tools, Homes, Fire & Workshop, Clothes,
+ *   Materials & Carrying, Traps — order within a group is the
+ *   current recipe order, empty groups never render.
+ *   CraftingMenu gains an optional `sections` prop (flat list
+ *   unchanged when absent; one shared row renderer, so
+ *   grouping changes layout only); App owns the UI-side
+ *   id→group map — no Systems file touch, no recipe field,
+ *   canCraft/execution untouched. Unmapped recipes would
+ *   trail under "Other" rather than vanish (none today).
  * POINTER DISCIPLINE: overlays are pointer-events-none except the
  * small interactive pieces (HUD buttons, panels, harvest buttons),
  * so world clicks — including the first-person mouse-capture click
@@ -739,6 +752,68 @@ const FIRE_NAME: Record<FireType, string> = {
   hearth: 'Hearth',
   kiln: 'Kiln',
   bloomery: 'Bloomery',
+};
+
+/**
+ * CRAFTING GROUPS (Adam, 2026-10-26 — "group the crafted items
+ * on the crafting screen"): SECTIONS in one scroll, NOT tabs —
+ * the phone sheet already scrolls, sections keep everything
+ * visible, tabs would hide recipes behind extra taps. UI-side
+ * id→group map (no Systems file touch, no recipe field added;
+ * a recipe field later is trivial if Adam wants it). Keys are
+ * recipe.id strings, verified against RECIPES at build time.
+ * Order within a group is the current recipe order (the shell
+ * filters, never re-sorts); a group with no recipes never
+ * renders. A recipe with no mapping falls into a trailing
+ * "Other" section rather than vanishing.
+ */
+const CRAFTING_GROUP_ORDER = [
+  'Tools',
+  'Homes',
+  'Fire & Workshop',
+  'Clothes',
+  'Materials & Carrying',
+  'Traps',
+];
+const CRAFTING_GROUP_BY_RECIPE_ID: Record<string, string> = {
+  'garden-trowel': 'Tools',
+  'sharp-trowel': 'Tools',
+  spade: 'Tools',
+  'axe-trowel': 'Tools',
+  'spade-axe': 'Tools',
+  'trundle-tool': 'Tools',
+  'primitive-lean-to': 'Homes',
+  'thatch-hut': 'Homes',
+  'wattle-and-daub-hut': 'Homes',
+  'woven-cottage-prototype': 'Homes',
+  'woven-cottage': 'Homes',
+  'small-wooden-hut': 'Homes',
+  'moss-cradle': 'Homes',
+  campfire: 'Fire & Workshop',
+  hearth: 'Fire & Workshop',
+  kiln: 'Fire & Workshop',
+  bloomery: 'Fire & Workshop',
+  'stumpy-workstation': 'Fire & Workshop',
+  'crafted-workstation': 'Fire & Workshop',
+  'potters-wheel': 'Fire & Workshop',
+  loom: 'Fire & Workshop',
+  'hooded-cloak': 'Clothes',
+  shawl: 'Clothes',
+  'pointy-hat': 'Clothes',
+  'mossy-mittens': 'Clothes',
+  'bog-boots': 'Clothes',
+  apron: 'Clothes',
+  umbrella: 'Clothes',
+  'twined-cordage': 'Materials & Carrying',
+  'clay-pot': 'Materials & Carrying',
+  'clay-brick': 'Materials & Carrying',
+  'small-basket': 'Materials & Carrying',
+  'large-basket': 'Materials & Carrying',
+  snare: 'Traps',
+  'fish-weir-trap': 'Traps',
+  'pot-trap': 'Traps',
+  pitfall: 'Traps',
+  deadfall: 'Traps',
 };
 
 /**
@@ -1670,6 +1745,26 @@ export default function App() {
         ) : undefined,
     };
   });
+
+  // CRAFTING GROUPS: sections in DEV's group order, each filtered
+  // from the recipe-ordered menu rows above (never re-sorted);
+  // empty groups dropped here, and the menu drops them again
+  // defensively. Unmapped recipes (none today — all 38 map)
+  // trail under "Other" instead of vanishing.
+  const ungroupedRecipes = craftingRecipes.filter(
+    (recipe) => CRAFTING_GROUP_BY_RECIPE_ID[recipe.id] === undefined,
+  );
+  const craftingSections = [
+    ...CRAFTING_GROUP_ORDER.map((title) => ({
+      title,
+      recipes: craftingRecipes.filter(
+        (recipe) => CRAFTING_GROUP_BY_RECIPE_ID[recipe.id] === title,
+      ),
+    })).filter((section) => section.recipes.length > 0),
+    ...(ungroupedRecipes.length > 0
+      ? [{ title: 'Other', recipes: ungroupedRecipes }]
+      : []),
+  ];
 
   const handleCraft = (recipeId: string) => {
     const recipe = RECIPES.find((candidate) => candidate.id === recipeId);
@@ -2789,6 +2884,7 @@ export default function App() {
         {craftingOpen ? (
           <CraftingMenu
             recipes={craftingRecipes}
+            sections={craftingSections}
             stationNote={stationNote}
             comfortable={isTouch}
             selectedRecipeId={selectedRecipeId}
