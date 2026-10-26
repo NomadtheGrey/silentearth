@@ -86,7 +86,10 @@ export function InventoryPanel({
                     (selected ? t.selected : 'hover:bg-stone-800')
                   }
                 >
-                  <span>
+                  <span className="flex items-center gap-1.5">
+                    {item.icon ? (
+                      <span className="inline-flex shrink-0">{item.icon}</span>
+                    ) : null}
                     {item.name}
                     {item.note ? (
                       <span className={'ml-2 text-sm ' + t.muted}>

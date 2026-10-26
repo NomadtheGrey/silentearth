@@ -150,6 +150,22 @@
  *   it lands it rides the EXISTING InventoryPanel pattern
  *   (items + capacity text) — no separate storage panel is
  *   invented here.
+ * - UMBRELLA GRAPHIC (Adam, 2026-10-26): UmbrellaIcon is a
+ *   scalloped moss-canopy glyph in the directory's inline-SVG
+ *   pattern, rendered through caller-supplied icon slots —
+ *   InventoryItem.icon, CraftingRecipe.icon, and
+ *   RecipeIngredient.icon — so the umbrella shows its glyph
+ *   in the inventory panel and the crafting menu (as a
+ *   crafted output or an ingredient) wherever it appears.
+ *   App maps Systems' item id (see UMBRELLA_ITEM_ID above)
+ *   to the icon in both places. The worn/clothes display
+ *   gains one umbrella rain note line (WornList umbrellaNote,
+ *   under the protection + capacity notes), shown only while
+ *   an umbrella is carried, with its number from Systems'
+ *   single constant (35%, a starting value for Adam's pin
+ *   pass, not pinned) — the UI holds no rain table of its
+ *   own. No separate umbrella panel is built, per the
+ *   brief; the icon and the note ride existing surfaces.
  * - CLOTHES UI, LIVE (Adam, 2026-10-26): the shell owns one
  *   Wardrobe; the HUD wardrobe lists all five garments with
  *   Wear (carried) / Remove (worn) buttons, and both note
@@ -208,11 +224,16 @@ import {
 } from './constants';
 import type { CameraMode, BiomeWeights } from './types';
 import { Wardrobe, GARMENTS } from './systems/clothes';
+import {
+  carriesUmbrella,
+  UMBRELLA_RAIN_PROTECTION,
+} from './systems/umbrella';
 import { HudShell } from './ui/HudShell';
 import { WitchHealth } from './ui/WitchHealth';
 import { HungerIndicator } from './ui/HungerIndicator';
 import { ShelteredIndicator } from './ui/ShelteredIndicator';
 import { WornList, type WornGarment } from './ui/WornList';
+import { UmbrellaIcon } from './ui/UmbrellaIcon';
 import { FireState, type FireChipStatus } from './ui/FireState';
 import { PlacementPreview } from './ui/PlacementPreview';
 import { ContextMenu } from './ui/ContextMenu';
@@ -335,6 +356,35 @@ interface PlacementMode {
   houseType?: HouseType;
 }
 
+/**
+ * UMBRELLA COORDINATION (Systems, 026b793): item id
+ * ITEMS.umbrella ('umbrella'), recipe id 'umbrella'
+ * (workstation, draft cost: 4 snap-wood + 6 tender vines + 4
+ * twined cordage). The mechanic lives in systems/umbrella.ts:
+ * rain protection UMBRELLA_RAIN_PROTECTION (35%, a STARTING
+ * value for Adam's pin pass, not pinned), applied when the
+ * umbrella is IN INVENTORY — no equip step, no worn slot,
+ * duplicates do not stack, rain axis only, multiplicative
+ * with worn clothes, and it counts against capacity like any
+ * ordinary item. App keys the icon and the rain note off this
+ * one id and that one constant — a pin-pass change to the
+ * number flows through untouched.
+ */
+const UMBRELLA_ITEM_ID = ITEMS.umbrella;
+
+/** One inventory stack as a panel row, with the umbrella icon attached. */
+function toInventoryItem(stack: {
+  item: string;
+  quantity: number;
+}): InventoryItem {
+  return {
+    id: stack.item,
+    name: stack.item,
+    quantityText: String(stack.quantity),
+    icon: stack.item === UMBRELLA_ITEM_ID ? <UmbrellaIcon /> : undefined,
+  };
+}
+
 export default function App() {
   const containerRef = useRef<HTMLDivElement>(null);
   const rendererRef = useRef<WorldRenderer | null>(null);
@@ -445,13 +495,7 @@ export default function App() {
   const placementRef = useRef<PlacementMode | null>(null);
 
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>(() =>
-    inventory
-      .stacksSnapshot()
-      .map((stack) => ({
-        id: stack.item,
-        name: stack.item,
-        quantityText: String(stack.quantity),
-      })),
+    inventory.stacksSnapshot().map(toInventoryItem),
   );
   const [capacityText, setCapacityText] = useState(
     () => `Carrying ${inventory.used()} / ${inventory.capacity()}`,
@@ -463,15 +507,7 @@ export default function App() {
   const feedbackTimersRef = useRef<Map<string, number>>(new Map());
 
   const refreshInventory = () => {
-    setInventoryItems(
-      inventory
-        .stacksSnapshot()
-        .map((stack) => ({
-          id: stack.item,
-          name: stack.item,
-          quantityText: String(stack.quantity),
-        })),
-    );
+    setInventoryItems(inventory.stacksSnapshot().map(toInventoryItem));
     setCapacityText(
       `Carrying ${inventory.used()} / ${inventory.capacity()}`,
     );
@@ -820,9 +856,17 @@ export default function App() {
       ingredients: recipe.ingredients.map((ingredient) => ({
         name: ingredient.item,
         amountText: `${inventory.count(ingredient.item)} / ${ingredient.quantity}`,
+        icon:
+          ingredient.item === UMBRELLA_ITEM_ID ? (
+            <UmbrellaIcon />
+          ) : undefined,
       })),
       canCraft: check.ok,
       availabilityNote,
+      icon:
+        recipe.output.item === UMBRELLA_ITEM_ID ? (
+          <UmbrellaIcon />
+        ) : undefined,
     };
   });
 
@@ -1065,6 +1109,12 @@ export default function App() {
   const capacityBonus = wardrobe.wornCapacityBonus();
   const capacityNote =
     capacityBonus > 0 ? `Carrying bonus +${capacityBonus}` : undefined;
+  // Umbrella rain note (see the coordination above): shown
+  // only while an umbrella is carried, and its number comes
+  // from Systems' single constant — never a UI-side table.
+  const umbrellaNote = carriesUmbrella(inventory)
+    ? `Umbrella: rain −${Math.round(UMBRELLA_RAIN_PROTECTION * 100)}%`
+    : undefined;
 
   // The fire whose lighting menu is open, with its anchor.
   const selectedFire =
@@ -1222,6 +1272,7 @@ export default function App() {
               onRemove={handleRemoveGarment}
               protectionNote={protectionNote}
               capacityNote={capacityNote}
+              umbrellaNote={umbrellaNote}
               note={wardrobeNote}
             />
           </div>

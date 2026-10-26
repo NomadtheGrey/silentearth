@@ -83,7 +83,12 @@ export function CraftingMenu({
                   aria-pressed={selected}
                   className="w-full text-left"
                 >
-                  <span className="font-medium">{recipe.name}</span>
+                  <span className="flex items-center gap-1.5 font-medium">
+                    {recipe.icon ? (
+                      <span className="inline-flex shrink-0">{recipe.icon}</span>
+                    ) : null}
+                    {recipe.name}
+                  </span>
                   {recipe.description ? (
                     <span className="mt-1 block text-sm text-stone-300">
                       {recipe.description}
@@ -92,7 +97,12 @@ export function CraftingMenu({
                 </button>
                 <ul className="mt-1 flex flex-col gap-0.5 text-sm text-stone-300">
                   {recipe.ingredients.map((ingredient, index) => (
-                    <li key={index}>
+                    <li key={index} className="flex items-center gap-1.5">
+                      {ingredient.icon ? (
+                        <span className="inline-flex shrink-0">
+                          {ingredient.icon}
+                        </span>
+                      ) : null}
                       {ingredient.name}
                       {ingredient.amountText ? (
                         <span className={'ml-2 ' + t.muted}>

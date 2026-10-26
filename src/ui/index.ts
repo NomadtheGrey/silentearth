@@ -38,6 +38,7 @@ export { ShelteredIndicator } from './ShelteredIndicator';
 export type { ShelteredIndicatorProps } from './ShelteredIndicator';
 export { WornList } from './WornList';
 export type { WornListProps, WornGarment } from './WornList';
+export { UmbrellaIcon } from './UmbrellaIcon';
 export { CAMERA_FRAMING, CAMERA_TRANSITION } from './cameraPresentation';
 export type { CameraFraming } from './cameraPresentation';
 export {

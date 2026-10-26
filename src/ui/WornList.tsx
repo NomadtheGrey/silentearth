@@ -80,6 +80,14 @@ export interface WornListProps {
    * Wardrobe (e.g. "Carrying bonus +9"). Omitted = no line.
    */
   capacityNote?: string;
+  /**
+   * One-line umbrella rain-protection note, caller-supplied
+   * (e.g. "Umbrella: rain −40%" once a mechanic supplies the
+   * number, or a plain qualitative line until then). Omitted
+   * = no line. This component holds no umbrella mechanic and
+   * computes no rain number.
+   */
+  umbrellaNote?: string;
   /** Caller-supplied note line (e.g. a wear/remove error). */
   note?: string | null;
   className?: string;
@@ -108,6 +116,7 @@ export function WornList({
   onRemove,
   protectionNote,
   capacityNote,
+  umbrellaNote,
   note,
   className,
 }: WornListProps) {
@@ -158,6 +167,9 @@ export function WornList({
       ) : null}
       {capacityNote ? (
         <p className="text-xs text-stone-400">{capacityNote}</p>
+      ) : null}
+      {umbrellaNote ? (
+        <p className="text-xs text-stone-400">{umbrellaNote}</p>
       ) : null}
       {note ? <p className="text-xs text-red-300">{note}</p> : null}
     </div>

@@ -13,6 +13,8 @@
  * separate step. This directory is new files only.
  */
 
+import type { ReactNode } from 'react';
+
 /** Camera perspectives. Values match the redesign's switchable camera. */
 export type CameraPerspective = 'first' | 'third';
 
@@ -39,6 +41,8 @@ export interface InventoryItem {
   quantityText?: string;
   /** Caller-supplied short note, e.g. a category or origin. Optional. */
   note?: string;
+  /** Caller-supplied glyph, rendered before the name. Optional. */
+  icon?: ReactNode;
 }
 
 /**
@@ -64,6 +68,8 @@ export interface RecipeIngredient {
   name: string;
   /** Caller-supplied, e.g. "2 / 3". Never computed here. */
   amountText?: string;
+  /** Caller-supplied glyph, rendered before the name. Optional. */
+  icon?: ReactNode;
 }
 
 /**
@@ -81,4 +87,6 @@ export interface CraftingRecipe {
   canCraft: boolean;
   /** Why crafting is or is not available, in the caller's words. Optional. */
   availabilityNote?: string;
+  /** Caller-supplied glyph, rendered before the name. Optional. */
+  icon?: ReactNode;
 }
