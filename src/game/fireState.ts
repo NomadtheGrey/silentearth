@@ -25,6 +25,22 @@
  * caller's check (Systems inventory + UI), not this machine's:
  * startLighting takes the method at face value.
  *
+ * PAUSE SHIFT (pause follow-up, Adam 2026-10-26): waitUntil is
+ * wall-clock, so a pause would otherwise let a friction wait
+ * elapse while frozen — the engine loop + shell interval stop
+ * calling advanceLighting during pause, but the deadline keeps
+ * its wall-clock value, so the first tick after resume would
+ * flip 'ready' (and the rub check, which reads waitUntil, would
+ * pass). This state subscribes to 'game:pause-changed': on pause
+ * it snapshots the ids of friction waits in 'waiting'; on resume
+ * it shifts those still waiting by the paused duration. Waits
+ * begun during a pause are not snapshotted and never shift;
+ * 'ready' waits and flint processes have no pending deadline and
+ * never shift. Systems' own fire ticks are count-based (tick(1)
+ * per gated interval second), not deadline-based — freezing the
+ * interval freezes them, so the deadline problem does not apply
+ * there (Systems' call to confirm, not this module's).
+ *
  * Time is wall-clock ms (Date.now()); callers that need
  * deterministic tests pass `now` explicitly, like harvestState.
  */
@@ -59,6 +75,16 @@ export type FireResult =
 class FireState {
   private fires = new Map<string, PlacedFire>();
   private counter = 0;
+  /** Wall-clock ms at the current pause start, or null when playing. */
+  private pauseStart: number | null = null;
+  /** Friction waits in 'waiting' at pause start (snapshot — see onPauseChanged). */
+  private pausedWaitingIds: Set<string> | null = null;
+
+  constructor() {
+    // Pause shift (see header): the bus subscription is the only
+    // pause wiring here — no trigger, no resume path, no UI.
+    bus.on('game:pause-changed', (p) => this.onPauseChanged(p.paused));
+  }
 
   placeFire(type: FireType, x: number, z: number): PlacedFire {
     const id = `fire:${type}:${++this.counter}`;
@@ -79,6 +105,48 @@ class FireState {
   clear(): void {
     this.fires.clear();
     this.counter = 0;
+    // A new world has no pending waits: drop any pause snapshot
+    // (its ids belong to fires that no longer exist).
+    this.pauseStart = null;
+    this.pausedWaitingIds = null;
+  }
+
+  /**
+   * Pause protocol (see header): on pause, snapshot the ids of
+   * friction waits currently in 'waiting'; on resume, shift those
+   * still waiting by the paused duration. `now` defaults to
+   * Date.now() (the bus subscription path) and is injectable for
+   * deterministic tests. Waits begun DURING a pause are not in
+   * the snapshot and are never shifted. Duplicate pause input
+   * keeps the original start; resume without pause is a no-op.
+   */
+  onPauseChanged(paused: boolean, now: number = Date.now()): void {
+    if (paused) {
+      if (this.pauseStart !== null) return; // duplicate pause: keep original start
+      this.pauseStart = now;
+      this.pausedWaitingIds = new Set(
+        [...this.fires.values()]
+          .filter((f) => {
+            const lighting = f.lighting;
+            return lighting?.method === 'friction' && lighting.phase === 'waiting';
+          })
+          .map((f) => f.id),
+      );
+      return;
+    }
+    if (this.pauseStart === null) return; // resume without pause: no-op
+    const pausedMs = now - this.pauseStart;
+    this.pauseStart = null;
+    const ids = this.pausedWaitingIds;
+    this.pausedWaitingIds = null;
+    if (pausedMs <= 0 || !ids) return;
+    for (const id of ids) {
+      const fire = this.fires.get(id);
+      const lighting = fire?.lighting;
+      if (lighting?.method === 'friction' && lighting.phase === 'waiting') {
+        lighting.waitUntil += pausedMs;
+      }
+    }
   }
 
   startLighting(id: string, method: LightingMethod, now: number): FireResult {
