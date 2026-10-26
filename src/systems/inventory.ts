@@ -31,26 +31,22 @@
  *   (all Adam, 2026-10-25). Trundle-Tool: +50 (PINNED by Adam,
  *   2026-10-26 — previously "hefty, size TBD").
  *
- * ONE OPEN QUESTION REMAINING — modelled explicitly, NEVER settled
- * silently. The Trundle-Tool bonus below it is now PINNED, not open:
- *
- * (1) Large Basket replace-vs-stack. The large basket is an upgrade
- *     of the small basket, and whether it REPLACES the small basket's
- *     +25 or STACKS on top of it is OPEN. Totals with pockets + apron:
- *       replace: 10 + 10 + 50 = 70
- *       stack:   10 + 10 + 25 + 50 = 95
- *     This is a required constructor option, `largeBasketMode`, with
- *     NO default — callers must pass 'replace' or 'stack', so the
- *     question stays visible at every construction site until Adam
- *     rules. (Note: the general additive rule leans toward stacking,
- *     but the large-basket question was explicitly left open, so this
- *     code does not treat the lean as a ruling.)
+ * PINNED (Adam, 2026-10-26): LARGE BASKET REPLACES SMALL BASKET.
+ *     Total with pockets + apron + large = 70; the small basket's
+ *     +25 does NOT stack with the large basket's 50. (The 'stack'
+ *     total, 95, is no longer live — it survives only as the
+ *     non-ruled alternative of the `largeBasketMode` option, which
+ *     wiring must NOT pass.) The mode stays a required constructor
+ *     option with NO default: shell construction passes the ruled
+ *     value explicitly — new PersonalInventory({ largeBasketMode:
+ *     'replace' }) — and no silent default was added to the model.
  *     Practical note: crafting a large basket CONSUMES the small
  *     basket (upgrade), so right after the upgrade the player holds
- *     only the large basket and both modes give the same total
- *     (pockets + apron if owned + large 50). The modes diverge only
- *     if the player later holds both baskets at once (e.g. by
- *     crafting a second small basket while owning a large one).
+ *     only the large basket; the modes diverge only if the player
+ *     later holds both baskets at once (e.g. by crafting a second
+ *     small basket while owning a large one) — under the ruling,
+ *     that second small basket adds nothing while the large basket
+ *     is held.
  *
  * PINNED (Adam, 2026-10-26): Trundle-Tool carrying bonus is +50.
  *     It was previously "hefty, size TBD"; that TBD is now closed.
@@ -119,7 +115,7 @@ export function isCarryingGear(item: ItemId): boolean {
 export type LargeBasketMode = 'replace' | 'stack';
 
 export interface PersonalInventoryOptions {
-  /** REQUIRED — 'replace' (total 70) or 'stack' (total 95). No default. */
+  /** REQUIRED — pass the RULED mode 'replace' (total 70). 'stack' (95) is the non-ruled alternative; wiring must not pass it. No default. */
   largeBasketMode: LargeBasketMode;
   /** Starting stacks (restoration path; not capacity-checked). */
   initial?: Record<string, number>;

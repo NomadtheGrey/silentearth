@@ -65,40 +65,21 @@
  *    such gate.
  *
  * ------------------------------------------------------------------
- * TEMPORARY CONSTRUCTION PATH — READ BEFORE USING (grep marker:
- * TEMPORARY-WIRING-PLACEHOLDER):
+ * RULED CONSTRUCTION (Adam, 2026-10-26): LARGE BASKET REPLACES
+ * SMALL BASKET — PINNED. Total with pockets + apron + large = 70;
+ * the small basket's +25 does NOT stack with the large basket's
+ * 50. The former temporary wiring inventory is DELETED in this
+ * landing — the ruled mode must never be "the placeholder, kept".
+ * Shell
+ * construction is now direct, with the ruled value passed
+ * explicitly (no silent default was added to the model — the
+ * constructor still requires largeBasketMode, and wiring passes
+ * 'replace'):
  *
- * App wiring needs a constructible inventory BEFORE Adam rules on
- * large-basket replace-vs-stack, and PersonalInventory's
- * constructor correctly requires largeBasketMode with no default —
- * that requirement must NOT be silently defaulted inside the class.
- * So the placeholder lives HERE, in wiring code, not in the model:
- *
- *   createTemporaryWiringInventory()
- *
- * It constructs a PersonalInventory with the placeholder mode
- * TEMPORARY_WIRING_LARGE_BASKET_MODE ('replace'). That value is a
- * PLACEHOLDER, NOT A RULING, and it is named as one everywhere it
- * appears. 'replace' was picked as the placeholder (not as an
- * answer) because in normal play the two modes coincide right
- * after the large-basket upgrade — the upgrade consumes the small
- * basket, so only the large basket is held and both modes give the
- * same total — which minimizes how far wiring can drift from the
- * eventual ruling while the question is open. The modes diverge
- * only if a player later holds both baskets at once.
- *
- * WHEN ADAM RULES: replace every createTemporaryWiringInventory()
- * call with a PersonalInventory constructed with the ruled mode,
- * then DELETE this function and its constant. The ruled mode must
- * never be "the placeholder, kept" — the placeholder's name is
- * there so the replacement is findable and complete.
+ *   new PersonalInventory({ largeBasketMode: 'replace', initial })
  */
 
-import {
-  craftIntoInventory,
-  PersonalInventory,
-  type LargeBasketMode,
-} from './inventory';
+import { craftIntoInventory, PersonalInventory } from './inventory';
 import {
   ownedStage,
   ownedStageName,
@@ -197,32 +178,3 @@ export function executeCraft(
   };
 }
 
-// ---------------------------------------------------------------------------
-// Temporary construction path (TEMPORARY-WIRING-PLACEHOLDER — see header)
-// ---------------------------------------------------------------------------
-
-/**
- * TEMPORARY-WIRING-PLACEHOLDER. Placeholder large-basket mode for
- * App wiring ONLY, until Adam rules on replace-vs-stack. NOT A
- * RULING. See the header for why 'replace' was picked as the
- * placeholder and for the replacement procedure when he rules.
- */
-export const TEMPORARY_WIRING_LARGE_BASKET_MODE: LargeBasketMode =
-  'replace';
-
-/**
- * TEMPORARY-WIRING-PLACEHOLDER. Constructible inventory for App
- * wiring before Adam's large-basket ruling. Callers must use this
- * (not a guessed mode passed to PersonalInventory directly) so the
- * placeholder is findable in one place. DELETE this function and
- * its constant when Adam rules, and construct PersonalInventory
- * with the ruled mode instead.
- */
-export function createTemporaryWiringInventory(
-  initial?: Record<string, number>,
-): PersonalInventory {
-  return new PersonalInventory({
-    largeBasketMode: TEMPORARY_WIRING_LARGE_BASKET_MODE,
-    initial,
-  });
-}
