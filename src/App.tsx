@@ -497,6 +497,21 @@
  *   miss falls back to the old wording. Other failure
  *   reasons untouched; 'permit-tbd' stays as-is (no tool
  *   decided there yet). App.tsx only.
+ * - PERSPECTIVE IN OPTIONS, LIVE (Adam, 2026-10-26 — the
+ *   toggle group obscured the harvest buttons): the
+ *   CameraToggle group is OUT of the HUD stack row and OUT
+ *   of the touch slim bar entirely, and lives as a
+ *   "Perspective" section in the Options modal's Settings
+ *   tab (a display preference beside the font — no new tab
+ *   for one control; the existing toggle component is
+ *   reused). App passes cameraMode + cycleToCamera through
+ *   new optional modal props; the section hides if no
+ *   perspective is passed. The toggle row wraps (flex-wrap)
+ *   so the long "Third-person overhead" label fits the
+ *   narrow touch bottom sheet. Slim bar is now Show HUD,
+ *   Inventory, Crafting, Options; stack row is Inventory,
+ *   Crafting, Options. The header readout still names the
+ *   current view in text.
  * POINTER DISCIPLINE: overlays are pointer-events-none except the
  * small interactive pieces (HUD buttons, panels, harvest buttons),
  * so world clicks — including the first-person mouse-capture click
@@ -555,7 +570,6 @@ import { FireState, type FireChipStatus } from './ui/FireState';
 import { PlacementPreview } from './ui/PlacementPreview';
 import { ContextMenu } from './ui/ContextMenu';
 import type { ContextAction } from './ui/types';
-import { CameraToggle } from './ui/CameraToggle';
 import { TouchControls } from './ui/TouchControls';
 import { LocationChip } from './ui/LocationChip';
 import {
@@ -2556,11 +2570,6 @@ export default function App() {
             >
               Options
             </button>
-            <CameraToggle
-              perspective={cameraMode}
-              comfortable={isTouch}
-              onChange={(picked) => cycleToCamera(picked)}
-            />
           </div>
           <div className="mt-3">
             <WitchHealth />
@@ -2675,11 +2684,6 @@ export default function App() {
             >
               Options
             </button>
-            <CameraToggle
-              perspective={cameraMode}
-              comfortable
-              onChange={(picked) => cycleToCamera(picked)}
-            />
           </div>
         ) : (
           <button
@@ -2802,11 +2806,13 @@ export default function App() {
         />
       ) : null}
 
-      {/* Options modal (tabbed; Settings first, font only). */}
+      {/* Options modal (tabbed; Settings first: font + perspective). */}
       {optionsOpen ? (
         <OptionsModal
           font={font}
           onFontChange={handleFontChange}
+          perspective={cameraMode}
+          onPerspectiveChange={(picked) => cycleToCamera(picked)}
           onClose={() => setOptionsOpen(false)}
           comfortable={isTouch}
         />

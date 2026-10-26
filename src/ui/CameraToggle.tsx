@@ -44,7 +44,7 @@ export function CameraToggle({
     <div
       role="group"
       aria-label="Camera perspective"
-      className={'flex gap-1 rounded p-1 ' + t.overlay}
+      className={'flex flex-wrap gap-1 rounded p-1 ' + t.overlay}
     >
       {OPTIONS.map((option) => {
         const active = option.value === perspective;
