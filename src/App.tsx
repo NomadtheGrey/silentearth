@@ -388,6 +388,26 @@
  *   Drag-look, the move stick, and USE are unchanged; the
  *   stick and look track separate touches, so all three can
  *   run at once.
+ * - SCREEN-FIXED HARVEST BUTTONS, LIVE (Adam, 2026-10-26):
+ *   proximity buttons no longer ride WorldAnchor projection
+ *   (they slid up behind screen UI as the camera moved).
+ *   They now render as one column fixed just above screen
+ *   middle (bottom edge at 52% of view height, growing
+ *   upward, scrolling past 40vh), in passed order — ground
+ *   first when eligible (at her feet, so nearest), then
+ *   scatter by distance; no re-sort, and HarvestTarget
+ *   carries no distance field. Each button already names
+ *   its target (verb + name); buttons are now thumb-sized
+ *   (min 44 px tall). Remove stays stacked under Harvest
+ *   for scatter only, never for ground. LAYERING: the
+ *   buttons live in their own z-40 overlay — above panels
+ *   (z-30), below modals (z-50); a z-40 child inside the
+ *   z-30 world overlay would still paint under the panels.
+ *   Target data and harvest behavior are unchanged;
+ *   position only. NOTE: the targets' anchorX/anchorY are
+ *   no longer consumed by the buttons (the shared projection
+ *   pass still computes them for fire/placement anchors);
+ *   removing harvest projection is a follow-up cleanup.
  * POINTER DISCIPLINE: overlays are pointer-events-none except the
  * small interactive pieces (HUD buttons, panels, harvest buttons),
  * so world clicks — including the first-person mouse-capture click
@@ -2101,13 +2121,8 @@ export default function App() {
       {/* 3D viewport */}
       <div ref={containerRef} className="absolute inset-0" />
 
-      {/* World-anchored overlay: harvest buttons + outcome feedback. */}
+      {/* World-anchored overlay: fire chips, menus, feedback. */}
       <div className="pointer-events-none absolute inset-0 z-30">
-        <ProximityHarvestButtons
-          targets={harvestTargets}
-          onHarvest={handleHarvest}
-          onRemove={handleRemove}
-        />
         {fireAnchors.map(({ fire, x, y }) => {
           const status: FireChipStatus = fire.lit
             ? 'lit'
@@ -2180,6 +2195,20 @@ export default function App() {
             </WorldAnchor>
           </Fragment>
         ))}
+      </div>
+
+      {/* Screen-fixed harvest buttons: above panels (z-30), below
+        modals (z-50). The buttons live in their own z-40 overlay
+        because a z-40 child inside the z-30 overlay above would
+        still paint under the z-30 panels (stacking contexts).
+        The column itself positions just above screen middle;
+        see ProximityHarvestButtons. */}
+      <div className="pointer-events-none absolute inset-0 z-40">
+        <ProximityHarvestButtons
+          targets={harvestTargets}
+          onHarvest={handleHarvest}
+          onRemove={handleRemove}
+        />
       </div>
 
       {/* HUD shell: needs row (awaiting survival systems) + HUD block. */}
