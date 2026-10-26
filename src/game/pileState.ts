@@ -37,6 +37,13 @@
  * brief). A new world is a new pile set: pileState.clear() runs in
  * the renderer's setWorldGen, like the other placed-state clears.
  * Piles are gameplay state, not worldgen — no seed, no RNG here.
+ *
+ * DROP PATH (Adam 2026-10-26, "for next pass"): spawnPile(record)
+ * is the drop handler's entry point — it validates a GroundPile
+ * record and delegates to drop(), so a dropped pile IS an
+ * overflow pile (same merge, events, visuals, pickup). UI's drop
+ * V1 already works via drop() directly; spawnPile is the
+ * intention-revealing wrapper for the shell to adopt.
  */
 
 import { bus } from './events';
@@ -63,6 +70,19 @@ export function pileIdFor(item: string, x: number, z: number): string {
   return `pile:${item}:${x.toFixed(2)},${z.toFixed(2)}`;
 }
 
+/**
+ * A pile record as handed to spawnPile — the same shape as
+ * Systems' GroundPile { item, quantity, x, z } (structural
+ * typing: a GroundPile value passes without importing Systems —
+ * the game layer must not import the systems layer).
+ */
+export interface PileSpawn {
+  item: string;
+  quantity: number;
+  x: number;
+  z: number;
+}
+
 class PileState {
   private piles = new Map<string, Pile>();
 
@@ -85,6 +105,35 @@ class PileState {
     this.piles.set(id, pile);
     bus.emit('pile:dropped', { ...pile });
     return pile;
+  }
+
+  /**
+   * Spawn a pile from a record — the DROP PATH entry point
+   * (Adam 2026-10-26, "for next pass"). The shell's drop handler
+   * hands it Systems' GroundPile record (player position, from
+   * the drop handler) and it becomes a NORMAL pile: same visuals,
+   * same merge rule, same events, same take() pickup path. No new
+   * pile type, no separate drop entity — a dropped pile IS an
+   * overflow pile, just with a different origin. Validates
+   * (mirroring Systems' createGroundPile): non-empty string item,
+   * positive-integer quantity, finite coords; anything else
+   * returns null and creates nothing. Does NOT normalize the item
+   * id (the alias table lives in Systems and is NOT duplicated
+   * here) — callers pass Systems' normalized ids. Delegates to
+   * drop().
+   */
+  spawnPile(record: PileSpawn): Pile | null {
+    if (
+      typeof record?.item !== 'string' ||
+      record.item.length === 0 ||
+      !Number.isInteger(record.quantity) ||
+      record.quantity <= 0 ||
+      !Number.isFinite(record.x) ||
+      !Number.isFinite(record.z)
+    ) {
+      return null;
+    }
+    return this.drop(record.item, record.quantity, record.x, record.z);
   }
 
   get(id: string): Pile | null {
