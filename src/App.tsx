@@ -297,6 +297,32 @@
  *   ~36 px, clear of the stick and USE buttons (which end
  *   96 px up) and of the top HUD bars; desktop gets the same
  *   chip, small and unobtrusive, and is otherwise unchanged.
+ * - TURNING FIX, LIVE (Adam, 2026-10-26): first-person
+ *   turning could not happen on a portrait phone because the
+ *   expanded touch stack (max-w-sm ≈ full phone width, z-30)
+ *   sat over the look field (right half, z-20), and an open
+ *   bottom sheet (60vh) plus the stack together covered the
+ *   full height — no open world left to drag on. Two changes,
+ *   both size/placement, no z-order hack, no panel behaviour
+ *   change: (1) the expanded touch stack is capped at
+ *   max-w-[46vw], so the right half stays open world in every
+ *   touch state (desktop keeps max-w-sm); (2) Hide HUD —
+ *   already a fixed top-right control outside the stack and
+ *   the sheets (z-40, visible in every expanded state) — now
+ *   also closes both panels, so one tap fully reclaims the
+ *   look field. Panel taps and scrolling are untouched
+ *   (pointer-events-auto + overflow-y throughout, 44 px
+ *   targets kept). Per-state look geometry: collapsed, no
+ *   panels — right half free except the slim bar + corners;
+ *   collapsed + sheet — middle band free, sheet Close one
+ *   tap; expanded, no panels — right half free; expanded +
+ *   sheet — right half upper 40% free, Hide one tap; a
+ *   perspective switch with panels open strands nothing
+ *   because Hide stays visible above the sheet. The one
+ *   exception is an open modal (z-50), which closes in one
+ *   tap via its X or backdrop. Look deltas are direction-
+ *   neutral (addLookDelta gateless both ways), so left and
+ *   right turn symmetric once the field is uncovered.
  * POINTER DISCIPLINE: overlays are pointer-events-none except the
  * small interactive pieces (HUD buttons, panels, harvest buttons),
  * so world clicks — including the first-person mouse-capture click
@@ -2008,7 +2034,16 @@ export default function App() {
               // clearance (bottom-24 offset + 128 px ring =
               // 224 px), so the expanded stack never slides
               // under the stick on portrait — 13rem did.
-              ? 'pointer-events-auto m-2 max-w-sm max-h-[calc(100vh-18rem)] overflow-y-auto pr-1 ' +
+              // TURNING FIX: max-w-[46vw], not max-w-sm — the
+              // look field is the right half (w-1/2) at z-20
+              // and the stack sits above it (z-30), so a
+              // full-width stack on portrait swallowed the
+              // look field and first-person drags could not
+              // turn. 46vw keeps the stack left of half width
+              // on any viewport, so the right half stays open
+              // world; the stack still scrolls (overflow-y)
+              // and its buttons keep 44 px targets.
+              ? 'pointer-events-auto m-2 max-w-[46vw] max-h-[calc(100vh-18rem)] overflow-y-auto pr-1 ' +
                 touchScrollbar
               : 'pointer-events-auto m-2 max-w-sm'
           }
@@ -2187,7 +2222,17 @@ export default function App() {
         ) : (
           <button
             type="button"
-            onClick={() => setHudCollapsed(true)}
+            // One tap reclaims the look field: collapsing the
+            // stack alone would leave an open bottom sheet
+            // (60vh) covering the look field's lower half,
+            // so Hide also closes both panels. Panel state is
+            // view-only — inventory, crafting, and wardrobe
+            // state live on, reopening restores the same rows.
+            onClick={() => {
+              setHudCollapsed(true);
+              setInventoryOpen(false);
+              setCraftingOpen(false);
+            }}
             aria-label="Hide HUD panels to reveal the game"
             className="pointer-events-auto absolute right-2 top-2 z-40 min-h-[44px] rounded bg-black/50 px-3 py-2 text-sm"
           >
