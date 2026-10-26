@@ -598,6 +598,20 @@
  *   sole granter, and its existing refresh + save +
  *   feedback subscriber handles the outcome. No new grant
  *   logic, no key binding, no touch change. App.tsx only.
+ * - UMBRELLA DRIVING, LIVE (Adam, 2026-10-26 — DEV brief,
+ *   third App landing after the two pile briefs; Background's
+ *   graphic 961cbac landed first, so the setter exists): the
+ *   shell calls renderer.setCarriesUmbrella with Systems'
+ *   carriesUmbrella(inventory) whenever inventory changes —
+ *   in refreshInventory, which every inventory-changing
+ *   handler already flows through (harvest, craft, eat,
+ *   cook, place, wear, deposit, drop, pile pickup), plus a
+ *   boot call after the renderer exists for a restored
+ *   umbrella. No equip step, duplicates do not stack, one
+ *   boolean; the graphic itself (third-person only, witch
+ *   group child) stays renderer-owned and hidden by
+ *   default until this call. App.tsx only; no game/systems
+ *   change.
  * POINTER DISCIPLINE: overlays are pointer-events-none except the
  * small interactive pieces (HUD buttons, panels, harvest buttons),
  * so world clicks — including the first-person mouse-capture click
@@ -1179,6 +1193,14 @@ export default function App() {
     setCapacityText(
       `Carrying ${inventory.used()} / ${inventory.capacity()}`,
     );
+    // UMBRELLA DRIVING: every inventory change flows through
+    // here (harvest, craft, eat, cook, place, wear, deposit,
+    // drop, pile pickup), so the carried-umbrella graphic
+    // tracks the live inventory — no equip step, duplicates
+    // do not stack, one boolean to the renderer. Guarded:
+    // refreshInventory is never called before boot, but the
+    // ?. keeps an early call from crashing.
+    rendererRef.current?.setCarriesUmbrella(carriesUmbrella(inventory));
   };
 
   // Save meta mirror: seed / camera / position as of the latest
@@ -1465,6 +1487,11 @@ export default function App() {
         player.z = saved.position.z;
       }
     }
+    // UMBRELLA DRIVING: initial visibility from the boot
+    // inventory — a restored umbrella shows, no umbrella
+    // leaves the renderer's default hidden standing. Later
+    // inventory changes drive it via refreshInventory above.
+    renderer.setCarriesUmbrella(carriesUmbrella(inventory));
     // Hunger wiring (see the header): the engine reads the stage
     // through this query — movement slowdown + harvest lockout.
     player.setHungerStageQuery(() => hunger.stage());
