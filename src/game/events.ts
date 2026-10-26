@@ -15,6 +15,8 @@
  * 'harvest:requested' when one is pressed. The OUTCOME (items into
  * inventory) is the next step, not this landing — no listener grants
  * items yet; Systems will consume 'harvest:requested'.
+ * Ground targets in 'harvest:inRange' are look-down-gated (Adam,
+ * 2026-10-26): proximity AND looking down, per proximity.ts.
  */
 
 import type { CameraMode } from '../types';
@@ -29,6 +31,14 @@ export interface EventMap {
   'world:chunkUnloaded': { cx: number; cz: number };
   /** Player position changed (throttled to ~10 Hz by the controller). */
   'player:moved': { x: number; z: number; chunkX: number; chunkZ: number };
+  /**
+   * Player look changed in first-person (throttled to ~10 Hz by the
+   * controller). Exists because looking down while STANDING STILL must
+   * still update proximity: 'player:moved' only fires while walking,
+   * so a stationary look-down would otherwise never reach the tracker.
+   * Pitch sign: negative = looking down (mouse-up raises pitch).
+   */
+  'player:looked': { pitch: number; mode: CameraMode };
   /** Camera mode toggled (V or C). */
   'camera:switched': { mode: CameraMode };
   /**

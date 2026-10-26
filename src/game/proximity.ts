@@ -14,14 +14,32 @@
  * side) — the outcome (items into inventory) is the NEXT step, not
  * here: no listener in this landing grants items.
  *
- * Part 2 — ground materials: the ground underfoot is always in range
- * (distance 0), so the ground button is always available — that is
- * Adam's "harvest nearly anyplace" ruling, not a bug. Which material
- * it is follows terrain at her position (groundSourceAt, lane-decided
- * mapping): marsh ground or very wet ground -> mud; meadow/oldfield
- * ground -> grass; everything else -> dirt. The ground target's id is
- * 'ground:<material>', so walking from mud onto grass changes the
- * target set and UI swaps the button.
+ * Part 2 — ground materials: the ground underfoot is always in
+ * proximity range (distance 0), but its BUTTON is look-down-gated
+ * (Adam, 2026-10-26 refinement): ground targets appear ONLY when she
+ * is looking down at the ground — otherwise the button would get in
+ * the way, since ground is everywhere. Object sources are unchanged:
+ * proximity only. Which material the ground is follows terrain at her
+ * position (groundSourceAt, lane-decided mapping): marsh ground or
+ * very wet ground -> mud; meadow/oldfield ground -> grass; everything
+ * else -> dirt. The ground target's id is 'ground:<material>', so
+ * walking from mud onto grass changes the target set and UI swaps
+ * the button.
+ *
+ * "Looking down", per perspective (lane-decided, see LOOK_DOWN_PITCH):
+ * - First-person: pitch <= -0.4 rad (about 23° below horizontal).
+ *   Pitch is negative when looking down (mouse-up raises pitch).
+ *   A clear intentional look-down, not a slight downward glance.
+ * - Third-person overhead: there is no look input at all (mouse look
+ *   only exists in first-person, and the overhead camera at offset
+ *   (0, 16, 10) looks steeply down by construction), so "looking
+ *   down" is trivially true there — and the clutter problem Adam
+ *   named is instead solved by a fallback rule: in third-person the
+ *   ground target appears ONLY when no scatter target is in range.
+ *   Ground is the fallback action when nothing else is near, never a
+ *   competitor to object buttons. This definition is lane-decided
+ *   and easy for Adam to override (e.g. third-person ground always,
+ *   or a dedicated look-down key) — it is flagged in the report.
  *
  * Design notes:
  * - Pure + deterministic: findInRange regenerates the chunks
@@ -64,6 +82,14 @@ import type { ScatterKind } from '../types';
  */
 export const HARVEST_RANGE = 2.5;
 
+/**
+ * First-person look-down threshold in radians (lane-decided starting
+ * value, single tunable constant like HARVEST_RANGE). Pitch <= this
+ * means looking down: about 23° below horizontal. Pitch is negative
+ * when looking down (mouse-up raises pitch, clamped to ±1.45 rad).
+ */
+export const LOOK_DOWN_PITCH = -0.4;
+
 /** One in-range harvest target, matching the 'harvest:inRange' payload. */
 export interface HarvestTarget {
   id: string;
@@ -100,27 +126,39 @@ export function groundSourceAt(gen: WorldGen, x: number, z: number): GroundMater
   return GROUND_MATERIAL_BY_ID.dirt;
 }
 
-/**
- * All in-range harvest targets at (x, z), ground target first (it is
- * always present), then scatter sources within HARVEST_RANGE, nearest
- * first. Scatter target ids are stable across regenerations (they
- * encode chunk + kind + position), so the tracker can diff by id.
- */
-export function findInRange(gen: WorldGen, x: number, z: number): HarvestTarget[] {
+/** The ground target at (x, z): always distance 0, always "in range"
+ *  by proximity — whether its BUTTON appears is the look-down gate,
+ *  decided by the caller/tracker, not here. */
+export function groundTarget(gen: WorldGen, x: number, z: number): HarvestTarget {
   const ground = groundSourceAt(gen, x, z);
-  const targets: HarvestTarget[] = [
-    {
-      id: `ground:${ground.id}`,
-      sourceId: ground.id,
-      kind: 'ground',
-      x,
-      z,
-      distance: 0,
-      name: ground.name,
-      primaryYield: ground.primaryYield,
-      permitTier: ground.permitTier,
-    },
-  ];
+  return {
+    id: `ground:${ground.id}`,
+    sourceId: ground.id,
+    kind: 'ground',
+    x,
+    z,
+    distance: 0,
+    name: ground.name,
+    primaryYield: ground.primaryYield,
+    permitTier: ground.permitTier,
+  };
+}
+
+/**
+ * All in-range harvest targets at (x, z): the ground target first when
+ * lookingDown is true (default true, for callers that do not gate),
+ * then scatter sources within HARVEST_RANGE, nearest first. Scatter
+ * target ids are stable across regenerations (they encode chunk +
+ * kind + position), so the tracker can diff by id. Object sources are
+ * NOT look-gated — only ground is.
+ */
+export function findInRange(
+  gen: WorldGen,
+  x: number,
+  z: number,
+  lookingDown = true,
+): HarvestTarget[] {
+  const targets: HarvestTarget[] = lookingDown ? [groundTarget(gen, x, z)] : [];
 
   const minCx = Math.floor((x - HARVEST_RANGE) / CHUNK_SIZE);
   const maxCx = Math.floor((x + HARVEST_RANGE) / CHUNK_SIZE);
@@ -155,20 +193,45 @@ export function findInRange(gen: WorldGen, x: number, z: number): HarvestTarget[
 }
 
 /**
- * Watches 'player:moved' and emits 'harvest:inRange' only when the
- * target set changes. The renderer owns one instance (see
- * WorldRenderer); Systems/tests can construct their own and call
- * update() directly. dispose() unsubscribes.
+ * Watches 'player:moved', 'player:looked', and 'camera:switched' and
+ * emits 'harvest:inRange' only when the target set changes. The
+ * renderer owns one instance (see WorldRenderer); Systems/tests can
+ * construct their own and call update() directly. dispose()
+ * unsubscribes from all three.
+ *
+ * Look-down gating lives here, not in findInRange's callers: the
+ * tracker remembers her last position, mode, and pitch, so a
+ * stationary look-down (a 'player:looked' with no movement) still
+ * re-evaluates, and a camera switch does too.
+ * - First-person: ground appears iff pitch <= LOOK_DOWN_PITCH.
+ * - Third-person: ground appears iff no scatter target is in range
+ *   (fallback rule — see the header; lane-decided, flaggable).
+ * Scatter targets are never look-gated in either perspective.
  */
 export class ProximityTracker {
   private gen: WorldGen;
   private lastIds = new Set<string>();
-  private unsubscribe: (() => void) | null = null;
+  private lastX: number | null = null;
+  private lastZ: number | null = null;
+  private lastMode: 'first' | 'third' = 'third';
+  private lastPitch = 0;
+  private unsubscribes: (() => void)[] = [];
 
   constructor(gen: WorldGen, subscribe = true) {
     this.gen = gen;
     if (subscribe) {
-      this.unsubscribe = bus.on('player:moved', (p) => this.update(p.x, p.z));
+      this.unsubscribes = [
+        bus.on('player:moved', (p) => this.update(p.x, p.z)),
+        bus.on('player:looked', (p) => {
+          this.lastMode = p.mode;
+          this.lastPitch = p.pitch;
+          this.recompute();
+        }),
+        bus.on('camera:switched', (p) => {
+          this.lastMode = p.mode;
+          this.recompute();
+        }),
+      ];
     }
   }
 
@@ -177,9 +240,23 @@ export class ProximityTracker {
     this.lastIds = new Set();
   }
 
-  /** Recompute targets at (x, z); emit only if the set changed. */
+  /** Move to (x, z) and recompute; emit only if the set changed. */
   update(x: number, z: number): HarvestTarget[] {
-    const targets = findInRange(this.gen, x, z);
+    this.lastX = x;
+    this.lastZ = z;
+    return this.recompute();
+  }
+
+  private recompute(): HarvestTarget[] {
+    if (this.lastX === null || this.lastZ === null) return [];
+    const scatter = findInRange(this.gen, this.lastX, this.lastZ, false);
+    const groundEligible =
+      this.lastMode === 'first'
+        ? this.lastPitch <= LOOK_DOWN_PITCH
+        : scatter.length === 0;
+    const targets = groundEligible
+      ? [groundTarget(this.gen, this.lastX, this.lastZ), ...scatter]
+      : scatter;
     const ids = new Set(targets.map((t) => t.id));
     const changed =
       ids.size !== this.lastIds.size || [...ids].some((id) => !this.lastIds.has(id));
@@ -191,7 +268,7 @@ export class ProximityTracker {
   }
 
   dispose(): void {
-    this.unsubscribe?.();
-    this.unsubscribe = null;
+    for (const unsub of this.unsubscribes) unsub();
+    this.unsubscribes = [];
   }
 }

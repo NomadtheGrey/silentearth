@@ -30,6 +30,7 @@ export class PlayerController {
   private keys = new Set<string>();
   private canvas: HTMLCanvasElement | null = null;
   private emitTimer = 0;
+  private lastLookEmit = 0;
   private disposed = false;
 
   constructor(spawn: { x: number; z: number }) {
@@ -79,6 +80,13 @@ export class PlayerController {
       -1.45,
       Math.min(1.45, this.pitch - e.movementY * 0.0025),
     );
+    // Look-down gating needs this even when she stands still: throttle
+    // to ~10 Hz like 'player:moved' so mouse-move spam stays off the bus.
+    const now = performance.now();
+    if (now - this.lastLookEmit >= 100) {
+      this.lastLookEmit = now;
+      bus.emit('player:looked', { pitch: this.pitch, mode: this.mode });
+    }
   };
 
   private onCanvasClick = (): void => {
