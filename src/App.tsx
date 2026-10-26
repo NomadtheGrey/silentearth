@@ -266,6 +266,37 @@
  *   ContextMenu gains a 70vh bound + scroll (overflow-only,
  *   no change when it fits). Panel density is deliberately
  *   unchanged — thumb targets outrank density on phone.
+ * - OPTIONS MODAL, LIVE (Adam, 2026-10-26): a tabbed modal
+ *   (Settings first; the tab bar is a scaffold for later tabs,
+ *   none invented here) holding exactly one setting — the UI
+ *   font dropdown (IM Fell English by default, then Alegreya,
+ *   EB Garamond). The choice persists in localStorage under
+ *   its own settings key, never the Systems save file, and
+ *   replaces font-mono on the App root, so it restyles the
+ *   whole 2D UI with a serif fallback if a webfont fails; it
+ *   never touches the 3D canvas. All three families load via
+ *   Google Fonts (display=swap); browsers only download the
+ *   family actually used. Opened by an Options button beside
+ *   Inventory/Crafting in the stack and in the touch slim
+ *   bar; closes via X, backdrop tap, or Escape. The panel is
+ *   a bottom sheet on touch (bounded, scroll inside) and a
+ *   centred card on desktop, per the phone-HUD rules.
+ * - LOCATION CHIP, LIVE (Adam, 2026-10-26): a small
+ *   translucent bottom-centre pill — dominant biome + percent,
+ *   player position, and FPS — rendered outside the
+ *   collapsible HUD stack, so it stays visible with the HUD
+ *   collapsed on touch (collapse hides panels, never this
+ *   chip). It hides only while a panel or the modal is open,
+ *   where it would sit on the bottom sheet. Position reuses
+ *   the shell's tracked coords; the biome is the engine's
+ *   dominant id + its weight from the same ground weights
+ *   the scaffold readout formats. FPS is shell-side rAF sampling (~1 update per
+ *   second, never per frame; hidden-tab samples dropped),
+ *   not a renderer instrument — the renderer is untouched.
+ *   The pill is pointer-events-none and lives in the bottom
+ *   ~36 px, clear of the stick and USE buttons (which end
+ *   96 px up) and of the top HUD bars; desktop gets the same
+ *   chip, small and unobtrusive, and is otherwise unchanged.
  * POINTER DISCIPLINE: overlays are pointer-events-none except the
  * small interactive pieces (HUD buttons, panels, harvest buttons),
  * so world clicks — including the first-person mouse-capture click
@@ -319,6 +350,14 @@ import { ContextMenu } from './ui/ContextMenu';
 import type { ContextAction } from './ui/types';
 import { CameraToggle } from './ui/CameraToggle';
 import { TouchControls } from './ui/TouchControls';
+import { LocationChip } from './ui/LocationChip';
+import {
+  OptionsModal,
+  fontClassFor,
+  loadFontChoice,
+  saveFontChoice,
+  type FontId,
+} from './ui/OptionsModal';
 import { InventoryPanel } from './ui/InventoryPanel';
 import { CraftingMenu } from './ui/CraftingMenu';
 import { ProximityHarvestButtons } from './ui/ProximityHarvestButtons';
@@ -335,7 +374,10 @@ import type {
   CraftingRecipe,
   FeedbackTone,
 } from './ui/types';
-import { PersonalInventory } from './systems/inventory';
+import {
+  PersonalInventory,
+  displayNameFor,
+} from './systems/inventory';
 import { executeCraft } from './systems/crafting-execution';
 import {
   HungerState,
@@ -348,6 +390,12 @@ import {
 } from './systems/hunger';
 import { FireState as SystemsFireState, cook } from './systems/fire';
 import { HomeStorage } from './systems/shelter';
+import {
+  loadSave,
+  saveGame,
+  serializeSave,
+  type SaveData,
+} from './systems/save';
 import { clothingRemaining } from './game/weather';
 import {
   ownedTier,
@@ -495,7 +543,10 @@ function toInventoryItem(stack: {
 }): InventoryItem {
   return {
     id: stack.item,
-    name: stack.item,
+    // Display spelling, never the raw code id (Adam, 2026-10-26:
+    // code spelling lives in code, display spelling lives in
+    // the systems table). The id stays the key for actions.
+    name: displayNameFor(stack.item),
     quantityText: String(stack.quantity),
     icon: stack.item === UMBRELLA_ITEM_ID ? <UmbrellaIcon /> : undefined,
   };
@@ -505,7 +556,20 @@ export default function App() {
   const containerRef = useRef<HTMLDivElement>(null);
   const rendererRef = useRef<WorldRenderer | null>(null);
   const playerRef = useRef<PlayerController | null>(null);
-  const genRef = useRef(createWorldGen(DEFAULT_SEED));
+
+  // Save boot-load (see ./systems/save.ts): read once, before any
+  // state below is created, so seed / inventory / hunger / worn /
+  // camera all start from the save, not from defaults. Null =
+  // fresh start (no save, or a corrupt one — never a crash).
+  // The ref-lazy pattern matches the inventory/hunger/wardrobe
+  // blocks below; the value never changes after first render.
+  const bootSaveRef = useRef<SaveData | null | undefined>(undefined);
+  if (bootSaveRef.current === undefined) {
+    bootSaveRef.current = loadSave();
+  }
+  const bootSave = bootSaveRef.current;
+
+  const genRef = useRef(createWorldGen(bootSave?.seed ?? DEFAULT_SEED));
 
   // The shell owns the one personal inventory, built directly
   // with the ruled large-basket mode (see the header — 'replace',
@@ -514,6 +578,9 @@ export default function App() {
   if (inventoryRef.current === null) {
     inventoryRef.current = new PersonalInventory({
       largeBasketMode: 'replace',
+      // Restored stacks arrive normalized (save.ts never persists
+      // UPPER ids) and the constructor merges spelling duplicates.
+      initial: bootSave?.inventory,
     });
   }
   const inventory = inventoryRef.current;
@@ -525,7 +592,9 @@ export default function App() {
   // everywhere — no second hunger value lives in this file.
   const hungerRef = useRef<HungerState | null>(null);
   if (hungerRef.current === null) {
-    hungerRef.current = new HungerState();
+    // Saved value when present; the constructor default (full)
+    // applies when bootSave is null or its hunger is undefined.
+    hungerRef.current = new HungerState(bootSave?.hunger);
   }
   const hunger = hungerRef.current;
   const [hungerStage, setHungerStage] = useState<HungerStage>(
@@ -538,6 +607,20 @@ export default function App() {
   const wardrobeRef = useRef<Wardrobe | null>(null);
   if (wardrobeRef.current === null) {
     wardrobeRef.current = new Wardrobe();
+    // Restored worn list: inventory is already seeded above, so
+    // wear()'s ownership check passes for saved garments. A
+    // saved worn id no longer carried is skipped, not fatal —
+    // capacity follows via setWorn, as in the wear handlers.
+    if (bootSave?.worn) {
+      for (const id of bootSave.worn) {
+        try {
+          wardrobeRef.current.wear(inventory, id);
+        } catch {
+          // Saved garment no longer carried — leave it unworn.
+        }
+      }
+      inventory.setWorn(wardrobeRef.current.wornItemIds());
+    }
   }
   const wardrobe = wardrobeRef.current;
   const [wornGarments, setWornGarments] = useState<WornGarment[]>(() =>
@@ -582,10 +665,17 @@ export default function App() {
   const [eatNote, setEatNote] = useState<string | null>(null);
   const [storageNote, setStorageNote] = useState<string | null>(null);
 
-  const [seedInput, setSeedInput] = useState(DEFAULT_SEED);
-  const [seed, setSeed] = useState(DEFAULT_SEED);
-  const [cameraMode, setCameraMode] = useState<CameraMode>('third');
-  const [position, setPosition] = useState({ x: 0, z: 0 });
+  const [seedInput, setSeedInput] = useState(bootSave?.seed ?? DEFAULT_SEED);
+  const [seed, setSeed] = useState(bootSave?.seed ?? DEFAULT_SEED);
+  const [cameraMode, setCameraMode] = useState<CameraMode>(
+    bootSave?.cameraMode ?? 'third',
+  );
+  // Restored position is applied to the player in the boot effect
+  // (which overwrites this state from the player); until then it
+  // holds the saved point, not the spawn.
+  const [position, setPosition] = useState(
+    bootSave?.position ?? { x: 0, z: 0 },
+  );
   const [biomeText, setBiomeText] = useState('—');
   const [chunkCount, setChunkCount] = useState(0);
   const [switching, setSwitching] = useState(false);
@@ -645,6 +735,73 @@ export default function App() {
     setCapacityText(
       `Carrying ${inventory.used()} / ${inventory.capacity()}`,
     );
+  };
+
+  // Save meta mirror: seed / camera / position as of the latest
+  // render, so saveNow() stays correct even when called from a
+  // first-render closure (the boot effect's listeners, pagehide).
+  // Live instances (inventory, hunger, wardrobe) and the engine
+  // singletons are read directly, never mirrored.
+  const saveMetaRef = useRef({
+    seed: DEFAULT_SEED,
+    cameraMode: 'third' as CameraMode,
+    position: { x: 0, z: 0 },
+  });
+  useEffect(() => {
+    saveMetaRef.current = { seed, cameraMode, position };
+  });
+
+  // Write the current game to localStorage (see ./systems/save.ts).
+  // Never throws and never blocks play: serialization + storage
+  // failures are swallowed inside saveGame, and this wrapper adds
+  // its own guard. Called after every meaningful change (harvest,
+  // craft, eat, cook, place, wear/remove, deposit/withdraw) and on
+  // pagehide — not on a timer, so a quiet session writes nothing.
+  const saveNow = () => {
+    try {
+      const meta = saveMetaRef.current;
+      const player = playerRef.current;
+      saveGame(
+        serializeSave({
+          seed: meta.seed,
+          cameraMode: meta.cameraMode,
+          position: player
+            ? { x: player.x, z: player.z }
+            : meta.position,
+          inventory: inventory.stacksSnapshot(),
+          hunger: hunger.value(),
+          worn: wardrobe.wornItemIds(),
+          fires: fireState.snapshot().map((fire) => ({
+            type: fire.type,
+            x: fire.x,
+            z: fire.z,
+            lit: fire.lit,
+          })),
+          houses: shelterState.snapshot().map((house) => {
+            const store = homeStoresRef.current.get(house.id);
+            const ids =
+              homeStoreItemsRef.current.get(house.id) ?? new Set<string>();
+            return {
+              type: house.type,
+              x: house.x,
+              z: house.z,
+              contents: [...ids]
+                .filter((id) => (store?.count(id) ?? 0) > 0)
+                .map((id) => ({
+                  item: id,
+                  quantity: store?.count(id) ?? 0,
+                })),
+            };
+          }),
+          looms: loomState.snapshot().map((loom) => ({
+            x: loom.x,
+            z: loom.z,
+          })),
+        }),
+      );
+    } catch {
+      // Saving must never break play.
+    }
   };
 
   // Project one world point to a screen anchor. Reads refs only, so
@@ -761,6 +918,17 @@ export default function App() {
   // Boot the world once. StrictMode double-mounts in dev only; the
   // cleanup below disposes the first instance, and the production build
   // mounts exactly once.
+  //
+  // Save restore lives here (guarded once per page load, so a dev
+  // StrictMode double-effect cannot place everything twice):
+  // singleton placements (fires / houses / looms) are re-placed
+  // from the save, the player is moved to the saved point, and
+  // the HUD re-reads from the restored singletons below. House
+  // contents ride by order (placeHouse regenerates ids — see
+  // save.ts). Restored fires come back UNLIT (no game-layer API
+  // marks a fire lit; she re-lights them) and their Systems
+  // vessels are created lazily, unlit, on first use — consistent.
+  const saveRestoredRef = useRef(false);
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
@@ -770,12 +938,62 @@ export default function App() {
     player.attach(renderer.domElement);
     rendererRef.current = renderer;
     playerRef.current = player;
+    if (!saveRestoredRef.current) {
+      saveRestoredRef.current = true;
+      const saved = bootSaveRef.current;
+      if (saved) {
+        for (const fire of saved.fires) {
+          try {
+            // Cast: deserializeSave already allowlisted the type.
+            fireState.placeFire(fire.type as FireType, fire.x, fire.z);
+          } catch {
+            // A placement that cannot restore is skipped, not fatal.
+          }
+        }
+        for (const house of saved.houses) {
+          try {
+            const placed = shelterState.placeHouse(
+              house.type as HouseType,
+              house.x,
+              house.z,
+            );
+            const store = new HomeStorage(
+              HOUSE_TYPE_TO_ITEM[placed.type],
+              house.contents,
+            );
+            homeStoresRef.current.set(placed.id, store);
+            homeStoreItemsRef.current.set(
+              placed.id,
+              new Set(Object.keys(house.contents)),
+            );
+          } catch {
+            // Same skip rule as fires.
+          }
+        }
+        for (const loom of saved.looms) {
+          try {
+            loomState.placeLoom(loom.x, loom.z);
+          } catch {
+            // Same skip rule as fires.
+          }
+        }
+        player.x = saved.position.x;
+        player.z = saved.position.z;
+      }
+    }
     // Hunger wiring (see the header): the engine reads the stage
     // through this query — movement slowdown + harvest lockout.
     player.setHungerStageQuery(() => hunger.stage());
     setPosition({ x: player.x, z: player.z });
     setBiomeText(formatWeights(gen.weightsAt(player.x, player.z)));
     bus.emit('world:seedSet', { seed: gen.seed });
+    // HUD re-read after a restore (the placedFires initial state
+    // was snapshotted before this effect re-placed anything).
+    setPlacedFires(fireState.snapshot());
+    applyShelterHouse(
+      shelterAt(player.x, player.z, shelterState.snapshot()).houseId,
+    );
+    recomputeAnchors();
 
     const offCamera = bus.on('camera:switched', ({ mode }) => {
       setCameraMode(mode);
@@ -844,8 +1062,17 @@ export default function App() {
     const offShelterChanged = bus.on('shelter:changed', ({ houseId }) => {
       applyShelterHouse(houseId);
     });
+    // Autosave on pagehide: the last-chance write when she leaves
+    // or refreshes. saveNow reads only refs + singletons (see its
+    // note), so this first-render closure stays correct for the
+    // life of the mount.
+    const onPageHide = () => {
+      saveNow();
+    };
+    window.addEventListener('pagehide', onPageHide);
     const offCompleted = bus.on('harvest:completed', (p) => {
       refreshInventory();
+      saveNow();
       setProgressItems((current) =>
         current.filter((item) => item.targetId !== p.targetId),
       );
@@ -921,6 +1148,7 @@ export default function App() {
       }
       feedbackTimersRef.current.clear();
       window.removeEventListener('resize', onResize);
+      window.removeEventListener('pagehide', onPageHide);
       offCamera();
       offMoved();
       offLooked();
@@ -1060,6 +1288,7 @@ export default function App() {
       );
     }
     refreshInventory();
+    saveNow();
   };
 
   const handleHarvest = (request: HarvestRequest) => {
@@ -1085,6 +1314,7 @@ export default function App() {
       );
     }
     refreshInventory();
+    saveNow();
   };
 
   const handleRemoveGarment = (garment: WornGarment) => {
@@ -1095,6 +1325,7 @@ export default function App() {
     setWornGarments(wardrobe.wornGarments());
     setWardrobeNote(null);
     refreshInventory();
+    saveNow();
   };
 
   const handlePlaceItem = (itemId: string) => {
@@ -1155,6 +1386,7 @@ export default function App() {
     setPlacementAnchor(null);
     setPlacementNote(null);
     refreshInventory();
+    saveNow();
   };
 
   const handlePlaceCancel = () => {
@@ -1184,6 +1416,7 @@ export default function App() {
       );
     }
     refreshInventory();
+    saveNow();
   };
 
   /** Lazily open (or create) the HomeStorage for a placed house. */
@@ -1221,6 +1454,7 @@ export default function App() {
       );
     }
     refreshInventory();
+    saveNow();
   };
 
   const handleWithdrawItem = (itemId: string) => {
@@ -1248,6 +1482,7 @@ export default function App() {
       );
     }
     refreshInventory();
+    saveNow();
   };
 
   /**
@@ -1445,6 +1680,7 @@ export default function App() {
         );
       }
       refreshInventory();
+      saveNow();
     } else if (actionId === 'rub') {
       const result = fireState.frictionRub(fireId, Date.now());
       if (isFireFailure(result)) {
@@ -1521,7 +1757,9 @@ export default function App() {
                   .filter((id) => openHomeStore.count(id) > 0)
                   .map((id) => ({
                     id,
-                    name: id,
+                    // Same display rule as panel rows above:
+                    // storage rows are panel rows too.
+                    name: displayNameFor(id),
                     quantityText: String(openHomeStore.count(id)),
                   })),
           capacityText:
@@ -1555,6 +1793,16 @@ export default function App() {
   // the stacked panel burying the world, so the game leads and
   // the panels are one tap away. Desktop never collapses.
   const [hudCollapsed, setHudCollapsed] = useState(isTouch);
+
+  // Options font (see the header): shell-owned UI setting,
+  // persisted in its own localStorage key — never the Systems
+  // save file. No stored choice reads as IM Fell English.
+  const [font, setFont] = useState<FontId>(loadFontChoice);
+  const [optionsOpen, setOptionsOpen] = useState(false);
+  const handleFontChange = (next: FontId): void => {
+    setFont(next);
+    saveFontChoice(next);
+  };
 
   // Visible thin scrollbars on the touch scroll containers
   // (Adam: "put in scrollbars"): native mobile scrollbars are
@@ -1615,8 +1863,57 @@ export default function App() {
     });
   };
 
+  // LOCATION CHIP (see the header): dominant biome from the
+  // same ground weights the scaffold readout formats — the
+  // engine already computes the dominant id on the weights
+  // object, so the shell reads it (and its weight) rather
+  // than re-deriving a maximum. It follows position state,
+  // so it moves with player:moved (~10 Hz) and with
+  // regenerate (seed in the deps).
+  const dominantBiome = useMemo(() => {
+    const at = genRef.current.weightsAt(position.x, position.z);
+    const def = BIOME_BY_ID[at.dominant];
+    return {
+      name: def?.name ?? at.dominant,
+      percent: Math.round(at.weights[at.dominant] * 100),
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [position.x, position.z, seed]);
+
+  // FPS, shell-side (see the header): a requestAnimationFrame
+  // sampler, not a renderer instrument — the renderer is
+  // untouched. State updates about once a second, never per
+  // frame, so the chip does not churn the HUD. A sample
+  // spanning hidden-tab time (rAF pauses when hidden) is
+  // dropped instead of showing a bogus low number.
+  const [fps, setFps] = useState<number | null>(null);
+  useEffect(() => {
+    let raf = 0;
+    let frames = 0;
+    let start = performance.now();
+    const tick = (now: number): void => {
+      frames += 1;
+      const elapsed = now - start;
+      if (elapsed >= 1000) {
+        if (elapsed < 2000) {
+          setFps(Math.round((frames * 1000) / elapsed));
+        }
+        frames = 0;
+        start = now;
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, []);
+
   return (
-    <div className="relative w-full h-screen bg-[#121612] overflow-hidden font-mono text-[#f0ead6]">
+    <div
+      className={
+        'relative w-full h-screen bg-[#121612] overflow-hidden text-[#f0ead6] ' +
+        fontClassFor(font)
+      }
+    >
       {/* 3D viewport */}
       <div ref={containerRef} className="absolute inset-0" />
 
@@ -1758,6 +2055,17 @@ export default function App() {
             >
               Crafting
             </button>
+            <button
+              type="button"
+              onClick={() => setOptionsOpen(true)}
+              className={
+                isTouch
+                  ? 'rounded bg-[#3a4436] px-3 py-2 text-sm min-h-[44px] hover:bg-[#4a5546]'
+                  : 'rounded bg-[#3a4436] px-3 py-1 text-xs hover:bg-[#4a5546]'
+              }
+            >
+              Options
+            </button>
             <CameraToggle
               perspective={cameraMode}
               comfortable={isTouch}
@@ -1858,6 +2166,13 @@ export default function App() {
               className="min-h-[44px] rounded bg-[#3a4436] px-3 py-2 text-sm hover:bg-[#4a5546]"
             >
               Crafting
+            </button>
+            <button
+              type="button"
+              onClick={() => setOptionsOpen(true)}
+              className="min-h-[44px] rounded bg-[#3a4436] px-3 py-2 text-sm hover:bg-[#4a5546]"
+            >
+              Options
             </button>
             <CameraToggle
               perspective={cameraMode}
@@ -1970,6 +2285,30 @@ export default function App() {
           onMove={applyTouchMove}
           onLook={applyTouchLook}
           onInteract={handleTouchInteract}
+        />
+      ) : null}
+
+      {/* Options modal (tabbed; Settings first, font only). */}
+      {optionsOpen ? (
+        <OptionsModal
+          font={font}
+          onFontChange={handleFontChange}
+          onClose={() => setOptionsOpen(false)}
+          comfortable={isTouch}
+        />
+      ) : null}
+
+      {/* Location chip: always visible, including with the HUD
+        collapsed on touch (it lives outside the collapsible
+        stack). It hides only while a panel or the modal is
+        open, where it would sit on top of the bottom sheet. */}
+      {!inventoryOpen && !craftingOpen && !optionsOpen ? (
+        <LocationChip
+          x={position.x}
+          z={position.z}
+          biomeName={dominantBiome.name}
+          biomePercent={dominantBiome.percent}
+          fps={fps}
         />
       ) : null}
 

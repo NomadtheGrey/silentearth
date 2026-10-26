@@ -1,0 +1,336 @@
+/**
+ * Silent Earth — versioned localStorage save (player-systems lane).
+ *
+ * Adam's order (2026-10-26, "for now"): a save that survives a
+ * page refresh while he playtests. Explicitly NOT in this landing:
+ * NO three-words passphrase, NO cloud save UI — Adam said "later
+ * we'll have the three words like in BioForge." That is a future
+ * direction, recorded here, not built here.
+ *
+ * SHAPE: one JSON document under SAVE_KEY, versioned. The shell
+ * (App.tsx) owns when to save/load; this module owns only the
+ * shape, the validation, and the storage access — no React, no
+ * game imports, nothing that can crash a boot.
+ *
+ * WHAT IS SAVED (the brief's minimum, all of it):
+ * - seed, player position, camera mode
+ * - personal inventory stacks — NORMALIZED ids only (see
+ *   inventory.ts): serializeSave normalizes every stack key and
+ *   merges duplicates, so an UPPER id can never be persisted,
+ *   even if a caller hands serialize raw stacks.
+ * - hunger meter value, wardrobe worn list
+ * - placed fires (type + position + lit flag), placed houses
+ *   (type + position + stored contents), placed looms (position)
+ *
+ * WHAT IS RECORDED BUT NOT RESTORED (stated, not silent):
+ * - A fire's LIT state is saved (lit: true/false) but restore
+ *   brings fires back UNLIT: marking an engine fire lit has no
+ *   public API in the game layer, and this landing does not
+ *   touch src/game/*. She re-lights restored fires. A future
+ *   lit-restore landing needs no format change — the flag is
+ *   already in the snapshot.
+ * - House restore matches saved houses to restored houses BY
+ *   ORDER (placeHouse regenerates ids, so saved ids cannot be
+ *   reused); contents ride with their house's position in that
+ *   order. A save whose house list cannot be restored whole is
+ *   treated as corrupt (see below), so order can never silently
+ *   shift contents onto the wrong house.
+ * - World runtime state outside the list above (harvested
+ *   scatter depletion/regrow, in-progress lighting waits,
+ *   multi-step harvest progress) is NOT saved: on refresh the
+ *   world regenerates from the seed, so harvested scatter
+ *   comes back. That is playtest-visible and intended for this
+ *   landing, not a hidden gap.
+ *
+ * CORRUPTION RULE: deserializeSave returns null — never throws —
+ * for any structural problem (not an object, wrong version,
+ * missing/wrong-typed field, unknown fire/house type, bad
+ * inventory/contents shape). The shell treats null as "fresh
+ * start", never as a crash. A merely out-of-range hunger value
+ * is clamped, not rejected: a meter number cannot break a boot.
+ * Unknown extra fields are ignored (forward-compatible within
+ * the version). Storage access itself is guarded: no
+ * localStorage (or a throwing one) behaves like "no save".
+ */
+
+// ---------------------------------------------------------------------------
+// Shape
+// ---------------------------------------------------------------------------
+
+import { normalizeItemId } from './inventory';
+
+/** Storage key. The version rides inside the document too. */
+export const SAVE_KEY = 'silentearth-save-v1';
+
+/** The only save version this code reads or writes. */
+export const SAVE_VERSION = 1;
+
+export type SaveCameraMode = 'first' | 'third';
+
+export interface SavedFire {
+  type: string;
+  x: number;
+  z: number;
+  /** Recorded; restore brings fires back unlit (see header). */
+  lit: boolean;
+}
+
+export interface SavedHouse {
+  type: string;
+  x: number;
+  z: number;
+  contents: Record<string, number>;
+}
+
+export interface SavedLoom {
+  x: number;
+  z: number;
+}
+
+export interface SaveData {
+  version: typeof SAVE_VERSION;
+  savedAt: number;
+  seed: string;
+  cameraMode: SaveCameraMode;
+  position: { x: number; z: number };
+  inventory: Record<string, number>;
+  hunger: number;
+  worn: string[];
+  fires: SavedFire[];
+  houses: SavedHouse[];
+  looms: SavedLoom[];
+}
+
+/** Draft input to serializeSave — the shell's live values. */
+export interface SaveDraft {
+  seed: string;
+  cameraMode: SaveCameraMode;
+  position: { x: number; z: number };
+  inventory: ReadonlyArray<{ item: string; quantity: number }>;
+  hunger: number;
+  worn: readonly string[];
+  fires: ReadonlyArray<{ type: string; x: number; z: number; lit: boolean }>;
+  houses: ReadonlyArray<{
+    type: string;
+    x: number;
+    z: number;
+    contents: ReadonlyArray<{ item: string; quantity: number }>;
+  }>;
+  looms: ReadonlyArray<{ x: number; z: number }>;
+}
+
+/**
+ * Fire/house types this version can restore. Mirrors of the game
+ * layer's unions (fire.ts FireType, shelter.ts HouseType) by
+ * literal — systems does not import game modules. An entry with
+ * any other type makes the whole document corrupt (see header:
+ * partial restores risk contents landing on the wrong house).
+ */
+const SAVE_FIRE_TYPES: ReadonlySet<string> = new Set([
+  'campfire',
+  'hearth',
+  'kiln',
+  'bloomery',
+]);
+
+const SAVE_HOUSE_TYPES: ReadonlySet<string> = new Set([
+  'leanTo',
+  'thatchHut',
+  'wovenCottage',
+  'smallWoodenHut',
+]);
+
+// ---------------------------------------------------------------------------
+// Serialize (shell values -> document; never persists UPPER ids)
+// ---------------------------------------------------------------------------
+
+function normalizeStacks(
+  stacks: ReadonlyArray<{ item: string; quantity: number }>,
+): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const stack of stacks) {
+    if (!Number.isInteger(stack.quantity) || stack.quantity <= 0) continue;
+    const id = normalizeItemId(stack.item);
+    out[id] = (out[id] ?? 0) + stack.quantity;
+  }
+  return out;
+}
+
+/** Build a versioned document from live values. */
+export function serializeSave(draft: SaveDraft): SaveData {
+  return {
+    version: SAVE_VERSION,
+    savedAt: Date.now(),
+    seed: draft.seed,
+    cameraMode: draft.cameraMode,
+    position: { x: draft.position.x, z: draft.position.z },
+    inventory: normalizeStacks(draft.inventory),
+    hunger: draft.hunger,
+    worn: draft.worn.map(normalizeItemId),
+    fires: draft.fires.map((fire) => ({
+      type: fire.type,
+      x: fire.x,
+      z: fire.z,
+      lit: fire.lit,
+    })),
+    houses: draft.houses.map((house) => ({
+      type: house.type,
+      x: house.x,
+      z: house.z,
+      contents: normalizeStacks(house.contents),
+    })),
+    looms: draft.looms.map((loom) => ({ x: loom.x, z: loom.z })),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Deserialize (unknown JSON -> document or null; never throws)
+// ---------------------------------------------------------------------------
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value);
+}
+
+function isPosition(value: unknown): value is { x: number; z: number } {
+  return (
+    isRecord(value) && isFiniteNumber(value.x) && isFiniteNumber(value.z)
+  );
+}
+
+function parseStacks(value: unknown): Record<string, number> | null {
+  if (!isRecord(value)) return null;
+  const out: Record<string, number> = {};
+  for (const [item, quantity] of Object.entries(value)) {
+    if (!Number.isInteger(quantity) || (quantity as number) <= 0) return null;
+    const id = normalizeItemId(item);
+    out[id] = (out[id] ?? 0) + (quantity as number);
+  }
+  return out;
+}
+
+function parseStringArray(value: unknown): string[] | null {
+  if (!Array.isArray(value)) return null;
+  if (!value.every((entry) => typeof entry === 'string')) return null;
+  return (value as string[]).map(normalizeItemId);
+}
+
+/** Validate an unknown value as a v1 save, or return null. */
+export function deserializeSave(value: unknown): SaveData | null {
+  try {
+    if (!isRecord(value)) return null;
+    if (value.version !== SAVE_VERSION) return null;
+    if (!isFiniteNumber(value.savedAt)) return null;
+    if (typeof value.seed !== 'string' || value.seed.length === 0) return null;
+    if (value.cameraMode !== 'first' && value.cameraMode !== 'third') {
+      return null;
+    }
+    if (!isPosition(value.position)) return null;
+    const inventory = parseStacks(value.inventory);
+    if (inventory === null) return null;
+    if (!isFiniteNumber(value.hunger)) return null;
+    const worn = parseStringArray(value.worn);
+    if (worn === null) return null;
+    if (!Array.isArray(value.fires)) return null;
+    const fires: SavedFire[] = [];
+    for (const entry of value.fires) {
+      if (!isRecord(entry)) return null;
+      if (
+        typeof entry.type !== 'string' ||
+        !SAVE_FIRE_TYPES.has(entry.type)
+      ) {
+        return null;
+      }
+      if (!isFiniteNumber(entry.x) || !isFiniteNumber(entry.z)) return null;
+      fires.push({
+        type: entry.type,
+        x: entry.x,
+        z: entry.z,
+        lit: entry.lit === true,
+      });
+    }
+    if (!Array.isArray(value.houses)) return null;
+    const houses: SavedHouse[] = [];
+    for (const entry of value.houses) {
+      if (!isRecord(entry)) return null;
+      if (
+        typeof entry.type !== 'string' ||
+        !SAVE_HOUSE_TYPES.has(entry.type)
+      ) {
+        return null;
+      }
+      if (!isFiniteNumber(entry.x) || !isFiniteNumber(entry.z)) return null;
+      const contents = parseStacks(entry.contents);
+      if (contents === null) return null;
+      houses.push({
+        type: entry.type,
+        x: entry.x,
+        z: entry.z,
+        contents,
+      });
+    }
+    if (!Array.isArray(value.looms)) return null;
+    const looms: SavedLoom[] = [];
+    for (const entry of value.looms) {
+      if (!isPosition(entry)) return null;
+      looms.push({ x: entry.x, z: entry.z });
+    }
+    return {
+      version: SAVE_VERSION,
+      savedAt: value.savedAt,
+      seed: value.seed,
+      cameraMode: value.cameraMode,
+      position: { x: value.position.x, z: value.position.z },
+      inventory,
+      hunger: Math.min(100, Math.max(0, value.hunger)),
+      worn,
+      fires,
+      houses,
+      looms,
+    };
+  } catch {
+    return null;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Storage access (guarded; never throws)
+// ---------------------------------------------------------------------------
+
+/** Write a save document. Failures are swallowed: saving must never break play. */
+export function saveGame(data: SaveData): void {
+  try {
+    if (typeof localStorage === 'undefined') return;
+    localStorage.setItem(SAVE_KEY, JSON.stringify(data));
+  } catch {
+    // Storage full, blocked, or unavailable — play continues unsaved.
+  }
+}
+
+/**
+ * Read the saved game, or null when there is none, it is corrupt,
+ * or storage is unavailable. Null always means "fresh start".
+ */
+export function loadSave(): SaveData | null {
+  try {
+    if (typeof localStorage === 'undefined') return null;
+    const raw = localStorage.getItem(SAVE_KEY);
+    if (raw === null) return null;
+    return deserializeSave(JSON.parse(raw));
+  } catch {
+    return null;
+  }
+}
+
+/** Remove the saved game (fresh start on next boot). */
+export function clearSave(): void {
+  try {
+    if (typeof localStorage === 'undefined') return;
+    localStorage.removeItem(SAVE_KEY);
+  } catch {
+    // Nothing to do — the save is already effectively gone.
+  }
+}
