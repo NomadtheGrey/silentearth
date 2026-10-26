@@ -580,6 +580,24 @@
  *   set — a new world is a new pile set, by design. Old
  *   saves load piles: []. App.tsx only; no format change
  *   (SaveData.piles already existed).
+ * - DESKTOP PILE PICKUP, LIVE (Adam, 2026-10-26 — DEV brief,
+ *   second of two; SUPERSEDES the desktop limit in PILE
+ *   PICKUP BY USE above): desktop gets a visible button —
+ *   the brief's preferred path over a key, for
+ *   discoverability. It renders in the z-40 harvest overlay,
+ *   just below the harvest column (top 54%, centre, min
+ *   44 px, black/60 pill), only on desktop (touch keeps
+ *   USE) and only when the nearest pile would win under
+ *   the touch USE rules: piles are already tracker-sorted
+ *   nearest first within 2.5 m, and the button shows only
+ *   when pile.distance <= the harvest candidate's distance
+ *   (bus distance, shell-computed fallback; ground at 0, so
+ *   a pile at her feet ties ground and wins). Pressing it
+ *   emits the same 'pile:pickup-requested' { pileId } the
+ *   touch USE press emits — Systems' listener is still the
+ *   sole granter, and its existing refresh + save +
+ *   feedback subscriber handles the outcome. No new grant
+ *   logic, no key binding, no touch change. App.tsx only.
  * POINTER DISCIPLINE: overlays are pointer-events-none except the
  * small interactive pieces (HUD buttons, panels, harvest buttons),
  * so world clicks — including the first-person mouse-capture click
@@ -1104,8 +1122,9 @@ export default function App() {
   );
   const [harvestTargets, setHarvestTargets] = useState<HarvestTarget[]>([]);
   // In-range dropped piles (harvest overflow), nearest first per
-  // the tracker. Drives the USE fallback only — piles get no
-  // buttons and no screen of their own (see handleTouchInteract).
+  // the tracker. Drives the touch USE fallback and the desktop
+  // pickup button (see handleTouchInteract + the desktop pile
+  // computation before return); piles get no screen of their own.
   const [piles, setPiles] = useState<PileTarget[]>([]);
   // Harvest outcome feedback + multi-step progress, rendered
   // through WorldAnchor + ObjectFeedback / InteractionProgress.
@@ -2599,8 +2618,9 @@ export default function App() {
   // change for Adam's call, not this landing's.
   // NOTE: this is the touch USE path only. Desktop has no USE
   // affordance (harvest is by button click), so desktop pile
-  // pickup needs a button or a key — a follow-up, not invented
-  // here.
+  // pickup is a visible button instead — see DESKTOP PILE
+  // PICKUP in the header and the computation before return.
+  // Touch keeps USE; the button is desktop-only.
   const handleTouchInteract = (): void => {
     const player = playerRef.current;
     const target =
@@ -2680,6 +2700,39 @@ export default function App() {
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
   }, []);
+
+  // DESKTOP PILE PICKUP (see the header): the nearest pile,
+  // but only when it would win under the touch USE rules —
+  // otherwise the button would contradict what USE would do.
+  // The tracker already limits piles to 2.5 m and sorts
+  // nearest first, so piles[0] is the candidate; its
+  // distance is the tracker's, and the harvest candidate is
+  // the same scatter-first pick handleTouchInteract uses
+  // (bus distance, shell-computed fallback from position
+  // state, which re-renders on the 10 Hz moved tick — so the
+  // button appears and disappears as she moves). Null on
+  // touch (USE already exists there) and null when a nearer
+  // harvest target wins: harvest that first, then the pile
+  // button appears. Pressing emits pile:pickup-requested;
+  // Systems' listener grants, the existing subscriber
+  // refreshes, saves, and feeds back.
+  const desktopPileTarget =
+    harvestTargets.find((candidate) => candidate.kind === 'scatter') ??
+    harvestTargets[0];
+  const desktopPileCandidateDistance = desktopPileTarget
+    ? (busTargetsRef.current.find((t) => t.id === desktopPileTarget.id)
+        ?.distance ??
+      Math.hypot(
+        desktopPileTarget.worldX - position.x,
+        desktopPileTarget.worldZ - position.z,
+      ))
+    : Number.POSITIVE_INFINITY;
+  const desktopPilePickup =
+    !isTouch &&
+    piles.length > 0 &&
+    piles[0].distance <= desktopPileCandidateDistance
+      ? piles[0]
+      : null;
 
   return (
     <div
@@ -2779,6 +2832,20 @@ export default function App() {
           onHarvest={handleHarvest}
           onRemove={handleRemove}
         />
+        {desktopPilePickup ? (
+          <button
+            type="button"
+            onClick={() =>
+              bus.emit('pile:pickup-requested', {
+                pileId: desktopPilePickup.id,
+              })
+            }
+            className="pointer-events-auto absolute left-1/2 top-[54%] min-h-[44px] -translate-x-1/2 rounded-full bg-black/60 px-4 py-2 text-sm font-medium text-[#f0ead6]"
+          >
+            Pick up {displayNameFor(desktopPilePickup.item)} ×{' '}
+            {desktopPilePickup.quantity}
+          </button>
+        ) : null}
       </div>
 
       {/* HUD shell: needs row (awaiting survival systems) + HUD block. */}
