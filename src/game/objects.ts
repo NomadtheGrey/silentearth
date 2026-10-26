@@ -46,10 +46,50 @@
  * - GENERAL HARVEST RULE (Adam, 2026-10-26): every harvest follows
  *   clay's shape (base + 25% chance of +1, rising per harvest stage)
  *   plus a permit tier (hard gate, yield 0 below it, progression
- *   starting at 1 + 25% at the permit). Every harvestable source
- *   carries a permitTier field; only silt's is pinned (trowel) —
- *   all other gates are 'TBD' for Adam's pin pass, none invented.
- *   See HARVEST_STAGES / harvestYieldForTool below.
+ *   starting at 1 + 25% at the permit). See HARVEST_STAGES /
+ *   harvestYieldForTool below.
+ * - STATUS MARKING (do not blur): Adam-pinned = the pattern itself,
+ *   the clay table, and clay's trowel permit. LANE-DECIDED (this lane,
+ *   2026-10-26, Adam's pin pass still applies) = every other source's
+ *   permit tier and amounts below. TBD = anything genuinely unsettled
+ *   (none left for permits after this landing; per-harvestable bonus
+ *   overrides are still open, defaulting to 25%).
+ * - LANE-DECIDED PERMITS (2026-10-26, rationale in brief): better
+ *   tools make acquisition EASIER — less waste, more complete
+ *   gathering — never magic creation. Amounts are what she RECOVERS
+ *   from a source, never more than the source holds; the later system
+ *   must deplete the source accordingly. Conversion (e.g. logs →
+ *   lumber) is Systems' business and must never magically reduce
+ *   what was provided — no conversion rule is set here.
+ *   HAND (no tool needed — hand stage, below trowel): brush, fallen
+ *   log, standing tree (snapped limbs only, no felling), snap-wood
+ *   thicket, tender-vine strands (prototype TUG by hand), peat moss
+ *   carpet, silt bed PRIMARY ONLY (silt scooped by hand; its clay
+ *   still needs the trowel — see below), river stone cluster, bone
+ *   scatter (surface fragments; rarity comes from sparse spawn, not
+ *   a gate, and bone already reaches her as a silt/stone secondary),
+ *   salt crust, reed bed, bog growth. Hand is forced for the first
+ *   three by the game itself: the first trowel costs snap-wood +
+ *   cordage (from vines) + river stone, so gating any of those behind
+ *   the trowel would make the first tool uncraftable.
+ *   SPADE-AXE (the one gated source): downed oak. Heavy structural
+ *   wood for true shelters (wattle hut onward, all mid-game), and a
+ *   route-symmetric gate: an axe-trowel-only gate would lock out
+ *   spade-route players until convergence, and vice versa. Below
+ *   spade-axe oak yields 0; at spade-axe 1 + 25% →2; trundle 2 + 25% →3
+ *   (hauling heavy logs is exactly what the wheeled tool is for).
+ *   STUMP: claiming needs no tool (permit 'hand'), but it is an
+ *   ANCHOR, not a counted harvest — the amount pattern does not apply
+ *   to it (see anchor flag); moving it still needs the trundle-tool
+ *   per the dolly rule.
+ *   SILT CLARIFICATION (lane-decided, clay untouched): siltBed's
+ *   permitTier was 'trowel' in the last landing because that field
+ *   then described only clay. It now describes the PRIMARY yield, so
+ *   it is 'hand' for silt itself; clay's trowel gate lives separately
+ *   in toolGatedYields (requiresTool: 'trowel') and is unchanged.
+ *   A silt-bed harvest therefore yields silt (general pattern) AND
+ *   clay (clay table) when she holds the trowel — two yields from one
+ *   ground, as the silt rulings have always said.
  * - No other quantities are invented: the prototype carries no
  *   per-harvest amounts, so other sources carry item ids + secondary
  *   chances only. Amounts belong to the later harvest system /
@@ -181,18 +221,22 @@ export interface ToolGatedYield {
 
 /**
  * Permit tier for a harvest source: the lowest tool tier that permits
- * harvesting it at all. 'TBD' means Adam has not named this source's
- * gate yet — the field exists and the pattern is modelled, but no gate
- * is invented. (Silt's permit is the trowel, per the clay rule.)
+ * harvesting it at all. 'hand' = no tool needed (the hand stage, below
+ * trowel — see harvestStageRank: a null tool counts as the hand stage,
+ * so a hand-permitted source yields at base 1 with no tool, and rises
+ * with better tools). 'TBD' remains available for any future source
+ * whose gate Adam has not named; after the 2026-10-26 lane decisions
+ * no current source is left at 'TBD'. (Clay's gate is separate:
+ * toolGatedYields requiresTool 'trowel', Adam-pinned.)
  */
-export type PermitTier = ToolTier | 'TBD';
+export type PermitTier = 'hand' | ToolTier | 'TBD';
 
 /** Outcome of the general harvest pattern for one source + tool. */
 export type HarvestYieldOutcome =
   | { permitted: true; base: number; bonus: number; bonusChance: number }
   | {
       permitted: false;
-      reason: 'not-harvestable' | 'below-permit' | 'permit-tbd';
+      reason: 'not-harvestable' | 'below-permit' | 'permit-tbd' | 'anchor';
     };
 
 /**
@@ -211,10 +255,19 @@ export function harvestYieldForTool(
   if (!source.harvestable || source.permitTier === null) {
     return { permitted: false, reason: 'not-harvestable' };
   }
+  if (source.anchor) {
+    // A unique world anchor (the stump) is claimed, not counted: the
+    // amount pattern must never be applied to it, whatever its permit.
+    return { permitted: false, reason: 'anchor' };
+  }
   if (source.permitTier === 'TBD') {
     return { permitted: false, reason: 'permit-tbd' };
   }
-  const permitStage = harvestStageRank(source.permitTier);
+  // 'hand' is the stage below trowel: a null tool IS the hand stage
+  // (harvestStageRank(null) = -1), so hand-permitted sources yield at
+  // base 1 with no tool and rise with better tools.
+  const permitStage =
+    source.permitTier === 'hand' ? -1 : harvestStageRank(source.permitTier);
   const stage = harvestStageRank(tier);
   if (stage < permitStage) {
     return { permitted: false, reason: 'below-permit' };
@@ -290,12 +343,19 @@ export interface HarvestSourceDef {
   harvestable: boolean;
   /**
    * Permit tier (general harvest rule, Adam 2026-10-26): the lowest tool
-   * tier that permits harvesting this source at all. 'TBD' = Adam has
-   * not named this source's gate yet — no gate invented. null = not a
-   * harvestable source (ground character). Every harvestable source
-   * carries this field; only silt's is pinned (trowel, clay rule).
+   * tier that permits harvesting this source at all. 'hand' = no tool
+   * needed. 'TBD' = gate not named (none left after the 2026-10-26
+   * lane decisions). null = not a harvestable source (ground
+   * character). Adam-pinned: clay's trowel gate only (in
+   * toolGatedYields, not here). Lane-decided: every other permit.
    */
-  permitTier: ToolTier | 'TBD' | null;
+  permitTier: PermitTier | null;
+  /**
+   * True only for a unique world anchor (the stump): it is claimed as
+   * a workstation, not counted as a harvest amount. harvestYieldForTool
+   * refuses anchors outright, so no system can stack them.
+   */
+  anchor?: boolean;
   /**
    * Bonus chance for this source's primary-yield +1 bonus. Omitted
    * means the standing default HARVEST_BONUS_CHANCE (0.25); a source
@@ -350,7 +410,7 @@ export const SOURCES: HarvestSourceDef[] = [
     description:
       'Low brush and saplings — young, brittle growth that snaps for framing.',
     harvestable: true,
-    permitTier: 'TBD',
+    permitTier: 'hand',
     primaryYield: 'SNAP_WOOD',
     secondaryYields: [SPORES_25],
     provenance: 'draft',
@@ -363,7 +423,7 @@ export const SOURCES: HarvestSourceDef[] = [
     name: 'Fallen Log',
     description: 'A plain fallen log, lighter than downed oak — framing wood, not structure.',
     harvestable: true,
-    permitTier: 'TBD',
+    permitTier: 'hand',
     primaryYield: 'SNAP_WOOD',
     secondaryYields: [],
     provenance: 'draft',
@@ -406,7 +466,7 @@ export const SOURCES: HarvestSourceDef[] = [
       'A standing tree. Its snapped lower limbs are snap-wood; felling a ' +
       'whole tree is not part of this source (no such mechanic is invented here).',
     harvestable: true,
-    permitTier: 'TBD',
+    permitTier: 'hand',
     primaryYield: 'SNAP_WOOD',
     secondaryYields: [],
     provenance: 'draft',
@@ -419,7 +479,7 @@ export const SOURCES: HarvestSourceDef[] = [
     name: 'Snap-Wood Thicket',
     description: 'Brittle dead branches and framing wood throughout the silt.',
     harvestable: true,
-    permitTier: 'TBD',
+    permitTier: 'hand',
     primaryYield: 'SNAP_WOOD',
     secondaryYields: [SPORES_25],
     provenance: 'prototype',
@@ -432,7 +492,7 @@ export const SOURCES: HarvestSourceDef[] = [
     name: 'Tender-Vine Strands',
     description: 'Primary binding and lashing for all structural work.',
     harvestable: true,
-    permitTier: 'TBD',
+    permitTier: 'hand',
     primaryYield: 'TENDER_VINES',
     secondaryYields: [SPORES_25],
     multiStep: {
@@ -451,7 +511,7 @@ export const SOURCES: HarvestSourceDef[] = [
     name: 'Peat Moss Carpet',
     description: 'Spongy insulation and flooring that drinks up dampness.',
     harvestable: true,
-    permitTier: 'TBD',
+    permitTier: 'hand',
     primaryYield: 'PEAT_MOSS',
     secondaryYields: [SPORES_25],
     provenance: 'prototype',
@@ -469,9 +529,10 @@ export const SOURCES: HarvestSourceDef[] = [
       'spade / axe-trowel 2 (+chance 1), spade-axe 3 (+chance 1), ' +
       'trundle-tool 4 (+chance 1); the bonus chance is 25% at every ' +
       'tier (CLAY_BONUS_CHANCE, starting value). Silt ground is the ' +
-      'ONLY source that yields clay.',
+      'ONLY source that yields clay. Silt itself is scooped by hand ' +
+      '(lane-decided primary permit); only its clay needs the trowel.',
     harvestable: true,
-    permitTier: 'trowel',
+    permitTier: 'hand',
     primaryYield: 'RIVER_SLUDGE',
     secondaryYields: [
       {
@@ -500,7 +561,7 @@ export const SOURCES: HarvestSourceDef[] = [
       'Smooth basalt shaped by moving water. Useful for grinding or weighing — ' +
       'and river stone is the pinned whetstone (kept, no loss) for sharpening.',
     harvestable: true,
-    permitTier: 'TBD',
+    permitTier: 'hand',
     primaryYield: 'RIVER_STONE',
     secondaryYields: [
       {
@@ -520,9 +581,11 @@ export const SOURCES: HarvestSourceDef[] = [
     description:
       'Bleached remains found deep within the silt. Exceptionally hard — ' +
       'and, per the arc ruling, Primal Bone stays with a reagent hint in its ' +
-      'description for when the magic layer opens. Survival first, magic hinted.',
+      'description for when the magic layer opens. Survival first, magic hinted. ' +
+      'Surface fragments are picked up by hand (lane-decided); rarity comes ' +
+      'from sparse spawn, not a gate.',
     harvestable: true,
-    permitTier: 'TBD',
+    permitTier: 'hand',
     primaryYield: 'BONE',
     secondaryYields: [],
     provenance: 'prototype',
@@ -535,7 +598,7 @@ export const SOURCES: HarvestSourceDef[] = [
     name: 'Salt Crust',
     description: 'Sharp, grey mineral deposits found where moisture has evaporated. High potency.',
     harvestable: true,
-    permitTier: 'TBD',
+    permitTier: 'hand',
     primaryYield: 'SALT_CRYSTAL',
     secondaryYields: [
       {
@@ -552,9 +615,12 @@ export const SOURCES: HarvestSourceDef[] = [
     id: 'downedOakLog',
     kind: 'downedOak',
     name: 'Downed Oak',
-    description: 'Heavy structural logs that form the skeleton of true shelters. Hard to process.',
+    description:
+      'Heavy structural logs that form the skeleton of true shelters. Hard to process. ' +
+      'Lane-decided permit: spade-axe — the heavy-wood gate, route-symmetric ' +
+      '(an axe-only gate would lock out spade-route players until convergence).',
     harvestable: true,
-    permitTier: 'TBD',
+    permitTier: 'spadeAxe',
     primaryYield: 'DOWNED_OAK',
     secondaryYields: [
       {
@@ -585,9 +651,12 @@ export const SOURCES: HarvestSourceDef[] = [
     description:
       'A solid, ancient anchor in the earth. Serves as a reliable workstation ' +
       '(prototype STUMP, isWorkstation) — it is an anchor to upgrade into a ' +
-      'workstation, not a consumable harvest. Later wiring must not consume it.',
+      'workstation, not a consumable harvest. Later wiring must not consume it. ' +
+      'Claiming it needs no tool (permit hand); the amount pattern does not ' +
+      'apply to a unique anchor, and moving it still needs the trundle-tool.',
     harvestable: true,
-    permitTier: 'TBD',
+    permitTier: 'hand',
+    anchor: true,
     primaryYield: 'STUMP',
     secondaryYields: [],
     provenance: 'prototype',
@@ -602,7 +671,7 @@ export const SOURCES: HarvestSourceDef[] = [
       'Tall reeds of the marsh and creek edge — the marsh\'s harvestable fiber. ' +
       'Reeds bind like vines; the yield maps to the existing fiber item.',
     harvestable: true,
-    permitTier: 'TBD',
+    permitTier: 'hand',
     primaryYield: 'TENDER_VINES',
     secondaryYields: [],
     provenance: 'draft',
@@ -633,7 +702,7 @@ export const SOURCES: HarvestSourceDef[] = [
       'Tufty bog plants crowning a bog patch — the living face of the bog, ' +
       'distinct from the dark peat ground beneath it. Yields peat moss.',
     harvestable: true,
-    permitTier: 'TBD',
+    permitTier: 'hand',
     primaryYield: 'PEAT_MOSS',
     secondaryYields: [SPORES_25],
     provenance: 'draft',
