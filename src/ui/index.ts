@@ -30,6 +30,14 @@ export { WitchHealth } from './WitchHealth';
 export type { WitchHealthProps } from './WitchHealth';
 export { HungerIndicator } from './HungerIndicator';
 export type { HungerIndicatorProps, HungerStage } from './HungerIndicator';
+export { FireState } from './FireState';
+export type { FireStateProps, FireKind, FireStateValue } from './FireState';
+export { PlacementPreview } from './PlacementPreview';
+export type { PlacementPreviewProps } from './PlacementPreview';
+export { ShelteredIndicator } from './ShelteredIndicator';
+export type { ShelteredIndicatorProps } from './ShelteredIndicator';
+export { WornList } from './WornList';
+export type { WornListProps, WornGarment } from './WornList';
 export { CAMERA_FRAMING, CAMERA_TRANSITION } from './cameraPresentation';
 export type { CameraFraming } from './cameraPresentation';
 export {

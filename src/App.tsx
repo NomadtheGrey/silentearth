@@ -7,8 +7,10 @@
  * HudShell (needs row awaiting survival systems), the scaffold
  * readout folded into the HUD (camera, position, ground here,
  * chunks, seed), WitchHealth unwired (awaiting health system),
- * HungerIndicator mounted with no stage (awaiting hunger system
- * — see the hunger note below),
+ * HungerIndicator live on the real Systems stage (see the hunger
+ * note below), WornList + ShelteredIndicator in the HUD,
+ * FireState + PlacementPreview staged unmounted (see the MVP
+ * notes below),
  * InventoryPanel on the real PersonalInventory, CraftingMenu on
  * the real Systems recipes + canCraft + executeCraft (the helper
  * App wiring is meant to call, which also reports the owned tool),
@@ -80,22 +82,75 @@
  * - Health and ambience: WitchHealth stays unwired (no value, so it
  *   renders its awaiting note); Effects.tsx / useAtmosphere.ts stay
  *   unimported.
- * - Hunger indicator (Adam, 2026-10-26): HungerIndicator is
- *   mounted in the HUD beside WitchHealth, but with NO stage
- *   passed, so it renders its awaiting note. That is deliberate,
- *   not an omission: no hunger meter or stage shape exists in
- *   the repo at this landing's tip (grep for hunger across src/
- *   returns nothing), and Systems owns the meter. The component
- *   is props-only — stage words fed / hungry / too-hungry, no
- *   numbers, no bar, no drain logic — and the moment Systems
- *   documents its stage query/event, App passes the stage
- *   through that shape. Until then no stage is guessed, no
- *   second channel is invented, and no hunger, weather, or
- *   movement/slow code is built here. Hunger is not health:
- *   WitchHealth is untouched and the two elements stay separate.
- *   The too-hungry hint (traps, campfire cooking, nuts and
- *   berries, one line) renders only when a real too-hungry
- *   stage is passed, so it does not show while awaiting.
+ * - Hunger indicator, LIVE (Adam, 2026-10-26): the shell owns
+ *   one HungerState (starts fully fed) and ticks it in real
+ *   seconds (1 s interval, disposed on unmount). The stage
+ *   feeds three places from the one meter: HungerIndicator
+ *   (stage prop, so the awaiting note is gone and the
+ *   too-hungry hint line shows only on a real too-hungry
+ *   stage), the player's hunger-stage query (movement
+ *   slowdown), and the harvest outcome listener's hunger
+ *   query (too-hungry harvest lockout except exempt sources).
+ *   Crafts pass the meter to executeCraft, so the too-hungry
+ *   crafting lockout bites (a blocked craft reports hunger in
+ *   the craft note; the menu itself does not pre-block, since
+ *   canCraft carries no hunger gate — pressing Craft while
+ *   too-hungry yields the honest error, not a silent no-op).
+ *   No eat button is built in this round (stage wiring only,
+ *   per the brief); Systems' eat() is the follow-up surface.
+ *   Hunger is not health: WitchHealth is untouched.
+ * - FIRE UI (Adam, 2026-10-26): campfire / hearth / kiln /
+ *   bloomery are craftable TODAY through the existing
+ *   CraftingMenu (draft recipes, unstated stations), and they
+ *   land in inventory as items. What does NOT exist yet is
+ *   placement, fire state, or cooking execution — the fire
+ *   system is explicitly not yet built — so FireState (lit /
+ *   unlit / cooking chip at the object) and PlacementPreview
+ *   (shared ghost preview for fire + shelter placement) are
+ *   staged UNMOUNTED in src/ui/, verified, awaiting fire
+ *   objects and their state. No fire state is invented, no
+ *   flame mesh is duplicated (3D flames are Background's
+ *   renderer), and cooking stays open-fire in the docs (stick
+ *   or fire-buried, never pot cooking). Fire actions, when
+ *   fire objects land, ride the existing ContextMenu with
+ *   caller-supplied actions. CANDLE NOTE: the avatar /
+ *   portrait candle is untouched, and nothing here assumes
+ *   the candle lights fires — that relation is flagged open
+ *   for Adam's call.
+ * - SHELTER UI (Adam, 2026-10-26): house recipes (lean-to,
+ *   thatch hut, woven cottage, small wooden hut) are craftable
+ *   TODAY through CraftingMenu, but placement does not exist
+ *   yet — no house positions, no placed-house state — so the
+ *   sheltered indicator mounts with sheltered=false (the
+ *   weather module's current default: unsheltered until
+ *   housing supplies positions) and reads "Unsheltered". The
+ *   moment housing supplies placed positions, App passes the
+ *   real value and the "Sheltered" pill appears at home.
+ *   Placement is free (no zones/plots) when it lands, and the
+ *   staged PlacementPreview carries no plot frame. HOME
+ *   STORAGE, FLAGGED: no home inventory exists yet, so
+ *   nothing is surfaced; when one lands it rides the EXISTING
+ *   InventoryPanel pattern (items + capacity text), which
+ *   already fits — no separate storage panel is invented.
+ * - CLOTHES UI (Adam, 2026-10-26): the loom itself is
+ *   craftable TODAY through CraftingMenu (draft recipe), but
+ *   its products are TBD and NO garment items or garment
+ *   recipes exist yet — so no garment can be crafted or worn
+ *   today. WornList mounts with the factual empty set
+ *   ("Wearing: none", "Protection: none", computed from the
+ *   engine's own garment table via clothingRemaining, not a
+ *   UI-side table). BONUS DIVERGENCE, FLAGGED NOT SMOOTHED:
+ *   the brief lists hat +1, shawl +3, cloak +6, but those
+ *   numbers match no table in the repo or docs, and list no
+ *   bonus for mittens or boots; the engine's only garment
+ *   numbers are the weather module's per-element percentages
+ *   (lane-decided, flagged for pin pass: cloak rain 40% /
+ *   wind 30%, shawl cold 30%, Pointy Hat rain 15%, Mossy
+ *   Mittens cold 15%, bog boots wet 40% + bog-travel
+ *   mitigation). Until Adam reconciles the two scales, the
+ *   UI shows the engine's percentages (the protection the
+ *   player actually experiences), and the +1/+3/+6 scale is
+ *   flagged here for his call, not rendered as engine truth.
  *
  * POINTER DISCIPLINE: overlays are pointer-events-none except the
  * small interactive pieces (HUD buttons, panels, harvest buttons),
@@ -124,6 +179,8 @@ import type { CameraMode, BiomeWeights } from './types';
 import { HudShell } from './ui/HudShell';
 import { WitchHealth } from './ui/WitchHealth';
 import { HungerIndicator } from './ui/HungerIndicator';
+import { ShelteredIndicator } from './ui/ShelteredIndicator';
+import { WornList, type WornGarment } from './ui/WornList';
 import { CameraToggle } from './ui/CameraToggle';
 import { InventoryPanel } from './ui/InventoryPanel';
 import { CraftingMenu } from './ui/CraftingMenu';
@@ -143,6 +200,8 @@ import type {
 } from './ui/types';
 import { PersonalInventory } from './systems/inventory';
 import { executeCraft } from './systems/crafting-execution';
+import { HungerState, type HungerStage } from './systems/hunger';
+import { clothingRemaining } from './game/weather';
 import {
   ownedTier,
   ownedToolItem,
@@ -202,6 +261,20 @@ export default function App() {
     });
   }
   const inventory = inventoryRef.current;
+
+  // The shell owns the one hunger meter, built directly (starts
+  // fully fed). Systems owns the meter's shape; the shell owns
+  // the instance, ticks it, and hands its stage query to the
+  // engine consumers (see the boot effect). One meter, read
+  // everywhere — no second hunger value lives in this file.
+  const hungerRef = useRef<HungerState | null>(null);
+  if (hungerRef.current === null) {
+    hungerRef.current = new HungerState();
+  }
+  const hunger = hungerRef.current;
+  const [hungerStage, setHungerStage] = useState<HungerStage>(
+    hunger.stage(),
+  );
 
   const [seedInput, setSeedInput] = useState(DEFAULT_SEED);
   const [seed, setSeed] = useState(DEFAULT_SEED);
@@ -367,6 +440,9 @@ export default function App() {
     player.attach(renderer.domElement);
     rendererRef.current = renderer;
     playerRef.current = player;
+    // Hunger wiring (see the header): the engine reads the stage
+    // through this query — movement slowdown + harvest lockout.
+    player.setHungerStageQuery(() => hunger.stage());
     setPosition({ x: player.x, z: player.z });
     setBiomeText(formatWeights(gen.weightsAt(player.x, player.z)));
     bus.emit('world:seedSet', { seed: gen.seed });
@@ -400,7 +476,15 @@ export default function App() {
       gen: () => genRef.current,
       inventory,
       getToolTier: () => ownedTier(inventory),
+      getHungerStage: () => hunger.stage(),
     });
+    // Hunger clock: drain in real seconds and refresh the HUD
+    // stage. setHungerStage with an unchanged stage bails out
+    // in React, so steady-state ticks cost no re-render.
+    const hungerTimer = window.setInterval(() => {
+      hunger.tick(1);
+      setHungerStage(hunger.stage());
+    }, 1000);
     const offCompleted = bus.on('harvest:completed', (p) => {
       refreshInventory();
       setProgressItems((current) =>
@@ -471,6 +555,7 @@ export default function App() {
 
     return () => {
       window.clearTimeout(timer);
+      window.clearInterval(hungerTimer);
       window.clearTimeout(transitionTimerRef.current);
       for (const timeout of feedbackTimersRef.current.values()) {
         window.clearTimeout(timeout);
@@ -557,7 +642,7 @@ export default function App() {
     if (!recipe) return;
     const ownedBefore = ownedToolItem(inventory);
     try {
-      const result = executeCraft(recipe, inventory, station);
+      const result = executeCraft(recipe, inventory, station, hunger);
       setOwnedItem(result.owned);
       setCraftNote(
         `Crafted ${result.output.item} × ${result.output.quantity}.` +
@@ -590,6 +675,19 @@ export default function App() {
     // here pre-judges removability or previews a yield.
     bus.emit('harvest:requested', removeRequestFor(target));
   };
+
+  // Wardrobe + shelter hooks (see the header): no wardrobe
+  // system and no housing state exist yet, so the worn set is
+  // empty and sheltered is false — the engine's current truth,
+  // not guesses. The protection note comes from the engine's
+  // own garment table via clothingRemaining.
+  const wornGarments: WornGarment[] = [];
+  const sheltered = false;
+  const wornRemaining = clothingRemaining(wornGarments);
+  const protectionNote =
+    wornGarments.length === 0
+      ? 'Protection: none'
+      : `Protection: rain ${Math.round((1 - wornRemaining.rain) * 100)}% · wind ${Math.round((1 - wornRemaining.wind) * 100)}% · cold ${Math.round((1 - wornRemaining.cold) * 100)}% · wet ${Math.round((1 - wornRemaining.wet) * 100)}%`;
 
   return (
     <div className="relative w-full h-screen bg-[#121612] overflow-hidden font-mono text-[#f0ead6]">
@@ -672,7 +770,13 @@ export default function App() {
             <WitchHealth />
           </div>
           <div className="mt-2">
-            <HungerIndicator />
+            <HungerIndicator stage={hungerStage} />
+          </div>
+          <div className="mt-2">
+            <WornList worn={wornGarments} protectionNote={protectionNote} />
+          </div>
+          <div className="mt-2">
+            <ShelteredIndicator sheltered={sheltered} />
           </div>
         </div>
       </HudShell>
