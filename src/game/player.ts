@@ -12,6 +12,28 @@
  * Position changes flow out through the event bus (player:moved, throttled
  * to ~10 Hz); nothing reads this controller's fields directly except the
  * renderer, which positions the cameras and the witch mesh each frame.
+ *
+ * TOUCH INPUT (engine half, Adam 2026-10-26 — phone playtest: WASD +
+ * pointer-lock mouse look left the live build unplayable on a phone).
+ * The engine exposes input METHODS; DOM gesture handling lives in
+ * UI's TouchControls (pointer capture, dead zone, tap-vs-drag
+ * disambiguation) and calls these. No DOM touch listeners are added
+ * here, so dispose() is unchanged and desktop behavior is unchanged
+ * by construction when no touch input is present:
+ * - setThumbstick(x, z): left-stick vector merged into the SAME
+ *   movement path as the keys (same speeds, same terrain/hunger
+ *   slowdowns). Walk only — Silent Earth has no sprint, and a
+ *   far push is still just full walk, never a sprint flag.
+ * - addLookDelta(dx, dy): drag-look that rotates the camera
+ *   WITHOUT pointer lock (a phone has none). It shares the mouse
+ *   look math and emits 'player:looked' on the same throttle, so
+ *   the proximity tracker recomputes look-down/ground state even
+ *   when she stands still — without this, FP ground targets would
+ *   never update on a phone (the BioForge audit catch, same shape).
+ * - pressUse(press?): tap / USE press that fires the EXISTING
+ *   'harvest:requested' bus event — no new harvest logic, no new
+ *   harvest rules; the outcome listener re-validates range +
+ *   permit at outcome time, so a stale press fails safely.
  */
 
 import { bus } from './events';
@@ -23,6 +45,28 @@ import {
   type BogBootsQuery,
   type TerrainSpeedQuery,
 } from './movement';
+
+/** Mouse-look sensitivity (radians per pixel), shared by mouse + touch. */
+const LOOK_SENSITIVITY = 0.0025;
+
+/**
+ * A harvest press for pressUse: exactly the 'harvest:requested' bus
+ * payload minus `action` (omitted = 'harvest'). The shell builds it
+ * with UI's harvestRequestFor (which maps a displayed target's id to
+ * targetId) or wires a query returning one; the engine never imports
+ * either HarvestTarget shape (game-side x/z vs UI-side worldX/worldZ)
+ * and stays coupled only to the bus contract.
+ */
+export interface UsePress {
+  targetId: string;
+  sourceId: string;
+  kind: 'scatter' | 'ground';
+  x: number;
+  z: number;
+}
+
+/** Shell-wired query: the nearest in-range harvest press, or null. */
+export type UseTargetQuery = () => UsePress | null;
 
 export class PlayerController {
   x = 0;
@@ -80,6 +124,57 @@ export class PlayerController {
   private lastLookEmit = 0;
   private disposed = false;
 
+  /**
+   * Thumbstick vector (touch half): x = right, z = back, matching
+   * the keys convention (W = fz -1, i.e. push UP = (0, -1)).
+   * Magnitude is clamped to 1 on set; the dead zone lives in UI's
+   * TouchControls (gesture layer), not here.
+   */
+  private stickX = 0;
+  private stickZ = 0;
+
+  /** Touch half: set the current thumbstick vector (UI's TouchControls). */
+  setThumbstick(x: number, z: number): void {
+    const len = Math.hypot(x, z);
+    if (len > 1) {
+      x /= len;
+      z /= len;
+    }
+    this.stickX = x;
+    this.stickZ = z;
+  }
+
+  /** Shell-wired nearest-target query for zero-arg pressUse (see below). */
+  private useTargetQuery: UseTargetQuery | null = null;
+
+  /** Wire the shell's nearest in-range press query (shell-owned wiring). */
+  setUseTargetQuery(query: UseTargetQuery): void {
+    this.useTargetQuery = query;
+  }
+
+  /**
+   * Touch half: tap / USE press. Fires the EXISTING
+   * 'harvest:requested' event for the given press, or for the wired
+   * query's press when none is passed. Nearest-target SELECTION
+   * stays with the shell/UI (it owns the proximity target set);
+   * the engine owns press → bus emission only. Returns true when
+   * a press was emitted, false when there was no target (nothing
+   * is emitted then — never a malformed request). 'remove' stays
+   * a separate UI affordance; a tap always means 'harvest'.
+   */
+  pressUse(press?: UsePress): boolean {
+    const resolved = press ?? this.useTargetQuery?.() ?? null;
+    if (!resolved) return false;
+    bus.emit('harvest:requested', {
+      targetId: resolved.targetId,
+      sourceId: resolved.sourceId,
+      kind: resolved.kind,
+      x: resolved.x,
+      z: resolved.z,
+    });
+    return true;
+  }
+
   constructor(spawn: { x: number; z: number }) {
     this.x = spawn.x;
     this.z = spawn.z;
@@ -122,19 +217,39 @@ export class PlayerController {
     // Mouse look only while the pointer is captured in first-person.
     if (this.mode !== 'first') return;
     if (document.pointerLockElement !== this.canvas) return;
-    this.yaw -= e.movementX * 0.0025;
+    this.applyLook(e.movementX, e.movementY);
+  };
+
+  /**
+   * Shared look math (mouse + touch): same sensitivity, same pitch
+   * clamp, same throttled 'player:looked' emission. Look-down
+   * gating needs the emission even when she stands still: throttle
+   * to ~10 Hz like 'player:moved' so look spam stays off the bus.
+   */
+  private applyLook(dx: number, dy: number): void {
+    this.yaw -= dx * LOOK_SENSITIVITY;
     this.pitch = Math.max(
       -1.45,
-      Math.min(1.45, this.pitch - e.movementY * 0.0025),
+      Math.min(1.45, this.pitch - dy * LOOK_SENSITIVITY),
     );
-    // Look-down gating needs this even when she stands still: throttle
-    // to ~10 Hz like 'player:moved' so mouse-move spam stays off the bus.
     const now = performance.now();
     if (now - this.lastLookEmit >= 100) {
       this.lastLookEmit = now;
       bus.emit('player:looked', { pitch: this.pitch, mode: this.mode });
     }
-  };
+  }
+
+  /**
+   * Touch half: drag-look deltas (pixels, same units as mouse
+   * movement). Unlike mouse look, there is NO mode gate and NO
+   * pointer-lock gate — a phone has no pointer lock, and gating
+   * here would make touch look dead. The pitch state stays
+   * consistent across mode switches; third-person ground gating
+   * ignores pitch by its own rule, so applying it there is harmless.
+   */
+  addLookDelta(dx: number, dy: number): void {
+    this.applyLook(dx, dy);
+  }
 
   private onCanvasClick = (): void => {
     // First-person mouse look needs pointer lock; a click is the gesture
@@ -161,8 +276,16 @@ export class PlayerController {
 
   /** Advance movement by dt seconds. Called once per frame by the renderer. */
   update(dt: number): void {
-    let fx = 0;
-    let fz = 0;
+    // One movement path for keys + thumbstick: the stick vector is
+    // the base, keys add on top, and the combined vector is
+    // direction-normalized with magnitude kept as the speed factor.
+    // Desktop is unchanged by construction: keys-only vectors have
+    // magnitude 1 (single key) or sqrt(2) (diagonal, clamped to 1),
+    // exactly as the old normalize-then-move. A partial stick push
+    // walks proportionally slower (analog magnitude < 1) — still
+    // walk only, never sprint.
+    let fx = this.stickX;
+    let fz = this.stickZ;
     if (this.keys.has('w')) fz -= 1;
     if (this.keys.has('s')) fz += 1;
     if (this.keys.has('a')) fx -= 1;
@@ -172,6 +295,7 @@ export class PlayerController {
     const len = Math.hypot(fx, fz);
     fx /= len;
     fz /= len;
+    const magnitude = Math.min(1, len);
 
     // Speed modifiers compose as separate multipliers (Adam,
     // 2026-10-26 — bog boots brief): terrain slow × hunger slow,
@@ -189,7 +313,7 @@ export class PlayerController {
     const stage = this.hungerStageQuery?.() ?? null;
     const hunger =
       stage === 'hungry' || stage === 'too-hungry' ? HUNGRY_SPEED_MULTIPLIER : 1;
-    const speed = PLAYER_SPEED * terrain * hunger;
+    const speed = PLAYER_SPEED * terrain * hunger * magnitude;
 
     if (this.mode === 'first') {
       // Movement relative to view yaw (yaw = 0 faces -z). Rotate the local
