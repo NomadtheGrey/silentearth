@@ -41,6 +41,19 @@ export { WitchMotion } from './WitchMotion';
 export type { WitchMotionProps } from './WitchMotion';
 export { CameraPerspectiveCard } from './CameraPerspectiveCard';
 export type { CameraPerspectiveCardProps } from './CameraPerspectiveCard';
+export {
+  HARVEST_REQUEST_EVENT,
+  harvestRequestFor,
+} from './proximityHarvest';
+export type {
+  HarvestTargetKind,
+  HarvestTarget,
+  HarvestRequest,
+} from './proximityHarvest';
+export { HarvestButton } from './HarvestButton';
+export type { HarvestButtonProps } from './HarvestButton';
+export { ProximityHarvestButtons } from './ProximityHarvestButtons';
+export type { ProximityHarvestButtonsProps } from './ProximityHarvestButtons';
 export { HudShell } from './HudShell';
 export type { HudShellProps } from './HudShell';
 export { InventoryPanel } from './InventoryPanel';
