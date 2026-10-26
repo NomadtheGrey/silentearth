@@ -68,15 +68,14 @@
  * exist (see hunger.ts), not exceptions built here.
  *
  * INVENTORY SHAPE: HarvestInventory is structural — PersonalInventory
- * satisfies it (free() + add()). The listener checks the TOTAL
- * non-gear quantity against free() BEFORE adding anything
- * (all-or-nothing, mirroring crafting's simulate-first): if it does
- * not fit, it emits 'harvest:failed' with reason 'inventory-full'
- * and grants nothing, shrinks/removes nothing, and does not consume
- * multi-step progress. Harvest yields are never carrying gear
+ * satisfies it (free() + add() + addPartial()). The listener grants
+ * PARTIALLY (harvest overflow, Adam 2026-10-26, superseding the earlier
+ * all-or-nothing rule): per merged yield, what fits goes into
+ * inventory and the remainder drops as a ground pile at the target's
+ * spot (pileState.ts). Capacity never fails a validated press. Harvest yields are never carrying gear
  * (apron/basket/trundle are crafted, not harvested), so the free()
  * check is exact for them; if a future harvestable ever yielded
- * gear, the check would be conservative (it might fail when it
+ * gear, the check would be conservative (it might pile when it
  * would fit), never over-granting.
  *
  * OUTCOME ORDER (every press, in order — a failure at any step stops
@@ -123,10 +122,17 @@
  *     bonus : 0); each secondary drop rolls its own chance for +1;
  *     tool-gated yields (clay on silt, Adam-pinned) pay their table
  *     when the tool meets requiresTool. Same-item quantities merge.
- *  6. Capacity: total vs inventory.free(). Fits -> add each yield,
- *     then the after-harvest step (below), then emit
- *     'harvest:completed' with merged yields + chunk coords +
- *     action 'harvest'.
+ *  6. Capacity — PARTIAL GRANT + PILES (harvest overflow, Adam
+ *     2026-10-26, supersedes the earlier all-or-nothing rule): the
+ *     harvest always completes once validation passes. What fits
+ *     goes into inventory (Systems' addPartial() when offered —
+ *     normalized item + granted + remainder — else sequential
+ *     free()/add()); what doesn't fit drops as ground piles at
+ *     the target's spot via pileState (same item + same spot
+ *     merges). 'harvest:completed' carries yields = granted, plus
+ *     dropped when non-empty. No capacity failure exists anymore,
+ *     so the after-harvest step (below) always runs on a validated
+ *     press.
  *
  * AFTER HARVEST (Adam, 2026-10-26, PINNED — supersedes the earlier
  * vanish model):
@@ -184,6 +190,7 @@ import {
 import type { WorldGen } from './worldgen';
 import { TOO_HUNGRY_STAGE, type HungerStageQuery } from './hunger';
 import { loomState } from './loomState';
+import { pileState } from './pileState';
 
 /** Re-exported so existing importers keep one harvest entry point. */
 export { harvestState };
@@ -198,10 +205,22 @@ export interface HarvestYield {
  * The inventory surface the outcome listener needs. Structural, so
  * Systems' PersonalInventory satisfies it without this file importing
  * Systems code. free() is remaining contents capacity; add() grants.
+ * addPartial() is Systems' partial grant (d76cb51): when present
+ * the listener prefers it — it returns the NORMALIZED item plus
+ * granted + remainder, so piles carry Systems' spelling (the
+ * single normalization truth) instead of the yield spelling. When
+ * absent (tests, older callers) the listener falls back to
+ * free()/add() and piles keep the yield spelling, which Systems'
+ * save/pickup boundaries re-normalize on read.
  */
 export interface HarvestInventory {
   free(): number;
   add(item: string, quantity: number): void;
+  addPartial?: (item: string, quantity: number) => {
+    item: string;
+    granted: number;
+    remainder: number;
+  };
 }
 
 /** Owned-tier query shape (see header: owned, never equipped). */
@@ -373,6 +392,56 @@ export function createHarvestOutcomeListener(
     into.set(item, (into.get(item) ?? 0) + qty);
   };
 
+  /**
+   * Partial grant (harvest overflow, Adam 2026-10-26): per merged
+   * yield, grant what fits and drop the remainder as a ground pile
+   * at (dropX, dropZ) via pileState. Preferred path: Systems'
+   * addPartial() when the inventory offers it — one call returns
+   * the normalized item + granted + remainder (conservation:
+   * granted + remainder === quantity, always), so the pile's item
+   * spelling matches inventory stacks and save documents. Fallback
+   * (no addPartial): sequential free()/add() with the yield
+   * spelling; earlier items consume room before later ones. A
+   * grant never fails here — free()-checked adds and addPartial
+   * both cap at capacity instead of throwing — so callers run
+   * their after-harvest step unconditionally after this.
+   * 'harvest:completed' yields and dropped both carry the pile's
+   * spelling (normalized on the addPartial path).
+   */
+  const grantOrPile = (
+    merged: { item: string; quantity: number }[],
+    dropX: number,
+    dropZ: number,
+  ): {
+    granted: { item: string; quantity: number }[];
+    dropped: { item: string; quantity: number }[];
+  } => {
+    const granted: { item: string; quantity: number }[] = [];
+    const dropped: { item: string; quantity: number }[] = [];
+    for (const y of merged) {
+      if (deps.inventory.addPartial) {
+        const g = deps.inventory.addPartial(y.item, y.quantity);
+        if (g.granted > 0) granted.push({ item: g.item, quantity: g.granted });
+        if (g.remainder > 0) {
+          pileState.drop(g.item, g.remainder, dropX, dropZ);
+          dropped.push({ item: g.item, quantity: g.remainder });
+        }
+        continue;
+      }
+      const take = Math.min(y.quantity, deps.inventory.free());
+      if (take > 0) {
+        deps.inventory.add(y.item, take);
+        granted.push({ item: y.item, quantity: take });
+      }
+      const rest = y.quantity - take;
+      if (rest > 0) {
+        pileState.drop(y.item, rest, dropX, dropZ);
+        dropped.push({ item: y.item, quantity: rest });
+      }
+    }
+    return { granted, dropped };
+  };
+
   const unsubRequested = bus.on('harvest:requested', (req) => {
     const gen = getGen();
     const tool = getToolTier();
@@ -411,12 +480,7 @@ export function createHarvestOutcomeListener(
         outcome.base + (rng() < outcome.bonusChance ? outcome.bonus : 0),
       );
       const merged = [...yields.entries()].map(([item, quantity]) => ({ item, quantity }));
-      const total = merged.reduce((sum, y) => sum + y.quantity, 0);
-      if (total > deps.inventory.free()) {
-        fail(req, 'inventory-full', merged);
-        return;
-      }
-      for (const y of merged) deps.inventory.add(y.item, y.quantity);
+      const { granted, dropped } = grantOrPile(merged, pos.x, pos.z);
       bus.emit('harvest:completed', {
         targetId: req.targetId,
         sourceId: ground.id,
@@ -425,8 +489,9 @@ export function createHarvestOutcomeListener(
         z: pos.z,
         cx: Math.floor(pos.x / CHUNK_SIZE),
         cz: Math.floor(pos.z / CHUNK_SIZE),
-        yields: merged,
+        yields: granted,
         action: 'harvest',
+        ...(dropped.length > 0 ? { dropped } : {}),
       });
       return;
     }
@@ -474,11 +539,11 @@ export function createHarvestOutcomeListener(
       );
       logYields.delete('');
       const logMerged = [...logYields.entries()].map(([item, quantity]) => ({ item, quantity }));
-      if (logMerged.reduce((sum, y) => sum + y.quantity, 0) > deps.inventory.free()) {
-        fail(req, 'inventory-full', logMerged);
-        return;
-      }
-      for (const y of logMerged) deps.inventory.add(y.item, y.quantity);
+      const { granted: logGranted, dropped: logDropped } = grantOrPile(
+        logMerged,
+        spawned.x,
+        spawned.z,
+      );
       state.takeSpawnedLog(req.targetId, nowMs, gen.seed);
       bus.emit('harvest:completed', {
         targetId: req.targetId,
@@ -488,8 +553,9 @@ export function createHarvestOutcomeListener(
         z: spawned.z,
         cx: spawned.cx,
         cz: spawned.cz,
-        yields: logMerged,
+        yields: logGranted,
         action: 'harvest',
+        ...(logDropped.length > 0 ? { dropped: logDropped } : {}),
       });
       return;
     }
@@ -552,11 +618,11 @@ export function createHarvestOutcomeListener(
       }
       treeYields.delete('');
       const treeMerged = [...treeYields.entries()].map(([item, quantity]) => ({ item, quantity }));
-      if (treeMerged.reduce((sum, y) => sum + y.quantity, 0) > deps.inventory.free()) {
-        fail(req, 'inventory-full', treeMerged);
-        return;
-      }
-      for (const y of treeMerged) deps.inventory.add(y.item, y.quantity);
+      const { granted: treeGranted, dropped: treeDropped } = grantOrPile(
+        treeMerged,
+        sapling.x,
+        sapling.z,
+      );
       if (action === 'remove') {
         state.removeSpawnedTree(req.targetId);
         state.markCleared(sapling.x, sapling.z);
@@ -572,8 +638,9 @@ export function createHarvestOutcomeListener(
         z: sapling.z,
         cx: sapling.cx,
         cz: sapling.cz,
-        yields: treeMerged,
+        yields: treeGranted,
         action,
+        ...(treeDropped.length > 0 ? { dropped: treeDropped } : {}),
       });
       return;
     }
@@ -649,11 +716,11 @@ export function createHarvestOutcomeListener(
       }
       removeYields.delete('');
       const removeMerged = [...removeYields.entries()].map(([item, quantity]) => ({ item, quantity }));
-      if (removeMerged.reduce((sum, y) => sum + y.quantity, 0) > deps.inventory.free()) {
-        fail(req, 'inventory-full', removeMerged);
-        return;
-      }
-      for (const y of removeMerged) deps.inventory.add(y.item, y.quantity);
+      const { granted: removeGranted, dropped: removeDropped } = grantOrPile(
+        removeMerged,
+        req.x,
+        req.z,
+      );
       state.remove(req.targetId);
       // Intentional clearing marks the ground: no saplings return
       // within CLEARED_SPOT_RADIUS — the house-plot case (Adam,
@@ -667,8 +734,9 @@ export function createHarvestOutcomeListener(
         z: req.z,
         cx: Math.floor(req.x / CHUNK_SIZE),
         cz: Math.floor(req.z / CHUNK_SIZE),
-        yields: removeMerged,
+        yields: removeGranted,
         action: 'remove',
+        ...(removeDropped.length > 0 ? { dropped: removeDropped } : {}),
       });
       return;
     }
@@ -689,9 +757,10 @@ export function createHarvestOutcomeListener(
         });
         return;
       }
-      // Progress reaches 1: fall through to grant; cleared on success
-      // below, and left at 1 on capacity failure so the next press
-      // retries the grant without redoing the steps.
+      // Progress reaches 1: fall through to grant. The grant
+      // always succeeds (overflow piles — see step 6), so the
+      // after-harvest step below clears progress via shrink /
+      // remove / fell, and no capacity-failure retry path remains.
       state.setProgress(req.targetId, 1);
     }
 
@@ -723,12 +792,7 @@ export function createHarvestOutcomeListener(
     // merged '' would corrupt the inventory, so never emit it).
     yields.delete('');
     const merged = [...yields.entries()].map(([item, quantity]) => ({ item, quantity }));
-    const total = merged.reduce((sum, y) => sum + y.quantity, 0);
-    if (total > deps.inventory.free()) {
-      fail(req, 'inventory-full', merged);
-      return;
-    }
-    for (const y of merged) deps.inventory.add(y.item, y.quantity);
+    const { granted, dropped } = grantOrPile(merged, req.x, req.z);
     if (source.fellOnHarvest) {
       // TREES FELL (Adam, 2026-10-26, PINNED): the tree becomes a
       // stump at its spot, and a sapling is planted in a nearby
@@ -764,8 +828,9 @@ export function createHarvestOutcomeListener(
       z: req.z,
       cx: Math.floor(req.x / CHUNK_SIZE),
       cz: Math.floor(req.z / CHUNK_SIZE),
-      yields: merged,
+      yields: granted,
       action: 'harvest',
+      ...(dropped.length > 0 ? { dropped } : {}),
     });
   });
 

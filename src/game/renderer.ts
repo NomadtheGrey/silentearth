@@ -41,6 +41,7 @@ import { fireState } from './fireState';
 import { FIRE_DEFS } from './fire';
 import { shelterState, HOUSE_DEFS } from './shelter';
 import { loomState } from './loomState';
+import { pileState } from './pileState';
 import { createBiomeTexture, TEXTURE_REPEAT } from './terrain';
 import {
   CHUNK_SIZE,
@@ -140,6 +141,13 @@ export class WorldRenderer {
   private placedGroup: THREE.Group | null = null;
   /** Unsubscribes for the placed-group rebuild events (below). */
   private unsubPlaced: (() => void)[] = [];
+  /**
+   * Dropped-pile meshes (harvest overflow, Adam 2026-10-26): one
+   * small heap + marker flag per pile, NOT chunk-filtered — piles
+   * are few, and a pile must stay visible wherever it lies. Shares
+   * the placed-group unsubscribe list (same dispose path).
+   */
+  private pileGroup: THREE.Group | null = null;
   /** Accumulated time for flame flicker (loop-driven). */
   private flameTime = 0;
   private worldTickAcc = 0;
@@ -196,6 +204,15 @@ export class WorldRenderer {
       bus.on('loom:placed', rebuild),
     );
     this.rebuildPlacedGroup();
+    // Dropped piles rebuild on their own events (a pile dropped
+    // at her feet must appear without a chunk reload).
+    const rebuildPiles = (): void => this.rebuildPileGroup();
+    this.unsubPlaced.push(
+      bus.on('pile:dropped', rebuildPiles),
+      bus.on('pile:changed', rebuildPiles),
+      bus.on('pile:removed', rebuildPiles),
+    );
+    this.rebuildPileGroup();
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.setSize(container.clientWidth, container.clientHeight);
@@ -273,6 +290,9 @@ export class WorldRenderer {
     shelterState.clear();
     loomState.clear();
     this.rebuildPlacedGroup();
+    // Dropped piles belong to the old world's map too.
+    pileState.clear();
+    this.rebuildPileGroup();
     this.gen = wrapGenWithState(gen);
     this.proximity.setGen(this.gen);
     this.disposeGroundTextures();
@@ -675,6 +695,50 @@ export class WorldRenderer {
     }
     this.scene.add(group);
     this.placedGroup = group;
+  }
+
+  /**
+   * Rebuild the dropped-pile meshes (harvest overflow, Adam
+   * 2026-10-26): one heap + marker flag per pile, phone-cheap
+   * (3 meshes per pile, piles are few). The heap is a flattened
+   * burlap mound; the flag is a small warm-yellow pennant on a
+   * stick so a pile reads at a glance against marsh ground — the
+   * quantity lives on the proximity channel (piles:inRange), not
+   * in the mesh, so size stays constant and no per-pile scaling
+   * logic can drift from state. NOT chunk-filtered, like the
+   * placed group: a pile dropped anywhere must render.
+   */
+  private rebuildPileGroup(): void {
+    if (this.pileGroup) {
+      this.scene.remove(this.pileGroup);
+      this.pileGroup.traverse((obj) => {
+        if (obj instanceof THREE.Mesh) {
+          obj.geometry.dispose();
+          const mat = obj.material;
+          if (Array.isArray(mat)) mat.forEach((m) => m.dispose());
+          else mat.dispose();
+        }
+      });
+      this.pileGroup = null;
+    }
+    const group = new THREE.Group();
+    for (const pile of pileState.snapshot()) {
+      const pg = new THREE.Group();
+      const heap = new THREE.Mesh(new THREE.SphereGeometry(0.35, 10, 8), lambert(0x8a7a5a));
+      heap.scale.y = 0.45;
+      heap.position.y = 0.16;
+      pg.add(heap);
+      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.9, 5), lambert(0x6b4a2f));
+      pole.position.set(0.25, 0.45, 0);
+      pg.add(pole);
+      const flag = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.18, 0.02), lambert(0xd8b040));
+      flag.position.set(0.39, 0.82, 0);
+      pg.add(flag);
+      pg.position.set(pile.x, 0, pile.z);
+      group.add(pg);
+    }
+    this.scene.add(group);
+    this.pileGroup = group;
   }
 
   /** Rebuild the spawned-object meshes for currently loaded chunks:
