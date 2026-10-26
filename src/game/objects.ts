@@ -11,10 +11,14 @@
  * lanes, and nothing here may be read as that system.
  *
  * YIELD RULES (from the task brief, not invented here):
- * - Yields use ONLY the existing item vocabulary in
- *   src/data/world_data.json (SNAP_WOOD, TENDER_VINES, PEAT_MOSS,
- *   RIVER_SLUDGE, RIVER_STONE, BONE, SALT_CRYSTAL, DOWNED_OAK, SPORES,
- *   DRY_KINDLING, STUMP). No new items are introduced.
+ * - Yields use the item vocabulary in src/data/world_data.json
+ *   (SNAP_WOOD, TENDER_VINES, PEAT_MOSS, RIVER_SLUDGE, RIVER_STONE, BONE,
+ *   SALT_CRYSTAL, DOWNED_OAK, SPORES, DRY_KINDLING, STUMP) plus CLAY —
+ *   the one exception, and it is Adam's, not this file's: clay is the
+ *   pinned new item reserved for pottery/bricks (2026-10-25; Systems
+ *   recipes already spend it), and per Adam's 2026-10-26 ruling it is
+ *   now a normal harvest yield of silt ground (see below). No other
+ *   new items are introduced.
  * - Secondary drops and multi-step harvest shapes marked `prototype` are
  *   carried verbatim from world_data.json (its harvestAction /
  *   harvestStep / secondaryDrops), NOT pinned by Adam and NOT re-balanced.
@@ -22,8 +26,15 @@
  *   had to choose so every source yields something sensible; they are
  *   draft, not prototype-carried and not pinned, and Adam's pin pass can
  *   change them without touching any system.
- * - Clay is deliberately ABSENT: clay is tool-gated digging from silt
- *   ground (per the 2026-10-25 rulings), never a harvest yield.
+ * - CLAY HARVEST RULE (Adam, 2026-10-26 — SUPERSEDES the 2026-10-25
+ *   dig-verb distinction): clay is harvested LIKE NORMAL, through the
+ *   normal harvest interaction on silt ground (creek beds, damp
+ *   hollows). No fuss over different verbs, no separate dig action.
+ *   It is gated and scaled by tool, following the tool ladder's "more
+ *   of whatever it does" shape: trowel → a little clay, better tool →
+ *   more clay. Quantities are TBD — Adam pinned "a little" vs "more"
+ *   only, so this file carries the tier SCALING SHAPE and no numbers.
+ *   Clay stays out of every OTHER source; only silt ground yields it.
  * - No quantities are invented: the prototype carries no per-harvest
  *   amounts, so sources carry item ids + secondary chances only. Amounts
  *   belong to the later harvest system / balancing pass, not here.
@@ -31,7 +42,7 @@
 
 import type { BiomeId, ScatterKind } from '../types';
 
-/** Item ids from src/data/world_data.json (the only allowed yields). */
+/** Item ids: src/data/world_data.json, plus CLAY (see header note). */
 export type ItemId =
   | 'SNAP_WOOD'
   | 'TENDER_VINES'
@@ -43,7 +54,56 @@ export type ItemId =
   | 'DOWNED_OAK'
   | 'SPORES'
   | 'DRY_KINDLING'
-  | 'STUMP';
+  | 'STUMP'
+  | 'CLAY';
+
+/**
+ * Tool ladder stages for tool-gated yields (the garden trowel and its
+ * evolutions, per the 2026-10-25 tool ladder). Spade and axe-trowel are
+ * parallel middle routes, not sequential stages — see the tier groups.
+ */
+export type ToolTier =
+  | 'trowel'
+  | 'sharpTrowel'
+  | 'spade'
+  | 'axeTrowel'
+  | 'spadeAxe'
+  | 'trundleTool';
+
+/**
+ * Clay tool-tier groups, lowest to highest. Each group is one rank:
+ * spade and axe-trowel share a rank because they are alternative routes
+ * to the same convergence (spade-axe), not one better than the other.
+ * The harvest system scales the clay amount upward by rank; the
+ * per-rank amounts are TBD for Adam's pin pass and are NOT in this file.
+ */
+export const CLAY_TOOL_TIER_GROUPS: ToolTier[][] = [
+  ['trowel'],
+  ['sharpTrowel'],
+  ['spade', 'axeTrowel'],
+  ['spadeAxe'],
+  ['trundleTool'],
+];
+
+/** Rank of a tool in the clay ladder, or -1 when she has no tool at all
+ *  (no tool = no clay yield). Pure ordering data, not a harvest system. */
+export function toolTierRank(tier: ToolTier | null): number {
+  if (!tier) return -1;
+  return CLAY_TOOL_TIER_GROUPS.findIndex((group) => group.includes(tier));
+}
+
+/**
+ * A tool-gated yield: present only when she holds at least the required
+ * tool, and scaled upward along the tier groups. `quantityPerTier` is
+ * deliberately the string 'TBD', not a number — inventing amounts here
+ * would pre-empt Adam's pin pass.
+ */
+export interface ToolGatedYield {
+  item: ItemId;
+  requiresTool: ToolTier;
+  tierGroups: ToolTier[][];
+  quantityPerTier: 'TBD';
+}
 
 /** A prototype-carried secondary drop: item + chance + prototype message. */
 export interface SecondaryYield {
@@ -110,6 +170,9 @@ export interface HarvestSourceDef {
   primaryYield?: ItemId;
   /** Prototype-carried secondary yields (empty when the prototype had none). */
   secondaryYields: SecondaryYield[];
+  /** Tool-gated yields (clay on silt ground only, per the 2026-10-26
+   *  ruling). Absent on every other source. */
+  toolGatedYields?: ToolGatedYield[];
   /** Prototype-carried multi-step shape, when the prototype had one. */
   multiStep?: MultiStep;
   /** 'prototype' = carried verbatim from world_data.json; 'draft' = new
@@ -254,7 +317,12 @@ export const SOURCES: HarvestSourceDef[] = [
     id: 'siltBed',
     kind: 'riverSilt',
     name: 'Silt Bed',
-    description: 'Fine mineral particles gathered from the creek bed. Useful as a binder.',
+    description:
+      'Fine mineral particles gathered from the creek bed. Useful as a binder. ' +
+      'Silt ground also yields clay through the NORMAL harvest interaction ' +
+      '(Adam, 2026-10-26 — no separate dig verb): have the trowel, get a ' +
+      'little clay; better tool, more clay, up the tool ladder. Per-tier ' +
+      'amounts TBD. Silt ground is the ONLY source that yields clay.',
     harvestable: true,
     primaryYield: 'RIVER_SLUDGE',
     secondaryYields: [
@@ -262,6 +330,14 @@ export const SOURCES: HarvestSourceDef[] = [
         item: 'BONE',
         chance: 0.15,
         message: 'Your fingers brush against a calcified fragment in the silt.',
+      },
+    ],
+    toolGatedYields: [
+      {
+        item: 'CLAY',
+        requiresTool: 'trowel',
+        tierGroups: CLAY_TOOL_TIER_GROUPS,
+        quantityPerTier: 'TBD',
       },
     ],
     provenance: 'prototype',
