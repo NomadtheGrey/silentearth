@@ -16,7 +16,7 @@
 import type { ReactNode } from 'react';
 
 /** Camera perspectives. Values match the redesign's switchable camera. */
-export type CameraPerspective = 'first' | 'third';
+export type CameraPerspective = 'first' | 'third' | 'behind';
 
 /**
  * One slot in the HUD needs row.

@@ -13,8 +13,8 @@
  * The table stays in the JSON file until a later cleanup landing removes it.
  */
 
-/** Player camera: first-person, or third-person overhead follow. */
-export type CameraMode = 'first' | 'third';
+/** Player camera: first-person, third-person overhead follow, or behind-the-witch follow. */
+export type CameraMode = 'first' | 'third' | 'behind';
 
 /** Biome ids (DRAFT set, 2026-10-25 — names await Adam's pin pass;
  *  meadow + forest added 2026-10-26, Adam's existence/placement/pretty

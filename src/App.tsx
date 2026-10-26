@@ -344,6 +344,31 @@
  *   mouse sensitivity untouched, pitch clamp still applies):
  *   40 px = 17°, 60 px = 26°, max-right 90 px = 39°.
  *   Lane-decided starting value for Adam's pin pass.
+ * - BEHIND CAMERA, LIVE (Adam, 2026-10-26): a third player-chosen
+ *   perspective — over-shoulder follow. The camera sits 3.5 m
+ *   behind her facing at 2.4 m height, looking at a point 4 m
+ *   ahead at 1.2 m (BEHIND_* tunables in constants, starting
+ *   values for Adam's pin pass): her back in frame low, the
+ *   view ahead dominating — not the +16 m overhead, not ground
+ *   level. V/C cycles first → third → behind; the CameraToggle
+ *   picks directly (the shell steps the engine toggle forward
+ *   to the picked mode, since one toggle is one step). Facing
+ *   rule (behind view only): movement is yaw-relative, which
+ *   is facing-relative because look-drag syncs facing to view
+ *   direction in behind mode (player.ts); the camera follows
+ *   behind facing, so standing-still looks turn the view.
+ *   Third-person overhead stays world-aligned; its ground
+ *   fallback rule (ground only when no scatter in range)
+ *   covers behind too via the tracker's non-first branch.
+ *   Witch mesh visible in behind (and third), hidden in first.
+ *   Desktop mouse-look stays first-person-only (pointer-lock
+ *   gate untouched): desktop behind turning works via walking
+ *   plus V/C. FLAG, pre-merge Systems follow-up (not this
+ *   lane's file, deliberately untouched): save validation
+ *   still accepts only first/third — a save made in behind
+ *   mode reloads as a fresh start until Systems accepts
+ *   'behind' in deserializeSave. Do not merge this view to
+ *   main until that one-liner lands.
  * POINTER DISCIPLINE: overlays are pointer-events-none except the
  * small interactive pieces (HUD buttons, panels, harvest buttons),
  * so world clicks — including the first-person mouse-capture click
@@ -378,6 +403,10 @@ import {
   DEFAULT_SEED,
   PLAYER_EYE_HEIGHT,
   THIRD_PERSON_OFFSET,
+  BEHIND_CAMERA_DISTANCE,
+  BEHIND_CAMERA_HEIGHT,
+  BEHIND_LOOK_AHEAD,
+  BEHIND_LOOK_HEIGHT,
 } from './constants';
 import type { CameraMode, BiomeWeights } from './types';
 import { Wardrobe, GARMENTS } from './systems/clothes';
@@ -892,9 +921,16 @@ export default function App() {
       pitch: player.pitch,
       yaw: player.yaw,
       mode: player.mode,
+      facing: player.facing,
       aspect: width / height,
       eyeHeight: PLAYER_EYE_HEIGHT,
       thirdOffset: THIRD_PERSON_OFFSET,
+      behindCamera: {
+        distance: BEHIND_CAMERA_DISTANCE,
+        height: BEHIND_CAMERA_HEIGHT,
+        lookAhead: BEHIND_LOOK_AHEAD,
+        lookHeight: BEHIND_LOOK_HEIGHT,
+      },
     });
     if (!point) return null;
     if (kind === 'ground') {
@@ -1905,6 +1941,25 @@ export default function App() {
     );
   };
 
+  // Camera pick (toggle control): V/C cycles one step, but
+  // the toggle control picks a perspective directly — with
+  // three modes, picking is NOT one toggle. Step the engine
+  // toggle forward until the picked mode is reached (at most
+  // two steps; the engine's mode advances synchronously per
+  // call, and camera:switched reports each step). Reads the
+  // live engine mode, not React state, so a stale render
+  // cannot double-step.
+  const cycleToCamera = (picked: CameraMode): void => {
+    const order: CameraMode[] = ['first', 'third', 'behind'];
+    const player = playerRef.current;
+    if (!player || player.mode === picked) return;
+    let steps = order.indexOf(picked) - order.indexOf(player.mode);
+    if (steps < 0) steps += order.length;
+    for (let i = 0; i < steps; i += 1) {
+      player.toggleCamera();
+    }
+  };
+
   // USE / still-tap interact: the nearest in-range object,
   // pressed through the engine's pressUse (which fires the
   // existing harvest:requested event; the outcome listener
@@ -2094,7 +2149,9 @@ export default function App() {
               Camera:{' '}
               {cameraMode === 'first'
                 ? 'First-person'
-                : 'Third-person overhead'}{' '}
+                : cameraMode === 'behind'
+                  ? 'Behind (over-shoulder)'
+                  : 'Third-person overhead'}{' '}
               <span className="opacity-60">(press V or C)</span>
             </p>
             <p>
@@ -2144,11 +2201,7 @@ export default function App() {
             <CameraToggle
               perspective={cameraMode}
               comfortable={isTouch}
-              onChange={(picked) => {
-                if (picked !== cameraMode) {
-                  playerRef.current?.toggleCamera();
-                }
-              }}
+              onChange={(picked) => cycleToCamera(picked)}
             />
           </div>
           <div className="mt-3">
@@ -2252,11 +2305,7 @@ export default function App() {
             <CameraToggle
               perspective={cameraMode}
               comfortable
-              onChange={(picked) => {
-                if (picked !== cameraMode) {
-                  playerRef.current?.toggleCamera();
-                }
-              }}
+              onChange={(picked) => cycleToCamera(picked)}
             />
           </div>
         ) : (

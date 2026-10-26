@@ -48,6 +48,10 @@ import {
   STREAM_RADIUS_CHUNKS,
   PLAYER_EYE_HEIGHT,
   THIRD_PERSON_OFFSET,
+  BEHIND_CAMERA_DISTANCE,
+  BEHIND_CAMERA_HEIGHT,
+  BEHIND_LOOK_AHEAD,
+  BEHIND_LOOK_HEIGHT,
 } from '../constants';
 import type { BiomeId, ScatterKind } from '../types';
 
@@ -753,7 +757,7 @@ export class WorldRenderer {
     // Witch mesh follows the player; hidden in first-person.
     this.witch.position.set(this.player.x, 0, this.player.z);
     this.witch.rotation.y = this.player.facing;
-    this.witch.visible = this.player.mode === 'third';
+    this.witch.visible = this.player.mode !== 'first';
 
     if (this.player.mode === 'first') {
       this.camera.position.set(
@@ -763,6 +767,27 @@ export class WorldRenderer {
       );
       this.camera.rotation.order = 'YXZ';
       this.camera.rotation.set(this.player.pitch, this.player.yaw, 0);
+    } else if (this.player.mode === 'behind') {
+      // Behind-the-witch follow (over-shoulder height): the
+      // camera sits behind her facing, looking past her at
+      // the ground ahead — her back in frame low, the view
+      // ahead dominating. Forward from facing is (sin facing,
+      // cos facing); distances/heights are the BEHIND_*
+      // tunables in constants (starting values for Adam's
+      // pin pass). Not the overhead map view, not ground
+      // level where she would block the view.
+      const fx = Math.sin(this.player.facing);
+      const fz = Math.cos(this.player.facing);
+      this.camera.position.set(
+        this.player.x - fx * BEHIND_CAMERA_DISTANCE,
+        BEHIND_CAMERA_HEIGHT,
+        this.player.z - fz * BEHIND_CAMERA_DISTANCE,
+      );
+      this.camera.lookAt(
+        this.player.x + fx * BEHIND_LOOK_AHEAD,
+        BEHIND_LOOK_HEIGHT,
+        this.player.z + fz * BEHIND_LOOK_AHEAD,
+      );
     } else {
       this.camera.position.set(
         this.player.x + THIRD_PERSON_OFFSET.x,

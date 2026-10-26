@@ -76,6 +76,7 @@ import {
   GROUND_MATERIAL_BY_ID,
   type GroundMaterialDef,
 } from './objects';
+import type { CameraMode } from '../types';
 import { harvestState, scatterTargetId } from './harvestState';
 import { weatherAt, type CurrentWeather } from './weather';
 import { shelterState, shelterAt } from './shelter';
@@ -226,7 +227,7 @@ export class ProximityTracker {
   private lastIds = new Set<string>();
   private lastX: number | null = null;
   private lastZ: number | null = null;
-  private lastMode: 'first' | 'third' = 'third';
+  private lastMode: CameraMode = 'third';
   private lastPitch = 0;
   /** Dominant biome of the last emitted 'weather:changed'. */
   private lastWeatherDominant: string | null = null;

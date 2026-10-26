@@ -12,7 +12,7 @@
  * it says so plainly.
  *
  * AS THE CONTROLLERS STAND (read, not changed):
- * - One perspective camera, FOV 60, near 0.1, far 1000, in both modes.
+ * - One perspective camera, FOV 60, near 0.1, far 1000, in all modes.
  * - First-person: camera at the player's position at eye height 1.7 m,
  *   rotation YXZ from yaw (mouse look, pointer-locked, 0.0025/px) and
  *   pitch clamped to ±1.45 rad. Movement is relative to view yaw.
@@ -20,6 +20,10 @@
  * - Third-person overhead: camera at player + offset (0, 16, 10),
  *   looking at the player on the ground. Movement is world-aligned
  *   (W = -z). The witch mesh is visible and faces movement.
+ * - Behind: camera 3.5 m behind her facing at 2.4 m height, looking
+ *   4 m ahead at 1.2 m. Movement is yaw-relative (facing-relative,
+ *   since look-drag syncs facing to view direction in this mode).
+ *   The witch mesh is visible from behind.
  * - Switching is instant in the engine (V / C, pointer lock entered
  *   on first-person entry, released on exit). The transition treatment
  *   below is an overlay that masks that snap — it does not move the
@@ -69,6 +73,17 @@ export const CAMERA_FRAMING: Record<CameraPerspective, CameraFraming> = {
       'Movement is world-aligned (W is always north, -z)',
     ],
     witchInView: 'Visible, facing the direction she moves.',
+  },
+  behind: {
+    mode: 'behind',
+    title: 'Behind (over-shoulder)',
+    feel: 'Walk with the witch. The camera rides just behind her at over-shoulder height, her back in frame low, and the ground and world ahead open out in front of her — the view for adventuring, for going somewhere rather than looking down at a map.',
+    facts: [
+      'Camera 3.5 m behind her facing at 2.4 m height, looking 4 m ahead at 1.2 m, FOV 60',
+      'Movement follows facing; look-drag turns facing, so the camera follows her turns',
+      'Not the overhead map view, not ground level where she would block the view',
+    ],
+    witchInView: 'Visible from behind — her back, dress, and candle lead the frame.',
   },
 };
 
