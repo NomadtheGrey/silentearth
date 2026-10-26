@@ -656,6 +656,14 @@ export const SOURCES: HarvestSourceDef[] = [
     biomes: ['creekBottom', 'mirewood', 'deepBog', 'oldfieldRise', 'saltFlat'],
     mesh: { shape: 'disc', color: 0x6b5b43, baseY: 0 },
   },
+  // DENSITY DIRECTION (Adam, 2026-10-26, expectation — "I would
+  // think"): river stone is RELATIVELY EASY TO FIND — common,
+  // not rare. This balances the high stone demand from deadfall
+  // counterweights. The tunable is the riverStone mix weight per
+  // biome in biomes.ts (creekBottom 0.15 and saltFlat 0.20 are
+  // the richest today; most biomes sit at 0.02–0.05). Density
+  // number TBD — no weight changed here; when stone sources are
+  // next touched, raise toward common and flag the number.
   {
     id: 'stoneCluster',
     kind: 'riverStone',

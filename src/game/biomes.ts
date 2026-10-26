@@ -31,7 +31,10 @@ import { makeNoise2D } from 'fast-simplex-noise';
 import { deriveSeed, mulberry32 } from './seed';
 import type { BiomeId, BiomeWeights, ScatterKind } from '../types';
 
-/** Per-biome object mix: scatter kind -> relative weight (normalized at use). */
+/** Per-biome object mix: scatter kind -> relative weight (normalized at use).
+ * riverStone weights are the stone-availability tunable (Adam,
+ * 2026-10-26: stones relatively easy to find — direction recorded
+ * on stoneCluster in objects.ts, number TBD, no change made yet). */
 export interface BiomeDef {
   id: BiomeId;
   name: string;

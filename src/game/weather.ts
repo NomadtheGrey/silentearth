@@ -33,9 +33,12 @@
  *   changed", the query says "to what, exactly".
  *
  * HOOKS, NOT BUILT (Adam's brief, explicit):
- * - Shelter modifier (lean-to and up — the housing system does not
- *   exist yet) is a DOCUMENTED INPUT to exposureAt, defaulting to
- *   unsheltered (multiplier 1) until housing lands with values.
+ * - Shelter modifier: the housing system does not exist yet, but
+ *   its HOOK SHAPE is now set (Adam, 2026-10-26, PINNED):
+ *   placement is free (no zones/plots), so shelter keys on the
+ *   placed house's position via ShelterQuery + exposureAtPosition
+ *   — see there. Until housing lands, shelter defaults to
+ *   unsheltered (multiplier 1).
  * - Clothes modifier: the INPUT SHAPE is now specified (garment
  *   table + multiplicative stacking, Marlowe-decided values in
  *   GARMENT_PROTECTION), but the clothes system itself is not
@@ -208,6 +211,31 @@ export interface ExposureModifiers {
 }
 
 /**
+ * SHELTER HOOK SHAPE (Adam, 2026-10-26, PINNED placement rule):
+ * housing placement is FREE — no zones, no plots. She places a
+ * house/hut anywhere she likes, and since biomes are continuous
+ * fields, nothing gates placement. So shelter keys on the PLACED
+ * HOUSE'S POSITION, never on a zone or plot: the housing system
+ * (not built yet) will supply a query closing over the placed
+ * house's coordinates, returning the shelter multiplier at any
+ * (x, z). Radius, falloff, and protection values are the housing
+ * system's decisions (TBD) — this hook names the key only.
+ * PACING NOTE (same brief): shelter conquers the environment
+ * SOON — it is the early-game answer to weather, not a
+ * late-game reward — so the hook shape is set now, ahead of the
+ * housing build, with no values invented in the meantime.
+ */
+export type ShelterQuery = (x: number, z: number) => number;
+
+/** Position-aware exposure inputs: shelter as a query, not a scalar. */
+export interface PositionExposureModifiers {
+  /** Housing query (see ShelterQuery). Omitted = unsheltered (1). */
+  shelterQuery?: ShelterQuery;
+  /** Worn garments, or a direct multiplier. Omitted = unclothed (1). */
+  clothing?: number | readonly GarmentId[];
+}
+
+/**
  * Effective exposure harshness: weather harshness reduced by
  * shelter (stationary) and clothing (traveling). Today both
  * default to 1, so exposure == harshness. Systems' survival math
@@ -227,4 +255,24 @@ export function exposureAt(
         ? clothingValue
         : clothingMultiplier(clothingValue);
   return weather.harshness * shelter * clothing;
+}
+
+/**
+ * Position-aware exposure: weather at (x, z) reduced by the
+ * shelter query at that same position plus clothing. This is
+ * the call Systems' survival math should use once housing
+ * lands: it evaluates shelter where she STANDS against the
+ * placed house's position, not against any zone or plot (there
+ * are none). Until housing supplies a query, shelter reads 1
+ * and this equals exposureAt(weatherAt(gen, x, z), { clothing }).
+ */
+export function exposureAtPosition(
+  gen: WorldGen,
+  x: number,
+  z: number,
+  modifiers: PositionExposureModifiers = {},
+): number {
+  const weather = weatherAt(gen, x, z);
+  const shelter = modifiers.shelterQuery?.(x, z) ?? 1;
+  return exposureAt(weather, { shelter, clothing: modifiers.clothing });
 }
