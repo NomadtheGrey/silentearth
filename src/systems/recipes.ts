@@ -351,8 +351,9 @@ const DRAFT_RECIPES: Recipe[] = [
       'further upgrade possible). Moves stations (workstation, loom, ' +
       'etc., maybe hearth — maybe, not pinned). Hauling device is a ' +
       'dolly or sledge, whichever fits the terrain (wheels firm ground, ' +
-      'sledge soft/wet swamp). Carrying-capacity bonus: "hefty", size ' +
-      'TBD — deliberately NOT a number here; see carrying docs.',
+      'sledge soft/wet swamp). Carrying-capacity bonus PINNED by Adam ' +
+      '2026-10-26: +50 — modelled as TRUNDLE_TOOL_BONUS in ' +
+      'inventory.ts, deliberately NOT a number here.',
   },
 
   // --- Housing ladder (merged cottage stage; no workstation required).

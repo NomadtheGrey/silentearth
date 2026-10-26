@@ -26,10 +26,13 @@
  * - used = sum of all stacks EXCEPT carrying gear (see below).
  * - capacity = pockets base + each owned gear type's bonus (additive).
  *
- * PINNED NUMBERS (Adam, 2026-10-25 — do not retune silently):
- * - Pockets base: 10. Apron: +10. Small Basket: +25. Large Basket: 50.
+ * PINNED NUMBERS (do not retune silently):
+ * - Pockets base: 10. Apron: +10. Small Basket: +25. Large Basket: 50
+ *   (all Adam, 2026-10-25). Trundle-Tool: +50 (PINNED by Adam,
+ *   2026-10-26 — previously "hefty, size TBD").
  *
- * TWO OPEN QUESTIONS — modelled explicitly, NEVER settled silently:
+ * ONE OPEN QUESTION REMAINING — modelled explicitly, NEVER settled
+ * silently. The Trundle-Tool bonus below it is now PINNED, not open:
  *
  * (1) Large Basket replace-vs-stack. The large basket is an upgrade
  *     of the small basket, and whether it REPLACES the small basket's
@@ -49,11 +52,11 @@
  *     if the player later holds both baskets at once (e.g. by
  *     crafting a second small basket while owning a large one).
  *
- * (2) Trundle-Tool carrying bonus: "hefty, size TBD". This is a named
- *     tunable parameter, `trundleToolBonus`, with NO number invented:
- *     omitted means 0 (no bonus yet) — that 0 is a placeholder for
- *     "not yet pinned", not a design value. The bonus applies only
- *     while the player holds a Trundle-Tool.
+ * PINNED (Adam, 2026-10-26): Trundle-Tool carrying bonus is +50.
+ *     It was previously "hefty, size TBD"; that TBD is now closed.
+ *     The bonus is the TRUNDLE_TOOL_BONUS constant below — the live
+ *     value, not a tunable and not an unset placeholder. It applies
+ *     only while the player holds a Trundle-Tool.
  *
  * IMPLEMENTATION CHOICES (not pinned rulings — Adam can overturn):
  * - Carrying gear grants capacity and is NOT counted against it.
@@ -91,6 +94,8 @@ export const POCKETS_BASE_CAPACITY = 10;
 export const APRON_BONUS = 10;
 export const SMALL_BASKET_BONUS = 25;
 export const LARGE_BASKET_BONUS = 50;
+/** PINNED by Adam 2026-10-26 (was "hefty, size TBD"). */
+export const TRUNDLE_TOOL_BONUS = 50;
 
 /**
  * Items that grant carrying capacity. Gear is not counted against
@@ -116,12 +121,6 @@ export type LargeBasketMode = 'replace' | 'stack';
 export interface PersonalInventoryOptions {
   /** REQUIRED — 'replace' (total 70) or 'stack' (total 95). No default. */
   largeBasketMode: LargeBasketMode;
-  /**
-   * Trundle-Tool carrying bonus while a Trundle-Tool is held.
-   * Optional; omitted = 0, meaning "not yet pinned", NOT a design
-   * value. Set it only when Adam pins the number.
-   */
-  trundleToolBonus?: number;
   /** Starting stacks (restoration path; not capacity-checked). */
   initial?: Record<string, number>;
 }
@@ -134,7 +133,7 @@ export interface CapacityBreakdown {
   trundleTool: number;
   total: number;
   largeBasketMode: LargeBasketMode;
-  /** The tunable as passed in (0 when omitted = not yet pinned). */
+  /** PINNED 50 (Adam 2026-10-26) — the live Trundle-Tool bonus. */
   trundleToolBonus: number;
 }
 
@@ -167,11 +166,9 @@ export class InventoryCapacityError extends Error {
 export class PersonalInventory implements CraftingInventory {
   private readonly stacks = new Map<ItemId, number>();
   private readonly largeBasketMode: LargeBasketMode;
-  private readonly trundleToolBonus: number;
 
   constructor(options: PersonalInventoryOptions) {
     this.largeBasketMode = options.largeBasketMode;
-    this.trundleToolBonus = options.trundleToolBonus ?? 0;
     if (options.initial) {
       for (const [item, quantity] of Object.entries(options.initial)) {
         if (quantity > 0) {
@@ -239,10 +236,10 @@ export class PersonalInventory implements CraftingInventory {
       apron: hasApron ? APRON_BONUS : 0,
       smallBasket,
       largeBasket: hasLargeBasket ? LARGE_BASKET_BONUS : 0,
-      trundleTool: hasTrundleTool ? this.trundleToolBonus : 0,
+      trundleTool: hasTrundleTool ? TRUNDLE_TOOL_BONUS : 0,
       total: 0,
       largeBasketMode: this.largeBasketMode,
-      trundleToolBonus: this.trundleToolBonus,
+      trundleToolBonus: TRUNDLE_TOOL_BONUS,
     };
     breakdown.total =
       breakdown.pockets +
@@ -294,7 +291,6 @@ export class PersonalInventory implements CraftingInventory {
   clone(): PersonalInventory {
     const copy = new PersonalInventory({
       largeBasketMode: this.largeBasketMode,
-      trundleToolBonus: this.trundleToolBonus,
     });
     for (const [item, quantity] of this.stacks) {
       copy.stacks.set(item, quantity);
