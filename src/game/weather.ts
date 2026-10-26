@@ -230,6 +230,40 @@ export function seasonalWeatherAt(
 }
 
 /**
+ * SEASONAL DAY/NIGHT SPLIT (Adam, 2026-10-26 — refinement of
+ * the light direction noted in fire.ts; sits with the
+ * time-of-year axis above). The cycle is SEMI-REALISTIC: the
+ * TOTAL stays ~10 minutes, but the day/night split varies by
+ * season — nights LONGER in winter, SHORTER in summer, even
+ * splits at the equinoxes. This is a pure function of month
+ * for the future clock to read; no clock, cycle, or darkness
+ * mechanic is built here (same open progression question as
+ * the season axis: nothing advances month yet).
+ *
+ * Ratios are LANE-DECIDED starting tunables for Adam's pin
+ * pass, NOT pinned: day fraction runs 0.65 at the summer
+ * solstice (June) down to 0.35 at the winter solstice
+ * (December), a smooth cosine between them. At the game's
+ * September start the split is even (0.5/0.5); by November
+ * the night is already ~63% of the cycle — longer nights
+ * arriving WITH the cold, which is the point: winter darkness
+ * and winter weather deepen together.
+ */
+export const DAY_NIGHT_CYCLE_MINUTES = 10;
+export const SUMMER_SOLSTICE_MONTH = 6;
+export const DAY_FRACTION_AMPLITUDE = 0.15;
+
+/** Fraction of the ~10-minute cycle that is day at a month. */
+export function dayFraction(month: number): number {
+  return 0.5 + DAY_FRACTION_AMPLITUDE * Math.cos(((month - SUMMER_SOLSTICE_MONTH) / 12) * Math.PI * 2);
+}
+
+/** Fraction of the ~10-minute cycle that is night at a month. */
+export function nightFraction(month: number): number {
+  return 1 - dayFraction(month);
+}
+
+/**
  * Exposure elements: the axes clothing protects against. Rain,
  * wind, and cold come from the weather; wet is ground water
  * (marsh/bog) soaking through. v1 weather profiles carry wind +

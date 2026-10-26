@@ -37,7 +37,10 @@
  * do not pull this into the fire/shelters round): when light
  * work lands, it looks like this —
  * - Day/night cycle ~10 minutes (Adam's "maybe" = starting
- *   value, tunable, NOT pinned).
+ *   value, tunable, NOT pinned) — with a SEASONAL split
+ *   (Adam's 2026-10-26 refinement): total stays ~10 minutes,
+ *   but nights run longer in winter, shorter in summer; see
+ *   dayFraction/nightFraction in weather.ts.
  * - Darkness is a REAL mechanic: night is genuinely dark, not
  *   cosmetic.
  * - She carries a candle (personal light).
