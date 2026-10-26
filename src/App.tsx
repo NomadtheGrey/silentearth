@@ -369,6 +369,25 @@
  *   mode reloads as a fresh start until Systems accepts
  *   'behind' in deserializeSave. Do not merge this view to
  *   main until that one-liner lands.
+ * - TURN STICK, LIVE (Adam, 2026-10-26, his direct order after
+ *   a playtest): a second joystick for turning, like the move
+ *   stick. The x3 drag fix treated perception, but Adam's real
+ *   problem was travel: his thumb rests near the right edge
+ *   (~half an inch of right travel), and a center-started drag
+ *   misses or clips the right-half look field. The stick is
+ *   bounded by its own radius, not the screen edge, and it is
+ *   rate-based: hold it deflected and the view keeps turning
+ *   (full deflection 1200 drag-px/s = 3 rad/s, TURN_STICK_
+ *   PX_PER_SEC, starting value for his pin pass) — no more
+ *   re-sliding for a big turn. Placement: 128 px ring above
+ *   USE, bottom-right (16 px gap), same pulse-until-first-use
+ *   pattern as MOVE with a TURN label; rendered after the
+ *   look field so its touches land on the stick. The shell
+ *   holds the deflection in a frame loop feeding the existing
+ *   addLookDelta — no engine change, no game/systems files.
+ *   Drag-look, the move stick, and USE are unchanged; the
+ *   stick and look track separate touches, so all three can
+ *   run at once.
  * POINTER DISCIPLINE: overlays are pointer-events-none except the
  * small interactive pieces (HUD buttons, panels, harvest buttons),
  * so world clicks — including the first-person mouse-capture click
@@ -604,6 +623,17 @@ const UMBRELLA_ITEM_ID = ITEMS.umbrella;
  * and pitch clamp are untouched.
  */
 const TOUCH_LOOK_SCALE = 3;
+
+/**
+ * Turn-stick rate: full stick deflection feeds the engine's
+ * addLookDelta this many drag-equivalent px per second — 3
+ * rad/s at the engine's 0.0025 rad/px, so a 90° turn takes
+ * ~0.5 s at full deflection, ~1 s at half. Lane-decided
+ * starting value for Adam's pin pass; pitch uses the same
+ * rate and the engine's ±1.45 clamp still applies. The dead
+ * zone lives in TouchControls (0.25, same as the move stick).
+ */
+const TURN_STICK_PX_PER_SEC = 1200;
 
 /**
  * Foods that gain an Eat button in the inventory panel:
@@ -1941,6 +1971,39 @@ export default function App() {
     );
   };
 
+  // Turn stick: TouchControls reports a deflection; the shell
+  // holds it and turns continuously — a held stick keeps
+  // turning without re-sliding, which is the whole point
+  // (drag-look is displacement-based: no travel, no turn).
+  // The loop feeds the engine's existing addLookDelta, so no
+  // engine change: x right turns right, y up looks up (the
+  // engine's dy is screen-down positive, so y is negated).
+  // At zero deflection the loop idles; dt is clamped so a
+  // backgrounded tab cannot jump the view on return.
+  const turnDeflectionRef = useRef({ x: 0, y: 0 });
+  const applyTurn = (x: number, y: number): void => {
+    turnDeflectionRef.current = { x, y };
+  };
+  useEffect(() => {
+    if (!isTouch) return undefined;
+    let frame = 0;
+    let last = performance.now();
+    const step = (now: number): void => {
+      const dt = Math.min(0.1, Math.max(0, (now - last) / 1000));
+      last = now;
+      const { x, y } = turnDeflectionRef.current;
+      if (x !== 0 || y !== 0) {
+        playerRef.current?.addLookDelta(
+          x * TURN_STICK_PX_PER_SEC * dt,
+          -y * TURN_STICK_PX_PER_SEC * dt,
+        );
+      }
+      frame = requestAnimationFrame(step);
+    };
+    frame = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(frame);
+  }, [isTouch]);
+
   // Camera pick (toggle control): V/C cycles one step, but
   // the toggle control picks a perspective directly — with
   // three modes, picking is NOT one toggle. Step the engine
@@ -2417,6 +2480,7 @@ export default function App() {
       {isTouch ? (
         <TouchControls
           onMove={applyTouchMove}
+          onTurn={applyTurn}
           onLook={applyTouchLook}
           onInteract={handleTouchInteract}
         />
