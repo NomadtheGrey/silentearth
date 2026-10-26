@@ -29,6 +29,8 @@ import { UI_THEMES, type UiThemeName } from './themes';
 export interface HudShellProps {
   /** Slots a real survival system provides. Empty = awaiting systems. */
   needSlots?: NeedSlot[];
+  /** Hide the needs row (touch HUD-collapsed state). Default false. */
+  hideNeeds?: boolean;
   /** Caller-composed content inside the shell (panels, toggles, etc.). */
   children?: ReactNode;
   /** Look for the overlay pill. Default "mire" (the world outside). */
@@ -38,6 +40,7 @@ export interface HudShellProps {
 
 export function HudShell({
   needSlots = [],
+  hideNeeds = false,
   children,
   theme = 'mire',
   className,
@@ -48,6 +51,7 @@ export function HudShell({
         'pointer-events-none absolute inset-0 flex flex-col ' + (className ?? '')
       }
     >
+      {hideNeeds ? null : (
       <div className="pointer-events-auto flex items-start justify-between gap-2 p-2">
         <div
           aria-label="Needs"
@@ -72,6 +76,7 @@ export function HudShell({
           )}
         </div>
       </div>
+      )}
       <div className="pointer-events-none flex-1">{children}</div>
     </div>
   );

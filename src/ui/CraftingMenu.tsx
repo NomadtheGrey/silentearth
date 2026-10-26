@@ -29,6 +29,8 @@ export interface CraftingMenuProps {
   onCraft?: (id: string) => void;
   /** Called when the menu is closed. Optional. */
   onClose?: () => void;
+  /** Thumb-sized action buttons (44 px targets) on touch. Default false. */
+  comfortable?: boolean;
   /** Look for the menu. Default "hearth" (firelit making). */
   theme?: UiThemeName;
 }
@@ -40,9 +42,18 @@ export function CraftingMenu({
   onSelectRecipe,
   onCraft,
   onClose,
+  comfortable = false,
   theme = 'hearth',
 }: CraftingMenuProps) {
   const t = UI_THEMES[theme];
+  const closeBtn = comfortable
+    ? 'rounded px-3 py-2 text-sm min-h-[44px] ' + t.button
+    : 'rounded px-2 py-1 text-sm ' + t.button;
+  const craftBtn = comfortable
+    ? 'mt-2 rounded px-3 py-2 text-sm min-h-[44px] disabled:cursor-not-allowed disabled:opacity-40 ' +
+      t.primary
+    : 'mt-2 rounded px-3 py-1 text-sm disabled:cursor-not-allowed disabled:opacity-40 ' +
+      t.primary;
   return (
     <section aria-label="Crafting" className={'rounded p-3 ' + t.panel}>
       <div className="mb-2 flex items-center justify-between gap-2">
@@ -57,7 +68,7 @@ export function CraftingMenu({
             type="button"
             onClick={onClose}
             aria-label="Close crafting menu"
-            className={'rounded px-2 py-1 text-sm ' + t.button}
+            className={closeBtn}
           >
             Close
           </button>
@@ -128,10 +139,7 @@ export function CraftingMenu({
                   type="button"
                   disabled={!recipe.canCraft}
                   onClick={() => onCraft?.(recipe.id)}
-                  className={
-                    'mt-2 rounded px-3 py-1 text-sm disabled:cursor-not-allowed disabled:opacity-40 ' +
-                    t.primary
-                  }
+                  className={craftBtn}
                 >
                   Craft
                 </button>

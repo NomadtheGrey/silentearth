@@ -231,6 +231,31 @@
  *   the LOOM PLACE bullet; the stump+loom wart is resolved
  *   there).
  *
+ * - TOUCH CONTROLS, LIVE (phone build, Adam 2026-10-26):
+ *   coarse-pointer devices render TouchControls (visible MOVE
+ *   ring + knob pulsing until first use, DRAG TO LOOK cue until
+ *   the first look drag, 64 px USE button) under the z-30 HUD,
+ *   so world buttons stay tappable over the look field. HUD
+ *   starts COLLAPSED on touch (the game leads; one tap shows
+ *   the panels, one tap hides them again) and the slim bar
+ *   keeps Show HUD + Inventory + Crafting + camera tappable;
+ *   panels become a bottom sheet (max 60vh, scrollable) and
+ *   panel/HUD buttons go thumb-sized (44 px) — all keyed off
+ *   touch detection only, so desktop rendering is unchanged.
+ *   Portrait AND landscape both work (no landscape-only
+ *   ruling imported). No sprint, no jump: the stick is walk
+ *   only. USE / still-tap interacts with the nearest
+ *   in-range object (scatter preferred over the ground the
+ *   tracker emits first); a look drag never fires interact
+ *   on release. ENGINE SEAM (Background's 50f5cd6, player.ts
+ *   only, landed mid-round): the shell wires straight to
+ *   setThumbstick(x, z) (same movement path as keys, analog
+ *   magnitude = proportional walk, never sprint), addLookDelta
+ *   (shared mouse-look math + throttled player:looked emit,
+ *   no mode or pointer-lock gate by design), and pressUse
+ *   (fires the existing harvest:requested event). No shell
+ *   bridges remain: no key synthesis, no yaw/pitch writes
+ *   from the shell, no game file touched by this lane.
  * POINTER DISCIPLINE: overlays are pointer-events-none except the
  * small interactive pieces (HUD buttons, panels, harvest buttons),
  * so world clicks — including the first-person mouse-capture click
@@ -283,6 +308,7 @@ import { PlacementPreview } from './ui/PlacementPreview';
 import { ContextMenu } from './ui/ContextMenu';
 import type { ContextAction } from './ui/types';
 import { CameraToggle } from './ui/CameraToggle';
+import { TouchControls } from './ui/TouchControls';
 import { InventoryPanel } from './ui/InventoryPanel';
 import { CraftingMenu } from './ui/CraftingMenu';
 import { ProximityHarvestButtons } from './ui/ProximityHarvestButtons';
@@ -1507,6 +1533,66 @@ export default function App() {
       ? null
       : (fireAnchors.find((a) => a.fire.id === selectedFire.id) ?? null);
 
+  // TOUCH CONTROLS (phone build — see the header): coarse-pointer
+  // devices get the touch layer and the collapsible HUD; desktop
+  // rendering is unchanged by construction (every touch branch
+  // below keys off isTouch).
+  const isTouch = useMemo(() => {
+    if (typeof window === 'undefined') return false;
+    return window.matchMedia('(pointer: coarse)').matches;
+  }, []);
+  // Collapsed by default on touch: Adam's portrait complaint was
+  // the stacked panel burying the world, so the game leads and
+  // the panels are one tap away. Desktop never collapses.
+  const [hudCollapsed, setHudCollapsed] = useState(isTouch);
+
+  // Touch wiring (see the header): the engine half landed
+  // on WIP as 50f5cd6 (player.ts only) while this round was
+  // in flight, so the shell wires straight to it — no key
+  // synthesis, no yaw/pitch writes from the shell.
+  // Move: TouchControls reports y = forward positive; the
+  // engine takes z = back positive (keys convention), so
+  // y is negated. Analog magnitude survives: a partial push
+  // walks proportionally slower — still walk only, never
+  // sprint — and terrain/hunger/boots slowdowns apply in
+  // update() exactly as for keys.
+  const applyTouchMove = (x: number, y: number): void => {
+    playerRef.current?.setThumbstick(x, -y);
+  };
+
+  // Look: the engine's addLookDelta shares the mouse-look
+  // math and the throttled player:looked emit, with NO mode
+  // gate and NO pointer-lock gate by design — pitch stays
+  // consistent across mode switches, and third-person
+  // ground gating ignores pitch by its own rule.
+  const applyTouchLook = (dx: number, dy: number): void => {
+    playerRef.current?.addLookDelta(dx, dy);
+  };
+
+  // USE / still-tap interact: the nearest in-range object,
+  // pressed through the engine's pressUse (which fires the
+  // existing harvest:requested event; the outcome listener
+  // re-validates range + permit, so a stale press fails
+  // safely). The tracker emits the ground target FIRST when
+  // eligible, so scatter is preferred and ground is the
+  // fallback — USE never harvests dirt while a bush is in
+  // range. With no target at all, pressUse is not called
+  // (menus and HUD buttons stay direct taps).
+  const handleTouchInteract = (): void => {
+    const player = playerRef.current;
+    const target =
+      harvestTargets.find((candidate) => candidate.kind === 'scatter') ??
+      harvestTargets[0];
+    if (!player || !target) return;
+    player.pressUse({
+      targetId: target.id,
+      sourceId: target.sourceId,
+      kind: target.kind,
+      x: target.worldX,
+      z: target.worldZ,
+    });
+  };
+
   return (
     <div className="relative w-full h-screen bg-[#121612] overflow-hidden font-mono text-[#f0ead6]">
       {/* 3D viewport */}
@@ -1594,8 +1680,15 @@ export default function App() {
       </div>
 
       {/* HUD shell: needs row (awaiting survival systems) + HUD block. */}
-      <HudShell>
-        <div className="pointer-events-auto m-2 max-w-sm">
+      <HudShell hideNeeds={isTouch && hudCollapsed}>
+        {(!isTouch || !hudCollapsed) ? (
+        <div
+          className={
+            isTouch
+              ? 'pointer-events-auto m-2 max-w-sm max-h-[calc(100vh-13rem)] overflow-y-auto pr-1'
+              : 'pointer-events-auto m-2 max-w-sm'
+          }
+        >
           <h1 className="text-lg tracking-widest">SILENT EARTH</h1>
           <div className="mt-2 text-xs space-y-1">
             <p>
@@ -1618,7 +1711,11 @@ export default function App() {
               type="button"
               onClick={() => setInventoryOpen((open) => !open)}
               aria-pressed={inventoryOpen}
-              className="rounded bg-[#3a4436] px-3 py-1 text-xs hover:bg-[#4a5546]"
+              className={
+                isTouch
+                  ? 'rounded bg-[#3a4436] px-3 py-2 text-sm min-h-[44px] hover:bg-[#4a5546]'
+                  : 'rounded bg-[#3a4436] px-3 py-1 text-xs hover:bg-[#4a5546]'
+              }
             >
               Inventory
             </button>
@@ -1626,12 +1723,17 @@ export default function App() {
               type="button"
               onClick={() => setCraftingOpen((open) => !open)}
               aria-pressed={craftingOpen}
-              className="rounded bg-[#3a4436] px-3 py-1 text-xs hover:bg-[#4a5546]"
+              className={
+                isTouch
+                  ? 'rounded bg-[#3a4436] px-3 py-2 text-sm min-h-[44px] hover:bg-[#4a5546]'
+                  : 'rounded bg-[#3a4436] px-3 py-1 text-xs hover:bg-[#4a5546]'
+              }
             >
               Crafting
             </button>
             <CameraToggle
               perspective={cameraMode}
+              comfortable={isTouch}
               onChange={(picked) => {
                 if (picked !== cameraMode) {
                   playerRef.current?.toggleCamera();
@@ -1651,6 +1753,7 @@ export default function App() {
               carried={carriedGarments}
               onWear={handleWear}
               onRemove={handleRemoveGarment}
+              comfortable={isTouch}
               protectionNote={protectionNote}
               capacityNote={capacityNote}
               umbrellaNote={umbrellaNote}
@@ -1670,14 +1773,22 @@ export default function App() {
                 <button
                   type="button"
                   onClick={handlePlaceConfirm}
-                  className="rounded bg-[#3a4436] px-2 py-0.5 text-xs hover:bg-[#4a5546]"
+                  className={
+                    isTouch
+                      ? 'rounded bg-[#3a4436] px-3 py-2 text-sm min-h-[44px] hover:bg-[#4a5546]'
+                      : 'rounded bg-[#3a4436] px-2 py-0.5 text-xs hover:bg-[#4a5546]'
+                  }
                 >
                   Place here
                 </button>
                 <button
                   type="button"
                   onClick={handlePlaceCancel}
-                  className="rounded bg-[#3a4436] px-2 py-0.5 text-xs hover:bg-[#4a5546]"
+                  className={
+                    isTouch
+                      ? 'rounded bg-[#3a4436] px-3 py-2 text-sm min-h-[44px] hover:bg-[#4a5546]'
+                      : 'rounded bg-[#3a4436] px-2 py-0.5 text-xs hover:bg-[#4a5546]'
+                  }
                 >
                   Cancel
                 </button>
@@ -1688,10 +1799,69 @@ export default function App() {
             </div>
           ) : null}
         </div>
+        ) : null}
       </HudShell>
 
-      {/* Panels column (right side). */}
-      <div className="pointer-events-auto absolute right-2 top-20 z-30 flex max-h-[calc(100vh-6rem)] w-80 max-w-[calc(100vw-1rem)] flex-col gap-2 overflow-y-auto">
+      {/* Touch HUD bar: collapsed = slim bar (Show HUD + the
+        buttons that must stay tappable); expanded = a single
+        Hide HUD button, since the stack carries the rest.
+        Desktop renders neither. */}
+      {isTouch ? (
+        hudCollapsed ? (
+          <div className="pointer-events-auto absolute left-2 right-2 top-2 z-40 flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setHudCollapsed(false)}
+              className="min-h-[44px] rounded bg-[#3a4436] px-3 py-2 text-sm hover:bg-[#4a5546]"
+            >
+              Show HUD
+            </button>
+            <button
+              type="button"
+              onClick={() => setInventoryOpen((open) => !open)}
+              aria-pressed={inventoryOpen}
+              className="min-h-[44px] rounded bg-[#3a4436] px-3 py-2 text-sm hover:bg-[#4a5546]"
+            >
+              Inventory
+            </button>
+            <button
+              type="button"
+              onClick={() => setCraftingOpen((open) => !open)}
+              aria-pressed={craftingOpen}
+              className="min-h-[44px] rounded bg-[#3a4436] px-3 py-2 text-sm hover:bg-[#4a5546]"
+            >
+              Crafting
+            </button>
+            <CameraToggle
+              perspective={cameraMode}
+              comfortable
+              onChange={(picked) => {
+                if (picked !== cameraMode) {
+                  playerRef.current?.toggleCamera();
+                }
+              }}
+            />
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setHudCollapsed(true)}
+            aria-label="Hide HUD panels to reveal the game"
+            className="pointer-events-auto absolute right-2 top-2 z-40 min-h-[44px] rounded bg-black/50 px-3 py-2 text-sm"
+          >
+            Hide HUD
+          </button>
+        )
+      ) : null}
+
+      {/* Panels column (right side; bottom sheet on touch). */}
+      <div
+        className={
+          isTouch
+            ? 'pointer-events-auto absolute left-2 right-2 bottom-2 z-30 flex max-h-[60vh] flex-col gap-2 overflow-y-auto'
+            : 'pointer-events-auto absolute right-2 top-20 z-30 flex max-h-[calc(100vh-6rem)] w-80 max-w-[calc(100vw-1rem)] flex-col gap-2 overflow-y-auto'
+        }
+      >
         {inventoryOpen ? (
           <InventoryPanel
             items={inventoryItems}
@@ -1705,12 +1875,14 @@ export default function App() {
             onDepositItem={handleDepositItem}
             capacityText={capacityText}
             onClose={() => setInventoryOpen(false)}
+            comfortable={isTouch}
           />
         ) : null}
         {craftingOpen ? (
           <CraftingMenu
             recipes={craftingRecipes}
             stationNote={stationNote}
+            comfortable={isTouch}
             selectedRecipeId={selectedRecipeId}
             onSelectRecipe={setSelectedRecipeId}
             onCraft={handleCraft}
@@ -1752,12 +1924,26 @@ export default function App() {
         <span className="text-xs opacity-60">Current: {seed}</span>
       </div>
 
-      {/* Controls help */}
+      {/* Controls help (desktop only — touch devices get the TouchControls cues). */}
+      {isTouch ? null : (
       <div className="absolute bottom-0 right-0 z-30 p-4 text-right text-xs opacity-70 pointer-events-none">
         <p>WASD to walk</p>
         <p>V / C to switch camera</p>
         {cameraMode === 'first' && <p>Click the world to capture the mouse</p>}
       </div>
+      )}
+
+      {/* Touch controls (coarse-pointer devices only). Rendered
+        below the z-30 HUD/panels/world buttons, so taps on
+        those still land on them; the look field only catches
+        touches on open world. */}
+      {isTouch ? (
+        <TouchControls
+          onMove={applyTouchMove}
+          onLook={applyTouchLook}
+          onInteract={handleTouchInteract}
+        />
+      ) : null}
 
       {/* Camera transition overlay (vignette at rest, fade on switch). */}
       <CameraTransition switching={switching} />

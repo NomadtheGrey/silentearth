@@ -90,6 +90,8 @@ export interface WornListProps {
   umbrellaNote?: string;
   /** Caller-supplied note line (e.g. a wear/remove error). */
   note?: string | null;
+  /** Thumb-sized Wear/Remove buttons (44 px targets) on touch. Default false. */
+  comfortable?: boolean;
   className?: string;
 }
 
@@ -118,8 +120,12 @@ export function WornList({
   capacityNote,
   umbrellaNote,
   note,
+  comfortable = false,
   className,
 }: WornListProps) {
+  const actionBtn = comfortable
+    ? 'pointer-events-auto rounded bg-[#3a4436] px-3 py-2 text-sm min-h-[44px] hover:bg-[#4a5546]'
+    : 'pointer-events-auto rounded bg-[#3a4436] px-2 py-0.5 text-xs hover:bg-[#4a5546]';
   return (
     <div
       aria-label="Wardrobe"
@@ -145,7 +151,7 @@ export function WornList({
                 <button
                   type="button"
                   onClick={() => onRemove?.(garment)}
-                  className="pointer-events-auto rounded bg-[#3a4436] px-2 py-0.5 text-xs hover:bg-[#4a5546]"
+                  className={actionBtn}
                 >
                   Remove
                 </button>
@@ -153,7 +159,7 @@ export function WornList({
                 <button
                   type="button"
                   onClick={() => onWear?.(garment)}
-                  className="pointer-events-auto rounded bg-[#3a4436] px-2 py-0.5 text-xs hover:bg-[#4a5546]"
+                  className={actionBtn}
                 >
                   Wear
                 </button>
