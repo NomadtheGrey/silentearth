@@ -432,6 +432,19 @@
  *   needs a button or a key, follow-up); if piles should
  *   outrank ground outright, that is a one-line priority
  *   change for Adam's call.
+ * - STUMP INDICATION, LIVE (Adam, 2026-10-26): a
+ *   workstation-gated recipe that cannot be crafted for
+ *   station reasons now reads "Needs a tree stump to work
+ *   at." — retiring "Needs a workstation station.", which
+ *   named no stump at all. Requirement display only, in the
+ *   shell's availabilityNote (App); no game/systems file
+ *   touched, no presence-kind plumbing added — presence is
+ *   booleans only, so the shell cannot split stump from
+ *   crafted workstation or Stumpy upgrade. Other stations
+ *   keep the old template. FOLLOW-UP, NOT CHANGED: the menu
+ *   header line still reads "Nearby stations: workstation,
+ *   loom" — it lists station contexts, not kinds, so it
+ *   stays truthful but still does not name the stump.
  * POINTER DISCIPLINE: overlays are pointer-events-none except the
  * small interactive pieces (HUD buttons, panels, harvest buttons),
  * so world clicks — including the first-person mouse-capture click
@@ -1464,7 +1477,20 @@ export default function App() {
       checks[0];
     let availabilityNote: string | undefined;
     if (check.stationMismatch) {
-      availabilityNote = `Needs a ${check.requiredStation} station.`;
+      // STUMP INDICATION (Adam, 2026-10-26): the starter
+      // workstation IS a tree stump, but the old note read
+      // "Needs a workstation station." — naming no stump at
+      // all. Workstation-gated recipes now say so outright.
+      // Presence is booleans only (workstation/loom), so the
+      // shell cannot tell a stump from a crafted workstation
+      // or a Stumpy upgrade — this names the starter case the
+      // player actually meets, and no presence-kind plumbing
+      // was added to game files to split the kinds. Other
+      // stations keep the old template unchanged.
+      availabilityNote =
+        check.requiredStation === 'workstation'
+          ? 'Needs a tree stump to work at.'
+          : `Needs a ${check.requiredStation} station.`;
     } else if (check.missingIngredients.length > 0) {
       const first = check.missingIngredients[0];
       availabilityNote = `Missing ${first.item} (${first.held} / ${first.quantity}).`;
