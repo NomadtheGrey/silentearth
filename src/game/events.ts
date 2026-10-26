@@ -85,12 +85,22 @@ export interface EventMap {
     kind: 'scatter' | 'ground';
     x: number;
     z: number;
+    /**
+     * What the press means. Omitted = 'harvest' (backward compatible
+     * with every button already firing this event). 'remove' =
+     * TOTALLY REMOVE the plant (Adam, 2026-10-26): a bigger one-time
+     * yield, and the plant is gone permanently (no regrow). UI
+     * renders the remove option alongside the normal harvest button
+     * for removable sources (see harvest.ts); ground and
+     * non-removable sources reject 'remove' with 'not-removable'.
+     */
+    action?: 'harvest' | 'remove';
   };
   /**
    * A harvest press resolved into items (harvest.ts outcome listener).
    * UI shows feedback from this and refreshes inventory. cx/cz are
    * the chunk containing the target, so the renderer can reload just
-   * that chunk (the harvested object vanishes). Yields are already
+   * that chunk (the harvested object shrinks, or leaves on remove). Yields are already
    * merged by item (one entry per item).
    */
   'harvest:completed': {
@@ -102,10 +112,12 @@ export interface EventMap {
     cx: number;
     cz: number;
     yields: { item: string; quantity: number }[];
+    /** Which action produced this completion ('harvest' or 'remove'). */
+    action: 'harvest' | 'remove';
   };
   /**
    * A multi-step harvest (prototype TUG/STOMP) advanced but has not
-   * finished: progress is 0..1, no items granted, nothing depleted.
+   * finished: progress is 0..1, no items granted, nothing shrinks or is removed.
    * UI shows progress from this; the next press on the same target
    * continues from this progress.
    */
@@ -116,7 +128,7 @@ export interface EventMap {
   };
   /**
    * A harvest press that granted NOTHING (failure/feedback event).
-   * All-or-nothing: on any failure, no items move, nothing depletes,
+   * All-or-nothing: on any failure, no items move, nothing shrinks or is removed,
    * and multi-step progress is NOT consumed (a capacity failure at
    * full progress leaves progress at 1, so freeing space and pressing
    * again collects without redoing the steps). 'yields' carries the
@@ -129,7 +141,9 @@ export interface EventMap {
     kind: 'scatter' | 'ground';
     reason:
       | 'out-of-range'
-      | 'already-harvested'
+      | 'regrowing'
+      | 'removed'
+      | 'not-removable'
       | 'below-permit'
       | 'permit-tbd'
       | 'anchor'

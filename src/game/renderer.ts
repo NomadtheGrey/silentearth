@@ -25,7 +25,12 @@ import { marshWeight } from './biomes';
 import { SOURCE_FOR_KIND } from './objects';
 import type { MeshShape } from './objects';
 import { ProximityTracker } from './proximity';
-import { harvestState, wrapGenWithDepletion } from './harvest';
+import {
+  harvestState,
+  SHRINK_SCALE,
+  scatterTargetId,
+  wrapGenWithRemoved,
+} from './harvestState';
 import { createBiomeTexture, TEXTURE_REPEAT } from './terrain';
 import {
   CHUNK_SIZE,
@@ -199,6 +204,11 @@ export class WorldRenderer {
   private proximity: ProximityTracker;
   /** Unsubscribe for the harvest:completed chunk reload (below). */
   private unsubHarvestCompleted: (() => void) | null = null;
+  /** Spawned-log meshes (log-renewal system): rebuilt on the world
+   *  tick when harvest state changed, only for loaded chunks. */
+  private spawnedGroup: THREE.Group | null = null;
+  private lastHarvestVersion = -1;
+  private worldTickAcc = 0;
   private disposed = false;
   /** One shared procedural ground texture per biome (+ marsh), built from
    *  the current world seed. Cached, never per-chunk, so texture cost
@@ -210,17 +220,19 @@ export class WorldRenderer {
     gen: WorldGen,
     player: PlayerController,
   ) {
-    // Depletion filtering lives on the generator the renderer (and its
-    // proximity tracker) actually use: harvested objects vanish from
-    // freshly generated chunks, so they stop rendering AND stop
-    // appearing as targets. The outcome listener (shell-owned, see
-    // harvest.ts) marks depletion in the shared harvestState.
-    this.gen = wrapGenWithDepletion(gen);
+    // Removed filtering lives on the generator the renderer (and its
+    // proximity tracker) actually use: permanently-removed objects
+    // (remove action, taken logs) leave freshly generated chunks, so
+    // they stop rendering AND stop appearing as targets. Shrunk
+    // objects are NOT filtered — they render at SHRINK_SCALE (see
+    // loadChunk). The outcome listener (shell-owned, see
+    // harvest.ts) marks state in the shared harvestState.
+    this.gen = wrapGenWithRemoved(gen);
     this.player = player;
     this.proximity = new ProximityTracker(this.gen);
     // Chunk reload on harvest completion: the harvested chunk is
-    // rebuilt from the (now filtered) generator, so the object
-    // visibly vanishes instead of lingering until the player walks
+    // rebuilt, so the object visibly shrinks (or leaves, on remove
+    // or a taken log) instead of lingering until the player walks
     // away and the chunk streams out.
     this.unsubHarvestCompleted = bus.on('harvest:completed', (p) => {
       if (p.kind !== 'scatter') return;
@@ -309,15 +321,17 @@ export class WorldRenderer {
 
   /** Swap the world generator (seed change): drop all chunks, re-stream. */
   setWorldGen(gen: WorldGen): void {
-    // A new seed is a new world: depletion + progress do not carry over.
+    // A new seed is a new world: shrink/removed/progress/spawned
+    // state does not carry over.
     harvestState.clear();
-    this.gen = wrapGenWithDepletion(gen);
+    this.gen = wrapGenWithRemoved(gen);
     this.proximity.setGen(this.gen);
     this.disposeGroundTextures();
     for (const [key, loaded] of this.chunks) {
       this.disposeLoaded(loaded);
       this.chunks.delete(key);
     }
+    this.rebuildSpawnedGroup();
   }
 
   get loadedChunkCount(): number {
@@ -403,13 +417,23 @@ export class WorldRenderer {
       byKind.set(obj.kind, list);
     }
     const dummy = new THREE.Object3D();
+    const now = Date.now();
     for (const [kind, objs] of byKind) {
       const render = KIND_RENDER[kind];
       const mesh = new THREE.InstancedMesh(render.geometry, render.material, objs.length);
       objs.forEach((obj, i) => {
-        dummy.position.set(obj.x, obj.y + render.baseY * obj.scale, obj.z);
+        // Shrink model (Adam, 2026-10-26): a regrowing object
+        // renders at SHRINK_SCALE; fully regrown objects render
+        // full-size. The scale applies to the base height too, so a
+        // shrunk tree's canopy sits at shrunk height, not floating.
+        const s =
+          obj.scale *
+          (harvestState.isRegrowing(scatterTargetId(cx, cz, obj), now)
+            ? SHRINK_SCALE
+            : 1);
+        dummy.position.set(obj.x, obj.y + render.baseY * s, obj.z);
         dummy.rotation.set(0, obj.rotY, 0);
-        dummy.scale.setScalar(obj.scale);
+        dummy.scale.setScalar(s);
         dummy.updateMatrix();
         mesh.setMatrixAt(i, dummy.matrix);
       });
@@ -423,9 +447,14 @@ export class WorldRenderer {
           objs.length,
         );
         objs.forEach((obj, i) => {
-          dummy.position.set(obj.x, obj.y + render.extra!.y * obj.scale, obj.z);
+          const s =
+            obj.scale *
+            (harvestState.isRegrowing(scatterTargetId(cx, cz, obj), now)
+              ? SHRINK_SCALE
+              : 1);
+          dummy.position.set(obj.x, obj.y + render.extra!.y * s, obj.z);
           dummy.rotation.set(0, obj.rotY, 0);
-          dummy.scale.setScalar(obj.scale);
+          dummy.scale.setScalar(s);
           dummy.updateMatrix();
           extra.setMatrixAt(i, dummy.matrix);
         });
@@ -481,12 +510,74 @@ export class WorldRenderer {
     }
   }
 
+  /**
+   * World tick (every ~2 s, not every frame): regrow + log-spawn
+   * bookkeeping. Regrown chunks reload (full-size meshes return);
+   * due log spawns are created near trees; spawned-log meshes
+   * rebuild when harvest state changed. The 2 s cadence is a
+   * rendering cadence, not a gameplay timer — regrow/spawn times
+   * themselves live in harvestState.ts, and a regrown plant is
+   * harvestable the moment its time passes even before its chunk
+   * reloads (the tracker checks state, not meshes).
+   */
+  private worldTick(): void {
+    const now = Date.now();
+    for (const key of harvestState.pruneExpiredRegrows(now)) {
+      const [cx, cz] = key.split(',').map(Number);
+      if (this.chunks.has(key)) {
+        this.unloadChunk(cx, cz);
+        this.loadChunk(cx, cz);
+      }
+    }
+    harvestState.processDueSpawns(now, this.gen);
+    if (harvestState.version !== this.lastHarvestVersion) {
+      this.rebuildSpawnedGroup();
+    }
+  }
+
+  /** Rebuild the spawned-log meshes for currently loaded chunks. */
+  private rebuildSpawnedGroup(): void {
+    this.lastHarvestVersion = harvestState.version;
+    if (this.spawnedGroup) {
+      this.scene.remove(this.spawnedGroup);
+      for (const child of this.spawnedGroup.children) {
+        if (child instanceof THREE.InstancedMesh) child.dispose();
+      }
+      this.spawnedGroup = null;
+    }
+    const group = new THREE.Group();
+    const render = KIND_RENDER['log'];
+    const logs = harvestState
+      .spawnedLogsSnapshot()
+      .filter((log) => this.chunks.has(this.chunkKey(log.cx, log.cz)));
+    if (logs.length > 0) {
+      const mesh = new THREE.InstancedMesh(render.geometry, render.material, logs.length);
+      const dummy = new THREE.Object3D();
+      logs.forEach((log, i) => {
+        dummy.position.set(log.x, render.baseY, log.z);
+        dummy.rotation.set(0, 0, 0);
+        dummy.scale.setScalar(1);
+        dummy.updateMatrix();
+        mesh.setMatrixAt(i, dummy.matrix);
+      });
+      mesh.instanceMatrix.needsUpdate = true;
+      group.add(mesh);
+    }
+    this.scene.add(group);
+    this.spawnedGroup = group;
+  }
+
   private loop = (): void => {
     if (this.disposed) return;
     this.raf = requestAnimationFrame(this.loop);
     const dt = Math.min(this.clock.getDelta(), 0.1);
     this.player.update(dt);
     this.stream();
+    this.worldTickAcc += dt;
+    if (this.worldTickAcc >= 2) {
+      this.worldTickAcc = 0;
+      this.worldTick();
+    }
 
     // Witch mesh follows the player; hidden in first-person.
     this.witch.position.set(this.player.x, 0, this.player.z);

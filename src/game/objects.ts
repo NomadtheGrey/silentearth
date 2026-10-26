@@ -391,6 +391,22 @@ export interface HarvestSourceDef {
   toolGatedYields?: ToolGatedYield[];
   /** Prototype-carried multi-step shape, when the prototype had one. */
   multiStep?: MultiStep;
+  /**
+   * What happens to the object AFTER a successful harvest (Adam,
+   * 2026-10-26): 'shrink' (default) = it shrinks and regrows for
+   * more harvesting; 'spawn-near-trees' = logs only — the log is
+   * taken and a fresh log spawns near trees over time. Ground
+   * never uses this (it never depletes).
+   */
+  renewal?: 'shrink' | 'spawn-near-trees';
+  /**
+   * Remove action (Adam, 2026-10-26): may this source be TOTALLY
+   * removed for a bigger one-time yield (clearing ground for a
+   * house)? Plant-like sources only. Logs are never removable
+   * (harvest already takes them, and their renewal is the spawn
+   * system); stones, bone, salt, and silt are not plants either.
+   */
+  removable?: boolean;
   /** 'prototype' = carried verbatim from world_data.json; 'draft' = new
    *  mapping chosen by this landing, awaiting Adam's pin pass. */
   provenance: 'prototype' | 'draft';
@@ -430,6 +446,7 @@ export const SOURCES: HarvestSourceDef[] = [
     description:
       'Low brush and saplings — young, brittle growth that snaps for framing.',
     harvestable: true,
+    removable: true,
     permitTier: 'hand',
     primaryYield: 'SNAP_WOOD',
     secondaryYields: [SPORES_25],
@@ -444,6 +461,7 @@ export const SOURCES: HarvestSourceDef[] = [
     description: 'A plain fallen log, lighter than downed oak — framing wood, not structure.',
     harvestable: true,
     permitTier: 'hand',
+    renewal: 'spawn-near-trees',
     primaryYield: 'SNAP_WOOD',
     secondaryYields: [],
     provenance: 'draft',
@@ -483,10 +501,18 @@ export const SOURCES: HarvestSourceDef[] = [
     kind: 'tree',
     name: 'Standing Tree',
     description:
-      'A standing tree. Its snapped lower limbs are snap-wood; felling a ' +
-      'whole tree is not part of this source (no such mechanic is invented here).',
+      'A standing tree, harvested DIRECTLY with the axe-trowel (Adam, ' +
+      '2026-10-26, PINNED permit: axe-trowel, stage 1). Yield maps to ' +
+      'the existing wood vocabulary (SNAP_WOOD, wood for fire/building) ' +
+      '— no new log item is invented here; if Adam wants whole-tree ' +
+      'yields to differ from limb wood, that is a new item for him to ' +
+      'name. After harvest the tree SHRINKS and regrows like other ' +
+      'harvested things (general rule) — FLAG: an axe suggests ' +
+      'felling, but Adam\'s general rule says shrink; felling is NOT ' +
+      'silently picked here, the question is flagged for his call.',
     harvestable: true,
-    permitTier: 'hand',
+    permitTier: 'axeTrowel',
+    removable: true,
     primaryYield: 'SNAP_WOOD',
     secondaryYields: [],
     provenance: 'draft',
@@ -499,6 +525,7 @@ export const SOURCES: HarvestSourceDef[] = [
     name: 'Snap-Wood Thicket',
     description: 'Brittle dead branches and framing wood throughout the silt.',
     harvestable: true,
+    removable: true,
     permitTier: 'hand',
     primaryYield: 'SNAP_WOOD',
     secondaryYields: [SPORES_25],
@@ -512,6 +539,7 @@ export const SOURCES: HarvestSourceDef[] = [
     name: 'Tender-Vine Strands',
     description: 'Primary binding and lashing for all structural work.',
     harvestable: true,
+    removable: true,
     permitTier: 'hand',
     primaryYield: 'TENDER_VINES',
     secondaryYields: [SPORES_25],
@@ -531,6 +559,7 @@ export const SOURCES: HarvestSourceDef[] = [
     name: 'Peat Moss Carpet',
     description: 'Spongy insulation and flooring that drinks up dampness.',
     harvestable: true,
+    removable: true,
     permitTier: 'hand',
     primaryYield: 'PEAT_MOSS',
     secondaryYields: [SPORES_25],
@@ -641,6 +670,7 @@ export const SOURCES: HarvestSourceDef[] = [
       '(an axe-only gate would lock out spade-route players until convergence).',
     harvestable: true,
     permitTier: 'spadeAxe',
+    renewal: 'spawn-near-trees',
     primaryYield: 'DOWNED_OAK',
     secondaryYields: [
       {
@@ -691,6 +721,7 @@ export const SOURCES: HarvestSourceDef[] = [
       'Tall reeds of the marsh and creek edge — the marsh\'s harvestable fiber. ' +
       'Reeds bind like vines; the yield maps to the existing fiber item.',
     harvestable: true,
+    removable: true,
     permitTier: 'hand',
     primaryYield: 'TENDER_VINES',
     secondaryYields: [],
@@ -722,6 +753,7 @@ export const SOURCES: HarvestSourceDef[] = [
       'Tufty bog plants crowning a bog patch — the living face of the bog, ' +
       'distinct from the dark peat ground beneath it. Yields peat moss.',
     harvestable: true,
+    removable: true,
     permitTier: 'hand',
     primaryYield: 'PEAT_MOSS',
     secondaryYields: [SPORES_25],

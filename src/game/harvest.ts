@@ -24,9 +24,10 @@
  *   })
  *
  * returns an unsubscribe function. The renderer does NOT call this
- * (it has no inventory or tool state); it only hosts depletion
- * filtering + chunk reload, which work off the shared harvestState
- * below regardless of who instantiated the listener.
+ * (it has no inventory or tool state); it only hosts removed
+ * filtering + shrink scaling + chunk reload, which work off the
+ * shared harvestState (see harvestState.ts) regardless of who
+ * instantiated the listener.
  *
  * TOOL QUERY SHAPE — OWNED TIER, NOT EQUIPPED (Adam, 2026-10-26,
  * correcting the brief's word): there is NO equipping anywhere in
@@ -54,7 +55,7 @@
  * non-gear quantity against free() BEFORE adding anything
  * (all-or-nothing, mirroring crafting's simulate-first): if it does
  * not fit, it emits 'harvest:failed' with reason 'inventory-full'
- * and grants nothing, depletes nothing, and does not consume
+ * and grants nothing, shrinks/removes nothing, and does not consume
  * multi-step progress. Harvest yields are never carrying gear
  * (apron/basket/trundle are crafted, not harvested), so the free()
  * check is exact for them; if a future harvestable ever yielded
@@ -66,33 +67,61 @@
  *  1. Ground: material is resolved at CURRENT position (she is
  *     always on ground, wherever she stands; the requested material
  *     is what the button showed, but the ground under her NOW is
- *     what she scoops). No range check, no depletion, no progress.
- *  2. Scatter: already-harvested? -> 'already-harvested'. Then the
- *     target must still be in findInRange at her last known position
- *     (range re-validation, not trusting the button) and its source
- *     must match the request -> 'out-of-range' / 'target-mismatch'.
- *     Range re-validation needs a 'player:moved' to have been seen;
- *     if none has (tests, or a listener created mid-game before the
- *     first move), it degrades to permit + depletion checks only —
- *     in the live game 'player:moved' fires constantly, so this
+ *     what she scoops). No range check, no shrink, no progress.
+ *     Ground rejects 'remove' with 'not-removable' (you cannot
+ *     remove the ground).
+ *  2. Scatter: removed? -> 'removed' (permanently gone: a removed
+ *     plant, or a taken log). Then the target must still be in
+ *     findInRange at her last known position (range re-validation,
+ *     not trusting the button) and its source must match the
+ *     request -> 'out-of-range' / 'target-mismatch'. Range
+ *     re-validation needs a 'player:moved' to have been seen; if
+ *     none has (tests, or a listener created mid-game before the
+ *     first move), it degrades to permit + state checks only — in
+ *     the live game 'player:moved' fires constantly, so this
  *     fallback is not the normal path.
  *  3. Permit: harvestYieldForTool(source, tool). Not permitted ->
  *     the outcome reason ('below-permit' / 'permit-tbd' / 'anchor' /
  *     'not-harvestable'). Note the tracker already excludes anchors
  *     and non-harvestables from buttons, so those reasons are
  *     defense-in-depth, not expected paths.
- *  4. Multi-step (prototype TUG/STOMP, lane decision following the
- *     prototype shape): each press adds the source's step to stored
- *     progress and emits 'harvest:progress' with no grant and no
- *     depletion until progress reaches 1. Only then do yields,
- *     capacity, grant, and depletion happen.
+ *  4a. REMOVE action (req.action === 'remove'): source must be
+ *     removable (plant-like sources only; logs, stones, bone, salt,
+ *     silt, and anchors reject with 'not-removable'). Multi-step
+ *     progress is bypassed (removal is one action) and cleared.
+ *     Yields: primary base x REMOVE_YIELD_MULTIPLIER (3, lane-
+ *     decided tunable, flagged) + the normal bonus roll; every
+ *     secondary drop granted (no roll); tool-gated yields as
+ *     normal. On success the plant is marked removed permanently
+ *     (no regrow) and 'harvest:completed' carries action 'remove'.
+ *  4b. HARVEST action: regrowing? -> 'regrowing' (shrunk, not yet
+ *     regrown — the tracker already hides these buttons, so this
+ *     is a stale-button defense). Multi-step (prototype TUG/STOMP,
+ *     lane decision following the prototype shape): each press
+ *     adds the source's step to stored progress and emits
+ *     'harvest:progress' with no grant and no shrink until
+ *     progress reaches 1. Only then do yields, capacity, grant,
+ *     and the after-harvest step happen.
  *  5. Yields: primary base + a bonus roll (rng() < bonusChance ?
  *     bonus : 0); each secondary drop rolls its own chance for +1;
  *     tool-gated yields (clay on silt, Adam-pinned) pay their table
  *     when the tool meets requiresTool. Same-item quantities merge.
  *  6. Capacity: total vs inventory.free(). Fits -> add each yield,
- *     deplete scatter targets (never ground), emit
- *     'harvest:completed' with merged yields + chunk coords.
+ *     then the after-harvest step (below), then emit
+ *     'harvest:completed' with merged yields + chunk coords +
+ *     action 'harvest'.
+ *
+ * AFTER HARVEST (Adam, 2026-10-26, PINNED — supersedes the earlier
+ * vanish model):
+ * - Ordinary sources SHRINK and REGROW (harvestState.ts: shrunk at
+ *   SHRINK_SCALE, harvestable again after REGROW_MS). The tracker
+ *   hides regrowing targets; the renderer scales them.
+ * - LOG sources (renewal 'spawn-near-trees': fallen logs, downed
+ *   oak) are TAKEN: marked removed (gone from that spot for good)
+ *   and a fresh log is scheduled to spawn near trees after
+ *   LOG_SPAWN_MS. Spawned logs harvest like fallen logs and, when
+ *   taken, schedule their own replacement — the chain renews.
+ * - Ground NEVER shrinks, depletes, or regrows: always scoopable.
  *
  * BONUS ROLLS: rng defaults to Math.random. That is GAMEPLAY randomness,
  * not world generation — the world-seed reproducibility rule covers
@@ -101,15 +130,6 @@
  * deterministic rng. The same roll function is used for bonus and
  * secondary drops, in primary-then-secondary-then-gated order, so an
  * injected rng makes an entire outcome reproducible.
- *
- * DEPLETION (prototype-faithful, Adam's task): a harvested scatter
- * object vanishes — one harvest, then gone. Ground NEVER depletes:
- * dirt/mud/grass are everywhere and always scoopable. Respawn rules
- * are OPEN (Adam has not ruled for the redesign): depletion here is
- * permanent until the seed changes (renderer clears harvestState on
- * setWorldGen) or harvestState.clear() is called. Respawn can be
- * added later as a time/schedule rule on top of this state — the
- * state shape (a set of target ids) already supports it.
  */
 
 import { bus } from './events';
@@ -125,10 +145,18 @@ import {
   HARVEST_RANGE,
   findInRange,
   groundSourceAt,
-  scatterTargetId,
   type HarvestTarget,
 } from './proximity';
+import {
+  harvestState,
+  REMOVE_YIELD_MULTIPLIER,
+  scatterTargetId,
+  type HarvestState,
+} from './harvestState';
 import type { WorldGen } from './worldgen';
+
+/** Re-exported so existing importers keep one harvest entry point. */
+export { harvestState };
 
 /** One merged yield line. */
 export interface HarvestYield {
@@ -158,68 +186,8 @@ export interface HarvestOutcomeDeps {
   getToolTier?: ToolTierQuery;
   /** Defaults to Math.random (gameplay luck, not worldgen). */
   rng?: () => number;
-}
-
-/** World harvest state: depletion + multi-step progress, shared. */
-export class HarvestState {
-  private depleted = new Set<string>();
-  private progress = new Map<string, number>();
-
-  isDepleted(targetId: string): boolean {
-    return this.depleted.has(targetId);
-  }
-
-  deplete(targetId: string): void {
-    this.depleted.add(targetId);
-    this.progress.delete(targetId);
-  }
-
-  progressFor(targetId: string): number {
-    return this.progress.get(targetId) ?? 0;
-  }
-
-  setProgress(targetId: string, progress: number): void {
-    this.progress.set(targetId, progress);
-  }
-
-  clearProgress(targetId: string): void {
-    this.progress.delete(targetId);
-  }
-
-  /** Seed change / world reset: depletion and progress both go. */
-  clear(): void {
-    this.depleted.clear();
-    this.progress.clear();
-  }
-}
-
-/** Shared singleton. Import this; do not construct a second state. */
-export const harvestState = new HarvestState();
-
-/**
- * A WorldGen view that filters depleted scatter objects out of
- * generated chunks. All other methods delegate untouched, so biome
- * weights, ground colors, and spawn are unaffected — only the
- * harvested objects vanish. The renderer wraps its generator with
- * this, so depletion is visible and depleted objects stop appearing
- * as proximity targets (the tracker runs on the wrapped generator).
- */
-export function wrapGenWithDepletion(
-  base: WorldGen,
-  state: HarvestState = harvestState,
-): WorldGen {
-  return {
-    ...base,
-    generateChunk: (cx: number, cz: number) => {
-      const chunk = base.generateChunk(cx, cz);
-      return {
-        ...chunk,
-        objects: chunk.objects.filter(
-          (obj) => !state.isDepleted(scatterTargetId(cx, cz, obj)),
-        ),
-      };
-    },
-  };
+  /** Clock for shrink/regrow/spawn timing. Defaults to Date.now. */
+  now?: () => number;
 }
 
 /**
@@ -246,7 +214,7 @@ export function stationPresence(
     for (let cx = minCx; cx <= maxCx; cx++) {
       for (const obj of gen.generateChunk(cx, cz).objects) {
         if (obj.kind !== 'stump') continue;
-        if (harvestState.isDepleted(scatterTargetId(cx, cz, obj))) continue;
+        if (harvestState.isRemoved(scatterTargetId(cx, cz, obj))) continue;
         if (Math.hypot(obj.x - x, obj.z - z) <= HARVEST_RANGE) {
           return { workstation: true };
         }
@@ -273,7 +241,9 @@ function isNotPermitted(o: ReturnType<typeof harvestYieldForTool>): o is {
 
 type FailedReason =
   | 'out-of-range'
-  | 'already-harvested'
+  | 'removed'
+  | 'regrowing'
+  | 'not-removable'
   | 'below-permit'
   | 'permit-tbd'
   | 'anchor'
@@ -296,6 +266,7 @@ export function createHarvestOutcomeListener(
   const getGen = typeof genDep === 'function' ? genDep : () => genDep;
   const getToolTier = deps.getToolTier ?? (() => null);
   const rng = deps.rng ?? Math.random;
+  const clock = deps.now ?? Date.now;
   let lastX: number | null = null;
   let lastZ: number | null = null;
 
@@ -326,11 +297,17 @@ export function createHarvestOutcomeListener(
   const unsubRequested = bus.on('harvest:requested', (req) => {
     const gen = getGen();
     const tool = getToolTier();
+    const nowMs = clock();
+    const action = req.action ?? 'harvest';
     const pos =
       lastX !== null && lastZ !== null ? { x: lastX, z: lastZ } : { x: req.x, z: req.z };
 
-    // --- Ground: material resolved at CURRENT position, never depleted.
+    // --- Ground: material resolved at CURRENT position, never shrunk.
     if (req.kind === 'ground') {
+      if (action === 'remove') {
+        fail(req, 'not-removable');
+        return;
+      }
       const ground: GroundMaterialDef = groundSourceAt(gen, pos.x, pos.z);
       const outcome = harvestYieldForTool(
         { harvestable: true, permitTier: ground.permitTier, bonusChance: undefined, anchor: undefined },
@@ -364,13 +341,72 @@ export function createHarvestOutcomeListener(
         cx: Math.floor(pos.x / CHUNK_SIZE),
         cz: Math.floor(pos.z / CHUNK_SIZE),
         yields: merged,
+        action: 'harvest',
       });
       return;
     }
 
-    // --- Scatter: depletion, range, source match, permit, progress.
-    if (state.isDepleted(req.targetId)) {
-      fail(req, 'already-harvested');
+    // --- Spawned logs (log-renewal system): targets the tracker
+    // appended from state, not from worldgen. They harvest exactly
+    // like fallen logs (hand permit, SNAP_WOOD) and, when taken,
+    // schedule their own replacement near trees.
+    if (req.targetId.startsWith('spawned-log:')) {
+      // Logs are never removable: harvesting already takes them,
+      // and their renewal is the spawn system.
+      if (action === 'remove') {
+        fail(req, 'not-removable');
+        return;
+      }
+      const spawned = state.spawnedLog(req.targetId);
+      if (!spawned) {
+        fail(req, 'removed');
+        return;
+      }
+      if (Math.hypot(spawned.x - pos.x, spawned.z - pos.z) > HARVEST_RANGE) {
+        fail(req, 'out-of-range');
+        return;
+      }
+      const logSource = SOURCE_BY_ID['fallenLog'];
+      if (!logSource) {
+        fail(req, 'target-mismatch');
+        return;
+      }
+      const logOutcome = harvestYieldForTool(logSource, tool);
+      if (isNotPermitted(logOutcome)) {
+        fail(req, logOutcome.reason);
+        return;
+      }
+      const logYields = new Map<string, number>();
+      mergeYields(
+        logYields,
+        logSource.primaryYield ?? '',
+        logOutcome.base + (rng() < logOutcome.bonusChance ? logOutcome.bonus : 0),
+      );
+      logYields.delete('');
+      const logMerged = [...logYields.entries()].map(([item, quantity]) => ({ item, quantity }));
+      if (logMerged.reduce((sum, y) => sum + y.quantity, 0) > deps.inventory.free()) {
+        fail(req, 'inventory-full', logMerged);
+        return;
+      }
+      for (const y of logMerged) deps.inventory.add(y.item, y.quantity);
+      state.takeSpawnedLog(req.targetId, nowMs, gen.seed);
+      bus.emit('harvest:completed', {
+        targetId: req.targetId,
+        sourceId: logSource.id,
+        kind: 'scatter',
+        x: spawned.x,
+        z: spawned.z,
+        cx: spawned.cx,
+        cz: spawned.cz,
+        yields: logMerged,
+        action: 'harvest',
+      });
+      return;
+    }
+
+    // --- Worldgen scatter: removed, range, source match, permit.
+    if (state.isRemoved(req.targetId)) {
+      fail(req, 'removed');
       return;
     }
     let target: HarvestTarget | undefined;
@@ -389,6 +425,66 @@ export function createHarvestOutcomeListener(
     const outcome = harvestYieldForTool(source, tool);
     if (isNotPermitted(outcome)) {
       fail(req, outcome.reason);
+      return;
+    }
+
+    // --- REMOVE action: bigger one-time yield, gone permanently.
+    // Bypasses multi-step progress (removal is one action) and the
+    // regrow check (removing a regrowing plant kills it for good).
+    if (action === 'remove') {
+      if (!source.removable) {
+        fail(req, 'not-removable');
+        return;
+      }
+      const removeYields = new Map<string, number>();
+      mergeYields(
+        removeYields,
+        source.primaryYield ?? '',
+        outcome.base * REMOVE_YIELD_MULTIPLIER +
+          (rng() < outcome.bonusChance ? outcome.bonus : 0),
+      );
+      for (const secondary of source.secondaryYields) {
+        mergeYields(removeYields, secondary.item, 1);
+      }
+      if (source.toolGatedYields) {
+        for (const gated of source.toolGatedYields) {
+          if (tool === null || harvestStageRank(tool) < harvestStageRank(gated.requiresTool)) {
+            continue;
+          }
+          const gatedYield = gated.yieldByStage[harvestStageRank(tool)];
+          if (!gatedYield) continue;
+          mergeYields(
+            removeYields,
+            gated.item,
+            gatedYield.base + (rng() < gatedYield.bonusChance ? gatedYield.bonus : 0),
+          );
+        }
+      }
+      removeYields.delete('');
+      const removeMerged = [...removeYields.entries()].map(([item, quantity]) => ({ item, quantity }));
+      if (removeMerged.reduce((sum, y) => sum + y.quantity, 0) > deps.inventory.free()) {
+        fail(req, 'inventory-full', removeMerged);
+        return;
+      }
+      for (const y of removeMerged) deps.inventory.add(y.item, y.quantity);
+      state.remove(req.targetId);
+      bus.emit('harvest:completed', {
+        targetId: req.targetId,
+        sourceId: req.sourceId,
+        kind: 'scatter',
+        x: req.x,
+        z: req.z,
+        cx: Math.floor(req.x / CHUNK_SIZE),
+        cz: Math.floor(req.z / CHUNK_SIZE),
+        yields: removeMerged,
+        action: 'remove',
+      });
+      return;
+    }
+
+    // --- HARVEST action: regrowing targets refuse (stale buttons).
+    if (state.isRegrowing(req.targetId, nowMs)) {
+      fail(req, 'regrowing');
       return;
     }
     if (source.multiStep) {
@@ -442,7 +538,20 @@ export function createHarvestOutcomeListener(
       return;
     }
     for (const y of merged) deps.inventory.add(y.item, y.quantity);
-    state.deplete(req.targetId);
+    if (source.renewal === 'spawn-near-trees') {
+      // Logs are TAKEN, not shrunk: gone from this spot for good,
+      // and a fresh log spawns near trees after LOG_SPAWN_MS.
+      state.remove(req.targetId);
+      state.scheduleLogSpawn(req.x, req.z, gen.seed, nowMs);
+    } else {
+      // Ordinary sources SHRINK and REGROW (Adam, 2026-10-26).
+      state.shrink(
+        req.targetId,
+        Math.floor(req.x / CHUNK_SIZE),
+        Math.floor(req.z / CHUNK_SIZE),
+        nowMs,
+      );
+    }
     bus.emit('harvest:completed', {
       targetId: req.targetId,
       sourceId: req.sourceId,
@@ -452,6 +561,7 @@ export function createHarvestOutcomeListener(
       cx: Math.floor(req.x / CHUNK_SIZE),
       cz: Math.floor(req.z / CHUNK_SIZE),
       yields: merged,
+      action: 'harvest',
     });
   });
 

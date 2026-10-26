@@ -26,20 +26,23 @@
  * walking from mud onto grass changes the target set and UI swaps
  * the button.
  *
- * "Looking down", per perspective (lane-decided, see LOOK_DOWN_PITCH):
+ * "Looking down", per perspective (see LOOK_DOWN_PITCH):
  * - First-person: pitch <= -0.4 rad (about 23° below horizontal).
  *   Pitch is negative when looking down (mouse-up raises pitch).
  *   A clear intentional look-down, not a slight downward glance.
- * - Third-person overhead: there is no look input at all (mouse look
- *   only exists in first-person, and the overhead camera at offset
- *   (0, 16, 10) looks steeply down by construction), so "looking
- *   down" is trivially true there — and the clutter problem Adam
- *   named is instead solved by a fallback rule: in third-person the
- *   ground target appears ONLY when no scatter target is in range.
- *   Ground is the fallback action when nothing else is near, never a
- *   competitor to object buttons. This definition is lane-decided
- *   and easy for Adam to override (e.g. third-person ground always,
- *   or a dedicated look-down key) — it is flagged in the report.
+ *   Threshold lane-decided, single tunable constant.
+ * - Third-person overhead: PINNED by Adam 2026-10-26 — keep the
+ *   fallback. There is no look input at all (mouse look only exists
+ *   in first-person, and the overhead camera at offset (0, 16, 10)
+ *   looks steeply down by construction), so "looking down" is
+ *   trivially true there — and the clutter problem Adam named is
+ *   solved by the fallback rule: in third-person the ground target
+ *   appears ONLY when no scatter target is in range. Adam's words:
+ *   "object in range for harvest is ok" — objects in range win.
+ *   Ground is the fallback action when nothing else is near, never
+ *   a competitor to object buttons. This rule is now Adam-pinned,
+ *   not lane-decided; it was already live and is unchanged by the
+ *   pin, only its marking.
  *
  * Design notes:
  * - Pure + deterministic: findInRange regenerates the chunks
@@ -55,6 +58,10 @@
  * - Excluded from targets: non-harvestable ground character (vine,
  *   bog patch, standing water, marsh grass, flowers, tall trees) and
  *   anchors (the stump is claimed as a workstation, not harvested).
+ *   Also excluded by the TRACKER (not by pure findInRange): regrowing
+ *   targets (shrunk, not yet regrown — see harvestState.ts) and
+ *   removed targets (the wrapped generator filters those). Spawned
+ *   logs are appended by the tracker as ordinary scatter targets.
  * - No occlusion yet: range is distance only, through objects and
  *   walls alike. That is a known limit for a later pass, not a bug
  *   to paper over here.
@@ -64,10 +71,14 @@ import { bus } from './events';
 import { marshWeight } from './biomes';
 import { CHUNK_SIZE } from '../constants';
 import {
+  SOURCE_BY_ID,
   SOURCE_FOR_KIND,
   GROUND_MATERIAL_BY_ID,
   type GroundMaterialDef,
 } from './objects';
+import { harvestState, scatterTargetId } from './harvestState';
+
+export { scatterTargetId };
 import type { WorldGen } from './worldgen';
 import type { ScatterKind } from '../types';
 
@@ -124,20 +135,6 @@ export function groundSourceAt(gen: WorldGen, x: number, z: number): GroundMater
     return GROUND_MATERIAL_BY_ID.grass;
   }
   return GROUND_MATERIAL_BY_ID.dirt;
-}
-
-/**
- * Stable scatter target id, shared with depletion (harvest.ts): the
- * same id must be computed from a generated object and from a button
- * press, or depletion could never match its target. Format:
- * 'scatter:<cx>,<cz>:<kind>:<x.toFixed(2)>,<z.toFixed(2)>'.
- */
-export function scatterTargetId(
-  cx: number,
-  cz: number,
-  obj: { kind: string; x: number; z: number },
-): string {
-  return `scatter:${cx},${cz}:${obj.kind}:${obj.x.toFixed(2)},${obj.z.toFixed(2)}`;
 }
 
 /** The ground target at (x, z): always distance 0, always "in range"
@@ -263,7 +260,41 @@ export class ProximityTracker {
 
   private recompute(): HarvestTarget[] {
     if (this.lastX === null || this.lastZ === null) return [];
-    const scatter = findInRange(this.gen, this.lastX, this.lastZ, false);
+    // State filtering (shrink + regrow model, Adam 2026-10-26):
+    // regrowing targets are NOT buttons — they show shrunk in the
+    // world but cannot be harvested again until regrown. Removed
+    // targets never reach here (the wrapped generator filters
+    // them). Spawned logs (log-renewal system) are appended as
+    // ordinary scatter targets. The filter runs BEFORE the
+    // third-person ground fallback, so a nearby regrowing plant
+    // does not suppress the ground button — only actually
+    // harvestable scatter does (Adam-pinned fallback).
+    const now = Date.now();
+    const scatter = findInRange(this.gen, this.lastX, this.lastZ, false).filter(
+      (t) => !harvestState.isRegrowing(t.id, now),
+    );
+    const logSource = SOURCE_BY_ID['fallenLog'];
+    if (logSource) {
+      for (const log of harvestState.spawnedLogsInRange(
+        this.lastX,
+        this.lastZ,
+        HARVEST_RANGE,
+      )) {
+        const distance = Math.hypot(log.x - this.lastX, log.z - this.lastZ);
+        scatter.push({
+          id: log.id,
+          sourceId: logSource.id,
+          kind: 'scatter',
+          x: log.x,
+          z: log.z,
+          distance,
+          name: logSource.name,
+          primaryYield: logSource.primaryYield ?? '',
+          permitTier: logSource.permitTier,
+        });
+      }
+      scatter.sort((a, b) => a.distance - b.distance);
+    }
     const groundEligible =
       this.lastMode === 'first'
         ? this.lastPitch <= LOOK_DOWN_PITCH
