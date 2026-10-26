@@ -554,6 +554,16 @@
  *   resume; triggers plug into setPaused only after Adam
  *   answers. Until then the badge is dormant (nothing sets
  *   the flag yet) and the gates stand ready.
+ * - PAUSE COMPLETION, LIVE (Adam, 2026-10-26 — both answers
+ *   now pinned; SUPERSEDES the dormant note above): resume is
+ *   TAP-TO-RESUME — the indicator is now a button reading
+ *   "Paused — tap to resume" and tapping it calls
+ *   pauseState.setPaused(false) (idempotent, so a stray second
+ *   tap emits nothing). And the trigger is wired: window blur
+ *   OR document hidden sets paused=true ("Switching Windows
+ *   should pause the game. If it's not playable, it should
+ *   pause"). NO auto-resume anywhere — focus/visible return
+ *   deliberately clears nothing; only the button resumes.
  * POINTER DISCIPLINE: overlays are pointer-events-none except the
  * small interactive pieces (HUD buttons, panels, harvest buttons),
  * so world clicks — including the first-person mouse-capture click
@@ -566,6 +576,7 @@ import { createWorldGen } from './game/worldgen';
 import { WorldRenderer } from './game/renderer';
 import { PlayerController } from './game/player';
 import { bus, type EventMap } from './game/events';
+import { pauseState } from './game/pause';
 import {
   createHarvestOutcomeListener,
   stationPresence,
@@ -1121,11 +1132,10 @@ export default function App() {
   // PAUSE (Adam, 2026-10-26 — core 54e525c): the engine pause
   // flag, mirrored for the shell. The ref is what the timers
   // read (intervals/rAF loops close over it, never over state);
-  // the state drives the Paused indicator. Both are set ONLY
-  // by the 'game:pause-changed' subscription in the boot
-  // effect — NO trigger lives in this file (nothing sets the
-  // flag until Adam answers auto-vs-tap resume and
-  // visibility-vs-blur).
+  // the state drives the Paused indicator. The flag is SET by
+  // the trigger effect below (blur / hidden) and CLEARED only
+  // by the indicator's tap (tap-to-resume, pinned) — nothing
+  // here auto-resumes on focus return.
   const pausedRef = useRef(false);
   const [paused, setPaused] = useState(false);
 
@@ -1644,6 +1654,31 @@ export default function App() {
       playerRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // PAUSE TRIGGER (Adam, 2026-10-26 — "Switching Windows should
+  // pause the game. If it's not playable, it should pause"):
+  // the game pauses whenever it stops being playable — the tab
+  // is hidden OR the window loses focus (switching windows,
+  // switching apps, anything that takes the game off-screen).
+  // This SETS the flag only. It never clears it: resume is
+  // tap-only (pinned), so focus/visible return does NOT
+  // auto-resume — only the Paused button's tap calls
+  // setPaused(false). setPaused is idempotent, so a repeated
+  // blur/hidden event emits nothing.
+  useEffect(() => {
+    const pause = () => {
+      pauseState.setPaused(true);
+    };
+    const onVisibility = () => {
+      if (document.hidden) pause();
+    };
+    window.addEventListener('blur', pause);
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      window.removeEventListener('blur', pause);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
   }, []);
 
   const regenerate = () => {
@@ -3045,10 +3080,14 @@ export default function App() {
         />
       ) : null}
 
-      {/* Paused badge: only while the engine flag is set. It
-        renders regardless of panels (a global state badge, not
-        a panel), pointer-events-none, so it never eats a tap. */}
-      {paused ? <PausedIndicator /> : null}
+      {/* Paused control: only while the engine flag is set. It
+        renders regardless of panels (a global state control,
+        not a panel). The wrapper is pointer-events-none, but
+        the button itself takes its own tap — that tap is the
+        resume (tap-to-resume, pinned). */}
+      {paused ? (
+        <PausedIndicator onResume={() => pauseState.setPaused(false)} />
+      ) : null}
 
       {/* Camera transition overlay (vignette at rest, fade on switch). */}
       <CameraTransition switching={switching} />
