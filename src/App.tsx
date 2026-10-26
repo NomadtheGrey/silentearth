@@ -564,6 +564,22 @@
  *   should pause the game. If it's not playable, it should
  *   pause"). NO auto-resume anywhere — focus/visible return
  *   deliberately clears nothing; only the button resumes.
+ * - PILE SAVE WIRING, LIVE (Adam, 2026-10-26 — DEV brief,
+ *   merge #5 on hold until everything is built): piles are no
+ *   longer session-only. saveNow passes pileState.snapshot()
+ *   (mapped to item/quantity/x/z, the id dropped) as
+ *   draft.piles, so serializeSave writes them normalized,
+ *   order preserved, never merged; boot restore, inside the
+ *   saveRestoredRef guard after the renderer exists, drops
+ *   each saved pile back through pileState.drop() (merge-safe,
+ *   emits pile:dropped for tracker + renderer visuals; the
+ *   100 ms moved tick then surfaces in-range piles). The
+ *   guard also protects against a double restore doubling
+ *   quantities (drop merges by id). Regenerate clears piles
+ *   via setWorldGen and the next save snapshots the empty
+ *   set — a new world is a new pile set, by design. Old
+ *   saves load piles: []. App.tsx only; no format change
+ *   (SaveData.piles already existed).
  * POINTER DISCIPLINE: overlays are pointer-events-none except the
  * small interactive pieces (HUD buttons, panels, harvest buttons),
  * so world clicks — including the first-person mouse-capture click
@@ -1206,6 +1222,16 @@ export default function App() {
             x: loom.x,
             z: loom.z,
           })),
+          // PILE SAVE WIRING: the live pile set rides every
+          // save (id dropped — serializeSave rebuilds nothing
+          // from it; it writes item/quantity/x/z normalized,
+          // order preserved, never merged).
+          piles: pileState.snapshot().map((pile) => ({
+            item: pile.item,
+            quantity: pile.quantity,
+            x: pile.x,
+            z: pile.z,
+          })),
         }),
       );
     } catch {
@@ -1398,6 +1424,23 @@ export default function App() {
           } catch {
             // Same skip rule as fires.
           }
+        }
+        // PILE SAVE WIRING: re-place each saved pile through
+        // pileState.drop() — merge-safe by id, and it emits
+        // pile:dropped, so the tracker and the renderer pile
+        // group pick the restored piles up (the tracker's
+        // 100 ms moved tick surfaces the in-range set once
+        // the loop runs at the restored position). Saved
+        // piles are deserialize-validated (normalized ids,
+        // positive quantities, finite coords); drop() returns
+        // null for anything invalid instead of throwing, so
+        // no skip rule is needed here. Inside the
+        // saveRestoredRef guard, so a second boot-effect run
+        // cannot double-drop (drop merges, which would double
+        // quantities). Runs after the renderer exists, so
+        // setWorldGen's pile clear cannot wipe the restore.
+        for (const pile of saved.piles) {
+          pileState.drop(pile.item, pile.quantity, pile.x, pile.z);
         }
         player.x = saved.position.x;
         player.z = saved.position.z;
