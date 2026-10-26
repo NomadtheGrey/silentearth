@@ -86,19 +86,15 @@
  * event exists for exactly this reason. The UI keeps NO second
  * threshold constant: the tracker's -0.4 is the single value.
  *
- * THIRD-PERSON (tracker definition, lane-decided, flagged for
- * Adam's override): the overhead camera already looks down, and
- * third-person has no look input at all (mouse look is
+ * THIRD-PERSON (tracker definition, PINNED by Adam 2026-10-26 —
+ * keep the fallback): the overhead camera already looks down,
+ * and third-person has no look input at all (mouse look is
  * first-person only), so "looking down" is trivially true there
  * — and the clutter problem is instead solved by a fallback rule:
  * in third-person the ground target appears ONLY when no scatter
  * target is in range. Ground is the fallback action when nothing
- * else is near, never a competitor to scatter buttons. This
- * definition is Background's lane decision, explicitly flagged
- * as easy for Adam to override (e.g. third-person ground always,
- * or a dedicated look-down key). Adam's call on the third-person
- * rule is therefore still open — but it is a call on the
- * tracker's fallback, not on an undefined UI rule.
+ * else is near, never a competitor to scatter buttons. Adam's
+ * words: "object in range for harvest is ok."
  *
  * THE BUS SHAPE (registered in EventMap by Background, 2026-10-26):
  * The bus is the single dispatch point, events named `domain:verb`
@@ -157,6 +153,18 @@ export interface HarvestTarget {
  * 'harvest:requested' EventMap payload, field for field — no
  * amounts, no yields, no inventory effect. Outcome logic belongs
  * to the next step.
+ *
+ * REMOVE (Adam, 2026-10-26; shape documented by Background in
+ * events.ts, 2003619): a remove press is the same event with
+ * `action: 'remove'` — totally remove the plant, bigger one-time
+ * yield (primary base x 3 + bonus roll + all secondaries), gone
+ * permanently (no regrow). Omitted action means 'harvest', as
+ * every button already fires. Removability is outcome-time
+ * (plant-like sources only; logs, stones, bone, salt, silt, and
+ * anchors reject with 'not-removable'), so this layer renders
+ * the remove option on all scatter targets and lets the outcome
+ * event explain a rejection honestly — it holds no source
+ * registry to pre-judge removability, by design.
  */
 export interface HarvestRequest {
   targetId: string;
@@ -164,6 +172,8 @@ export interface HarvestRequest {
   kind: HarvestTargetKind;
   x: number;
   z: number;
+  /** What the press means. Omitted = 'harvest'. */
+  action?: 'harvest' | 'remove';
 }
 
 /** Bus event name for a harvest press (registered in EventMap). */
@@ -177,5 +187,13 @@ export function harvestRequestFor(target: HarvestTarget): HarvestRequest {
     kind: target.kind,
     x: target.worldX,
     z: target.worldZ,
+  };
+}
+
+/** Build a remove press from a target: same event, action 'remove'. */
+export function removeRequestFor(target: HarvestTarget): HarvestRequest {
+  return {
+    ...harvestRequestFor(target),
+    action: 'remove',
   };
 }

@@ -50,8 +50,8 @@ export type {
   HarvestTarget,
   HarvestRequest,
 } from './proximityHarvest';
-export { HarvestButton } from './HarvestButton';
-export type { HarvestButtonProps } from './HarvestButton';
+export { HarvestButton, RemoveButton } from './HarvestButton';
+export type { HarvestButtonProps, RemoveButtonProps } from './HarvestButton';
 export { ProximityHarvestButtons } from './ProximityHarvestButtons';
 export type { ProximityHarvestButtonsProps } from './ProximityHarvestButtons';
 export { projectWorldToScreen } from './worldProjection';

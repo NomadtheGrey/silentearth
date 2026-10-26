@@ -36,19 +36,30 @@
  *   unavailable until they exist. The raw generator is used
  *   because stumps are never depleted, so it gives the same
  *   stump set as the renderer's depletion-wrapped generator.
- * - Inventory capacity mode: PersonalInventory requires a
- *   largeBasketMode, and replace-vs-stack is still Adam's open
- *   question. Systems solved the wiring side of it explicitly:
- *   this shell constructs through createTemporaryWiringInventory()
- *   (TEMPORARY-WIRING-PLACEHOLDER, 'replace' as the placeholder,
- *   not a ruling — see crafting-execution.ts). When Adam rules,
- *   that call is replaced with a PersonalInventory built with the
- *   ruled mode and the placeholder function is deleted; the
- *   placeholder must never simply be kept as the answer. It
- *   changes nothing until a large basket is held alongside a
- *   small one (a lone small basket always gives +25 either way),
- *   and the upgrade normally consumes the small basket, so the
- *   modes coincide right after the upgrade in normal play.
+ * - Inventory capacity mode: PINNED by Adam 2026-10-26 — a large
+ *   basket REPLACES a small basket (full kit: pockets 10 + apron
+ *   10 + large 50 = 70). The shell constructs PersonalInventory
+ *   directly with largeBasketMode 'replace' — the ruled mode, not
+ *   Systems' temporary wiring placeholder, which this shell no
+ *   longer references (Systems deletes the placeholder function
+ *   separately). The modes coincide right after the upgrade in
+ *   normal play (the upgrade consumes the small basket); they
+ *   diverge only if she later holds both baskets at once.
+ * - Remove option (Adam, 2026-10-26): alongside normal harvest,
+ *   she may TOTALLY REMOVE a plant — more resources at once, but
+ *   the plant is gone permanently (no regrow), for clearing
+ *   ground for a house. Wired to Background's documented shape
+ *   (2003619): a remove press is 'harvest:requested' with action
+ *   'remove' — same event, not a second channel. The outcome
+ *   grants primary base x 3 + bonus roll + all secondaries, and
+ *   marks the plant removed permanently. The button renders on
+ *   every scatter target (removability is outcome-time: plant-
+ *   like sources only, so a remove press on a log, stone, bone,
+ *   salt, silt, or anchor returns an honest 'not-removable'
+ *   failure through the existing feedback path); ground targets
+ *   never get one. The "Remove" label is the lane's pick,
+ *   flagged, not pinned. Feedback for a remove completion shows
+ *   the yields exactly as carried, like any harvest.
  * - Owned tool (Adam correction, 2026-10-26 — owning is
  *   sufficient, no equipping): there is no held/equipped slot.
  *   The owned tool is the highest-stage ladder tool present in
@@ -105,16 +116,14 @@ import { CameraTransition } from './ui/CameraTransition';
 import { CAMERA_TRANSITION } from './ui/cameraPresentation';
 import { projectWorldToScreen } from './ui/worldProjection';
 import type { HarvestTarget, HarvestRequest } from './ui/proximityHarvest';
+import { removeRequestFor } from './ui/proximityHarvest';
 import type {
   InventoryItem,
   CraftingRecipe,
   FeedbackTone,
 } from './ui/types';
-import type { PersonalInventory } from './systems/inventory';
-import {
-  createTemporaryWiringInventory,
-  executeCraft,
-} from './systems/crafting-execution';
+import { PersonalInventory } from './systems/inventory';
+import { executeCraft } from './systems/crafting-execution';
 import {
   ownedTier,
   ownedToolItem,
@@ -164,12 +173,14 @@ export default function App() {
   const playerRef = useRef<PlayerController | null>(null);
   const genRef = useRef(createWorldGen(DEFAULT_SEED));
 
-  // The shell owns the one personal inventory, built through
-  // Systems' temporary wiring helper (see the header — placeholder
-  // mode until Adam rules on replace-vs-stack).
+  // The shell owns the one personal inventory, built directly
+  // with the ruled large-basket mode (see the header — 'replace',
+  // pinned by Adam 2026-10-26, total 70).
   const inventoryRef = useRef<PersonalInventory | null>(null);
   if (inventoryRef.current === null) {
-    inventoryRef.current = createTemporaryWiringInventory();
+    inventoryRef.current = new PersonalInventory({
+      largeBasketMode: 'replace',
+    });
   }
   const inventory = inventoryRef.current;
 
@@ -552,6 +563,15 @@ export default function App() {
     bus.emit('harvest:requested', request);
   };
 
+  const handleRemove = (target: HarvestTarget) => {
+    // Same shape as a harvest press, action 'remove' (Background's
+    // documented shape, 2003619): the outcome listener resolves
+    // it into the bigger one-time yield or an honest failure
+    // ('not-removable' for logs, stones, and the like). Nothing
+    // here pre-judges removability or previews a yield.
+    bus.emit('harvest:requested', removeRequestFor(target));
+  };
+
   return (
     <div className="relative w-full h-screen bg-[#121612] overflow-hidden font-mono text-[#f0ead6]">
       {/* 3D viewport */}
@@ -562,6 +582,7 @@ export default function App() {
         <ProximityHarvestButtons
           targets={harvestTargets}
           onHarvest={handleHarvest}
+          onRemove={handleRemove}
         />
         {feedbacks.map((feedback) => (
           <Fragment key={feedback.id}>

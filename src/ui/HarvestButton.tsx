@@ -18,6 +18,19 @@
  * underfoot is not a second-class target. The verb reads "Harvest"
  * unless the caller overrides it per target; the bus carries no
  * verb, so the verb is presentation, not data.
+ *
+ * REMOVE (Adam, 2026-10-26): alongside normal harvest, she may
+ * TOTALLY REMOVE a plant — more resources at once, but the plant
+ * is gone permanently (no regrow), for clearing ground for a
+ * house. RemoveButton below is that second option: same look,
+ * an uprooted-plant glyph, and a target-level onRemove callback
+ * (no bus import, no invented event — the wiring caller maps it
+ * to Background's documented shape, 'harvest:requested' with
+ * action 'remove', 2003619). It renders only for scatter
+ * targets, only when the caller passes onRemove, and never for
+ * ground: there is no plant to remove from the ground underfoot,
+ * and ground never depletes. The "Remove" label is the lane's
+ * pick, flagged, not pinned.
  */
 
 import type { HarvestTarget, HarvestRequest } from './proximityHarvest';
@@ -57,6 +70,55 @@ function KindGlyph({ kind }: { kind: HarvestTarget['kind'] }) {
       />
       <path d="M 7,3 L 7,12" stroke="#2d451e" strokeWidth="1" fill="none" />
     </svg>
+  );
+}
+
+export interface RemoveButtonProps {
+  /** The in-range scatter target this button removes. */
+  target: HarvestTarget;
+  /** Called with the target when the player presses the button. */
+  onRemove?: (target: HarvestTarget) => void;
+  /** Verb for the button. Default "Remove" (lane's pick, flagged). */
+  removeLabel?: string;
+  /** Look for the button. Default "mire" (the world outside). */
+  theme?: UiThemeName;
+}
+
+/** Small uprooted plant: stem, leaf, and exposed roots. */
+function UprootGlyph() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
+      <path d="M 7,1 L 7,8" stroke="#5c823d" strokeWidth="1.5" fill="none" />
+      <path
+        d="M 7,3 C 4,2 3,4 4,6 C 6,6 7,5 7,3 Z"
+        fill="#5c823d"
+      />
+      <path d="M 7,8 L 5,12 M 7,8 L 7,12 M 7,8 L 9,12" stroke="#a8a29e" strokeWidth="1" fill="none" />
+    </svg>
+  );
+}
+
+export function RemoveButton({
+  target,
+  onRemove,
+  removeLabel = 'Remove',
+  theme = 'mire',
+}: RemoveButtonProps) {
+  const t = UI_THEMES[theme];
+  return (
+    <button
+      type="button"
+      onClick={() => onRemove?.(target)}
+      aria-label={`${removeLabel} ${target.name} permanently`}
+      className={
+        'flex items-center gap-2 rounded-full px-3 py-1.5 text-sm shadow-lg transition-transform hover:scale-105 ' +
+        t.panel
+      }
+    >
+      <UprootGlyph />
+      <span className="font-medium">{removeLabel}</span>
+      <span className={t.muted}>{target.name}</span>
+    </button>
   );
 }
 
