@@ -80,6 +80,15 @@ export { CameraToggle } from './CameraToggle';
 export type { CameraToggleProps } from './CameraToggle';
 export { TouchControls } from './TouchControls';
 export type { TouchControlsProps } from './TouchControls';
+export {
+  OptionsModal,
+  FONT_OPTIONS,
+  DEFAULT_FONT_ID,
+  loadFontChoice,
+  saveFontChoice,
+  fontClassFor,
+} from './OptionsModal';
+export type { OptionsModalProps, FontId } from './OptionsModal';
 export { Popup } from './Popup';
 export type { PopupProps } from './Popup';
 export type {

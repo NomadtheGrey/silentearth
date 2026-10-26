@@ -266,6 +266,21 @@
  *   ContextMenu gains a 70vh bound + scroll (overflow-only,
  *   no change when it fits). Panel density is deliberately
  *   unchanged — thumb targets outrank density on phone.
+ * - OPTIONS MODAL, LIVE (Adam, 2026-10-26): a tabbed modal
+ *   (Settings first; the tab bar is a scaffold for later tabs,
+ *   none invented here) holding exactly one setting — the UI
+ *   font dropdown (IM Fell English by default, then Alegreya,
+ *   EB Garamond). The choice persists in localStorage under
+ *   its own settings key, never the Systems save file, and
+ *   replaces font-mono on the App root, so it restyles the
+ *   whole 2D UI with a serif fallback if a webfont fails; it
+ *   never touches the 3D canvas. All three families load via
+ *   Google Fonts (display=swap); browsers only download the
+ *   family actually used. Opened by an Options button beside
+ *   Inventory/Crafting in the stack and in the touch slim
+ *   bar; closes via X, backdrop tap, or Escape. The panel is
+ *   a bottom sheet on touch (bounded, scroll inside) and a
+ *   centred card on desktop, per the phone-HUD rules.
  * POINTER DISCIPLINE: overlays are pointer-events-none except the
  * small interactive pieces (HUD buttons, panels, harvest buttons),
  * so world clicks — including the first-person mouse-capture click
@@ -319,6 +334,13 @@ import { ContextMenu } from './ui/ContextMenu';
 import type { ContextAction } from './ui/types';
 import { CameraToggle } from './ui/CameraToggle';
 import { TouchControls } from './ui/TouchControls';
+import {
+  OptionsModal,
+  fontClassFor,
+  loadFontChoice,
+  saveFontChoice,
+  type FontId,
+} from './ui/OptionsModal';
 import { InventoryPanel } from './ui/InventoryPanel';
 import { CraftingMenu } from './ui/CraftingMenu';
 import { ProximityHarvestButtons } from './ui/ProximityHarvestButtons';
@@ -1556,6 +1578,16 @@ export default function App() {
   // the panels are one tap away. Desktop never collapses.
   const [hudCollapsed, setHudCollapsed] = useState(isTouch);
 
+  // Options font (see the header): shell-owned UI setting,
+  // persisted in its own localStorage key — never the Systems
+  // save file. No stored choice reads as IM Fell English.
+  const [font, setFont] = useState<FontId>(loadFontChoice);
+  const [optionsOpen, setOptionsOpen] = useState(false);
+  const handleFontChange = (next: FontId): void => {
+    setFont(next);
+    saveFontChoice(next);
+  };
+
   // Visible thin scrollbars on the touch scroll containers
   // (Adam: "put in scrollbars"): native mobile scrollbars are
   // overlay and fade, so a user who never swipes sees no
@@ -1616,7 +1648,12 @@ export default function App() {
   };
 
   return (
-    <div className="relative w-full h-screen bg-[#121612] overflow-hidden font-mono text-[#f0ead6]">
+    <div
+      className={
+        'relative w-full h-screen bg-[#121612] overflow-hidden text-[#f0ead6] ' +
+        fontClassFor(font)
+      }
+    >
       {/* 3D viewport */}
       <div ref={containerRef} className="absolute inset-0" />
 
@@ -1758,6 +1795,17 @@ export default function App() {
             >
               Crafting
             </button>
+            <button
+              type="button"
+              onClick={() => setOptionsOpen(true)}
+              className={
+                isTouch
+                  ? 'rounded bg-[#3a4436] px-3 py-2 text-sm min-h-[44px] hover:bg-[#4a5546]'
+                  : 'rounded bg-[#3a4436] px-3 py-1 text-xs hover:bg-[#4a5546]'
+              }
+            >
+              Options
+            </button>
             <CameraToggle
               perspective={cameraMode}
               comfortable={isTouch}
@@ -1858,6 +1906,13 @@ export default function App() {
               className="min-h-[44px] rounded bg-[#3a4436] px-3 py-2 text-sm hover:bg-[#4a5546]"
             >
               Crafting
+            </button>
+            <button
+              type="button"
+              onClick={() => setOptionsOpen(true)}
+              className="min-h-[44px] rounded bg-[#3a4436] px-3 py-2 text-sm hover:bg-[#4a5546]"
+            >
+              Options
             </button>
             <CameraToggle
               perspective={cameraMode}
@@ -1970,6 +2025,16 @@ export default function App() {
           onMove={applyTouchMove}
           onLook={applyTouchLook}
           onInteract={handleTouchInteract}
+        />
+      ) : null}
+
+      {/* Options modal (tabbed; Settings first, font only). */}
+      {optionsOpen ? (
+        <OptionsModal
+          font={font}
+          onFontChange={handleFontChange}
+          onClose={() => setOptionsOpen(false)}
+          comfortable={isTouch}
         />
       ) : null}
 

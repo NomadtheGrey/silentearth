@@ -1,1 +1,14 @@
 @import "tailwindcss";
+
+/* UI font families (Options modal font setting). Each carries a
+   serif fallback stack if the webfont fails to load; the 3D
+   canvas never uses these classes. */
+.font-im-fell {
+  font-family: 'IM Fell English', Georgia, 'Times New Roman', serif;
+}
+.font-alegreya {
+  font-family: 'Alegreya', Georgia, 'Times New Roman', serif;
+}
+.font-eb-garamond {
+  font-family: 'EB Garamond', Georgia, 'Times New Roman', serif;
+}
