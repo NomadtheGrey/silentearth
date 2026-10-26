@@ -183,6 +183,7 @@ import {
 } from './harvestState';
 import type { WorldGen } from './worldgen';
 import { TOO_HUNGRY_STAGE, type HungerStageQuery } from './hunger';
+import { loomState } from './loomState';
 
 /** Re-exported so existing importers keep one harvest entry point. */
 export { harvestState };
@@ -242,36 +243,58 @@ export function stationPresence(
   gen: WorldGen,
   x: number,
   z: number,
-): { workstation: boolean } {
+): { workstation: boolean; loom: boolean } {
   // Felled stumps count too — and this check must read state, not
   // just the passed generator, because callers pass the RAW
   // generator (App passes genRef.current) while felled stumps live
   // in state until the wrapped generator adds them.
-  if (harvestState.felledStumpsInRange(x, z, HARVEST_RANGE)) {
-    return { workstation: true };
-  }
-  const minCx = Math.floor((x - HARVEST_RANGE) / CHUNK_SIZE);
-  const maxCx = Math.floor((x + HARVEST_RANGE) / CHUNK_SIZE);
-  const minCz = Math.floor((z - HARVEST_RANGE) / CHUNK_SIZE);
-  const maxCz = Math.floor((z + HARVEST_RANGE) / CHUNK_SIZE);
-  for (let cz = minCz; cz <= maxCz; cz++) {
-    for (let cx = minCx; cx <= maxCx; cx++) {
-      for (const obj of gen.generateChunk(cx, cz).objects) {
-        if (obj.kind !== 'stump') continue;
-        if (harvestState.isRemoved(scatterTargetId(cx, cz, obj))) continue;
-        if (Math.hypot(obj.x - x, obj.z - z) <= HARVEST_RANGE) {
-          return { workstation: true };
+  let workstation = harvestState.felledStumpsInRange(x, z, HARVEST_RANGE);
+  if (!workstation) {
+    const minCx = Math.floor((x - HARVEST_RANGE) / CHUNK_SIZE);
+    const maxCx = Math.floor((x + HARVEST_RANGE) / CHUNK_SIZE);
+    const minCz = Math.floor((z - HARVEST_RANGE) / CHUNK_SIZE);
+    const maxCz = Math.floor((z + HARVEST_RANGE) / CHUNK_SIZE);
+    for (let cz = minCz; cz <= maxCz && !workstation; cz++) {
+      for (let cx = minCx; cx <= maxCx && !workstation; cx++) {
+        for (const obj of gen.generateChunk(cx, cz).objects) {
+          if (obj.kind !== 'stump') continue;
+          if (harvestState.isRemoved(scatterTargetId(cx, cz, obj))) continue;
+          if (Math.hypot(obj.x - x, obj.z - z) <= HARVEST_RANGE) {
+            workstation = true;
+            break;
+          }
         }
       }
     }
   }
-  return { workstation: false };
+  // Loom presence (gap-closing round, Adam 2026-10-26): a placed
+  // loom within the same HARVEST_RANGE (2.5 m, workstation
+  // precedent) counts as station 'loom'. This reads live
+  // loomState, like the felled-stump check reads live state.
+  const loom = loomState.loomsInRange(x, z, HARVEST_RANGE);
+  return { workstation, loom };
 }
 
-/** Map station presence onto Systems' StationContext values. */
+/**
+ * Map station presence onto Systems' StationContext values.
+ * Loom takes precedence when both are nearby: canCraft
+ * requires an EXACT station match, so a single context cannot
+ * satisfy both families at once, and the gap this landing
+ * closes is garments — standing at a loom must read as
+ * 'loom', or garments stay uncraftable. FLAGGED WART: while
+ * both a stump and a loom are in range, workstation recipes
+ * read as mismatched until she steps out of loom range.
+ * The presence object itself carries both booleans, so UI's
+ * later CraftingMenu wiring can surface both contexts if it
+ * wants; this mapping is the single-context fallback. The
+ * `loom` field is optional so presence objects built before
+ * this landing (workstation only) still map.
+ */
 export function stationContextForPresence(presence: {
   workstation: boolean;
-}): 'workstation' | null {
+  loom?: boolean;
+}): 'workstation' | 'loom' | null {
+  if (presence.loom) return 'loom';
   return presence.workstation ? 'workstation' : null;
 }
 

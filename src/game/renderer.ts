@@ -36,6 +36,7 @@ import { terrainSpeedAt } from './movement';
 import { fireState } from './fireState';
 import { FIRE_DEFS } from './fire';
 import { shelterState, HOUSE_DEFS } from './shelter';
+import { loomState } from './loomState';
 import { createBiomeTexture, TEXTURE_REPEAT } from './terrain';
 import {
   CHUNK_SIZE,
@@ -266,14 +267,16 @@ export class WorldRenderer {
       this.unloadChunk(p.cx, p.cz);
       this.loadChunk(p.cx, p.cz);
     });
-    // Placed-group rebuild on placement + lighting: a new fire or
-    // house appears, and a lit fire gains its flame. Lighting
-    // PROGRESS needs no rebuild (only lit state changes meshes).
+    // Placed-group rebuild on placement + lighting: a new fire,
+    // house, or loom appears, and a lit fire gains its flame.
+    // Lighting PROGRESS needs no rebuild (only lit state
+    // changes meshes).
     const rebuild = (): void => this.rebuildPlacedGroup();
     this.unsubPlaced.push(
       bus.on('fire:placed', rebuild),
       bus.on('fire:lit', rebuild),
       bus.on('shelter:placed', rebuild),
+      bus.on('loom:placed', rebuild),
     );
     this.rebuildPlacedGroup();
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -360,10 +363,12 @@ export class WorldRenderer {
     // state (and felled stumps, saplings, cleared spots) does not
     // carry over.
     harvestState.clear();
-    // A new seed is a new world: placed fires + houses do not
-    // carry over either (they belong to the old world's map).
+    // A new seed is a new world: placed fires + houses + looms
+    // do not carry over either (they belong to the old world's
+    // map).
     fireState.clear();
     shelterState.clear();
+    loomState.clear();
     this.rebuildPlacedGroup();
     this.gen = wrapGenWithState(gen);
     this.proximity.setGen(this.gen);
@@ -605,7 +610,7 @@ export class WorldRenderer {
     return flame;
   }
 
-  /** Rebuild all player-placed meshes (fires + houses). */
+  /** Rebuild all player-placed meshes (fires + houses + looms). */
   private rebuildPlacedGroup(): void {
     if (this.placedGroup) {
       this.scene.remove(this.placedGroup);
@@ -715,6 +720,20 @@ export class WorldRenderer {
         hg.add(box(0.9, 1.8, 0.1, 0x3a2812, 0, 0.9, (f * 0.85) / 2 + 0.01));
       }
       group.add(hg);
+    }
+    for (const loom of loomState.snapshot()) {
+      // Upright weaving frame: two posts, a top beam, warp
+      // threads, and a half-woven band — a loom, not furniture.
+      const lg = new THREE.Group();
+      lg.position.set(loom.x, 0, loom.z);
+      lg.add(cyl(0.06, 0.06, 1.6, 0x6b4a2f, -0.7, 0.8, 0));
+      lg.add(cyl(0.06, 0.06, 1.6, 0x6b4a2f, 0.7, 0.8, 0));
+      lg.add(box(1.6, 0.1, 0.1, 0x6b4a2f, 0, 1.6, 0));
+      for (let i = 0; i < 7; i++) {
+        lg.add(box(0.02, 1.1, 0.02, 0xd8c9a8, -0.6 + i * 0.2, 1.05, 0));
+      }
+      lg.add(box(1.3, 0.5, 0.05, 0x8a7a5a, 0, 0.75, 0));
+      group.add(lg);
     }
     this.scene.add(group);
     this.placedGroup = group;

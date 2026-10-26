@@ -198,6 +198,13 @@ export interface EventMap {
    */
   'shelter:placed': { id: string; type: HouseType; x: number; z: number };
   /**
+   * A loom was placed (loomState.placeLoom). Free placement
+   * — no zone/plot gate, like fires and houses. Renderer
+   * rebuilds the placed group; stationPresence reads live
+   * state, so no re-wiring is needed.
+   */
+  'loom:placed': { id: string; x: number; z: number };
+  /**
    * Shelter state at her position changed (tracker, change-only,
    * like weather:changed): multiplier from real placed houses
    * (1 = unsheltered), houseId of the nearest sheltering house
