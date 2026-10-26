@@ -323,6 +323,27 @@
  *   tap via its X or backdrop. Look deltas are direction-
  *   neutral (addLookDelta gateless both ways), so left and
  *   right turn symmetric once the field is uncovered.
+ * - TURNING FIX, PART 2 — TOUCH SENSITIVITY (Adam, 2026-10-26):
+ *   Adam's answers (no panels open, three worlds, fresh drag
+ *   failing) killed panel coverage as the whole story, so the
+ *   no-panels path was probed: handlers verified correct
+ *   (start/move/end/cancel all guard the touch id, deltas
+ *   fire every move, no bounds check, applyTouchLook gateless,
+ *   engine yaw -= dx * 0.0025); collapsed/no-panels coverage
+ *   audited (nothing over the right half — slim bar top strip
+ *   only, HudShell needs div null when collapsed, empty panels
+ *   column zero-height, chip + transition pointer-events-none,
+ *   WorldAnchor pointer-events-none except small button rects);
+ *   stuck-id cleared (end + cancel both clear on matching id,
+ *   stick/look separated by id, no remount path). What
+ *   reproduces is sensitivity + right-edge travel: 40 px =
+ *   5.7°, 60 px = 8.6° at mouse sensitivity, and a right-drag
+ *   from a natural thumb start caps at ~90 px (12.9°) where a
+ *   left-drag reaches 300 px (43°). Fix: shell-side
+ *   TOUCH_LOOK_SCALE = 3 (effective 0.0075 rad/px, engine
+ *   mouse sensitivity untouched, pitch clamp still applies):
+ *   40 px = 17°, 60 px = 26°, max-right 90 px = 39°.
+ *   Lane-decided starting value for Adam's pin pass.
  * POINTER DISCIPLINE: overlays are pointer-events-none except the
  * small interactive pieces (HUD buttons, panels, harvest buttons),
  * so world clicks — including the first-person mouse-capture click
@@ -541,6 +562,19 @@ interface PlacementMode {
  * a pin-pass change to the number flows through untouched.
  */
 const UMBRELLA_ITEM_ID = ITEMS.umbrella;
+
+/**
+ * Touch look scale (turning fix, Adam 2026-10-26): touch
+ * travel is far shorter than mouse travel, so raw pixels
+ * under-turn — a 40 px thumb slide is 5.7° at the mouse
+ * 0.0025 rad/px, and a right-drag from a natural thumb start
+ * caps at ~90 px (12.9°) where a left-drag reaches 300 px
+ * (43°). x3 (effective 0.0075 rad/px): 40 px = 17°,
+ * 60 px = 26°, max-right 90 px = 39°. Lane-decided starting
+ * value for Adam's pin pass; the engine's mouse sensitivity
+ * and pitch clamp are untouched.
+ */
+const TOUCH_LOOK_SCALE = 3;
 
 /**
  * Foods that gain an Eat button in the inventory panel:
@@ -1860,9 +1894,15 @@ export default function App() {
   // math and the throttled player:looked emit, with NO mode
   // gate and NO pointer-lock gate by design — pitch stays
   // consistent across mode switches, and third-person
-  // ground gating ignores pitch by its own rule.
+  // ground gating ignores pitch by its own rule. Touch
+  // deltas are scaled by TOUCH_LOOK_SCALE (see the const):
+  // taps are unaffected, since they fire interact, not
+  // look deltas.
   const applyTouchLook = (dx: number, dy: number): void => {
-    playerRef.current?.addLookDelta(dx, dy);
+    playerRef.current?.addLookDelta(
+      dx * TOUCH_LOOK_SCALE,
+      dy * TOUCH_LOOK_SCALE,
+    );
   };
 
   // USE / still-tap interact: the nearest in-range object,
