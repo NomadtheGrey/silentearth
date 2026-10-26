@@ -7,6 +7,8 @@
  * HudShell (needs row awaiting survival systems), the scaffold
  * readout folded into the HUD (camera, position, ground here,
  * chunks, seed), WitchHealth unwired (awaiting health system),
+ * HungerIndicator mounted with no stage (awaiting hunger system
+ * — see the hunger note below),
  * InventoryPanel on the real PersonalInventory, CraftingMenu on
  * the real Systems recipes + canCraft + executeCraft (the helper
  * App wiring is meant to call, which also reports the owned tool),
@@ -78,6 +80,22 @@
  * - Health and ambience: WitchHealth stays unwired (no value, so it
  *   renders its awaiting note); Effects.tsx / useAtmosphere.ts stay
  *   unimported.
+ * - Hunger indicator (Adam, 2026-10-26): HungerIndicator is
+ *   mounted in the HUD beside WitchHealth, but with NO stage
+ *   passed, so it renders its awaiting note. That is deliberate,
+ *   not an omission: no hunger meter or stage shape exists in
+ *   the repo at this landing's tip (grep for hunger across src/
+ *   returns nothing), and Systems owns the meter. The component
+ *   is props-only — stage words fed / hungry / too-hungry, no
+ *   numbers, no bar, no drain logic — and the moment Systems
+ *   documents its stage query/event, App passes the stage
+ *   through that shape. Until then no stage is guessed, no
+ *   second channel is invented, and no hunger, weather, or
+ *   movement/slow code is built here. Hunger is not health:
+ *   WitchHealth is untouched and the two elements stay separate.
+ *   The too-hungry hint (traps, campfire cooking, nuts and
+ *   berries, one line) renders only when a real too-hungry
+ *   stage is passed, so it does not show while awaiting.
  *
  * POINTER DISCIPLINE: overlays are pointer-events-none except the
  * small interactive pieces (HUD buttons, panels, harvest buttons),
@@ -105,6 +123,7 @@ import {
 import type { CameraMode, BiomeWeights } from './types';
 import { HudShell } from './ui/HudShell';
 import { WitchHealth } from './ui/WitchHealth';
+import { HungerIndicator } from './ui/HungerIndicator';
 import { CameraToggle } from './ui/CameraToggle';
 import { InventoryPanel } from './ui/InventoryPanel';
 import { CraftingMenu } from './ui/CraftingMenu';
@@ -651,6 +670,9 @@ export default function App() {
           </div>
           <div className="mt-3">
             <WitchHealth />
+          </div>
+          <div className="mt-2">
+            <HungerIndicator />
           </div>
         </div>
       </HudShell>

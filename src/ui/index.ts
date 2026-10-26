@@ -28,6 +28,8 @@ export { InteractionProgress } from './InteractionProgress';
 export type { InteractionProgressProps } from './InteractionProgress';
 export { WitchHealth } from './WitchHealth';
 export type { WitchHealthProps } from './WitchHealth';
+export { HungerIndicator } from './HungerIndicator';
+export type { HungerIndicatorProps, HungerStage } from './HungerIndicator';
 export { CAMERA_FRAMING, CAMERA_TRANSITION } from './cameraPresentation';
 export type { CameraFraming } from './cameraPresentation';
 export {
