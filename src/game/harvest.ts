@@ -50,6 +50,20 @@
  * hand-permitted sources and ground work, tool-gated sources
  * correctly fail 'below-permit'.
  *
+ * HUNGER LOCKOUT (Adam, 2026-10-26 — weather + hunger build,
+ * engine half): Systems owns the hunger meter and stage; this
+ * listener reads it through deps.getHungerStage (same pattern as
+ * getToolTier — no hunger state duplicated here). At the
+ * too-hungry stage ('starving'), harvests fail 'too-hungry' —
+ * EXCEPT hungerExempt food sources (nuts/berries, see hunger.ts:
+ * downed oak for acorns, bog growth for bog berries, brush for
+ * elderberries). Ground counts as harvest and is never exempt, so
+ * ground is blocked too. The lockout sits after the permit check
+ * and before any progress, yield, or state change: a locked-out
+ * press consumes nothing and depletes nothing. Traps and campfire
+ * cooking are HOOKS for when those systems exist (see hunger.ts),
+ * not exceptions built here.
+ *
  * INVENTORY SHAPE: HarvestInventory is structural — PersonalInventory
  * satisfies it (free() + add()). The listener checks the TOTAL
  * non-gear quantity against free() BEFORE adding anything
@@ -165,6 +179,7 @@ import {
   type HarvestState,
 } from './harvestState';
 import type { WorldGen } from './worldgen';
+import { TOO_HUNGRY_STAGE, type HungerStageQuery } from './hunger';
 
 /** Re-exported so existing importers keep one harvest entry point. */
 export { harvestState };
@@ -195,6 +210,14 @@ export interface HarvestOutcomeDeps {
   inventory: HarvestInventory;
   /** Defaults to () => null (no tool) until Systems lands the query. */
   getToolTier?: ToolTierQuery;
+  /**
+   * Hunger stage query (Systems owns hunger state — same pattern
+   * as getToolTier). Defaults to () => null (fed) until Systems
+   * lands the meter. At 'starving', harvests lock out except for
+   * hungerExempt food sources (see hunger.ts); see the lockout
+   * note in the header.
+   */
+  getHungerStage?: HungerStageQuery;
   /** Defaults to Math.random (gameplay luck, not worldgen). */
   rng?: () => number;
   /** Clock for shrink/regrow/spawn timing. Defaults to Date.now. */
@@ -267,7 +290,8 @@ type FailedReason =
   | 'anchor'
   | 'not-harvestable'
   | 'target-mismatch'
-  | 'inventory-full';
+  | 'inventory-full'
+  | 'too-hungry';
 
 /**
  * Subscribe the outcome listener to 'harvest:requested' (+ track
@@ -283,6 +307,17 @@ export function createHarvestOutcomeListener(
   const genDep = deps.gen;
   const getGen = typeof genDep === 'function' ? genDep : () => genDep;
   const getToolTier = deps.getToolTier ?? (() => null);
+  const getHungerStage = deps.getHungerStage ?? (() => null);
+  /**
+   * Too-hungry lockout (Adam, 2026-10-26): at the 'starving'
+   * stage, harvests fail 'too-hungry' — except hungerExempt food
+   * sources (nuts/berries, see hunger.ts). The check sits AFTER
+   * the permit check (tool capability still reports first) and
+   * BEFORE any progress, yield, or state change, so a locked-out
+   * press consumes nothing and depletes nothing.
+   */
+  const hungerLocked = (sourceExempt: boolean): boolean =>
+    getHungerStage() === TOO_HUNGRY_STAGE && !sourceExempt;
   const rng = deps.rng ?? Math.random;
   const clock = deps.now ?? Date.now;
   let lastX: number | null = null;
@@ -335,6 +370,12 @@ export function createHarvestOutcomeListener(
         // Unreachable for hand-permitted ground today, but the shape
         // stays honest if a ground material ever gains a tool gate.
         fail(req, outcome.reason);
+        return;
+      }
+      // Ground counts as harvest here: blocked when too hungry
+      // (ground is never a nuts/berries source, so never exempt).
+      if (hungerLocked(false)) {
+        fail(req, 'too-hungry');
         return;
       }
       const yields = new Map<string, number>();
@@ -394,6 +435,11 @@ export function createHarvestOutcomeListener(
         fail(req, logOutcome.reason);
         return;
       }
+      // Logs are not hunger-exempt food: locked out when starving.
+      if (hungerLocked(logSource.hungerExempt ?? false)) {
+        fail(req, 'too-hungry');
+        return;
+      }
       const logYields = new Map<string, number>();
       mergeYields(
         logYields,
@@ -448,6 +494,13 @@ export function createHarvestOutcomeListener(
       const treeOutcome = harvestYieldForTool(treeSource, tool);
       if (isNotPermitted(treeOutcome)) {
         fail(req, treeOutcome.reason);
+        return;
+      }
+      // Trees are not hunger-exempt food: locked out when starving
+      // (both felling and clearing — a starving witch does not fell
+      // a tree for wood she cannot eat).
+      if (hungerLocked(treeSource.hungerExempt ?? false)) {
+        fail(req, 'too-hungry');
         return;
       }
       const treeYields = new Map<string, number>();
@@ -526,6 +579,13 @@ export function createHarvestOutcomeListener(
     const outcome = harvestYieldForTool(source, tool);
     if (isNotPermitted(outcome)) {
       fail(req, outcome.reason);
+      return;
+    }
+    // Too-hungry lockout, before remove AND harvest branches:
+    // exempt food sources pass through; everything else refuses
+    // with no progress consumed and nothing depleted.
+    if (hungerLocked(source.hungerExempt ?? false)) {
+      fail(req, 'too-hungry');
       return;
     }
 

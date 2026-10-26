@@ -15,6 +15,7 @@
 import { bus } from './events';
 import { CAMERA_TOGGLE_KEYS, MOVE_KEYS, PLAYER_SPEED, CHUNK_SIZE } from '../constants';
 import type { CameraMode } from '../types';
+import { HUNGRY_SPEED_MULTIPLIER, type HungerStageQuery } from './hunger';
 
 export class PlayerController {
   x = 0;
@@ -28,6 +29,19 @@ export class PlayerController {
   facing = 0;
 
   private keys = new Set<string>();
+
+  /**
+   * Hunger stage query (Systems owns hunger state — same pattern
+   * as the owned-tool tier query in harvest.ts). The shell wires
+   * it via setHungerStageQuery once Systems lands the meter;
+   * until then it stays unset and movement runs full speed.
+   */
+  private hungerStageQuery: HungerStageQuery | null = null;
+
+  /** Wire Systems' hunger stage query (shell-owned wiring). */
+  setHungerStageQuery(query: HungerStageQuery): void {
+    this.hungerStageQuery = query;
+  }
   private canvas: HTMLCanvasElement | null = null;
   private emitTimer = 0;
   private lastLookEmit = 0;
@@ -126,6 +140,17 @@ export class PlayerController {
     fx /= len;
     fz /= len;
 
+    // Hunger slowdown (Adam, 2026-10-26 — weather + hunger build):
+    // a hungry witch moves at HUNGRY_SPEED_MULTIPLIER of base
+    // speed. Applies at 'hungry' AND 'starving' (starving is hungry
+    // or worse). Unrecognized stages read as fed (see hunger.ts),
+    // and an unwired query means full speed.
+    const stage = this.hungerStageQuery?.() ?? null;
+    const speed =
+      stage === 'hungry' || stage === 'starving'
+        ? PLAYER_SPEED * HUNGRY_SPEED_MULTIPLIER
+        : PLAYER_SPEED;
+
     if (this.mode === 'first') {
       // Movement relative to view yaw (yaw = 0 faces -z). Rotate the local
       // input (fx = right, fz = back) by yaw around Y into world space.
@@ -133,13 +158,13 @@ export class PlayerController {
       const cos = Math.cos(this.yaw);
       const wx = fx * cos + fz * sin;
       const wz = -fx * sin + fz * cos;
-      this.x += wx * PLAYER_SPEED * dt;
-      this.z += wz * PLAYER_SPEED * dt;
+      this.x += wx * speed * dt;
+      this.z += wz * speed * dt;
       this.facing = Math.atan2(wx, wz);
     } else {
       // Third-person overhead: world-aligned movement (W = -z).
-      this.x += fx * PLAYER_SPEED * dt;
-      this.z += fz * PLAYER_SPEED * dt;
+      this.x += fx * speed * dt;
+      this.z += fz * speed * dt;
       this.facing = Math.atan2(fx, fz);
     }
 

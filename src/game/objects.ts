@@ -118,7 +118,10 @@ export type ItemId =
   | 'CLAY'
   | 'DIRT'
   | 'MUD'
-  | 'GRASS';
+  | 'GRASS'
+  | 'ACORNS'
+  | 'BOG_BERRIES'
+  | 'ELDERBERRIES';
 
 /**
  * Tool ladder stages for tool-gated yields (the garden trowel and its
@@ -414,6 +417,17 @@ export interface HarvestSourceDef {
    * Only standing trees set this.
    */
   fellOnHarvest?: boolean;
+  /**
+   * Hunger exemption (Adam, 2026-10-26 — weather + hunger build):
+   * when true, this source may still be harvested at the
+   * too-hungry ('starving') stage, when all other harvests lock
+   * out. Set exactly on the sources yielding the exemption foods
+   * (ACORNS, BOG_BERRIES, ELDERBERRIES — see hunger.ts). The
+   * exemption covers the whole source harvest, both actions
+   * (harvest and remove): a starving witch gathering berries
+   * keeps the wood she gathered alongside them.
+   */
+  hungerExempt?: boolean;
   /** 'prototype' = carried verbatim from world_data.json; 'draft' = new
    *  mapping chosen by this landing, awaiting Adam's pin pass. */
   provenance: 'prototype' | 'draft';
@@ -429,6 +443,33 @@ const SPORES_25: SecondaryYield = {
   item: 'SPORES',
   chance: 0.25,
   message: 'A cloud of luminescent spores clings to your sleeves. Potency gathered.',
+};
+
+/**
+ * Nuts/berries secondaries (Adam, 2026-10-26 — weather + hunger
+ * build; NO such sources existed before this landing, so the
+ * exemption foods ride as secondaries on existing sources rather
+ * than new scatter kinds: acorns with downed oak, bog berries
+ * with bog growth, elderberries with brush. Chances are
+ * LANE-DECIDED starting values (Adam's pin pass still applies) —
+ * generous on purpose, so a starving witch can actually recover.
+ */
+const ACORNS_50: SecondaryYield = {
+  item: 'ACORNS',
+  chance: 0.5,
+  message: 'Acorns scattered around the fallen oak — nuts for the hungry.',
+};
+
+const BOG_BERRIES_50: SecondaryYield = {
+  item: 'BOG_BERRIES',
+  chance: 0.5,
+  message: 'Dark bog berries among the tufts — tart, but food.',
+};
+
+const ELDERBERRIES_50: SecondaryYield = {
+  item: 'ELDERBERRIES',
+  chance: 0.5,
+  message: 'Elderberries hang among the brush — berries for the hungry.',
 };
 
 export const SOURCES: HarvestSourceDef[] = [
@@ -451,12 +492,14 @@ export const SOURCES: HarvestSourceDef[] = [
     kind: 'bush',
     name: 'Brush',
     description:
-      'Low brush and saplings — young, brittle growth that snaps for framing.',
+      'Low brush and saplings — young, brittle growth that snaps for framing. ' +
+      'Elderberries hang among it (hunger-exempt food, Adam 2026-10-26).',
     harvestable: true,
     removable: true,
     permitTier: 'hand',
+    hungerExempt: true,
     primaryYield: 'SNAP_WOOD',
-    secondaryYields: [SPORES_25],
+    secondaryYields: [SPORES_25, ELDERBERRIES_50],
     provenance: 'draft',
     biomes: ['mirewood', 'oldfieldRise', 'tanglewood', 'deepBog', 'creekBottom', 'saltFlat'],
     mesh: { shape: 'bush', color: 0x3f5a2c, baseY: 0.45 },
@@ -678,10 +721,12 @@ export const SOURCES: HarvestSourceDef[] = [
     description:
       'Heavy structural logs that form the skeleton of true shelters. Hard to process. ' +
       'Lane-decided permit: spade-axe — the heavy-wood gate, route-symmetric ' +
-      '(an axe-only gate would lock out spade-route players until convergence).',
+      '(an axe-only gate would lock out spade-route players until convergence). ' +
+      'Acorns scatter around it (hunger-exempt food, Adam 2026-10-26).',
     harvestable: true,
     permitTier: 'spadeAxe',
     renewal: 'spawn-near-trees',
+    hungerExempt: true,
     primaryYield: 'DOWNED_OAK',
     secondaryYields: [
       {
@@ -694,6 +739,7 @@ export const SOURCES: HarvestSourceDef[] = [
         chance: 0.2,
         message: 'You recover some dry splinters from the core.',
       },
+      ACORNS_50,
     ],
     multiStep: {
       action: 'STOMP',
@@ -762,12 +808,14 @@ export const SOURCES: HarvestSourceDef[] = [
     name: 'Bog Growth',
     description:
       'Tufty bog plants crowning a bog patch — the living face of the bog, ' +
-      'distinct from the dark peat ground beneath it. Yields peat moss.',
+      'distinct from the dark peat ground beneath it. Yields peat moss. ' +
+      'Bog berries grow among it (hunger-exempt food, Adam 2026-10-26).',
     harvestable: true,
     removable: true,
     permitTier: 'hand',
+    hungerExempt: true,
     primaryYield: 'PEAT_MOSS',
-    secondaryYields: [SPORES_25],
+    secondaryYields: [SPORES_25, BOG_BERRIES_50],
     provenance: 'draft',
     biomes: ['deepBog', 'mirewood', 'tanglewood', 'creekBottom'],
     mesh: { shape: 'bogTuft', color: 0x3a5a2a, baseY: 0.25 },

@@ -77,6 +77,7 @@ import {
   type GroundMaterialDef,
 } from './objects';
 import { harvestState, scatterTargetId } from './harvestState';
+import { weatherAt, type CurrentWeather } from './weather';
 
 export { scatterTargetId };
 import type { WorldGen } from './worldgen';
@@ -226,6 +227,8 @@ export class ProximityTracker {
   private lastZ: number | null = null;
   private lastMode: 'first' | 'third' = 'third';
   private lastPitch = 0;
+  /** Dominant biome of the last emitted 'weather:changed'. */
+  private lastWeatherDominant: string | null = null;
   private unsubscribes: (() => void)[] = [];
 
   constructor(gen: WorldGen, subscribe = true) {
@@ -249,6 +252,9 @@ export class ProximityTracker {
   setGen(gen: WorldGen): void {
     this.gen = gen;
     this.lastIds = new Set();
+    // A new seed is a new world: re-emit the weather regime even
+    // if the dominant biome happens to match the old world's.
+    this.lastWeatherDominant = null;
   }
 
   /** Move to (x, z) and recompute; emit only if the set changed. */
@@ -334,6 +340,17 @@ export class ProximityTracker {
     if (changed) {
       this.lastIds = ids;
       bus.emit('harvest:inRange', { targets });
+    }
+    // Weather regime event (Adam, 2026-10-26 — weather + hunger
+    // build): weather depends on position only, so it is checked
+    // on every recompute but emitted ONLY when the dominant biome
+    // changes (first recompute always emits — Systems/UI get an
+    // initial regime without a separate query). Continuous values
+    // come from the weatherAt query, not this event.
+    const weather: CurrentWeather = weatherAt(this.gen, this.lastX, this.lastZ);
+    if (weather.dominant !== this.lastWeatherDominant) {
+      this.lastWeatherDominant = weather.dominant;
+      bus.emit('weather:changed', weather);
     }
     return targets;
   }

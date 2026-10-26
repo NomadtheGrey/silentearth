@@ -19,7 +19,7 @@
  * 2026-10-26): proximity AND looking down, per proximity.ts.
  */
 
-import type { CameraMode } from '../types';
+import type { BiomeId, CameraMode } from '../types';
 import type { PermitTier } from './objects';
 
 export interface EventMap {
@@ -149,8 +149,24 @@ export interface EventMap {
       | 'anchor'
       | 'not-harvestable'
       | 'target-mismatch'
-      | 'inventory-full';
+      | 'inventory-full'
+      | 'too-hungry';
     yields: { item: string; quantity: number }[];
+  };
+  /**
+   * The dominant-biome weather regime changed at her position
+   * (emitted by the proximity tracker — see weather.ts for the
+   * query/event split). The payload carries the full blended
+   * weather at the new position, so UI can display it without a
+   * second query; Systems can re-read via weatherAt any time.
+   * Fires on dominant-biome change only, not on every step.
+   */
+  'weather:changed': {
+    wind: number;
+    rain: number;
+    harshness: number;
+    dominant: BiomeId;
+    weights: Record<BiomeId, number>;
   };
 }
 
