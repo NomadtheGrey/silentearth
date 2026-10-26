@@ -8,11 +8,19 @@
  * state: the caller owns which item (if any) is selected and decides
  * what a selection does. Capacity, if shown at all, is caller-supplied
  * text — this panel never counts, totals, or enforces a limit.
+ *
+ * The witch herself stands at the top of her inventory, front-facing
+ * (WitchPortrait, default size): this screen shows whose things these
+ * are, not just a list. Worn garments are NOT reflected yet —
+ * CharacterAvatar has no garment layers, and two of the five garments
+ * (mittens, boots) have no body part drawn to hang them on — so that
+ * reflection is a separate illustration landing, not part of this mount.
  */
 
 import type { InventoryItem } from './types';
 import { UI_THEMES, type UiThemeName } from './themes';
 import { VineDivider } from './WitchyArt';
+import { WitchPortrait } from './WitchPortrait';
 
 /**
  * A home-storage section inside the inventory panel (the SAME
@@ -114,6 +122,11 @@ export function InventoryPanel({
         ) : null}
       </div>
       <VineDivider className="mb-2" />
+
+      {/* The witch, front-facing, above her things. */}
+      <div className="mb-2 flex justify-center">
+        <WitchPortrait />
+      </div>
 
       {capacityText ? (
         <p className={'mb-2 text-sm ' + t.muted}>{capacityText}</p>
