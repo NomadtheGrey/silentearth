@@ -374,7 +374,10 @@ import type {
   CraftingRecipe,
   FeedbackTone,
 } from './ui/types';
-import { PersonalInventory } from './systems/inventory';
+import {
+  PersonalInventory,
+  displayNameFor,
+} from './systems/inventory';
 import { executeCraft } from './systems/crafting-execution';
 import {
   HungerState,
@@ -540,7 +543,10 @@ function toInventoryItem(stack: {
 }): InventoryItem {
   return {
     id: stack.item,
-    name: stack.item,
+    // Display spelling, never the raw code id (Adam, 2026-10-26:
+    // code spelling lives in code, display spelling lives in
+    // the systems table). The id stays the key for actions.
+    name: displayNameFor(stack.item),
     quantityText: String(stack.quantity),
     icon: stack.item === UMBRELLA_ITEM_ID ? <UmbrellaIcon /> : undefined,
   };
@@ -1751,7 +1757,9 @@ export default function App() {
                   .filter((id) => openHomeStore.count(id) > 0)
                   .map((id) => ({
                     id,
-                    name: id,
+                    // Same display rule as panel rows above:
+                    // storage rows are panel rows too.
+                    name: displayNameFor(id),
                     quantityText: String(openHomeStore.count(id)),
                   })),
           capacityText:

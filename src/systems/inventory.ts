@@ -189,6 +189,95 @@ export function normalizeItemId(item: ItemId): ItemId {
   return ITEM_ID_ALIASES[item] ?? item;
 }
 
+// ---------------------------------------------------------------------------
+// Display spelling — code ids are never printed (2026-10-26)
+// ---------------------------------------------------------------------------
+
+/**
+ * Display spelling for every known item, keyed by NORMALIZED id.
+ * RULE (Adam, 2026-10-26): the UI NEVER prints a raw code id —
+ * code spelling lives in code, display spelling lives HERE.
+ * Crafted names match their RECIPES names (the single display
+ * source; if a recipe is renamed, this table follows it);
+ * harvested/food/ground names follow the design doc's display
+ * names (snap-wood -> "Snap-Wood", tender-vines ->
+ * "Tender-Vines", luminous-spores -> "Luminous Spores",
+ * twined-cordage -> "Twined Cordage", bog-berries ->
+ * "Bog Berries" per the food-candidates doc). The panel row
+ * name comes from displayNameFor(), never from the stack key.
+ */
+export const ITEM_DISPLAY_NAMES: Readonly<Record<string, string>> = {
+  'snap-wood': 'Snap-Wood',
+  'tender-vines': 'Tender-Vines',
+  'peat-moss': 'Peat Moss',
+  'downed-oak': 'Downed Oak',
+  'river-silt': 'River Silt',
+  'river-stone': 'River Stone',
+  'luminous-spores': 'Luminous Spores',
+  'dry-kindling': 'Dry Kindling',
+  clay: 'Clay',
+  flint: 'Flint',
+  'old-stump': 'Old Stump',
+  'twined-cordage': 'Twined Cordage',
+  'garden-trowel': 'Garden Trowel',
+  'sharp-trowel': 'Sharp Trowel',
+  spade: 'Spade',
+  'axe-trowel': 'Axe-Trowel',
+  'spade-axe': 'Spade-Axe',
+  'trundle-tool': 'Trundle-Tool',
+  'primitive-lean-to': 'Primitive Lean-to',
+  'thatch-hut': 'Thatch Hut',
+  'wattle-and-daub-hut': 'Wattle-and-Daub Hut',
+  'woven-cottage': 'Woven Cottage',
+  'small-wooden-hut': 'Small Wooden Hut',
+  'moss-cradle': 'Moss Cradle',
+  campfire: 'Campfire',
+  hearth: 'Hearth',
+  kiln: 'Kiln',
+  bloomery: 'Bloomery',
+  'stumpy-workstation': 'Stumpy Workstation',
+  'crafted-workstation': 'Crafted Workstation',
+  'potters-wheel': "Potter's Wheel",
+  loom: 'Loom',
+  'clay-pot': 'Clay Pot',
+  'clay-brick': 'Clay Brick',
+  'small-basket': 'Small Basket',
+  'large-basket': 'Large Basket',
+  apron: 'Apron',
+  'hooded-cloak': 'Hooded Cloak',
+  shawl: 'Shawl',
+  'pointy-hat': 'Pointy Hat',
+  'mossy-mittens': 'Mossy Mittens',
+  'bog-boots': 'Bog Boots',
+  umbrella: 'Umbrella',
+  snare: 'Snare',
+  'fish-weir-trap': 'Fish / Weir Trap',
+  'pot-trap': 'Pot Trap',
+  pitfall: 'Pitfall',
+  deadfall: 'Deadfall',
+  bone: 'Bone',
+  'salt-crystal': 'Salt Crystal',
+  dirt: 'Dirt',
+  mud: 'Mud',
+  grass: 'Grass',
+  acorns: 'Acorns',
+  'bog-berries': 'Bog Berries',
+  elderberries: 'Elderberries',
+  'cooked-acorns': 'Cooked Acorns',
+};
+
+/**
+ * Display spelling for an item in either code spelling
+ * ('SNAP_WOOD' and 'snap-wood' both give 'Snap-Wood').
+ * Unknown ids fall back to themselves — the function never
+ * blanks a row, it just has no prettier name to offer; the
+ * table above covers every known id, so a fallback print
+ * means a new item arrived without a display name yet.
+ */
+export function displayNameFor(item: ItemId): string {
+  return ITEM_DISPLAY_NAMES[normalizeItemId(item)] ?? item;
+}
+
 /**
  * Large-basket question, as an explicit switch. No default exists:
  * PersonalInventoryOptions requires this field.
