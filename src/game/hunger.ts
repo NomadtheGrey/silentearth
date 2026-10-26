@@ -23,6 +23,52 @@
  * nothing else). When the health system lands, it must gate
  * any hunger→health link behind the cold/November threshold.
  *
+ * COLD-DAMAGE THRESHOLDS (Adam, 2026-10-26 — recorded for the
+ * future health system; NO health drain is built here):
+ * - She takes NO cold damage until below 40°F baseline.
+ * - The threshold RISES to 55°F under the combined condition:
+ *   too wet AND does not have enough clothes/shelter AND
+ *   exposure is prolonged (all three, as stated). So the
+ *   damage band is below 40°F normally, below 55°F when the
+ *   combined condition holds — wet + under-protected +
+ *   prolonged is what makes merely-chilly air dangerous.
+ * - PROLONGED DURATION IS TBD (tunable, flagged) — no number
+ *   is set here.
+ * - PREREQUISITES NOT YET BUILT, so these thresholds cannot
+ *   even be evaluated yet: a temperature field (the November
+ *   anchor in weather.ts is a reference, not a live value),
+ *   a wetness state ("too wet" is undefined until a wetness
+ *   meter lands), and prolonged-exposure tracking. The health
+ *   system must build those inputs before it can apply this.
+ * - OPEN READING, FLAGGED NOT RESOLVED: whether "clothes /
+ *   shelter" means their COMBINED protection is insufficient,
+ *   or either one alone suffices — the health-system design
+ *   pins that; nothing here assumes it.
+ * - SITS WITH the hunger gate above: both are cold-gated
+ *   health effects, and the health system must honor both
+ *   when it lands (hunger→health only when cold; cold damage
+ *   per these thresholds).
+ *
+ * GARMENT SHIFT (Adam, 2026-10-26 — "I suppose we can";
+ * Marlowe-decided starting value, FLAGGED for Adam's pin
+ * pass; same future-health-system scope, NO drain built):
+ * danger temperature drops PROGRESSIVELY per garment she
+ * fashions — 3°F per WORN garment, uniform, counting distinct
+ * worn GarmentId (cloak, shawl, pointyHat, mossyMittens,
+ * bogBoots — at most 5, so at most 15°F). Both thresholds
+ * shift by the same amount: dry 40°F − 3n, wet-combined
+ * 55°F − 3n. Full kit (n = 5): dry 40°F → 25°F, wet
+ * 55°F → 40°F if the wet condition still applies. The
+ * umbrella does NOT count here: it is CARRIED, not worn —
+ * it moves precipitation remaining (see weather.ts), not
+ * the cold threshold. No floor is set: none is needed, the
+ * closed 5-garment set bounds the shift. OPEN INTERPLAY,
+ * FLAGGED: the wet threshold's "not enough clothes/shelter"
+ * condition and this count-based shift overlap — whether a
+ * high garment count by itself defeats the "under-protected"
+ * condition, or the condition is judged separately, is for
+ * the health-system design to pin; nothing here assumes it.
+ *
  * STAGE VOCABULARY — ALIGNED WITH SYSTEMS (correction, 2026-10-26):
  * Systems owns the meter and its stage (src/systems/hunger.ts,
  * HungerState.stage()), and its literals are 'fed' | 'hungry' |

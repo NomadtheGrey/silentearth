@@ -290,6 +290,24 @@ export function nightFraction(month: number): number {
  * CLOTHING axes — the per-element split lives in the garment
  * table, not in the biome profiles.
  */
+/**
+ * PRECIPITATION AXIS (Adam, 2026-10-26 — umbrella revision,
+ * for the future umbrella/exposure wiring): the 'rain'
+ * element IS the precipitation axis, broadly — rain +
+ * sleet/etc., not rain only. Systems' umbrella mechanic
+ * (src/systems/umbrella.ts, revised 60% — substantial,
+ * multiplicative with worn clothes) applies its factor
+ * (precipitation remaining × 0.4 when carried) to THIS axis:
+ * today profile.rain is the 0..1 precipitation intensity,
+ * so the umbrella factor lands on rain remaining, and it
+ * covers whatever falling forms that axis carries. If a
+ * sleet element is ever split out of 'rain', the same factor
+ * applies to it too — the wiring names precipitation, not
+ * rain, precisely so it does not have to change. No umbrella
+ * entry is added to GARMENT_PROTECTION below: the umbrella
+ * is carried, not worn, and its mechanic lives with Systems;
+ * this note only fixes which axis its factor multiplies.
+ */
 export type ExposureElement = 'rain' | 'wind' | 'cold' | 'wet';
 
 /** Per-element protection percentages, 0..1 (fraction blocked). */
