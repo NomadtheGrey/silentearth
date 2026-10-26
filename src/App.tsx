@@ -197,12 +197,11 @@
  *   a carried loom item gains the same Place button +
  *   preview + Place here flow as fires and houses (free
  *   placement, consumes the carried item), dropping a
- *   loomState loom at her feet. Station presence needs no
- *   shell change: the existing station memo already flows
- *   through stationContextForPresence, which now yields
- *   'loom' when a placed loom is within 2.5 m — so garment
- *   recipes (station 'loom') become craftable standing at
- *   a placed loom. WART RESOLVED (loom-wiring round): the
+ *   loomState loom at her feet. Station presence: the memo
+ *   reads both presence booleans directly (stump = workstation,
+ *   placed loom within 2.5 m = loom) — so garment recipes
+ *   (station 'loom') become craftable standing at a placed
+ *   loom. WART RESOLVED (loom-wiring round): the
  *   old single context read 'loom' whenever a loom was
  *   near, so workstation recipes mismatched at a dual site
  *   — the shell now carries BOTH presence booleans, ORs
