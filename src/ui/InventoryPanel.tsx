@@ -14,6 +14,27 @@ import type { InventoryItem } from './types';
 import { UI_THEMES, type UiThemeName } from './themes';
 import { VineDivider } from './WitchyArt';
 
+/**
+ * A home-storage section inside the inventory panel (the SAME
+ * panel pattern, not a second panel): the sheltering house's
+ * stored items, with Withdraw buttons. Deposit buttons live on
+ * the personal rows above, gated by onDepositItem. The caller
+ * owns both inventories; this panel never moves anything
+ * itself.
+ */
+export interface InventoryStorageSection {
+  /** Display name of the house holding these supplies. */
+  label: string;
+  /** Stored items, caller-supplied rows like the personal list. */
+  items: InventoryItem[];
+  /** Caller-supplied capacity line for the home store. */
+  capacityText?: string;
+  /** Caller-supplied note line (e.g. a transfer error). */
+  note?: string | null;
+  /** Called when the player presses Withdraw on a stored item. */
+  onWithdrawItem?: (id: string) => void;
+}
+
 export interface InventoryPanelProps {
   items: InventoryItem[];
   /** Id of the selected item, if any. Undefined = nothing selected. */
@@ -28,6 +49,23 @@ export interface InventoryPanelProps {
   placeableIds?: ReadonlySet<string>;
   /** Called when the player presses Place on an item. Optional. */
   onPlaceItem?: (id: string) => void;
+  /**
+   * Item ids that can be eaten (foods, including cook-required
+   * ones whose press surfaces the cook-first note). Items in
+   * this set gain an Eat button. Omitted = no Eat buttons;
+   * eating itself is the caller's job.
+   */
+  foodIds?: ReadonlySet<string>;
+  /** Called when the player presses Eat on an item. Optional. */
+  onEatItem?: (id: string) => void;
+  /**
+   * Home-storage section, shown when the caller opens one
+   * (sheltered at a placed house). Omitted = personal list
+   * only, no Deposit buttons.
+   */
+  storage?: InventoryStorageSection;
+  /** Called when the player presses Deposit on a carried item. */
+  onDepositItem?: (id: string) => void;
   /** Caller-supplied capacity line, e.g. a total the system provides. */
   capacityText?: string;
   /** Called when the panel is closed. Optional. */
@@ -42,6 +80,10 @@ export function InventoryPanel({
   onSelectItem,
   placeableIds,
   onPlaceItem,
+  foodIds,
+  onEatItem,
+  storage,
+  onDepositItem,
   capacityText,
   onClose,
   theme = 'mire',
@@ -75,6 +117,7 @@ export function InventoryPanel({
           {items.map((item) => {
             const selected = item.id === selectedItemId;
             const placeable = placeableIds?.has(item.id) ?? false;
+            const food = foodIds?.has(item.id) ?? false;
             return (
               <li key={item.id} className="flex items-center gap-1">
                 <button
@@ -113,11 +156,83 @@ export function InventoryPanel({
                     Place
                   </button>
                 ) : null}
+                {food && onEatItem ? (
+                  <button
+                    type="button"
+                    onClick={() => onEatItem(item.id)}
+                    aria-label={`Eat ${item.name}`}
+                    className="rounded bg-[#3a4436] px-2 py-1 text-xs hover:bg-[#4a5546]"
+                  >
+                    Eat
+                  </button>
+                ) : null}
+                {storage !== undefined && onDepositItem ? (
+                  <button
+                    type="button"
+                    onClick={() => onDepositItem(item.id)}
+                    aria-label={`Deposit ${item.name} at ${storage.label}`}
+                    className="rounded bg-[#3a4436] px-2 py-1 text-xs hover:bg-[#4a5546]"
+                  >
+                    Deposit
+                  </button>
+                ) : null}
               </li>
             );
           })}
         </ul>
       )}
+
+      {storage !== undefined ? (
+        <>
+          <VineDivider className="mb-2 mt-3" />
+          <h3 className={'text-base font-semibold ' + t.heading}>
+            Home storage — {storage.label}
+          </h3>
+          {storage.capacityText ? (
+            <p className={'mb-2 text-sm ' + t.muted}>
+              {storage.capacityText}
+            </p>
+          ) : null}
+          {storage.items.length === 0 ? (
+            <p className={'italic ' + t.muted}>Nothing stored here yet.</p>
+          ) : (
+            <ul className="flex flex-col gap-1">
+              {storage.items.map((item) => (
+                <li key={item.id} className="flex items-center gap-1">
+                  <span className="flex flex-1 items-baseline justify-between gap-2 rounded px-2 py-1 text-left">
+                    <span className="flex items-center gap-1.5">
+                      {item.icon ? (
+                        <span className="inline-flex shrink-0">
+                          {item.icon}
+                        </span>
+                      ) : null}
+                      {item.name}
+                    </span>
+                    {item.quantityText ? (
+                      <span className="text-sm text-stone-300">
+                        {item.quantityText}
+                      </span>
+                    ) : null}
+                  </span>
+                  {storage.onWithdrawItem ? (
+                    <button
+                      type="button"
+                      onClick={() => storage.onWithdrawItem?.(item.id)}
+                      aria-label={`Withdraw ${item.name} from ${storage.label}`}
+                      className="rounded bg-[#3a4436] px-2 py-1 text-xs hover:bg-[#4a5546]"
+                    >
+                      Withdraw
+                    </button>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          )}
+          {storage.note ? (
+            <p className="mt-1 text-xs text-red-300">{storage.note}</p>
+          ) : null}
+        </>
+      ) : null}
     </section>
   );
 }

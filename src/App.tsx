@@ -96,11 +96,18 @@
  *   the craft note; the menu itself does not pre-block, since
  *   canCraft carries no hunger gate — pressing Craft while
  *   too-hungry yields the honest error, not a silent no-op).
- *   No eat button is built in this round (stage wiring only,
- *   per the brief); Systems' eat() is the follow-up surface.
- *   Cooked acorns are now eatable through it (nutrition 20,
- *   lane-decided) once cooking exists. Hunger is not health:
- *   WitchHealth is untouched.
+ *   EAT BUTTON, LIVE (gap-closing round): inventory rows for
+ *   foods gain an Eat button (same row-button pattern as
+ *   Place). Berries and cooked acorns eat through Systems'
+ *   eat() — one item, nutrition from its table (berries 10 /
+ *   15, cooked acorns 20, lane-decided), stage refreshes at
+ *   once. Raw acorns never reach eat(): their press shows
+ *   the cook-first note and consumes nothing (eat() itself
+ *   would refuse with a stale "future fire system" message —
+ *   the fire system exists now, so the shell says so in its
+ *   own words). Eating is never hunger-gated (it is the
+ *   recovery action). Hunger is not health: WitchHealth is
+ *   untouched.
  * - FIRE UI, LIVE (Adam, 2026-10-26): placement + lighting
  *   are wired to the engine's placed-fire machine. A carried
  *   fire item (campfire / hearth / kiln / bloomery, crafted
@@ -119,18 +126,29 @@
  *   possession to the caller) or friction (rub, wait,
  *   rub — the 1 s game clock advances the wait to ready).
  *   No flame mesh is duplicated (3D flames are Background's
- *   renderer). COOKING BRIDGE GAP, FLAGGED: Systems' cook()
- *   takes a Systems FireState (seconds-based lighting), and
- *   engine lit is a separate flag on a placed fire — the two
- *   models do not share a lit state, so no cook button is
- *   wired yet (a cook against the wrong fire would be worse
- *   than none). Cooking UI waits on the lanes agreeing
- *   which state owns lit, or a bridge from engine lit to
- *   the cooking gate. Cooking stays open-fire (stick or
- *   fire-buried, never pot cooking). CANDLE NOTE: the avatar
- *   / portrait candle is untouched, and nothing here assumes
- *   the candle lights fires — that relation is flagged open
- *   for Adam's call.
+ *   renderer). COOK BUTTON, LIVE (gap-closing round, DEV
+ *   bridge decision): a lit fire's chip opens a cooking
+ *   menu — Cook acorns (stick) / Cook acorns (buried), one
+ *   acorn per press, quantity preserved 1:1, disabled
+ *   without carried acorns. THE BRIDGE (shell-owned, see
+ *   getSystemsFire / ensureSystemsLit): one Systems
+ *   FireState per placed fire; engine lit is the gate —
+ *   the shell mirrors engine lighting into the vessel
+ *   (light() at lighting start, tick(1) on the game clock)
+ *   and completes it when the engine reports lit or Cook
+ *   is pressed, so cook() never runs against a vessel the
+ *   engine hasn't lit. COST ASYMMETRY, FLAGGED: Systems'
+ *   slow method consumes 1 snap-wood kindling, but engine
+ *   friction charges nothing — the mirror charges kindling
+ *   only when snap-wood is carried (named in the friction
+ *   menu hint), engine lighting proceeds regardless, and a
+ *   kindling-less friction fire cooks once kindling is
+ *   carried and Cook is pressed (the press retries and
+ *   says so when it still can't). Cooking stays open-fire
+ *   (stick or fire-buried, never pot cooking). CANDLE NOTE:
+ *   the avatar / portrait candle is untouched, and nothing
+ *   here assumes the candle lights fires — that relation
+ *   is flagged open for Adam's call.
  * - SHELTER UI, LIVE (Adam, 2026-10-26): house recipes
  *   (lean-to, thatch hut, woven cottage, small wooden hut)
  *   are craftable through CraftingMenu, and a carried house
@@ -143,13 +161,18 @@
  *   alone would lag) — "Sheltered at {house}" within 6 m
  *   of a placed house, "Unsheltered" otherwise. Placement
  *   is free (no zones/plots) and the preview carries no
- *   plot frame. HOME STORAGE TRANSFER, FLAGGED NEXT
- *   SURFACE: Systems' HomeStorage exists per placed house,
- *   but deposit/withdraw UI is not built in this landing
- *   (it needs item selection across two inventories); when
- *   it lands it rides the EXISTING InventoryPanel pattern
- *   (items + capacity text) — no separate storage panel is
- *   invented here.
+ *   plot frame. HOME STORAGE TRANSFER, LIVE (gap-closing
+ *   round): while sheltered at a placed house, the inventory
+ *   panel gains a "Home storage — {house}" section (the SAME
+ *   panel pattern, not a second panel) with the house's
+ *   stored rows + Withdraw buttons, and Deposit buttons on
+ *   the personal rows. One item per press; add-first
+ *   ordering on both directions, so a full destination
+ *   throws and the source keeps its item. One HomeStorage
+ *   per placed house, created lazily; the shell tracks only
+ *   the stored id universe (HomeStorage exposes counts,
+ *   not a snapshot). Unsheltered = no section, no Deposit
+ *   buttons — storage is reached at home, not from afar.
  * - UMBRELLA GRAPHIC (Adam, 2026-10-26): UmbrellaIcon is a
  *   scalloped moss-canopy glyph in the directory's inline-SVG
  *   pattern, rendered through caller-supplied icon slots —
@@ -162,10 +185,24 @@
  *   gains one umbrella rain note line (WornList umbrellaNote,
  *   under the protection + capacity notes), shown only while
  *   an umbrella is carried, with its number from Systems'
- *   single constant (35%, a starting value for Adam's pin
- *   pass, not pinned) — the UI holds no rain table of its
- *   own. No separate umbrella panel is built, per the
- *   brief; the icon and the note ride existing surfaces.
+ *   single constant (60% precipitation, a starting value
+ *   for Adam's pin pass, not pinned — revised from 35%
+ *   rain-only) — the UI holds no rain table of its own.
+ *   No separate umbrella panel is built, per the brief;
+ *   the icon and the note ride existing surfaces.
+ * - LOOM PLACE, LIVE (gap-closing round, presence b39f0aa):
+ *   a carried loom item gains the same Place button +
+ *   preview + Place here flow as fires and houses (free
+ *   placement, consumes the carried item), dropping a
+ *   loomState loom at her feet. Station presence needs no
+ *   shell change: the existing station memo already flows
+ *   through stationContextForPresence, which now yields
+ *   'loom' when a placed loom is within 2.5 m — so garment
+ *   recipes (station 'loom') become craftable standing at
+ *   a placed loom. FLAGGED WART (Background's, not fixed
+ *   here): while both a stump and a loom are in range,
+ *   'loom' wins, so workstation recipes read as mismatched
+ *   until she steps out of loom range.
  * - CLOTHES UI, LIVE (Adam, 2026-10-26): the shell owns one
  *   Wardrobe; the HUD wardrobe lists all five garments with
  *   Wear (carried) / Remove (worn) buttons, and both note
@@ -180,12 +217,13 @@
  *   UI shows both, each from its source, and holds no table
  *   itself. Wearing does not consume the garment; capacity
  *   follows via inventory.setWorn after every wear/remove.
- *   LOOM GAP, FLAGGED: garment recipes carry station 'loom',
- *   and no loom station presence exists yet (a crafted loom
- *   is an inventory item, not a placed station the shell can
- *   detect), so garments cannot be crafted in play today —
- *   the wardrobe is wired and will fill in the moment
- *   garments can be obtained.
+ *   LOOM GAP, CLOSED (gap-closing round, presence b39f0aa):
+ *   garment recipes carry station 'loom', and placed-loom
+ *   presence now exists — a placed loom within 2.5 m reads
+ *   as station 'loom' through the existing station memo, so
+ *   garments are craftable standing at a placed loom (see
+ *   the LOOM PLACE bullet; the stump+loom wart is flagged
+ *   there).
  *
  * POINTER DISCIPLINE: overlays are pointer-events-none except the
  * small interactive pieces (HUD buttons, panels, harvest buttons),
@@ -210,6 +248,7 @@ import {
   type PlacedFire,
   type FireResult,
 } from './game/fireState';
+import { loomState } from './game/loomState';
 import type { FireType } from './game/fire';
 import {
   shelterState,
@@ -257,7 +296,17 @@ import type {
 } from './ui/types';
 import { PersonalInventory } from './systems/inventory';
 import { executeCraft } from './systems/crafting-execution';
-import { HungerState, type HungerStage } from './systems/hunger';
+import {
+  HungerState,
+  eat,
+  needsCooking,
+  FOOD_ACORNS,
+  FOOD_ITEMS,
+  COOK_REQUIRED_ITEMS,
+  type HungerStage,
+} from './systems/hunger';
+import { FireState as SystemsFireState, cook } from './systems/fire';
+import { HomeStorage } from './systems/shelter';
 import { clothingRemaining } from './game/weather';
 import {
   ownedTier,
@@ -327,6 +376,7 @@ const HOUSE_ITEM_TO_TYPE: Record<string, HouseType> = {
 const PLACEABLE_IDS: ReadonlySet<string> = new Set([
   ...Object.keys(FIRE_ITEM_TO_TYPE),
   ...Object.keys(HOUSE_ITEM_TO_TYPE),
+  ITEMS.loom,
 ]);
 
 const FIRE_NAME: Record<FireType, string> = {
@@ -354,6 +404,8 @@ interface PlacementMode {
   label: string;
   fireType?: FireType;
   houseType?: HouseType;
+  /** True for a loom placement (loomState takes x/z only). */
+  loom?: boolean;
 }
 
 /**
@@ -374,6 +426,26 @@ interface PlacementMode {
  * a pin-pass change to the number flows through untouched.
  */
 const UMBRELLA_ITEM_ID = ITEMS.umbrella;
+
+/**
+ * Foods that gain an Eat button in the inventory panel:
+ * directly-eatable foods plus cook-required ones (raw acorns),
+ * whose press surfaces the cook-first note instead of a gain.
+ * Both lists come from Systems' hunger module — the UI holds
+ * no food table of its own.
+ */
+const FOOD_IDS: ReadonlySet<string> = new Set([
+  ...FOOD_ITEMS,
+  ...COOK_REQUIRED_ITEMS,
+]);
+
+/** Engine house type → Systems house item (for HomeStorage). */
+const HOUSE_TYPE_TO_ITEM: Record<HouseType, string> = {
+  leanTo: ITEMS.primitiveLeanTo,
+  thatchHut: ITEMS.thatchHut,
+  wovenCottage: ITEMS.wovenCottage,
+  smallWoodenHut: ITEMS.smallWoodenHut,
+};
 
 /** One inventory stack as a panel row, with the umbrella icon attached. */
 function toInventoryItem(stack: {
@@ -438,18 +510,36 @@ export default function App() {
   const [shelterHouseName, setShelterHouseName] = useState<
     string | undefined
   >(undefined);
+  const [shelterHouseId, setShelterHouseId] = useState<string | null>(null);
 
   /** Apply a sheltering house id (null = unsheltered) to HUD state. */
   const applyShelterHouse = (houseId: string | null) => {
     if (houseId === null) {
       setSheltered(false);
       setShelterHouseName(undefined);
+      setShelterHouseId(null);
       return;
     }
     const house = shelterState.snapshot().find((h) => h.id === houseId);
     setSheltered(true);
     setShelterHouseName(house ? HOUSE_DEFS[house.type].name : undefined);
+    setShelterHouseId(houseId);
   };
+
+  // Gap-closing state (see the header): one Systems FireState
+  // per placed fire (the cooking vessel), the engine lighting
+  // path per fire (for the bridge's method mapping), and one
+  // HomeStorage per placed house, with the item ids it has ever
+  // held (HomeStorage exposes counts, not a snapshot, so the
+  // shell tracks the id universe; counts stay Systems').
+  const systemsFiresRef = useRef(new Map<string, SystemsFireState>());
+  const engineFirePathRef = useRef(
+    new Map<string, 'flint' | 'friction'>(),
+  );
+  const homeStoresRef = useRef(new Map<string, HomeStorage>());
+  const homeStoreItemsRef = useRef(new Map<string, Set<string>>());
+  const [eatNote, setEatNote] = useState<string | null>(null);
+  const [storageNote, setStorageNote] = useState<string | null>(null);
 
   const [seedInput, setSeedInput] = useState(DEFAULT_SEED);
   const [seed, setSeed] = useState(DEFAULT_SEED);
@@ -686,6 +776,11 @@ export default function App() {
       hunger.tick(1);
       setHungerStage(hunger.stage());
       fireState.advanceLighting(Date.now());
+      // Drive every tracked Systems fire's lighting clock
+      // alongside the engine's (the bridge's tick half).
+      for (const systemsFire of systemsFiresRef.current.values()) {
+        systemsFire.tick(1);
+      }
     }, 1000);
     // Placed-fire + shelter subscriptions: fires re-read from
     // the engine singleton on every fire event; shelter applies
@@ -932,10 +1027,17 @@ export default function App() {
   const handlePlaceItem = (itemId: string) => {
     const fireType = FIRE_ITEM_TO_TYPE[itemId];
     const houseType = HOUSE_ITEM_TO_TYPE[itemId];
-    if (!fireType && !houseType) return;
+    const loom = itemId === ITEMS.loom;
+    if (!fireType && !houseType && !loom) return;
     const label =
       inventoryItems.find((i) => i.id === itemId)?.name ?? itemId;
-    const mode: PlacementMode = { itemId, label, fireType, houseType };
+    const mode: PlacementMode = {
+      itemId,
+      label,
+      fireType,
+      houseType,
+      loom: loom ? true : undefined,
+    };
     placementRef.current = mode;
     setPlacement(mode);
     setPlacementNote(null);
@@ -965,6 +1067,8 @@ export default function App() {
         fireState.placeFire(mode.fireType, player.x, player.z);
       } else if (mode.houseType) {
         shelterState.placeHouse(mode.houseType, player.x, player.z);
+      } else if (mode.loom) {
+        loomState.placeLoom(player.x, player.z);
       }
       inventory.remove(mode.itemId, 1);
     } catch (error) {
@@ -987,9 +1091,179 @@ export default function App() {
     setPlacementNote(null);
   };
 
-  /** Lighting menu actions for one placed fire, caller-decided. */
+  const handleEatItem = (itemId: string) => {
+    // Raw cook-required food never reaches eat(): the press
+    // surfaces the cook-first note honestly instead of a gain
+    // (eat() itself would refuse with a stale "future fire
+    // system" message — the fire system exists now, so the
+    // shell says so in its own words and consumes nothing).
+    if (needsCooking(itemId)) {
+      setEatNote('Acorns must be cooked first — cook them at a lit fire.');
+      return;
+    }
+    try {
+      const result = eat(hunger, inventory, itemId);
+      setHungerStage(result.stage);
+      setEatNote(`Ate ${result.item} (+${result.nutrition} hunger).`);
+    } catch (error) {
+      setEatNote(
+        error instanceof Error ? error.message : 'Could not eat that.',
+      );
+    }
+    refreshInventory();
+  };
+
+  /** Lazily open (or create) the HomeStorage for a placed house. */
+  const getHomeStore = (houseId: string): HomeStorage | null => {
+    const existing = homeStoresRef.current.get(houseId);
+    if (existing) return existing;
+    const placed = shelterState.snapshot().find((h) => h.id === houseId);
+    if (!placed) return null;
+    const store = new HomeStorage(HOUSE_TYPE_TO_ITEM[placed.type]);
+    homeStoresRef.current.set(houseId, store);
+    homeStoreItemsRef.current.set(houseId, new Set());
+    return store;
+  };
+
+  const handleDepositItem = (itemId: string) => {
+    if (!shelterHouseId) return;
+    const store = getHomeStore(shelterHouseId);
+    if (!store) {
+      setStorageNote('No home storage here.');
+      return;
+    }
+    try {
+      // Add first: a full home store throws and the carried
+      // item stays carried. Then remove (count >= 1, the row
+      // exists only for carried stacks).
+      store.add(itemId, 1);
+      inventory.remove(itemId, 1);
+      homeStoreItemsRef.current.get(shelterHouseId)?.add(itemId);
+      inventory.setWorn(wardrobe.wornItemIds());
+      setWornGarments(wardrobe.wornGarments());
+      setStorageNote(null);
+    } catch (error) {
+      setStorageNote(
+        error instanceof Error ? error.message : 'Could not store that.',
+      );
+    }
+    refreshInventory();
+  };
+
+  const handleWithdrawItem = (itemId: string) => {
+    if (!shelterHouseId) return;
+    const store = getHomeStore(shelterHouseId);
+    if (!store) {
+      setStorageNote('No home storage here.');
+      return;
+    }
+    try {
+      // Add first: a full pack throws and the stored item
+      // stays stored. Then remove (count >= 1, the row exists
+      // only for stored stacks).
+      inventory.add(itemId, 1);
+      store.remove(itemId, 1);
+      if (store.count(itemId) === 0) {
+        homeStoreItemsRef.current.get(shelterHouseId)?.delete(itemId);
+      }
+      inventory.setWorn(wardrobe.wornItemIds());
+      setWornGarments(wardrobe.wornGarments());
+      setStorageNote(null);
+    } catch (error) {
+      setStorageNote(
+        error instanceof Error ? error.message : 'Could not take that.',
+      );
+    }
+    refreshInventory();
+  };
+
+  /**
+   * COOKING BRIDGE (DEV decision, gap-closing round — see the
+   * header): one Systems FireState per placed fire, created
+   * lazily here. Engine lit is the gate: the shell mirrors
+   * the player's engine lighting into the Systems vessel
+   * (light() at lighting start, tick(1) on the game clock),
+   * and completes it the moment the engine reports lit or
+   * the player presses Cook — so cook() never runs against
+   * a vessel the engine hasn't lit, and never against a
+   * stale one. COST ASYMMETRY, FLAGGED: Systems' slow method
+   * ('sticks') consumes 1 snap-wood as kindling, but the
+   * engine friction path charges nothing — so the mirror
+   * charges kindling only when snap-wood is carried, and
+   * engine lighting proceeds regardless. A friction-lit fire
+   * with no kindling cooks once kindling is carried and Cook
+   * is pressed (the press retries the completion and says
+   * so when it still can't).
+   */
+  const getSystemsFire = (fireId: string): SystemsFireState => {
+    const existing = systemsFiresRef.current.get(fireId);
+    if (existing) return existing;
+    const created = new SystemsFireState();
+    systemsFiresRef.current.set(fireId, created);
+    return created;
+  };
+
+  /** Bring a Systems vessel to lit for an engine-lit fire. */
+  const ensureSystemsLit = (
+    fireId: string,
+    systemsFire: SystemsFireState,
+  ) => {
+    if (systemsFire.lit) return;
+    if (systemsFire.fireStatus() === 'lighting') {
+      systemsFire.tick(systemsFire.lightingRemaining());
+      return;
+    }
+    const path = engineFirePathRef.current.get(fireId);
+    const method =
+      path === 'flint'
+        ? 'flint'
+        : path === 'friction'
+          ? 'sticks'
+          : inventory.count(ITEMS.flint) > 0
+            ? 'flint'
+            : 'sticks';
+    systemsFire.light(method, inventory);
+    systemsFire.tick(systemsFire.lightingRemaining());
+  };
+
+  /** Mirror an engine lighting start into the Systems vessel. */
+  const mirrorLightingStart = (
+    fireId: string,
+    method: 'flint' | 'friction',
+  ) => {
+    engineFirePathRef.current.set(fireId, method);
+    try {
+      getSystemsFire(fireId).light(
+        method === 'flint' ? 'flint' : 'sticks',
+        inventory,
+      );
+    } catch {
+      // Engine lighting is the authority and proceeds: a
+      // friction start without snap-wood kindling simply
+      // leaves the vessel unlit until Cook retries it.
+    }
+  };
+
+  /** Lighting + cooking menu actions for one placed fire. */
   const fireMenuActions = (fire: PlacedFire): ContextAction[] => {
-    if (fire.lit) return [{ id: 'close', label: 'Close' }];
+    if (fire.lit) {
+      const hasAcorns = inventory.count(FOOD_ACORNS) > 0;
+      return [
+        {
+          id: 'cook-stick',
+          label: 'Cook acorns (stick)',
+          disabled: !hasAcorns,
+          disabledNote: hasAcorns ? undefined : 'Needs carried acorns',
+        },
+        {
+          id: 'cook-buried',
+          label: 'Cook acorns (buried)',
+          disabled: !hasAcorns,
+          disabledNote: hasAcorns ? undefined : 'Needs carried acorns',
+        },
+        { id: 'close', label: 'Close' },
+      ];
+    }
     if (fire.lighting?.method === 'flint') {
       return [
         {
@@ -1024,7 +1298,7 @@ export default function App() {
       {
         id: 'light-friction',
         label: 'Light with friction (slow)',
-        hint: 'Rub, wait, rub',
+        hint: 'Rub, wait, rub · 1 snap-wood kindling readies it for cooking',
       },
       { id: 'close', label: 'Close' },
     ];
@@ -1047,6 +1321,7 @@ export default function App() {
         say(`Cannot light: ${result.reason}.`, 'blocked');
         return;
       }
+      mirrorLightingStart(fireId, 'flint');
       say('Flint ready — click flint 3 times.', 'info');
     } else if (actionId === 'click-flint') {
       const result = fireState.flintClick(fireId);
@@ -1069,7 +1344,34 @@ export default function App() {
         say(`Cannot light: ${result.reason}.`, 'blocked');
         return;
       }
+      mirrorLightingStart(fireId, 'friction');
       say('Rubbing… wait, then rub again.', 'info');
+    } else if (actionId === 'cook-stick' || actionId === 'cook-buried') {
+      // Open-fire only: stick or fire-buried, never pot
+      // cooking (cook() takes no pot method). One acorn per
+      // press; quantity is preserved 1:1 by cook(). The menu
+      // stays open so she can cook more.
+      const systemsFire = getSystemsFire(fireId);
+      try {
+        ensureSystemsLit(fireId, systemsFire);
+        const result = cook(
+          systemsFire,
+          inventory,
+          FOOD_ACORNS,
+          1,
+          actionId === 'cook-buried' ? 'buried' : 'stick',
+        );
+        say(
+          `Cooked ${result.count} acorns → ${result.cooked} (${result.method}).`,
+          'gain',
+        );
+      } catch (error) {
+        say(
+          error instanceof Error ? error.message : 'Cooking failed.',
+          'blocked',
+        );
+      }
+      refreshInventory();
     } else if (actionId === 'rub') {
       const result = fireState.frictionRub(fireId, Date.now());
       if (isFireFailure(result)) {
@@ -1119,6 +1421,44 @@ export default function App() {
   const umbrellaNote = carriesUmbrella(inventory)
     ? `Umbrella: precipitation −${Math.round(UMBRELLA_PRECIPITATION_PROTECTION * 100)}%`
     : undefined;
+
+  // Home-storage section for the sheltering house, when
+  // sheltered: rows come from the HomeStorage counts (the
+  // shell tracks only the id universe, since HomeStorage
+  // exposes counts, not a snapshot). Unsheltered = no
+  // section, no Deposit buttons — storage is reached at
+  // home, not from afar. Transfers refresh the personal list
+  // above, which re-renders this derivation.
+  const openHomeStore =
+    shelterHouseId !== null
+      ? (homeStoresRef.current.get(shelterHouseId) ?? null)
+      : null;
+  const openHomeIds =
+    shelterHouseId !== null
+      ? (homeStoreItemsRef.current.get(shelterHouseId) ?? new Set<string>())
+      : new Set<string>();
+  const storageSection =
+    sheltered && shelterHouseId !== null
+      ? {
+          label: shelterHouseName ?? shelterHouseId,
+          items:
+            openHomeStore === null
+              ? []
+              : [...openHomeIds]
+                  .filter((id) => openHomeStore.count(id) > 0)
+                  .map((id) => ({
+                    id,
+                    name: id,
+                    quantityText: String(openHomeStore.count(id)),
+                  })),
+          capacityText:
+            openHomeStore === null
+              ? 'Home storage — empty until first deposit'
+              : `Stored ${openHomeStore.used()} / ${openHomeStore.capacity()}`,
+          note: storageNote,
+          onWithdrawItem: handleWithdrawItem,
+        }
+      : undefined;
 
   // The fire whose lighting menu is open, with its anchor.
   const selectedFire =
@@ -1322,6 +1662,10 @@ export default function App() {
             onSelectItem={setSelectedItemId}
             placeableIds={PLACEABLE_IDS}
             onPlaceItem={handlePlaceItem}
+            foodIds={FOOD_IDS}
+            onEatItem={handleEatItem}
+            storage={storageSection}
+            onDepositItem={handleDepositItem}
             capacityText={capacityText}
             onClose={() => setInventoryOpen(false)}
           />
@@ -1338,6 +1682,11 @@ export default function App() {
         {craftNote ? (
           <p className="rounded bg-black/50 px-2 py-1 text-xs text-stone-200">
             {craftNote}
+          </p>
+        ) : null}
+        {eatNote ? (
+          <p className="rounded bg-black/50 px-2 py-1 text-xs text-stone-200">
+            {eatNote}
           </p>
         ) : null}
       </div>
