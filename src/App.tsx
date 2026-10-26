@@ -33,13 +33,16 @@
  *   invents a yield, a reason, or a progress value.
  * - Station presence: crafting checks the real presence query
  *   (stationPresence on the current generator at her position,
- *   mapped through stationContextForPresence). A stump within
- *   harvest range means 'workstation'; anything else reads as
- *   unavailable — no placeholder stations are invented, and other
- *   stations (wheel, loom, kiln, hearth) correctly stay
- *   unavailable until they exist. The raw generator is used
- *   because stumps are never depleted, so it gives the same
- *   stump set as the renderer's depletion-wrapped generator.
+ *   carrying BOTH booleans: stump in range = workstation,
+ *   placed loom in range = loom). Craftability ORs over
+ *   every present station and execution takes the whole
+ *   array, so a stump beside a loom serves both ladders at
+ *   once; the menu names the nearby stations. No placeholder
+ *   stations are invented, and other stations (wheel, kiln,
+ *   hearth) correctly stay unavailable until they exist. The
+ *   raw generator is used because stumps are never depleted,
+ *   so it gives the same stump set as the renderer's
+ *   depletion-wrapped generator.
  * - Inventory capacity mode: PINNED by Adam 2026-10-26 — a large
  *   basket REPLACES a small basket (full kit: pockets 10 + apron
  *   10 + large 50 = 70). The shell constructs PersonalInventory
@@ -199,10 +202,14 @@
  *   through stationContextForPresence, which now yields
  *   'loom' when a placed loom is within 2.5 m — so garment
  *   recipes (station 'loom') become craftable standing at
- *   a placed loom. FLAGGED WART (Background's, not fixed
- *   here): while both a stump and a loom are in range,
- *   'loom' wins, so workstation recipes read as mismatched
- *   until she steps out of loom range.
+ *   a placed loom. WART RESOLVED (loom-wiring round): the
+ *   old single context read 'loom' whenever a loom was
+ *   near, so workstation recipes mismatched at a dual site
+ *   — the shell now carries BOTH presence booleans, ORs
+ *   craftability over every present station, passes the
+ *   whole array to executeCraft (already set-based), and
+ *   the menu names the nearby stations. The engine
+ *   presence shape is unchanged.
  * - CLOTHES UI, LIVE (Adam, 2026-10-26): the shell owns one
  *   Wardrobe; the HUD wardrobe lists all five garments with
  *   Wear (carried) / Remove (worn) buttons, and both note
@@ -222,7 +229,7 @@
  *   presence now exists — a placed loom within 2.5 m reads
  *   as station 'loom' through the existing station memo, so
  *   garments are craftable standing at a placed loom (see
- *   the LOOM PLACE bullet; the stump+loom wart is flagged
+ *   the LOOM PLACE bullet; the stump+loom wart is resolved
  *   there).
  *
  * POINTER DISCIPLINE: overlays are pointer-events-none except the
@@ -239,7 +246,6 @@ import { PlayerController } from './game/player';
 import { bus, type EventMap } from './game/events';
 import {
   createHarvestOutcomeListener,
-  stationContextForPresence,
   stationPresence,
 } from './game/harvest';
 import { BIOME_BY_ID } from './game/biomes';
@@ -313,8 +319,8 @@ import {
   ownedToolItem,
   type OwnedToolItem,
 } from './systems/owned-tool';
-import { canCraft, type StationContext } from './systems/crafting';
-import { ITEMS, RECIPES } from './systems/recipes';
+import { canCraft } from './systems/crafting';
+import { ITEMS, RECIPES, type CraftingStation } from './systems/recipes';
 
 type BusHarvestTarget = EventMap['harvest:inRange']['targets'][number];
 
@@ -921,20 +927,47 @@ export default function App() {
     recomputeAnchors();
   };
 
-  // Station context from the real presence query at her position
-  // (see the header): a stump within harvest range means
-  // 'workstation', otherwise null. Recomputed when she moves or
-  // the world regenerates; stumps are never depleted, so the raw
-  // generator gives the same stump set as the wrapped one.
-  const station: StationContext = useMemo(() => {
-    return stationContextForPresence(
-      stationPresence(genRef.current, position.x, position.z),
-    );
+  // Station presence from the real query at her position
+  // (see the header): stump in range = workstation, placed
+  // loom in range = loom — BOTH booleans, not one context.
+  // The old single-context mapping read 'loom' whenever a
+  // loom was near, so workstation recipes mismatched at a
+  // dual site until she stepped out of loom range (the
+  // flagged wart). Craftability now ORs over every present
+  // station (below), and execution takes the whole array
+  // (executeCraft's StationInput is already set-based) —
+  // so a stump beside a loom serves both ladders at once.
+  // Recomputed when she moves or the world regenerates.
+  const stationPresenceValue = useMemo(() => {
+    return stationPresence(genRef.current, position.x, position.z);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [position.x, position.z, seed]);
+  const availableStations: CraftingStation[] = [];
+  if (stationPresenceValue.workstation) {
+    availableStations.push('workstation');
+  }
+  if (stationPresenceValue.loom) {
+    availableStations.push('loom');
+  }
+  const stationNote =
+    availableStations.length === 0
+      ? 'No station nearby'
+      : `Nearby station${availableStations.length > 1 ? 's' : ''}: ${availableStations.join(', ')}`;
 
   const craftingRecipes: CraftingRecipe[] = RECIPES.map((recipe) => {
-    const check = canCraft(recipe, inventory, station);
+    // OR over every present station: a recipe is craftable
+    // when ANY present station satisfies it. When none does,
+    // prefer the check for a present station (ingredient /
+    // requirement detail) over a mismatch note, so a dual
+    // site never reports a present station as missing.
+    const checks =
+      availableStations.length > 0
+        ? availableStations.map((s) => canCraft(recipe, inventory, s))
+        : [canCraft(recipe, inventory, null)];
+    const check =
+      checks.find((c) => c.ok) ??
+      checks.find((c) => !c.stationMismatch) ??
+      checks[0];
     let availabilityNote: string | undefined;
     if (check.stationMismatch) {
       availabilityNote = `Needs a ${check.requiredStation} station.`;
@@ -973,7 +1006,12 @@ export default function App() {
     if (!recipe) return;
     const ownedBefore = ownedToolItem(inventory);
     try {
-      const result = executeCraft(recipe, inventory, station, hunger);
+      const result = executeCraft(
+        recipe,
+        inventory,
+        availableStations.length > 0 ? availableStations : null,
+        hunger,
+      );
       setOwnedItem(result.owned);
       setCraftNote(
         `Crafted ${result.output.item} × ${result.output.quantity}.` +
@@ -1673,6 +1711,7 @@ export default function App() {
         {craftingOpen ? (
           <CraftingMenu
             recipes={craftingRecipes}
+            stationNote={stationNote}
             selectedRecipeId={selectedRecipeId}
             onSelectRecipe={setSelectedRecipeId}
             onCraft={handleCraft}

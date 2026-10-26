@@ -19,6 +19,8 @@ import { WitchMark } from './WitchyArt';
 
 export interface CraftingMenuProps {
   recipes: CraftingRecipe[];
+  /** Caller-supplied nearby-stations line, e.g. "Nearby stations: workstation, loom". */
+  stationNote?: string;
   /** Id of the selected recipe, if any. Undefined = nothing selected. */
   selectedRecipeId?: string;
   /** Called when the player picks a recipe. Optional. */
@@ -33,6 +35,7 @@ export interface CraftingMenuProps {
 
 export function CraftingMenu({
   recipes,
+  stationNote,
   selectedRecipeId,
   onSelectRecipe,
   onCraft,
@@ -60,6 +63,10 @@ export function CraftingMenu({
           </button>
         ) : null}
       </div>
+
+      {stationNote ? (
+        <p className={'mb-2 text-sm ' + t.muted}>{stationNote}</p>
+      ) : null}
 
       {recipes.length === 0 ? (
         <p className={'italic ' + t.muted}>
