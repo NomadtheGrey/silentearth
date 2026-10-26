@@ -512,6 +512,18 @@
  *   Inventory, Crafting, Options; stack row is Inventory,
  *   Crafting, Options. The header readout still names the
  *   current view in text.
+ * - DEPENDENCIES DISPLAY, LIVE (Adam, 2026-10-26 — "make sure all
+ *   dependencies are listed in the crafting ingredients"): every
+ *   recipe row now lists its dependencies after its ingredients —
+ *   upgradeFrom as "Upgrades from: {name} {held} / 1" (either/or
+ *   spade-axe: "Upgrades from: Spade or Axe-Trowel", held 1 if
+ *   either held else 0) and requires as "Requires present:
+ *   {name} {held} / {qty} (kept, not used up)". App mapping
+ *   only — no CraftingMenu change (rows are data-driven), no
+ *   recipe/execution change, and the predecessor is NOT added
+ *   to recipe.ingredients (execution removes ingredients AND
+ *   upgradeFrom separately — listing it there would consume
+ *   it twice). Station is not an ingredient line.
  * POINTER DISCIPLINE: overlays are pointer-events-none except the
  * small interactive pieces (HUD buttons, panels, harvest buttons),
  * so world clicks — including the first-person mouse-capture click
@@ -1597,18 +1609,59 @@ export default function App() {
       const first = check.missingRequirements[0];
       availabilityNote = `Requires ${first.item} present (${first.held} / ${first.quantity}).`;
     }
+    // DEPENDENCIES DISPLAY (Adam, 2026-10-26): upgradeFrom and
+    // requires are dependencies, not ingredients, and they must
+    // NOT be folded into recipe.ingredients — execution removes
+    // ingredients AND upgradeFrom separately, so listing the
+    // predecessor there would consume it twice. They ride as
+    // extra display rows after the ingredient rows instead:
+    // upgradeFrom as "Upgrades from: {name} {held} / 1"
+    // (either/or: "Spade or Axe-Trowel", held 1 if either held
+    // else 0), requires as "Requires present: {name} {held} /
+    // {qty} (kept, not used up)". Station is NOT a row —
+    // context, not an ingredient; the header and mismatch
+    // notes already cover it.
+    const dependencyRows: { name: string; amountText: string }[] = [];
+    if (recipe.upgradeFrom) {
+      const predecessors = Array.isArray(recipe.upgradeFrom)
+        ? recipe.upgradeFrom
+        : [recipe.upgradeFrom];
+      if (predecessors.length === 1) {
+        dependencyRows.push({
+          name: `Upgrades from: ${displayNameFor(predecessors[0])}`,
+          amountText: `${inventory.count(predecessors[0])} / 1`,
+        });
+      } else {
+        const held = predecessors.some((item) => inventory.count(item) > 0)
+          ? 1
+          : 0;
+        dependencyRows.push({
+          name: `Upgrades from: ${predecessors.map(displayNameFor).join(' or ')}`,
+          amountText: `${held} / 1`,
+        });
+      }
+    }
+    for (const requirement of recipe.requires ?? []) {
+      dependencyRows.push({
+        name: `Requires present: ${displayNameFor(requirement.item)}`,
+        amountText: `${inventory.count(requirement.item)} / ${requirement.quantity} (kept, not used up)`,
+      });
+    }
     return {
       id: recipe.id,
       name: recipe.name,
       description: `Makes ${recipe.output.quantity} × ${recipe.output.item}.`,
-      ingredients: recipe.ingredients.map((ingredient) => ({
-        name: ingredient.item,
-        amountText: `${inventory.count(ingredient.item)} / ${ingredient.quantity}`,
-        icon:
-          ingredient.item === UMBRELLA_ITEM_ID ? (
-            <UmbrellaIcon />
-          ) : undefined,
-      })),
+      ingredients: [
+        ...recipe.ingredients.map((ingredient) => ({
+          name: ingredient.item,
+          amountText: `${inventory.count(ingredient.item)} / ${ingredient.quantity}`,
+          icon:
+            ingredient.item === UMBRELLA_ITEM_ID ? (
+              <UmbrellaIcon />
+            ) : undefined,
+        })),
+        ...dependencyRows,
+      ],
       canCraft: check.ok,
       availabilityNote,
       icon:
