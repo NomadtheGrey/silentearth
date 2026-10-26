@@ -256,6 +256,16 @@
  *   (fires the existing harvest:requested event). No shell
  *   bridges remain: no key synthesis, no yaw/pitch writes
  *   from the shell, no game file touched by this lane.
+ *   SQUISH + SCROLLBARS FOLLOW-UP (Adam 2026-10-26: "squish
+ *   it for phone, put in scrollbars"): the touch stack
+ *   reserves 18rem (needs row + thumbstick clearance) so an
+ *   expanded tall stack never slides under the stick; both
+ *   touch scroll containers carry a visible thin scrollbar
+ *   (webkit styled thumb, firefox thin + colours — iOS
+ *   Safari keeps overlay scrollbars, platform limit); and
+ *   ContextMenu gains a 70vh bound + scroll (overflow-only,
+ *   no change when it fits). Panel density is deliberately
+ *   unchanged — thumb targets outrank density on phone.
  * POINTER DISCIPLINE: overlays are pointer-events-none except the
  * small interactive pieces (HUD buttons, panels, harvest buttons),
  * so world clicks — including the first-person mouse-capture click
@@ -1546,6 +1556,18 @@ export default function App() {
   // the panels are one tap away. Desktop never collapses.
   const [hudCollapsed, setHudCollapsed] = useState(isTouch);
 
+  // Visible thin scrollbars on the touch scroll containers
+  // (Adam: "put in scrollbars"): native mobile scrollbars are
+  // overlay and fade, so a user who never swipes sees no
+  // affordance that a panel scrolls. WebKit gets a styled
+  // 8 px thumb, Firefox gets thin + thumb/track colours;
+  // iOS Safari ignores webkit scrollbar styling (platform
+  // limit — swipe scrolling still reaches everything there).
+  const touchScrollbar =
+    '[scrollbar-width:thin] [scrollbar-color:#f0ead666_transparent] ' +
+    '[&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-black/20 ' +
+    '[&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[#f0ead6]/40';
+
   // Touch wiring (see the header): the engine half landed
   // on WIP as 50f5cd6 (player.ts only) while this round was
   // in flight, so the shell wires straight to it — no key
@@ -1685,7 +1707,12 @@ export default function App() {
         <div
           className={
             isTouch
-              ? 'pointer-events-auto m-2 max-w-sm max-h-[calc(100vh-13rem)] overflow-y-auto pr-1'
+              // Reserve 18rem: needs row (~52 px) + thumbstick
+              // clearance (bottom-24 offset + 128 px ring =
+              // 224 px), so the expanded stack never slides
+              // under the stick on portrait — 13rem did.
+              ? 'pointer-events-auto m-2 max-w-sm max-h-[calc(100vh-18rem)] overflow-y-auto pr-1 ' +
+                touchScrollbar
               : 'pointer-events-auto m-2 max-w-sm'
           }
         >
@@ -1858,7 +1885,8 @@ export default function App() {
       <div
         className={
           isTouch
-            ? 'pointer-events-auto absolute left-2 right-2 bottom-2 z-30 flex max-h-[60vh] flex-col gap-2 overflow-y-auto'
+            ? 'pointer-events-auto absolute left-2 right-2 bottom-2 z-30 flex max-h-[60vh] flex-col gap-2 overflow-y-auto ' +
+              touchScrollbar
             : 'pointer-events-auto absolute right-2 top-20 z-30 flex max-h-[calc(100vh-6rem)] w-80 max-w-[calc(100vw-1rem)] flex-col gap-2 overflow-y-auto'
         }
       >

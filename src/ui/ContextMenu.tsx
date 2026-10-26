@@ -44,7 +44,7 @@ export function ContextMenu({
 }: ContextMenuProps) {
   const t = UI_THEMES[theme];
   return (
-    <section aria-label={`${objectName} actions`} className={'w-56 rounded p-2 ' + t.panel}>
+    <section aria-label={`${objectName} actions`} className={'w-56 max-h-[70vh] overflow-y-auto rounded p-2 ' + t.panel}>
       <div className="mb-1 flex items-center justify-between gap-2">
         <h2 className={'text-sm font-semibold ' + t.heading}>{objectName}</h2>
         {onClose ? (
