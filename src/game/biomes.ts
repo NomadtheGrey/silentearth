@@ -15,6 +15,16 @@
  *
  * The biome set below is DRAFT (2026-10-25, delegated to Marlowe by Adam;
  * names, membership, and blend widths await Adam's pin pass).
+ *
+ * MEADOW + FOREST (Adam, 2026-10-26): existence, farther-out placement,
+ * and pretty character are his. Placement mechanism is lane-decided:
+ * a 'distance' field axis (see below) — meadow/forest affinity is near
+ * zero around spawn and rises with distance from it, so they read as
+ * farther-out discoveries, not start neighbors. Their pretty character
+ * is lane-decided scenery: meadow = open grass, flowers, light; forest
+ * = tall trees, dappled light. New flora is SCENERY ONLY — no new
+ * harvestable items; meadow/forest growth yields existing items (the
+ * kinds they share with other biomes) or nothing.
  */
 
 import { makeNoise2D } from 'fast-simplex-noise';
@@ -38,7 +48,7 @@ export interface BiomeDef {
   anchor: Partial<Record<FieldAxis, { at: number; sigma: number }>>;
 }
 
-export type FieldAxis = 'wetness' | 'elevation' | 'density' | 'mineral' | 'creek';
+export type FieldAxis = 'wetness' | 'elevation' | 'density' | 'mineral' | 'creek' | 'distance';
 
 export const BIOMES: BiomeDef[] = [
   {
@@ -148,6 +158,51 @@ export const BIOMES: BiomeDef[] = [
       elevation: { at: 0.50, sigma: 0.30 },
     },
   },
+  {
+    id: 'meadow',
+    name: 'Meadow',
+    groundColor: 0x7d9a52,
+    density: 0.85,
+    mix: {
+      flower: 0.28, bush: 0.16, snapWood: 0.08, tree: 0.04, log: 0.04,
+      tenderVines: 0.05, riverStone: 0.05, peatMoss: 0.03, vine: 0.03,
+      bone: 0.01, stump: 0.01,
+    },
+    // Pretty and open: light grass, flowers, scattered brush — the
+    // pleasant far-out clearing. Drier and lower than Oldfield Rise
+    // (which stays the near-spawn pleasant neighbor), and gated by
+    // distance so it is never a start neighbor (see distance axis).
+    // 'flower' is scenery only; everything yield-bearing here is an
+    // existing item shared with other biomes.
+    anchor: {
+      wetness: { at: 0.35, sigma: 0.25 },
+      elevation: { at: 0.55, sigma: 0.30 },
+      density: { at: 0.30, sigma: 0.25 },
+      distance: { at: 1.0, sigma: 0.25 },
+    },
+  },
+  {
+    id: 'forest',
+    name: 'Forest',
+    groundColor: 0x44552e,
+    density: 1.30,
+    mix: {
+      tallTree: 0.28, tree: 0.14, bush: 0.12, vine: 0.10, tenderVines: 0.08,
+      log: 0.06, snapWood: 0.05, downedOak: 0.04, peatMoss: 0.04,
+      flower: 0.03, riverStone: 0.02, bone: 0.01, stump: 0.01, bogGrowth: 0.01,
+    },
+    // Pretty and deep: tall trees, dappled light, a sparse flower floor.
+    // Dense like Tanglewood, but mid-elevation and distance-gated, so
+    // near-spawn dense growth stays Tanglewood and true forest is a
+    // farther-out discovery. 'tallTree' is scenery only; yield-bearing
+    // kinds here are existing items shared with other biomes.
+    anchor: {
+      density: { at: 0.90, sigma: 0.22 },
+      wetness: { at: 0.55, sigma: 0.30 },
+      elevation: { at: 0.50, sigma: 0.30 },
+      distance: { at: 1.0, sigma: 0.22 },
+    },
+  },
 ];
 
 export const BIOME_BY_ID: Record<BiomeId, BiomeDef> = Object.fromEntries(
@@ -185,6 +240,20 @@ export interface Fields {
   density: number;
   mineral: number;
   creek: number;
+  /**
+   * Distance axis (lane-decided, 2026-10-26): min(1, distance from world
+   * origin / 1000 m). Spawn sits near the origin by construction
+   * (findSpawn scans ±200 m), so at the scales involved this reads as
+   * distance from spawn. Falloff with the meadow/forest anchors
+   * (at 1.0): distance factor ≈0.006 (meadow) / 0.001 (forest) at 200 m,
+   * ≈0.14 / 0.08 at 500 m, ≈0.73 / 0.66 at 800 m, 1.0 at 1000 m+ — first
+   * patches around 500–800 m out, strong at a kilometre. Existing
+   * biomes have no distance anchor (factor 1), so their near-spawn
+   * affinities are unchanged; far out, meadow/forest only win where
+   * their other field anchors also match, so bog/salt/etc. still hold
+   * their own far-out ground. Deterministic from (x, z) — no randomness.
+   */
+  distance: number;
 }
 
 const norm = (n: number): number => (n + 1) / 2;
@@ -204,7 +273,9 @@ export function createFields(seed: string): (x: number, z: number) => Fields {
     const mineral = norm(mineralN(x * 0.006, z * 0.006));
     // Ridged creek field: near 1 only along narrow winding lines.
     const creek = Math.max(0, 1 - Math.abs(creekN(x * 0.008, z * 0.008)) * 2.5);
-    return { wetness, elevation, density, mineral, creek };
+    // Distance from origin, normalized to 1000 m (see Fields.distance).
+    const distance = Math.min(1, Math.hypot(x, z) / 1000);
+    return { wetness, elevation, density, mineral, creek, distance };
   };
 }
 

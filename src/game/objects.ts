@@ -318,7 +318,9 @@ export type MeshShape =
   | 'disc'
   | 'stone'
   | 'crystal'
-  | 'bone';
+  | 'bone'
+  | 'flower'
+  | 'tallTree';
 
 export interface MeshSpec {
   shape: MeshShape;
@@ -708,6 +710,38 @@ export const SOURCES: HarvestSourceDef[] = [
     provenance: 'draft',
     biomes: ['deepBog', 'mirewood', 'tanglewood', 'creekBottom'],
     mesh: { shape: 'bogTuft', color: 0x3a5a2a, baseY: 0.25 },
+  },
+  {
+    id: 'meadowFlower',
+    kind: 'flower',
+    name: 'Meadow Flower',
+    description:
+      'Small bright flowers of the open meadow — pretty, and SCENERY ONLY ' +
+      '(meadow/forest landing, 2026-10-26): they yield nothing, and no new ' +
+      'item is invented for them. The meadow harvest is the brush and ' +
+      'snap-wood growing beside them.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['meadow', 'forest'],
+    mesh: { shape: 'flower', color: 0xe08aa8, baseY: 0.18 },
+  },
+  {
+    id: 'forestTallTree',
+    kind: 'tallTree',
+    name: 'Tall Tree',
+    description:
+      'A tall forest tree, canopy high above the dappled floor — SCENERY ' +
+      'ONLY (meadow/forest landing, 2026-10-26): it yields nothing, and no ' +
+      'new item is invented for it. The forest harvest is the brush, vines, ' +
+      'and downed wood beneath it.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['forest'],
+    mesh: { shape: 'tallTree', color: 0x4a2e18, extraColor: 0x2f5a26, baseY: 1.6, extraY: 3.7 },
   },
 ];
 

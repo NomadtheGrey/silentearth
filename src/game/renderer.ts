@@ -121,6 +121,10 @@ function geometryForShape(shape: MeshShape, kind: ScatterKind): THREE.BufferGeom
       return new THREE.OctahedronGeometry(0.3, 0);
     case 'bone':
       return new THREE.BoxGeometry(0.5, 0.12, 0.12);
+    case 'flower':
+      return new THREE.SphereGeometry(0.18, 6, 5);
+    case 'tallTree':
+      return new THREE.CylinderGeometry(0.22, 0.34, 3.2, 6);
   }
 }
 
@@ -134,6 +138,8 @@ function extraGeometryForShape(shape: MeshShape): THREE.BufferGeometry | null {
       return flatDisc(0.42, 8);
     case 'reed':
       return new THREE.ConeGeometry(0.12, 0.4, 5);
+    case 'tallTree':
+      return new THREE.ConeGeometry(1.8, 3.0, 7);
     default:
       return null;
   }

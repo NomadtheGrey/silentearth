@@ -16,14 +16,18 @@
 /** Player camera: first-person, or third-person overhead follow. */
 export type CameraMode = 'first' | 'third';
 
-/** Biome ids (DRAFT set, 2026-10-25 — names await Adam's pin pass). */
+/** Biome ids (DRAFT set, 2026-10-25 — names await Adam's pin pass;
+ *  meadow + forest added 2026-10-26, Adam's existence/placement/pretty
+ *  ruling, lane-decided falloff in src/game/biomes.ts). */
 export type BiomeId =
   | 'mirewood'
   | 'deepBog'
   | 'oldfieldRise'
   | 'creekBottom'
   | 'tanglewood'
-  | 'saltFlat';
+  | 'saltFlat'
+  | 'meadow'
+  | 'forest';
 
 /** Normalized biome weights at a position; weights sum to 1. */
 export interface BiomeWeights {
@@ -39,7 +43,9 @@ export interface BiomeWeights {
  *  marshGrass, bogGrowth) are sources or ground character whose yields are
  *  defined in src/game/objects.ts; standingWater and bogPatch yield
  *  nothing — they are ground character, not harvest sources.
- *  Fill-in landing (2026-10-25) added stump, reed, marshGrass, bogGrowth. */
+ *  Fill-in landing (2026-10-25) added stump, reed, marshGrass, bogGrowth.
+ *  Meadow/forest landing (2026-10-26) added flower + tallTree: SCENERY
+ *  ONLY, no harvestable item — they yield nothing. */
 export type ScatterKind =
   | 'vine'
   | 'bush'
@@ -58,7 +64,9 @@ export type ScatterKind =
   | 'stump'
   | 'reed'
   | 'marshGrass'
-  | 'bogGrowth';
+  | 'bogGrowth'
+  | 'flower'
+  | 'tallTree';
 
 /** One placed scatter object in a chunk. y is its base height above ground. */
 export interface ScatterObject {

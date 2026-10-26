@@ -37,6 +37,8 @@ const SCATTER_KINDS: ScatterKind[] = [
   'bone', 'saltCrystal', 'downedOak',
   // Fill-in landing (2026-10-25): stump, reed, marshGrass, bogGrowth.
   'stump', 'reed', 'marshGrass', 'bogGrowth',
+  // Meadow/forest landing (2026-10-26): flower, tallTree (scenery only).
+  'flower', 'tallTree',
 ];
 
 export function createWorldGen(seed: string): WorldGen {
