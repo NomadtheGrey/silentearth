@@ -80,7 +80,8 @@ export const SAVE_KEY = 'silentearth-save-v1';
 /** The only save version this code reads or writes. */
 export const SAVE_VERSION = 1;
 
-export type SaveCameraMode = 'first' | 'third';
+/** 'behind' added 2026-10-26 (UI's third perspective): before this, a save made in behind view reloaded as fresh, because deserialize rejected the mode. */
+export type SaveCameraMode = 'first' | 'third' | 'behind';
 
 export interface SavedFire {
   type: string;
@@ -272,7 +273,11 @@ export function deserializeSave(value: unknown): SaveData | null {
     if (value.version !== SAVE_VERSION) return null;
     if (!isFiniteNumber(value.savedAt)) return null;
     if (typeof value.seed !== 'string' || value.seed.length === 0) return null;
-    if (value.cameraMode !== 'first' && value.cameraMode !== 'third') {
+    if (
+      value.cameraMode !== 'first' &&
+      value.cameraMode !== 'third' &&
+      value.cameraMode !== 'behind'
+    ) {
       return null;
     }
     if (!isPosition(value.position)) return null;
