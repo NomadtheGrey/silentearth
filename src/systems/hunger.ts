@@ -113,6 +113,7 @@
 
 import type { CraftingInventory } from './crafting';
 import type { ItemId } from './recipes';
+import { normalizeItemId } from './inventory';
 
 // ---------------------------------------------------------------------------
 // Lane-decided starting tunables (NOT pinned — see the header)
@@ -149,12 +150,22 @@ export const FOOD_ELDERBERRIES: ItemId = 'ELDERBERRIES';
  */
 export const FOOD_COOKED_ACORNS: ItemId = 'COOKED_ACORNS';
 
-/** Foods eaten directly: berries as gathered, acorns once cooked. */
+/**
+ * Foods eaten directly: berries as gathered, acorns once cooked.
+ * SPELLING NOTE (2026-10-26 id fix): these are the NORMALIZED
+ * (kebab) ids, derived from the FOOD_* harvest-spelling constants
+ * above — because this list's live consumer is App's FOOD_IDS
+ * set, matched against panel row ids, and panel rows are
+ * normalized stack keys (see inventory.ts). The FOOD_* constants
+ * keep the harvest spelling for grant-side callers; every
+ * predicate below accepts EITHER spelling, so no caller has to
+ * remember which list it holds.
+ */
 export const FOOD_ITEMS: ReadonlyArray<ItemId> = [
   FOOD_BOG_BERRIES,
   FOOD_ELDERBERRIES,
   FOOD_COOKED_ACORNS,
-];
+].map(normalizeItemId);
 
 /**
  * Foods that must be cooked before eating (Adam, 2026-10-26,
@@ -177,16 +188,30 @@ export const FOOD_NUTRITION: Readonly<Record<string, number>> = {
   [FOOD_COOKED_ACORNS]: 20,
 };
 
-/** True for a directly-eatable food (berries in v1). */
+/**
+ * Nutrition keyed by NORMALIZED id (derived once from
+ * FOOD_NUTRITION, not a second authored table) — so the
+ * predicates below accept a food in either spelling: the
+ * harvest spelling ('BOG_BERRIES', as a grant-side caller holds
+ * it) or the normalized spelling ('bog-berries', as a panel row
+ * id holds it). A Map, not a plain object, so prototype names
+ * ('constructor', 'toString', ...) are never food.
+ */
+const NUTRITION_BY_NORMALIZED_ID: ReadonlyMap<string, number> = new Map(
+  Object.entries(FOOD_NUTRITION).map(([id, nutrition]) => [
+    normalizeItemId(id),
+    nutrition,
+  ]),
+);
+
+/** True for a directly-eatable food (berries in v1), either spelling. */
 export function isEatable(item: ItemId): boolean {
-  // Own-property check, not `in`: prototype names ('constructor',
-  // 'toString', ...) are not food.
-  return Object.prototype.hasOwnProperty.call(FOOD_NUTRITION, item);
+  return NUTRITION_BY_NORMALIZED_ID.has(normalizeItemId(item));
 }
 
-/** True for a food that must be cooked first (acorns in v1). */
+/** True for a food that must be cooked first (acorns in v1), either spelling. */
 export function needsCooking(item: ItemId): boolean {
-  return item === FOOD_ACORNS;
+  return normalizeItemId(item) === normalizeItemId(FOOD_ACORNS);
 }
 
 /**
@@ -204,7 +229,7 @@ export function isFood(item: ItemId): boolean {
  * have no direct nutrition until the fire system cooks them).
  */
 export function nutritionFor(item: ItemId): number | undefined {
-  return isEatable(item) ? FOOD_NUTRITION[item] : undefined;
+  return NUTRITION_BY_NORMALIZED_ID.get(normalizeItemId(item));
 }
 
 // ---------------------------------------------------------------------------

@@ -51,6 +51,7 @@
 
 import type { CraftingInventory } from './crafting';
 import { ITEMS, type ItemId } from './recipes';
+import { normalizeItemId } from './inventory';
 
 // ---------------------------------------------------------------------------
 // Lighting — lane-decided starting tunables (NOT pinned)
@@ -105,12 +106,31 @@ export const COOK_TRANSFORMATIONS: Readonly<Record<string, ItemId>> = {
   ACORNS: FOOD_COOKED_ACORNS,
 };
 
-export function isCookable(item: ItemId): boolean {
-  return Object.prototype.hasOwnProperty.call(COOK_TRANSFORMATIONS, item);
+/**
+ * The raw key in COOK_TRANSFORMATIONS matching an item in either
+ * spelling (harvest 'ACORNS' or normalized 'acorns' — see
+ * inventory.ts). Undefined when the item is not cookable.
+ */
+function cookableRaw(item: ItemId): string | undefined {
+  const wanted = normalizeItemId(item);
+  return Object.keys(COOK_TRANSFORMATIONS).find(
+    (raw) => normalizeItemId(raw) === wanted,
+  );
 }
 
+/** True when the item cooks (either spelling). */
+export function isCookable(item: ItemId): boolean {
+  return cookableRaw(item) !== undefined;
+}
+
+/**
+ * Cooked form of a cookable item (either spelling in, the
+ * table's cooked constant out — inventory.add normalizes the
+ * stored stack, so the stored form is always normalized).
+ */
 export function cookedForm(item: ItemId): ItemId | undefined {
-  return isCookable(item) ? COOK_TRANSFORMATIONS[item] : undefined;
+  const raw = cookableRaw(item);
+  return raw === undefined ? undefined : COOK_TRANSFORMATIONS[raw];
 }
 
 // ---------------------------------------------------------------------------
