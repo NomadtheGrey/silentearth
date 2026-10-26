@@ -80,6 +80,7 @@
  */
 
 import { craftIntoInventory, PersonalInventory } from './inventory';
+import type { HungerState } from './hunger';
 import {
   ownedStage,
   ownedStageName,
@@ -128,12 +129,37 @@ function describePresent(present: Set<CraftingStation>): string {
  * inventory after the craft. Throws (inventory — and therefore
  * owned tier — untouched) on a missing station, an ingredient
  * shortfall, or a capacity overflow.
+ *
+ * HUNGER GATE (Adam, 2026-10-26: too hungry → cannot build): when
+ * a HungerState is passed and it is at the too-hungry stage, the
+ * craft is blocked — it throws before anything is consumed, so a
+ * blocked craft eats no ingredients. The gate is checked FIRST,
+ * before the station gate, so a too-hungry attempt reports hunger
+ * rather than station. Omitting hunger leaves the gate OFF
+ * (transitional, for callers not yet tracking hunger) — shell
+ * wiring MUST pass the hunger state for the lockout to bite in
+ * play. The gate applies to EVERY recipe through this helper,
+ * including the campfire STRUCTURE recipe: campfire COOKING is
+ * not a craft (open-fire, future fire system), so no cooking
+ * exception belongs here, and trap recipes get no exception
+ * either (traps are brainstorm-stage; their exemption, when the
+ * trap system lands, is trap use, not trap crafting).
  */
 export function executeCraft(
   recipe: Recipe,
   inventory: PersonalInventory,
   station: StationInput = null,
+  hunger: HungerState | null = null,
 ): CraftExecutionResult {
+  // Hunger gate, before anything is consumed.
+  if (hunger !== null && hunger.isTooHungry()) {
+    throw new Error(
+      `Cannot craft ${recipe.name}: too hungry to craft ` +
+        `(hunger ${hunger.value()}, stage too-hungry). ` +
+        `Eat carried food first.`,
+    );
+  }
+
   const present = presentStations(station);
 
   // Station gate, before anything is consumed. 'hand' and unstated
