@@ -463,6 +463,24 @@
  *   'stump' is the kind passed; the component maps all three
  *   brief-named kinds (stump / workstation / Stumpy) so the
  *   title follows from a prop when presence learns kinds.
+ * - INVENTORY DROP V1, LIVE (Adam, 2026-10-26 — "for next
+ *   pass"): every personal inventory row gains a Drop button
+ *   (storage rows never get one). One item per press, dropped
+ *   at her feet as a ground pile in the same pile system as
+ *   overflow — merges by item at the same spot, pick-up-able
+ *   later via the pile USE trigger. Shell wiring: Systems'
+ *   dropFromInventory(item, 1) validates + removes, then the
+ *   shell hands the record to pileState.drop() (no
+ *   pileState.spawn exists; drop() is the spawn equivalent
+ *   and emits pile:dropped for tracker + renderer). A failed
+ *   drop leaves the inventory exact (Systems builds the
+ *   record before removing; remove() throws before mutating).
+ *   Dropped piles ride the pending pile save wiring; no
+ *   separate save handling invented. Worn garments drop
+ *   without unwearing (mirroring deposit: bonus self-cancels
+ *   at count 0, returns on pickup). Quantity choice: one per
+ *   press, per the brief and Systems' V1 note — unless Adam
+ *   corrects it.
  * POINTER DISCIPLINE: overlays are pointer-events-none except the
  * small interactive pieces (HUD buttons, panels, harvest buttons),
  * so world clicks — including the first-person mouse-capture click
@@ -550,7 +568,7 @@ import {
   PersonalInventory,
   displayNameFor,
 } from './systems/inventory';
-import { grantFromPile } from './systems/piles';
+import { grantFromPile, dropFromInventory } from './systems/piles';
 import { executeCraft } from './systems/crafting-execution';
 import {
   HungerState,
@@ -860,6 +878,7 @@ export default function App() {
   const homeStoresRef = useRef(new Map<string, HomeStorage>());
   const homeStoreItemsRef = useRef(new Map<string, Set<string>>());
   const [eatNote, setEatNote] = useState<string | null>(null);
+  const [dropNote, setDropNote] = useState<string | null>(null);
   const [storageNote, setStorageNote] = useState<string | null>(null);
 
   const [seedInput, setSeedInput] = useState(bootSave?.seed ?? DEFAULT_SEED);
@@ -1761,6 +1780,44 @@ export default function App() {
     saveNow();
   };
 
+  // INVENTORY DROP V1 (Adam, 2026-10-26 — "for next pass"):
+  // one item per press, dropped at her feet as a ground pile
+  // in the same pile system as overflow (merges by item at
+  // the same spot, pick-up-able later via the pile USE
+  // trigger). Systems validates + removes first — the pile
+  // record is built before the removal and remove() throws
+  // before mutating on insufficiency, so a failed drop leaves
+  // the inventory exactly as it was — then the shell hands
+  // the record to pileState.drop(), the spawn equivalent
+  // (no pileState.spawn exists; drop() creates/merges and
+  // emits pile:dropped for the tracker + renderer). Dropped
+  // piles ride the pending pile save wiring like overflow
+  // piles; no separate save handling is invented here.
+  // Worn garments drop like anything else (no unwear —
+  // mirroring deposit: the worn bonus already self-cancels
+  // when the carried count hits 0 via the setWorn re-sync,
+  // and returns if the garment is picked back up).
+  const handleDropItem = (itemId: string) => {
+    const player = playerRef.current;
+    if (!player) {
+      setDropNote('Could not drop that.');
+      return;
+    }
+    try {
+      const pile = dropFromInventory(itemId, 1, inventory, player.x, player.z);
+      pileState.drop(pile.item, pile.quantity, pile.x, pile.z);
+      inventory.setWorn(wardrobe.wornItemIds());
+      setWornGarments(wardrobe.wornGarments());
+      setDropNote(`Dropped 1 ${displayNameFor(itemId)}.`);
+    } catch (error) {
+      setDropNote(
+        error instanceof Error ? error.message : 'Could not drop that.',
+      );
+    }
+    refreshInventory();
+    saveNow();
+  };
+
   /**
    * COOKING BRIDGE (DEV decision, gap-closing round — see the
    * header): one Systems FireState per placed fire, created
@@ -2621,6 +2678,7 @@ export default function App() {
             onEatItem={handleEatItem}
             storage={storageSection}
             onDepositItem={handleDepositItem}
+            onDropItem={handleDropItem}
             capacityText={capacityText}
             onClose={() => setInventoryOpen(false)}
             comfortable={isTouch}
@@ -2645,6 +2703,11 @@ export default function App() {
         {eatNote ? (
           <p className="rounded bg-black/50 px-2 py-1 text-xs text-stone-200">
             {eatNote}
+          </p>
+        ) : null}
+        {dropNote ? (
+          <p className="rounded bg-black/50 px-2 py-1 text-xs text-stone-200">
+            {dropNote}
           </p>
         ) : null}
       </div>

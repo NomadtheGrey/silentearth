@@ -74,6 +74,14 @@ export interface InventoryPanelProps {
   storage?: InventoryStorageSection;
   /** Called when the player presses Deposit on a carried item. */
   onDepositItem?: (id: string) => void;
+  /**
+   * Called when the player presses Drop on a carried item.
+   * Every personal row gains a Drop button when this is
+   * passed; storage rows never get one (dropping is from
+   * the pack she carries, not the house store). Dropping
+   * itself is the caller's job.
+   */
+  onDropItem?: (id: string) => void;
   /** Caller-supplied capacity line, e.g. a total the system provides. */
   capacityText?: string;
   /** Called when the panel is closed. Optional. */
@@ -94,6 +102,7 @@ export function InventoryPanel({
   onEatItem,
   storage,
   onDepositItem,
+  onDropItem,
   capacityText,
   onClose,
   comfortable = false,
@@ -196,6 +205,16 @@ export function InventoryPanel({
                     className={actionBtn}
                   >
                     Deposit
+                  </button>
+                ) : null}
+                {onDropItem ? (
+                  <button
+                    type="button"
+                    onClick={() => onDropItem(item.id)}
+                    aria-label={`Drop ${item.name}`}
+                    className={actionBtn}
+                  >
+                    Drop
                   </button>
                 ) : null}
               </li>
