@@ -9,13 +9,15 @@
  * one press reports a HarvestRequest through onHarvest. It does not
  * harvest anything itself, does not touch inventory, and does not
  * import the event bus — the wiring step connects onHarvest to
- * bus.emit('harvest:requested', request) once that event is
- * registered (see proximityHarvest.ts for the pending status).
+ * bus.emit('harvest:requested', request), the event Background
+ * registered in EventMap (see proximityHarvest.ts for the mapping).
  *
- * The glyph differs by kind, lightly: a leaf for an object, soil
+ * The glyph differs by kind, lightly: a leaf for scatter, soil
  * specks for the ground. Ground buttons look and behave exactly
- * like object buttons — nearly-anyplace harvesting means the ground
- * underfoot is not a second-class target.
+ * like scatter buttons — nearly-anyplace harvesting means the ground
+ * underfoot is not a second-class target. The verb reads "Harvest"
+ * unless the caller overrides it per target; the bus carries no
+ * verb, so the verb is presentation, not data.
  */
 
 import type { HarvestTarget, HarvestRequest } from './proximityHarvest';
@@ -66,20 +68,21 @@ export function HarvestButton({
   theme = 'mire',
 }: HarvestButtonProps) {
   const t = UI_THEMES[theme];
+  const action = target.actionLabel ?? 'Harvest';
   return (
     <button
       type="button"
       disabled={disabled}
       onClick={() => onHarvest?.(harvestRequestFor(target))}
-      aria-label={`${target.actionLabel} ${target.sourceName}`}
+      aria-label={`${action} ${target.name}`}
       className={
         'flex items-center gap-2 rounded-full px-3 py-1.5 text-sm shadow-lg transition-transform hover:scale-105 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:scale-100 ' +
         t.panel
       }
     >
       <KindGlyph kind={target.kind} />
-      <span className="font-medium">{target.actionLabel}</span>
-      <span className={t.muted}>{target.sourceName}</span>
+      <span className="font-medium">{action}</span>
+      <span className={t.muted}>{target.name}</span>
       {disabledNote ? (
         <span className={'text-xs italic ' + t.muted}>{disabledNote}</span>
       ) : null}
