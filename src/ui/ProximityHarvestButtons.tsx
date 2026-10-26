@@ -21,14 +21,16 @@
  * proximity.ts, so the look-down gate below is what keeps the
  * ground button from being permanent.
  *
- * LOOK-DOWN GATE (Adam, 2026-10-26): ground targets render only
- * when `lookingDown` is true; scatter targets are unaffected and
- * render whenever passed. Ground is everywhere — and per
- * proximity.ts the ground target is always in range — so an
- * ungated ground button would be permanent clutter: no look
- * down, no ground button, even standing on harvestable ground.
- * See proximityHarvest.ts for the first-person pitch threshold
- * and for the third-person gap, which needs Adam's call.
+ * LOOK-DOWN GATE (Adam, 2026-10-26): this layer does NOT gate.
+ * Ground targets arrive here only when ProximityTracker already
+ * deemed them eligible (first-person pitch <= -0.4 rad, or
+ * third-person with no scatter target in range — see
+ * proximityHarvest.ts). An earlier version of this landing added
+ * a UI-side `lookingDown` prop; it was removed, because a second
+ * gate would hide buttons the tracker already approved. This
+ * component renders exactly what it is passed: the tracker's
+ * output is the gate. A caller bypassing the tracker owns
+ * gating for the targets it passes directly.
  *
  * Render this inside a relatively-positioned overlay (e.g. HudShell)
  * so the anchors position against the game view. A press on any
@@ -49,32 +51,19 @@ export interface ProximityHarvestButtonsProps {
   onHarvest?: (request: HarvestRequest) => void;
   /** Look for the buttons. Default "mire" (the world outside). */
   theme?: UiThemeName;
-  /**
-   * Whether she is looking down at the ground (Adam's clutter rule).
-   * Ground targets render only when true; scatter targets are
-   * unaffected. Default false: no look down, no ground button.
-   * First-person source: pitch <= LOOK_DOWN_PITCH_RAD (see
-   * proximityHarvest.ts). Third-person has no natural source yet —
-   * pass false there until Adam picks a reveal gesture.
-   */
-  lookingDown?: boolean;
 }
 
 export function ProximityHarvestButtons({
   targets,
   onHarvest,
   theme = 'mire',
-  lookingDown = false,
 }: ProximityHarvestButtonsProps) {
-  const visibleTargets = targets.filter(
-    (target) => target.kind !== 'ground' || lookingDown,
-  );
-  if (visibleTargets.length === 0) {
+  if (targets.length === 0) {
     return null;
   }
   return (
     <>
-      {visibleTargets.map((target) => (
+      {targets.map((target) => (
         <Fragment key={target.id}>
           <WorldAnchor x={target.anchorX} y={target.anchorY} interactive>
             <HarvestButton target={target} onHarvest={onHarvest} theme={theme} />

@@ -43,7 +43,6 @@ export { CameraPerspectiveCard } from './CameraPerspectiveCard';
 export type { CameraPerspectiveCardProps } from './CameraPerspectiveCard';
 export {
   HARVEST_REQUEST_EVENT,
-  LOOK_DOWN_PITCH_RAD,
   harvestRequestFor,
 } from './proximityHarvest';
 export type {

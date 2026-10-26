@@ -13,16 +13,16 @@
  *
  * HOW PROXIMITY FLOWS (the whole agreement, in one paragraph):
  * The engine supplies in-range state: ProximityTracker watches
- * 'player:moved' and emits 'harvest:inRange' only when the SET of
- * in-range targets changes, ground target first, scatter nearest
- * first, within HARVEST_RANGE 2.5 m. The wiring caller maps each
- * bus target to a UI HarvestTarget (table below) and passes ONLY
- * those targets as props to ProximityHarvestButtons; a button
- * appears when its target is passed and disappears when its
- * target stops being passed. The UI computes no distance, no
- * range, and no position: anchor coordinates arrive as screen
- * percentages, projected by the caller from the bus target's
- * world x/z.
+ * 'player:moved', 'player:looked', and 'camera:switched' and emits
+ * 'harvest:inRange' only when the SET of in-range targets changes,
+ * ground target first when eligible, scatter nearest first, within
+ * HARVEST_RANGE 2.5 m. The wiring caller maps each bus target to a
+ * UI HarvestTarget (table below) and passes ONLY those targets as
+ * props to ProximityHarvestButtons; a button appears when its
+ * target is passed and disappears when its target stops being
+ * passed. The UI computes no distance, no range, and no position:
+ * anchor coordinates arrive as screen percentages, projected by
+ * the caller from the bus target's world x/z.
  *
  * BUS TARGET -> UI TARGET (the mapping the wiring caller applies):
  *   bus id          -> UI id (stable: 'scatter:<chunk>:<kind>:<x>:<z>'
@@ -41,61 +41,64 @@
  *     outcome time), and primaryYield belongs to the outcome step.
  *
  * NEARLY ANYWHERE (Adam's scope note):
- * A target is a target — the UI gates on nothing except the
- * look-down gate below. `kind: 'scatter'` covers bushes, logs,
- * stumps (anchors excluded by proximity itself), and other
- * scatter sources; kind 'ground' covers the ground underfoot —
+ * A target is a target — the UI gates on nothing. `kind: 'scatter'`
+ * covers bushes, logs, and other scatter sources (anchors excluded
+ * by proximity itself); kind 'ground' covers the ground underfoot —
  * dirt, mud, grass, the Adam-named ground materials, now real
  * sources in objects.ts (hand permit, yields DIRT/MUD/GRASS).
  * Ground targets get buttons exactly like scatter targets,
  * because the button layer never asks whether a target is
- * special enough — subject to the look-down gate, which exists
- * for clutter, not for gating harvestability itself.
+ * special enough — subject to the look-down gate below, which
+ * lives in the tracker, not in this layer (see below).
  *
- * LOOK-DOWN GATE (Adam, 2026-10-26 — the clutter rule):
+ * LOOK-DOWN GATE (Adam, 2026-10-26 — the clutter rule, as
+ * implemented by Background in proximity.ts, 7e0de60):
  * Ground-harvest UI appears ONLY when she looks down at the ground.
  * No look down, no ground button — even standing on harvestable
  * ground. Adam's reason: ground is everywhere, so a permanent
  * ground button would be constant clutter. This is load-bearing,
- * not cosmetic: per proximity.ts the ground target is ALWAYS in
- * range (distance 0), so without the gate the ground button
- * would literally never disappear. Scatter buttons are UNCHANGED:
- * proximity only, no look-down requirement. The gate lives in
- * ProximityHarvestButtons as the `lookingDown` prop: ground
- * targets render only when it is true; scatter targets render
- * whenever they are passed, as before. A standalone HarvestButton
- * has no gate — gating is the layer's job, so a caller that
- * renders a button directly has chosen to show it.
+ * not cosmetic: per proximity.ts the ground target is always in
+ * proximity range (distance 0), so without the gate the ground
+ * button would literally never disappear. Scatter buttons are
+ * UNCHANGED: proximity only, no look-down requirement.
  *
- * FIRST-PERSON (this lane's proposed threshold, for the wiring step):
- * Looking down is a pitch threshold. In the controller, pitch is
- * in radians, clamped to ±1.45, and positive pitch looks up
- * (camera rotation.x, order YXZ), so looking down is NEGATIVE
- * pitch. LOOK_DOWN_PITCH_RAD below is -0.5 rad, about 29 degrees
- * below level: a deliberate downward glance, not level gaze and
- * not staring at her feet. The wiring step computes
- * `lookingDown = pitch <= LOOK_DOWN_PITCH_RAD` in first-person
- * and passes it as the prop. The threshold is a proposal —
- * Background / Adam may tune it — but the sign and the shape
- * (a single pitch comparison) are the agreement.
+ * WHERE THE GATE LIVES — READ THIS, IT CHANGED: the gate lives
+ * in ProximityTracker, NOT in the UI layer. An earlier version of
+ * this landing added a UI-side `lookingDown` prop to
+ * ProximityHarvestButtons; that prop is REMOVED, because a second
+ * UI gate would hide buttons the tracker already deemed eligible:
+ * in first-person the tracker's threshold is -0.4 rad while the
+ * removed UI proposal was -0.5, leaving a pitch window where the
+ * tracker emits ground and the UI would have hidden it, and in
+ * third-person the tracker's fallback rule (below) would have been
+ * hidden entirely by a UI layer passing `lookingDown: false`.
+ * The UI renders exactly what the tracker emits. A caller that
+ * bypasses the tracker and passes targets directly owns gating
+ * for those targets itself.
  *
- * THIRD-PERSON — NO NATURAL RULE YET (needs Adam's call, not
- * silently invented): the overhead camera already looks down, and
- * the controllers give third-person no pitch input at all (mouse
- * look is first-person only; pitch is a first-person field). So
- * there is currently no gesture in third-person that MEANS "she
- * looks down at the ground". This layer therefore defines
- * nothing for third-person: callers pass `lookingDown` as
- * supplied, and until Adam picks a reveal gesture, third-person
- * callers should pass false — ground buttons stay hidden there
- * rather than the UI inventing a substitute (standing still,
- * say) and calling it looking down. Options for Adam's call,
- * none decided here: a dedicated inspect-ground key in
- * third-person; ground buttons appearing when stationary with
- * no scatter button shown; or ground harvesting in third-person
- * through a held interact key. The component honours
- * `lookingDown: true` in either perspective once a real source
- * for it exists, so whichever he picks needs no component change.
+ * FIRST-PERSON (tracker definition, proximity.ts LOOK_DOWN_PITCH):
+ * Looking down is pitch <= -0.4 rad, about 23 degrees below level:
+ * a clear intentional look-down, not a slight downward glance.
+ * Pitch is in radians, clamped to ±1.45, and negative means
+ * looking down (mouse-up raises pitch). The tracker re-evaluates
+ * on 'player:looked' (throttled ~10 Hz, first-person only), so a
+ * stationary look-down still reveals the ground button — that
+ * event exists for exactly this reason. The UI keeps NO second
+ * threshold constant: the tracker's -0.4 is the single value.
+ *
+ * THIRD-PERSON (tracker definition, lane-decided, flagged for
+ * Adam's override): the overhead camera already looks down, and
+ * third-person has no look input at all (mouse look is
+ * first-person only), so "looking down" is trivially true there
+ * — and the clutter problem is instead solved by a fallback rule:
+ * in third-person the ground target appears ONLY when no scatter
+ * target is in range. Ground is the fallback action when nothing
+ * else is near, never a competitor to scatter buttons. This
+ * definition is Background's lane decision, explicitly flagged
+ * as easy for Adam to override (e.g. third-person ground always,
+ * or a dedicated look-down key). Adam's call on the third-person
+ * rule is therefore still open — but it is a call on the
+ * tracker's fallback, not on an undefined UI rule.
  *
  * THE BUS SHAPE (registered in EventMap by Background, 2026-10-26):
  * The bus is the single dispatch point, events named `domain:verb`
@@ -165,14 +168,6 @@ export interface HarvestRequest {
 
 /** Bus event name for a harvest press (registered in EventMap). */
 export const HARVEST_REQUEST_EVENT = 'harvest:requested' as const;
-
-/**
- * First-person look-down threshold, in radians (proposal, see the
- * LOOK-DOWN GATE section above). Looking down is negative pitch,
- * so the wiring step tests `pitch <= LOOK_DOWN_PITCH_RAD`.
- * About -29 degrees: a deliberate downward glance.
- */
-export const LOOK_DOWN_PITCH_RAD = -0.5;
 
 /** Build a HarvestRequest from a target. Pure shape, no logic. */
 export function harvestRequestFor(target: HarvestTarget): HarvestRequest {
