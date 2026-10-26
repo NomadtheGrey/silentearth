@@ -10,6 +10,10 @@
  * tab means adding one entry plus its panel branch — no other
  * tab and no other setting is invented here. The Settings tab
  * holds exactly one setting for now: the UI font dropdown.
+ * The SECOND tab is Build history (Adam, 2026-10-26): the
+ * recent build records from buildHistory.ts, newest first,
+ * capped at 20, each with what changed, why, the date, and
+ * the merge reference.
  *
  * FONT SETTING (Adam, 2026-10-26): three families, in this
  * order — IM Fell English (the default when nothing is
@@ -31,6 +35,7 @@
 
 import { useEffect, useState } from 'react';
 import { UI_THEMES, type UiThemeName } from './themes';
+import { BUILD_HISTORY } from './buildHistory';
 
 export type FontId = 'im-fell' | 'alegreya' | 'eb-garamond';
 
@@ -93,7 +98,10 @@ export function fontClassFor(font: FontId): string {
 }
 
 /** Tab scaffold: one entry per tab, in display order. */
-const OPTION_TABS = [{ id: 'settings', label: 'Settings' }] as const;
+const OPTION_TABS = [
+  { id: 'settings', label: 'Settings' },
+  { id: 'history', label: 'Build history' },
+] as const;
 
 type OptionsTabId = (typeof OPTION_TABS)[number]['id'];
 
@@ -216,6 +224,32 @@ export function OptionsModal({
               <p className={'mt-3 text-lg ' + fontClassFor(font)}>
                 {selectedLabel}
               </p>
+            </div>
+          ) : null}
+          {activeTab === 'history' ? (
+            <div>
+              {BUILD_HISTORY.length === 0 ? (
+                <p className={'italic ' + t.muted}>No build records yet.</p>
+              ) : (
+                <ul className="flex flex-col gap-3">
+                  {BUILD_HISTORY.map((record) => (
+                    <li key={record.sha}>
+                      <p
+                        className={'text-sm font-medium ' + t.heading}
+                      >
+                        {record.what}
+                      </p>
+                      <p className={'mt-0.5 text-xs ' + t.muted}>
+                        {record.date} · {record.merge} · PR #{record.pr} ·{' '}
+                        {record.sha}
+                      </p>
+                      <p className={'mt-1 text-sm ' + t.muted}>
+                        {record.why}
+                      </p>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
           ) : null}
         </div>

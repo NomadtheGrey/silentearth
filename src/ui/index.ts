@@ -93,6 +93,8 @@ export {
   fontClassFor,
 } from './OptionsModal';
 export type { OptionsModalProps, FontId } from './OptionsModal';
+export { BUILD_HISTORY } from './buildHistory';
+export type { BuildRecord } from './buildHistory';
 export { Popup } from './Popup';
 export type { PopupProps } from './Popup';
 export type {
