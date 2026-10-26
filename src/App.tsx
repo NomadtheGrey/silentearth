@@ -226,7 +226,7 @@ import type { CameraMode, BiomeWeights } from './types';
 import { Wardrobe, GARMENTS } from './systems/clothes';
 import {
   carriesUmbrella,
-  UMBRELLA_RAIN_PROTECTION,
+  UMBRELLA_PRECIPITATION_PROTECTION,
 } from './systems/umbrella';
 import { HudShell } from './ui/HudShell';
 import { WitchHealth } from './ui/WitchHealth';
@@ -357,18 +357,21 @@ interface PlacementMode {
 }
 
 /**
- * UMBRELLA COORDINATION (Systems, 026b793): item id
- * ITEMS.umbrella ('umbrella'), recipe id 'umbrella'
+ * UMBRELLA COORDINATION (Systems, 026b793, REVISED 89bba82):
+ * item id ITEMS.umbrella ('umbrella'), recipe id 'umbrella'
  * (workstation, draft cost: 4 snap-wood + 6 tender vines + 4
  * twined cordage). The mechanic lives in systems/umbrella.ts:
- * rain protection UMBRELLA_RAIN_PROTECTION (35%, a STARTING
- * value for Adam's pin pass, not pinned), applied when the
- * umbrella is IN INVENTORY — no equip step, no worn slot,
- * duplicates do not stack, rain axis only, multiplicative
- * with worn clothes, and it counts against capacity like any
- * ordinary item. App keys the icon and the rain note off this
- * one id and that one constant — a pin-pass change to the
- * number flows through untouched.
+ * precipitation protection UMBRELLA_PRECIPITATION_PROTECTION
+ * (60%, a STARTING value for Adam's pin pass, not pinned —
+ * this revision supersedes the earlier 35% rain-only value),
+ * applied when the umbrella is IN INVENTORY — no equip step,
+ * no worn slot, duplicates do not stack, precipitation axis
+ * only (rain is that axis in today's weather model; the
+ * factor covers whatever falling forms that axis carries),
+ * multiplicative with worn clothes, and it counts against
+ * capacity like any ordinary item. App keys the icon and the
+ * precipitation note off this one id and that one constant —
+ * a pin-pass change to the number flows through untouched.
  */
 const UMBRELLA_ITEM_ID = ITEMS.umbrella;
 
@@ -1109,11 +1112,12 @@ export default function App() {
   const capacityBonus = wardrobe.wornCapacityBonus();
   const capacityNote =
     capacityBonus > 0 ? `Carrying bonus +${capacityBonus}` : undefined;
-  // Umbrella rain note (see the coordination above): shown
-  // only while an umbrella is carried, and its number comes
-  // from Systems' single constant — never a UI-side table.
+  // Umbrella precipitation note (see the coordination above):
+  // shown only while an umbrella is carried, and its number
+  // comes from Systems' single constant — never a UI-side
+  // table.
   const umbrellaNote = carriesUmbrella(inventory)
-    ? `Umbrella: rain −${Math.round(UMBRELLA_RAIN_PROTECTION * 100)}%`
+    ? `Umbrella: precipitation −${Math.round(UMBRELLA_PRECIPITATION_PROTECTION * 100)}%`
     : undefined;
 
   // The fire whose lighting menu is open, with its anchor.

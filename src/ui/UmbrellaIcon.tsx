@@ -13,14 +13,16 @@
  * appears (inventory rows and crafting rows, via the panels'
  * caller-supplied icon slots); this file only draws it.
  *
- * COORDINATION (Systems, 026b793): the umbrella is item id
- * ITEMS.umbrella ('umbrella'), recipe id 'umbrella', and its
- * rain mechanic lives in systems/umbrella.ts (35% rain
- * protection, a starting value for Adam's pin pass, applied
- * when carried — no equip step). App keys this icon off that
- * id; this file only draws it. The rain-protection NOTE (see
- * WornList's umbrellaNote) carries the number from Systems'
- * single constant — this glyph itself never implies one.
+ * COORDINATION (Systems, 026b793, REVISED 89bba82): the
+ * umbrella is item id ITEMS.umbrella ('umbrella'), recipe id
+ * 'umbrella', and its precipitation mechanic lives in
+ * systems/umbrella.ts (60% precipitation protection, a
+ * starting value for Adam's pin pass, applied when carried —
+ * no equip step; this revision supersedes the earlier 35%
+ * rain-only value). App keys this icon off that id; this
+ * file only draws it. The precipitation NOTE (see WornList's
+ * umbrellaNote) carries the number from Systems' single
+ * constant — this glyph itself never implies one.
  */
 
 export function UmbrellaIcon({ className }: { className?: string }) {
