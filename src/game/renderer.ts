@@ -42,6 +42,7 @@ import { FIRE_DEFS } from './fire';
 import { shelterState, HOUSE_DEFS } from './shelter';
 import { loomState } from './loomState';
 import { pileState } from './pileState';
+import { pauseState } from './pause';
 import { SkyRig } from './sky';
 import { SEASON_START_MONTH, seasonalWeatherAt } from './weather';
 import { createBiomeTexture, TEXTURE_REPEAT } from './terrain';
@@ -823,6 +824,16 @@ export class WorldRenderer {
     if (this.disposed) return;
     this.raf = requestAnimationFrame(this.loop);
     const dt = Math.min(this.clock.getDelta(), 0.1);
+    // PAUSE GATE (Adam 2026-10-26 — see pause.ts): while paused
+    // the loop schedules its next frame but simulates nothing —
+    // no player update, no sky advance, no world tick, no render.
+    // The canvas keeps its last frame, so the view reads frozen.
+    // getDelta is still consumed above so resume sees no spike
+    // (the 0.1 clamp would cap it anyway). NOTHING here sets or
+    // clears the flag — the trigger (visibilitychange and/or
+    // blur) is Adam's open choice and plugs into
+    // pauseState.setPaused + the 'game:pause-changed' event.
+    if (pauseState.isPaused()) return;
     this.player.update(dt);
     this.stream();
     this.worldTickAcc += dt;
