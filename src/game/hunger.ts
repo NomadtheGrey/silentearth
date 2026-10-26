@@ -11,14 +11,17 @@
  * Until Systems lands the query, both consumers default to
  * unhungry (no slowdown, no lockout).
  *
- * STAGE VOCABULARY — ALIGNMENT POINT: these literals are what the
- * engine matches on. If Systems' brief names the stages
- * differently, THIS union is the one place that changes to match —
- * the engine treats any unrecognized stage as 'fed' (no effect),
- * never as hungry, so a mismatch fails safe instead of starving
- * the player by accident.
+ * STAGE VOCABULARY — ALIGNED WITH SYSTEMS (correction, 2026-10-26):
+ * Systems owns the meter and its stage (src/systems/hunger.ts,
+ * HungerState.stage()), and its literals are 'fed' | 'hungry' |
+ * 'too-hungry'. An earlier engine draft guessed 'starving' for the
+ * lockout stage — that literal is never emitted, so the lockout
+ * would never have fired once wired. This union now matches
+ * Systems exactly; the engine still treats any unrecognized stage
+ * as 'fed' (no effect), so a future mismatch fails safe instead
+ * of starving the player by accident.
  */
-export type HungerStage = 'fed' | 'hungry' | 'starving';
+export type HungerStage = 'fed' | 'hungry' | 'too-hungry';
 
 /** Query shape, mirroring ToolTierQuery in harvest.ts. */
 export type HungerStageQuery = () => HungerStage | null;
@@ -26,17 +29,17 @@ export type HungerStageQuery = () => HungerStage | null;
 /**
  * Movement slowdown while hungry — LANE-DECIDED starting tunable
  * (Adam's pin pass still applies). Applied at 'hungry' AND at
- * 'starving' (starving is hungry or worse — slowing only the
+ * 'too-hungry' (too-hungry is hungry or worse — slowing only the
  * middle stage and not the worst would read as a bug).
  */
 export const HUNGRY_SPEED_MULTIPLIER = 0.7;
 
 /**
  * The too-hungry stage: harvests are locked out at this stage
- * except for exempt food sources (see below). 'starving' is the
+ * except for exempt food sources (see below). 'too-hungry' is the
  * lockout stage; 'hungry' only slows movement.
  */
-export const TOO_HUNGRY_STAGE: HungerStage = 'starving';
+export const TOO_HUNGRY_STAGE: HungerStage = 'too-hungry';
 
 /**
  * NUTS/BERRIES EXEMPTION SET — shared contract with Systems
@@ -48,7 +51,7 @@ export const TOO_HUNGRY_STAGE: HungerStage = 'starving';
  * The SOURCES carrying these are flagged hungerExempt in
  * objects.ts; the listener exempts the whole source harvest
  * (primary + secondaries), not just the berry roll — the dispatch
- * exempts sources, and a starving witch gathering berries should
+ * exempts sources, and a too-hungry witch gathering berries should
  * not have to drop the wood she gathered alongside them.
  *
  * GATHER vs EAT (Adam, 2026-10-26, PINNED clarification): this
@@ -77,9 +80,9 @@ export const COOK_REQUIRED_ITEMS = ['ACORNS'] as const;
  *   trap mechanics are invented here.
  * - Campfire cooking is a fire-system action, not yet built, and
  *   is itself a TOO-HUNGRY EXCEPTION (Adam, 2026-10-26): a
- *   starving witch can still cook — the future fire system must
+ *   too-hungry witch can still cook — the future fire system must
  *   not lock the cooking step behind hunger, or the acorn path
- *   (forage when starving, then cook to eat) would deadlock.
+ *   (forage when too-hungry, then cook to eat) would deadlock.
  *   Cooked food is hunger recovery through that system, not
  *   through this lockout — this module does not gate cooking.
  * - Shelter/clothes do not touch hunger here; they plug into

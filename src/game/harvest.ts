@@ -54,7 +54,7 @@
  * engine half): Systems owns the hunger meter and stage; this
  * listener reads it through deps.getHungerStage (same pattern as
  * getToolTier — no hunger state duplicated here). At the
- * too-hungry stage ('starving'), harvests fail 'too-hungry' —
+ * too-hungry stage ('too-hungry'), harvests fail 'too-hungry' —
  * EXCEPT hungerExempt food sources (nuts/berries, see hunger.ts:
  * downed oak for acorns, bog growth for bog berries, brush for
  * elderberries). Ground counts as harvest and is never exempt, so
@@ -216,7 +216,7 @@ export interface HarvestOutcomeDeps {
   /**
    * Hunger stage query (Systems owns hunger state — same pattern
    * as getToolTier). Defaults to () => null (fed) until Systems
-   * lands the meter. At 'starving', harvests lock out except for
+   * lands the meter. At 'too-hungry', harvests lock out except for
    * hungerExempt food sources (see hunger.ts); see the lockout
    * note in the header.
    */
@@ -312,7 +312,7 @@ export function createHarvestOutcomeListener(
   const getToolTier = deps.getToolTier ?? (() => null);
   const getHungerStage = deps.getHungerStage ?? (() => null);
   /**
-   * Too-hungry lockout (Adam, 2026-10-26): at the 'starving'
+   * Too-hungry lockout (Adam, 2026-10-26): at the 'too-hungry'
    * stage, harvests fail 'too-hungry' — except hungerExempt food
    * sources (nuts/berries, see hunger.ts). The check sits AFTER
    * the permit check (tool capability still reports first) and
@@ -438,7 +438,7 @@ export function createHarvestOutcomeListener(
         fail(req, logOutcome.reason);
         return;
       }
-      // Logs are not hunger-exempt food: locked out when starving.
+      // Logs are not hunger-exempt food: locked out when too-hungry.
       if (hungerLocked(logSource.hungerExempt ?? false)) {
         fail(req, 'too-hungry');
         return;
@@ -499,8 +499,8 @@ export function createHarvestOutcomeListener(
         fail(req, treeOutcome.reason);
         return;
       }
-      // Trees are not hunger-exempt food: locked out when starving
-      // (both felling and clearing — a starving witch does not fell
+      // Trees are not hunger-exempt food: locked out when too-hungry
+      // (both felling and clearing — a too-hungry witch does not fell
       // a tree for wood she cannot eat).
       if (hungerLocked(treeSource.hungerExempt ?? false)) {
         fail(req, 'too-hungry');

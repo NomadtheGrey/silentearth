@@ -32,6 +32,7 @@ import {
   scatterTargetId,
   wrapGenWithState,
 } from './harvestState';
+import { terrainSpeedAt } from './movement';
 import { createBiomeTexture, TEXTURE_REPEAT } from './terrain';
 import {
   CHUNK_SIZE,
@@ -230,6 +231,14 @@ export class WorldRenderer {
     // harvest.ts) marks state in the shared harvestState.
     this.gen = wrapGenWithState(gen);
     this.player = player;
+    // Terrain slow wiring (Adam, 2026-10-26, PINNED): the
+    // renderer owns both the generator and the player, so it
+    // wires the terrain query itself — no App.tsx change needed.
+    // The closure reads this.gen dynamically, so seed changes
+    // (setWorldGen) flow through without re-wiring. The wrapped
+    // generator delegates fieldsAt/weightsAt untouched, so the
+    // slow reads true world data, not harvest state.
+    this.player.setTerrainSpeedQuery((x, z) => terrainSpeedAt(this.gen, x, z));
     this.proximity = new ProximityTracker(this.gen);
     // Chunk reload on harvest completion: the harvested chunk is
     // rebuilt, so the object visibly shrinks (or leaves, on remove

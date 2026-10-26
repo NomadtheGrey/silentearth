@@ -4,8 +4,10 @@
  *
  * Player movement controller. Landing 1 scope only: walk movement (WASD)
  * + mouse look in first-person, world-aligned movement in third-person.
- * No sprint, no jump, no terrain speed modifier — swamp navigation
- * difficulty is undecided and must not be invented here.
+ * No sprint, no jump. Terrain speed modifier: marsh/bog slow IS
+ * implemented (Adam, 2026-10-26, PINNED — see movement.ts); the
+ * renderer wires the terrain query, and bog boots arrive via a
+ * worn-state query until the clothes system lands.
  *
  * Position changes flow out through the event bus (player:moved, throttled
  * to ~10 Hz); nothing reads this controller's fields directly except the
@@ -16,6 +18,11 @@ import { bus } from './events';
 import { CAMERA_TOGGLE_KEYS, MOVE_KEYS, PLAYER_SPEED, CHUNK_SIZE } from '../constants';
 import type { CameraMode } from '../types';
 import { HUNGRY_SPEED_MULTIPLIER, type HungerStageQuery } from './hunger';
+import {
+  applyBogBoots,
+  type BogBootsQuery,
+  type TerrainSpeedQuery,
+} from './movement';
 
 export class PlayerController {
   x = 0;
@@ -41,6 +48,32 @@ export class PlayerController {
   /** Wire Systems' hunger stage query (shell-owned wiring). */
   setHungerStageQuery(query: HungerStageQuery): void {
     this.hungerStageQuery = query;
+  }
+
+  /**
+   * Terrain speed query (renderer-owned wiring — the renderer
+   * owns the generator and the player, so it wires this itself in
+   * its constructor; the shell never touches it). Defaults to
+   * firm ground (multiplier 1) when unwired.
+   */
+  private terrainSpeedQuery: TerrainSpeedQuery | null = null;
+
+  /** Renderer wiring for the terrain query (see above). */
+  setTerrainSpeedQuery(query: TerrainSpeedQuery): void {
+    this.terrainSpeedQuery = query;
+  }
+
+  /**
+   * Bog-boots worn-state query (clothes system, future — same
+   * pattern as the hunger query). The shell wires it once
+   * Systems' clothes work lands; until then it stays unset and
+   * travel runs at the full terrain slow (no boots).
+   */
+  private bogBootsQuery: BogBootsQuery | null = null;
+
+  /** Wire Systems' bog-boots worn query (shell-owned wiring). */
+  setBogBootsQuery(query: BogBootsQuery): void {
+    this.bogBootsQuery = query;
   }
   private canvas: HTMLCanvasElement | null = null;
   private emitTimer = 0;
@@ -140,16 +173,23 @@ export class PlayerController {
     fx /= len;
     fz /= len;
 
+    // Speed modifiers compose as separate multipliers (Adam,
+    // 2026-10-26 — bog boots brief): terrain slow × hunger slow,
+    // with boots mitigation reducing ONLY the terrain part.
+    // Terrain: raw terrain multiplier at her position (firm = 1,
+    // full bog = BOGGY_SLOW_MIN), mitigated by boots when worn.
+    const rawTerrain = this.terrainSpeedQuery?.(this.x, this.z) ?? 1;
+    const bootsWorn = this.bogBootsQuery?.() ?? false;
+    const terrain = applyBogBoots(rawTerrain, bootsWorn);
     // Hunger slowdown (Adam, 2026-10-26 — weather + hunger build):
     // a hungry witch moves at HUNGRY_SPEED_MULTIPLIER of base
-    // speed. Applies at 'hungry' AND 'starving' (starving is hungry
-    // or worse). Unrecognized stages read as fed (see hunger.ts),
+    // speed. Applies at 'hungry' AND 'too-hungry' (too-hungry is
+    // hungry or worse). Unrecognized stages read as fed (see hunger.ts),
     // and an unwired query means full speed.
     const stage = this.hungerStageQuery?.() ?? null;
-    const speed =
-      stage === 'hungry' || stage === 'starving'
-        ? PLAYER_SPEED * HUNGRY_SPEED_MULTIPLIER
-        : PLAYER_SPEED;
+    const hunger =
+      stage === 'hungry' || stage === 'too-hungry' ? HUNGRY_SPEED_MULTIPLIER : 1;
+    const speed = PLAYER_SPEED * terrain * hunger;
 
     if (this.mode === 'first') {
       // Movement relative to view yaw (yaw = 0 faces -z). Rotate the local

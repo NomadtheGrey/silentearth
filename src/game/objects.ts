@@ -420,11 +420,11 @@ export interface HarvestSourceDef {
   /**
    * Hunger exemption (Adam, 2026-10-26 — weather + hunger build):
    * when true, this source may still be harvested at the
-   * too-hungry ('starving') stage, when all other harvests lock
+   * too-hungry ('too-hungry') stage, when all other harvests lock
    * out. Set exactly on the sources yielding the exemption foods
    * (ACORNS, BOG_BERRIES, ELDERBERRIES — see hunger.ts). The
    * exemption covers the whole source harvest, both actions
-   * (harvest and remove): a starving witch gathering berries
+   * (harvest and remove): a too-hungry witch gathering berries
    * keeps the wood she gathered alongside them.
    */
   hungerExempt?: boolean;
@@ -452,7 +452,7 @@ const SPORES_25: SecondaryYield = {
  * than new scatter kinds: acorns with downed oak, bog berries
  * with bog growth, elderberries with brush. Chances are
  * LANE-DECIDED starting values (Adam's pin pass still applies) —
- * generous on purpose, so a starving witch can actually recover.
+ * generous on purpose, so a too-hungry witch can actually recover.
  */
 const ACORNS_50: SecondaryYield = {
   item: 'ACORNS',
