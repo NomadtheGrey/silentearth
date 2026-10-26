@@ -408,6 +408,30 @@
  *   no longer consumed by the buttons (the shared projection
  *   pass still computes them for fire/placement anchors);
  *   removing harvest projection is a follow-up cleanup.
+ * - PILE PICKUP BY USE, LIVE (Adam, 2026-10-26): no new buttons,
+ *   no new screen — the touch USE press picks the nearest
+ *   in-range pile when no harvest target is nearer, emitting
+ *   'pile:pickup-requested' { pileId } (the channel's pile
+ *   field is 'item', not 'itemId' as the brief's shape said).
+ *   The pile wins on a tie with the harvest candidate (none
+ *   is NEARER then); ground sits at distance 0, so a pile at
+ *   her feet ties ground and wins, a farther pile loses to
+ *   it. Harvest behavior is otherwise unchanged — the same
+ *   scatter-first candidate, the same pressUse path, and
+ *   with no pile in range USE behaves exactly as before.
+ *   DISCLOSED, NOT HIDDEN: no Systems listener for
+ *   'pile:pickup-requested' exists at this tip (the grant
+ *   pieces exist — grantFromPile() + pileState.take() — but
+ *   nothing subscribes), so the shell bridges the grant
+ *   itself, reusing Systems' grant function: grant what fits,
+ *   take exactly that much (partial, remainder stays), then
+ *   refresh + save + feedback. When Systems' own listener
+ *   lands, this bridge comes out — two granters would
+ *   double-fire feedback and saves. LIMITS: touch USE only
+ *   (desktop has no USE affordance — desktop pile pickup
+ *   needs a button or a key, follow-up); if piles should
+ *   outrank ground outright, that is a one-line priority
+ *   change for Adam's call.
  * POINTER DISCIPLINE: overlays are pointer-events-none except the
  * small interactive pieces (HUD buttons, panels, harvest buttons),
  * so world clicks — including the first-person mouse-capture click
@@ -431,6 +455,7 @@ import {
   type FireResult,
 } from './game/fireState';
 import { loomState } from './game/loomState';
+import { pileState, type PileTarget } from './game/pileState';
 import type { FireType } from './game/fire';
 import {
   shelterState,
@@ -493,6 +518,7 @@ import {
   PersonalInventory,
   displayNameFor,
 } from './systems/inventory';
+import { grantFromPile } from './systems/piles';
 import { executeCraft } from './systems/crafting-execution';
 import {
   HungerState,
@@ -831,6 +857,10 @@ export default function App() {
     ownedToolItem(inventory),
   );
   const [harvestTargets, setHarvestTargets] = useState<HarvestTarget[]>([]);
+  // In-range dropped piles (harvest overflow), nearest first per
+  // the tracker. Drives the USE fallback only — piles get no
+  // buttons and no screen of their own (see handleTouchInteract).
+  const [piles, setPiles] = useState<PileTarget[]>([]);
   // Harvest outcome feedback + multi-step progress, rendered
   // through WorldAnchor + ObjectFeedback / InteractionProgress.
   // Populated only by the outcome events (see the header) — never
@@ -1163,6 +1193,54 @@ export default function App() {
       busTargetsRef.current = targets;
       recomputeAnchors();
     });
+    const offPiles = bus.on('piles:inRange', ({ piles: inRange }) => {
+      setPiles(inRange);
+    });
+    // PILE PICKUP BRIDGE (Adam, 2026-10-26 — see the header):
+    // the shell owns the 'pile:pickup-requested' grant FOR NOW
+    // because no Systems listener exists at this tip (Systems
+    // built the grant pieces — grantFromPile() + pileState.take()
+    // — but nothing subscribes to the event yet). The bridge
+    // reuses Systems' own grant function, so no grant logic is
+    // invented here: grant what fits, take exactly that much
+    // from the pile (partial: the remainder stays, never
+    // vanishes or duplicates), refresh + save + feedback like
+    // any other inventory change. When Systems' own listener
+    // lands, THIS bridge comes out — two granters on one event
+    // would double-fire feedback and saves. A stale or missing
+    // pile grants nothing.
+    const offPilePickup = bus.on('pile:pickup-requested', ({ pileId }) => {
+      const pile = pileState.get(pileId);
+      if (!pile) return;
+      const grant = grantFromPile(
+        { item: pile.item, quantity: pile.quantity, x: pile.x, z: pile.z },
+        inventory,
+      );
+      if (grant.granted <= 0) {
+        const anchor = projectAnchor(pile.x, pile.z, 'scatter');
+        if (anchor) {
+          showFeedback(
+            `Pack full — no room for ${displayNameFor(pile.item)}.`,
+            'blocked',
+            anchor.x,
+            anchor.y,
+          );
+        }
+        return;
+      }
+      pileState.take(pileId, grant.granted);
+      refreshInventory();
+      saveNow();
+      const anchor = projectAnchor(pile.x, pile.z, 'scatter');
+      if (anchor) {
+        showFeedback(
+          `Picked up ${grant.granted} ${displayNameFor(pile.item)}.`,
+          'gain',
+          anchor.x,
+          anchor.y,
+        );
+      }
+    });
     // The shell's one harvest outcome listener (see the header):
     // presses resolve through it into the shell's inventory, and
     // its completed/failed/progress events drive the feedback below.
@@ -1299,6 +1377,8 @@ export default function App() {
       offMoved();
       offLooked();
       offInRange();
+      offPiles();
+      offPilePickup();
       offCompleted();
       offFailed();
       offProgress();
@@ -2057,12 +2137,46 @@ export default function App() {
   // fallback — USE never harvests dirt while a bush is in
   // range. With no target at all, pressUse is not called
   // (menus and HUD buttons stay direct taps).
+  //
+  // PILE FALLBACK (Adam, 2026-10-26): no new buttons, no new
+  // screen — a pile in range is picked up by this same USE
+  // press when no harvest target is nearer. The tracker sorts
+  // piles nearest first, so piles[0] is the nearest pile; the
+  // harvest candidate's distance comes from the raw bus target
+  // (the UI target shape carries no distance field), falling
+  // back to a shell-computed distance if the bus entry is gone.
+  // The pile wins on a tie (no harvest target is NEARER then)
+  // — which matters because ground sits at distance 0: a pile
+  // she stands on ties ground and wins, while a pile farther
+  // than her feet loses to ground. Consequence, stated
+  // plainly: in third/behind with no scatter, ground is
+  // eligible at distance 0, so only a pile at her feet is
+  // reachable by USE; in first-person looking level, any
+  // in-range pile nearer than the scatter target wins. If piles
+  // should outrank ground outright, that is a one-line priority
+  // change for Adam's call, not this landing's.
+  // NOTE: this is the touch USE path only. Desktop has no USE
+  // affordance (harvest is by button click), so desktop pile
+  // pickup needs a button or a key — a follow-up, not invented
+  // here.
   const handleTouchInteract = (): void => {
     const player = playerRef.current;
     const target =
       harvestTargets.find((candidate) => candidate.kind === 'scatter') ??
       harvestTargets[0];
-    if (!player || !target) return;
+    if (!player) return;
+    const pile = piles[0];
+    if (pile) {
+      const candidateDistance = target
+        ? (busTargetsRef.current.find((t) => t.id === target.id)?.distance ??
+          Math.hypot(target.worldX - player.x, target.worldZ - player.z))
+        : Number.POSITIVE_INFINITY;
+      if (pile.distance <= candidateDistance) {
+        bus.emit('pile:pickup-requested', { pileId: pile.id });
+        return;
+      }
+    }
+    if (!target) return;
     player.pressUse({
       targetId: target.id,
       sourceId: target.sourceId,
