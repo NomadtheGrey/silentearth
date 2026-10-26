@@ -91,6 +91,9 @@ export const ITEMS = {
   pointyHat: 'pointy-hat',
   mossyMittens: 'mossy-mittens',
   bogBoots: 'bog-boots',
+  // Umbrella (2026-10-26 queued work — carried rain protection,
+  // see umbrella.ts for the mechanic and coordination shape).
+  umbrella: 'umbrella',
   // Traps (brainstorm only — nothing picked; see their notes).
   snare: 'snare',
   fishWeirTrap: 'fish-weir-trap',
@@ -615,6 +618,34 @@ const DRAFT_RECIPES: Recipe[] = [
       'DRAFT cost (cordage bunch = lane-decided). No capacity ' +
       'bonus. Weather (Background table): wet 40%, plus the ' +
       'less-slow bog travel effect in movement.ts.',
+  },
+  {
+    id: 'umbrella',
+    name: 'Umbrella',
+    status: 'draft',
+    output: { item: ITEMS.umbrella, quantity: 1 },
+    ingredients: [
+      i(ITEMS.snapWood, 4),
+      i(ITEMS.tenderVines, 6),
+      i(ITEMS.twinedCordage, 4),
+    ],
+    station: 'workstation',
+    notes:
+      'DRAFT cost — materials and quantities are LANE-DECIDED ' +
+      'starting tunables for Adam\'s pin pass, from existing ' +
+      'vocabulary only (no new items): snap-wood ribs + handle, ' +
+      'tender-vine woven cover, cordage lashing. Station is the ' +
+      'brief\'s default workstation. LOOM FLAG: the cover half ' +
+      'is woven, so the loom fits that half better — but the ' +
+      'whole assembly (frame + cover + lashing) is bench work, ' +
+      'so workstation stands for the single-station recipe; if ' +
+      'Adam wants the weave split out, a woven cover (loom) + ' +
+      'umbrella assembly (workstation) split is the shape. ' +
+      'Mechanic (umbrella.ts, NOT a worn bonus): rain ' +
+      'protection 35% (starting value, pin pass) while carried ' +
+      'in inventory — no equip step, multiplicative with worn ' +
+      'clothes (full kit + umbrella rain ~67%). The umbrella ' +
+      'counts against personal capacity like any ordinary item.',
   },
 
   // --- Receptacles. Clay is reserved for pottery / bricks / maybe tools
