@@ -84,6 +84,13 @@ export const ITEMS = {
   smallBasket: 'small-basket',
   largeBasket: 'large-basket',
   apron: 'apron',
+  // Garments (MVP round, 2026-10-26 — woven at the loom; see
+  // clothes.ts for slots, worn bonuses, and the weather shape).
+  hoodedCloak: 'hooded-cloak',
+  shawl: 'shawl',
+  pointyHat: 'pointy-hat',
+  mossyMittens: 'mossy-mittens',
+  bogBoots: 'bog-boots',
   // Traps (brainstorm only — nothing picked; see their notes).
   snare: 'snare',
   fishWeirTrap: 'fish-weir-trap',
@@ -111,7 +118,12 @@ export const ITEMS = {
  * do not assume". The engine treats an unstated station as passable
  * from any station context; see crafting.ts.
  */
-export type CraftingStation = 'workstation' | 'fire' | 'hand' | 'kiln';
+export type CraftingStation =
+  | 'workstation'
+  | 'fire'
+  | 'hand'
+  | 'kiln'
+  | 'loom';
 
 export interface Ingredient {
   item: ItemId;
@@ -516,8 +528,93 @@ const DRAFT_RECIPES: Recipe[] = [
     output: { item: ITEMS.loom, quantity: 1 },
     ingredients: [i(ITEMS.snapWood, 6), i(ITEMS.twinedCordage, 6)],
     notes:
-      'DRAFT. Fork off the crafted workstation — MAYBE (weaving). ' +
-      'Products TBD. Wheel and loom are SEPARATE, not combined.',
+      'DRAFT cost. Fork off the crafted workstation, SEPARATE from ' +
+      'the wheel. PINNED 2026-10-26: the loom is REQUIRED for ' +
+      'clothes — all five garment recipes carry station \'loom\'. ' +
+      'A placed loom supplies that station the same way a stump ' +
+      'supplies \'workstation\' (presence is wiring input, not ' +
+      'settled here).',
+  },
+
+  // --- Garments (MVP round, 2026-10-26). All woven at the loom
+  // --- (station 'loom', PINNED requirement). Every garment needs
+  // --- a bunch of cordage (Adam's words) — quantities below are
+  // --- LANE-DECIDED starting tunables for his pin pass, flagged
+  // --- as such; the other ingredients are likewise lane-decided.
+  // --- Worn bonuses are PINNED and live in clothes.ts, NOT in
+  // --- capacityBonus here (that field is a carried-container
+  // --- bonus; a worn bonus applies only while worn, per slot).
+  {
+    id: 'hooded-cloak',
+    name: 'Hooded Cloak',
+    status: 'draft',
+    output: { item: ITEMS.hoodedCloak, quantity: 1 },
+    ingredients: [
+      i(ITEMS.twinedCordage, 8),
+      i(ITEMS.tenderVines, 4),
+    ],
+    station: 'loom',
+    notes:
+      'DRAFT cost (cordage bunch = lane-decided). Worn bonus ' +
+      'PINNED: +6 capacity. Weather (Background table, not ' +
+      're-decided here): rain 40%, wind 30%.',
+  },
+  {
+    id: 'shawl',
+    name: 'Shawl',
+    status: 'draft',
+    output: { item: ITEMS.shawl, quantity: 1 },
+    ingredients: [
+      i(ITEMS.twinedCordage, 6),
+      i(ITEMS.peatMoss, 2),
+    ],
+    station: 'loom',
+    notes:
+      'DRAFT cost (cordage bunch = lane-decided). Worn bonus ' +
+      'PINNED: +3 capacity. Weather (Background table): cold 30%.',
+  },
+  {
+    id: 'pointy-hat',
+    name: 'Pointy Hat',
+    status: 'draft',
+    output: { item: ITEMS.pointyHat, quantity: 1 },
+    ingredients: [
+      i(ITEMS.twinedCordage, 4),
+      i(ITEMS.tenderVines, 2),
+    ],
+    station: 'loom',
+    notes:
+      'DRAFT cost (cordage bunch = lane-decided). Worn bonus ' +
+      'PINNED: +1 capacity. Weather (Background table): rain 15%.',
+  },
+  {
+    id: 'mossy-mittens',
+    name: 'Mossy Mittens',
+    status: 'draft',
+    output: { item: ITEMS.mossyMittens, quantity: 1 },
+    ingredients: [
+      i(ITEMS.twinedCordage, 4),
+      i(ITEMS.peatMoss, 4),
+    ],
+    station: 'loom',
+    notes:
+      'DRAFT cost (cordage bunch = lane-decided). No capacity ' +
+      'bonus. Weather (Background table): cold 15%.',
+  },
+  {
+    id: 'bog-boots',
+    name: 'Bog Boots',
+    status: 'draft',
+    output: { item: ITEMS.bogBoots, quantity: 1 },
+    ingredients: [
+      i(ITEMS.twinedCordage, 6),
+      i(ITEMS.tenderVines, 4),
+    ],
+    station: 'loom',
+    notes:
+      'DRAFT cost (cordage bunch = lane-decided). No capacity ' +
+      'bonus. Weather (Background table): wet 40%, plus the ' +
+      'less-slow bog travel effect in movement.ts.',
   },
 
   // --- Receptacles. Clay is reserved for pottery / bricks / maybe tools

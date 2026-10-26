@@ -54,6 +54,16 @@
  *     value, not a tunable and not an unset placeholder. It applies
  *     only while the player holds a Trundle-Tool.
  *
+ * PINNED (Adam, 2026-10-26): WORN clothes capacity bonuses, ADDITIVE
+ *     with the gear above — Pointy Hat +1, Shawl +3, Cloak +6
+ *     (mittens and bog boots add none). Worn garments follow the
+ *     gear rule: a worn garment is NOT counted against used
+ *     capacity, and its bonus counts while it is both worn and
+ *     carried. The worn list lives in clothes.ts (Wardrobe);
+ *     wiring keeps this inventory in sync by calling setWorn()
+ *     after any wear/remove. Until then worn is empty and
+ *     capacity is unchanged.
+ *
  * IMPLEMENTATION CHOICES (not pinned rulings — Adam can overturn):
  * - Carrying gear grants capacity and is NOT counted against it.
  *   Rationale: the doc's totals read as contents capacity, and a
@@ -83,6 +93,7 @@ import {
   type CraftingInventory,
   type StationContext,
 } from './crafting';
+import { WORN_CAPACITY_BONUS } from './clothes';
 import { ITEMS, type ItemId, type Recipe } from './recipes';
 
 /** Pinned numbers — see the header. Change only on Adam's word. */
@@ -119,6 +130,8 @@ export interface PersonalInventoryOptions {
   largeBasketMode: LargeBasketMode;
   /** Starting stacks (restoration path; not capacity-checked). */
   initial?: Record<string, number>;
+  /** Worn garment item ids (from Wardrobe); see setWorn(). */
+  worn?: readonly ItemId[];
 }
 
 export interface CapacityBreakdown {
@@ -127,6 +140,8 @@ export interface CapacityBreakdown {
   smallBasket: number;
   largeBasket: number;
   trundleTool: number;
+  /** PINNED worn bonuses total (hat +1, shawl +3, cloak +6). */
+  worn: number;
   total: number;
   largeBasketMode: LargeBasketMode;
   /** PINNED 50 (Adam 2026-10-26) — the live Trundle-Tool bonus. */
@@ -162,9 +177,13 @@ export class InventoryCapacityError extends Error {
 export class PersonalInventory implements CraftingInventory {
   private readonly stacks = new Map<ItemId, number>();
   private readonly largeBasketMode: LargeBasketMode;
+  private worn = new Set<ItemId>();
 
   constructor(options: PersonalInventoryOptions) {
     this.largeBasketMode = options.largeBasketMode;
+    if (options.worn) {
+      this.worn = new Set(options.worn);
+    }
     if (options.initial) {
       for (const [item, quantity] of Object.entries(options.initial)) {
         if (quantity > 0) {
@@ -172,6 +191,21 @@ export class PersonalInventory implements CraftingInventory {
         }
       }
     }
+  }
+
+  /**
+   * Sync the worn list from Wardrobe (call after any wear /
+   * remove). A worn garment counts its PINNED bonus only while
+   * it is also carried (count >= 1); a worn id with no stack
+   * contributes nothing and is excluded from nothing.
+   */
+  setWorn(worn: readonly ItemId[]): void {
+    this.worn = new Set(worn);
+  }
+
+  /** Current worn garment item ids. */
+  wornItems(): ItemId[] {
+    return [...this.worn];
   }
 
   // --- CraftingInventory interface (count / add / remove) ---
@@ -227,12 +261,23 @@ export class PersonalInventory implements CraftingInventory {
         ? SMALL_BASKET_BONUS
         : 0;
 
+    // Worn bonus: PINNED per garment (clothes.ts), counted only
+    // for worn garments actually carried — mirrors the gear rule
+    // (bonus once per garment, not per unit).
+    let worn = 0;
+    for (const item of this.worn) {
+      if (this.count(item) >= 1) {
+        worn += WORN_CAPACITY_BONUS[item] ?? 0;
+      }
+    }
+
     const breakdown: CapacityBreakdown = {
       pockets: POCKETS_BASE_CAPACITY,
       apron: hasApron ? APRON_BONUS : 0,
       smallBasket,
       largeBasket: hasLargeBasket ? LARGE_BASKET_BONUS : 0,
       trundleTool: hasTrundleTool ? TRUNDLE_TOOL_BONUS : 0,
+      worn,
       total: 0,
       largeBasketMode: this.largeBasketMode,
       trundleToolBonus: TRUNDLE_TOOL_BONUS,
@@ -242,15 +287,16 @@ export class PersonalInventory implements CraftingInventory {
       breakdown.apron +
       breakdown.smallBasket +
       breakdown.largeBasket +
-      breakdown.trundleTool;
+      breakdown.trundleTool +
+      breakdown.worn;
     return breakdown;
   }
 
-  /** Contents count: every stack except carrying gear. */
+  /** Contents count: every stack except carrying gear and worn garments. */
   used(): number {
     let total = 0;
     for (const [item, quantity] of this.stacks) {
-      if (!isCarryingGear(item)) {
+      if (!isCarryingGear(item) && !this.worn.has(item)) {
         total += quantity;
       }
     }
@@ -263,11 +309,12 @@ export class PersonalInventory implements CraftingInventory {
   }
 
   /**
-   * Would this addition fit? Gear always fits (it is not counted).
-   * Non-gear fits when used + quantity <= capacity.
+   * Would this addition fit? Gear and worn garments always fit
+   * (they are not counted). Other items fit when used + quantity
+   * <= capacity.
    */
   canCarry(item: ItemId, quantity: number): boolean {
-    if (isCarryingGear(item)) {
+    if (isCarryingGear(item) || this.worn.has(item)) {
       return true;
     }
     return this.used() + quantity <= this.capacity();
@@ -283,10 +330,11 @@ export class PersonalInventory implements CraftingInventory {
     }));
   }
 
-  /** Independent copy with the same options and stacks. */
+  /** Independent copy with the same options, stacks, and worn list. */
   clone(): PersonalInventory {
     const copy = new PersonalInventory({
       largeBasketMode: this.largeBasketMode,
+      worn: [...this.worn],
     });
     for (const [item, quantity] of this.stacks) {
       copy.stacks.set(item, quantity);

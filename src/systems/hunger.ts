@@ -66,12 +66,11 @@
  *   them when too hungry), but EATING them requires the campfire
  *   cooking step — raw acorns must NOT count as eaten food, and
  *   eat() REFUSES raw ACORNS with a cook-required error (nothing
- *   consumed). The cooked form's item id is the future fire
- *   system's to define — this module invents none. Campfire
- *   cooking is itself a too-hungry exception (a starving witch
- *   can still cook), so the forage → cook → eat path cannot
- *   deadlock; the cooking step lives in the future fire system,
- *   not here.
+ *   consumed). The cooked form is COOKED_ACORNS, defined by the
+ *   fire system (fire.ts, MVP round) — cooking itself is not
+ *   hunger-gated (a too-hungry witch can still cook; the fire
+ *   module does not check hunger), so the forage → cook → eat
+ *   path cannot deadlock.
  * - Food ids are the SHARED CONTRACT with Background's exemption
  *   set, and they are UPPER_SNAKE, matching objects.ts and
  *   Background's HUNGER_EXEMPT_ITEMS — NOT the kebab-case systems
@@ -144,11 +143,17 @@ export const FOOD_ACORNS: ItemId = 'ACORNS';
 export const FOOD_BOG_BERRIES: ItemId = 'BOG_BERRIES';
 /** Berries — eaten as gathered. */
 export const FOOD_ELDERBERRIES: ItemId = 'ELDERBERRIES';
+/**
+ * Cooked acorns — the fire-system output (fire.ts). Eaten
+ * directly, unlike raw acorns (see COOK_REQUIRED_ITEMS).
+ */
+export const FOOD_COOKED_ACORNS: ItemId = 'COOKED_ACORNS';
 
-/** Foods eaten directly, as gathered. */
+/** Foods eaten directly: berries as gathered, acorns once cooked. */
 export const FOOD_ITEMS: ReadonlyArray<ItemId> = [
   FOOD_BOG_BERRIES,
   FOOD_ELDERBERRIES,
+  FOOD_COOKED_ACORNS,
 ];
 
 /**
@@ -161,11 +166,15 @@ export const COOK_REQUIRED_ITEMS: ReadonlyArray<ItemId> = [FOOD_ACORNS];
 
 /**
  * Nutrition restored by eating one of each directly-eatable
- * food. LANE-DECIDED starting tunables (NOT pinned).
+ * food. LANE-DECIDED starting tunables (NOT pinned) — cooked
+ * acorns included (MVP round, fire.ts output; 20 = the value
+ * raw acorns carried in the first hunger draft, now earned
+ * through cooking instead of granted raw).
  */
 export const FOOD_NUTRITION: Readonly<Record<string, number>> = {
   [FOOD_BOG_BERRIES]: 10,
   [FOOD_ELDERBERRIES]: 15,
+  [FOOD_COOKED_ACORNS]: 20,
 };
 
 /** True for a directly-eatable food (berries in v1). */
