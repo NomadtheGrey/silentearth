@@ -135,6 +135,87 @@ export interface PileGrant {
 }
 
 /**
+ * 'pile:pickup-requested' listener logic (Systems' listener,
+ * landed 2026-10-26 on DEV's bridge-out signal, b23a042 —
+ * the shell bridge is out, so this is the SOLE granter on
+ * the event; a second subscriber would double-grant). The
+ * shell registers this on the bus and owns refresh + save
+ * + feedback from the outcome; the grant logic itself
+ * lives here, beside grantFromPile.
+ *
+ * Sequence, mirroring the bridge exactly (so the swap is
+ * behavior-identical): look the pile up; grant what fits;
+ * take EXACTLY the granted amount from the pile (partial:
+ * the remainder stays); report. Stale/missing pile: silent
+ * nothing (found: false). Full pack: granted 0, NO take
+ * call, and the shell shows the Pack-full note without
+ * refresh or save. The take's remaining is authoritative
+ * for the outcome (it owns the pile); in single-threaded
+ * execution the get → grant → take sequence cannot
+ * interleave, so take.taken === granted in practice — the
+ * outcome still reports take's numbers, never invented
+ * ones. PileStore is structural on purpose: Background's
+ * pileState satisfies it without systems importing game
+ * modules (item/quantity/x/z + take; the store pile's id
+ * is addressed by the pileId argument, not read here).
+ */
+export interface PileStore {
+  get(
+    id: string,
+  ): { item: string; quantity: number; x: number; z: number } | null | undefined;
+  take(id: string, quantity: number): { taken: number; remaining: number };
+}
+
+export type PilePickupOutcome =
+  | { found: false; pileId: string }
+  | {
+      found: true;
+      pileId: string;
+      item: ItemId;
+      granted: number;
+      remaining: number;
+      /** Pile position, for the shell's anchored feedback (same values the bridge used). */
+      x: number;
+      z: number;
+    };
+
+export function handlePilePickupRequest(
+  pileId: string,
+  store: PileStore,
+  inventory: PersonalInventory,
+): PilePickupOutcome {
+  const pile = store.get(pileId);
+  if (!pile) {
+    return { found: false, pileId };
+  }
+  const grant = grantFromPile(
+    { item: pile.item, quantity: pile.quantity, x: pile.x, z: pile.z },
+    inventory,
+  );
+  if (grant.granted <= 0) {
+    return {
+      found: true,
+      pileId,
+      item: normalizeItemId(pile.item),
+      granted: 0,
+      remaining: pile.quantity,
+      x: pile.x,
+      z: pile.z,
+    };
+  }
+  const take = store.take(pileId, grant.granted);
+  return {
+    found: true,
+    pileId,
+    item: normalizeItemId(pile.item),
+    granted: grant.granted,
+    remaining: take.remaining,
+    x: pile.x,
+    z: pile.z,
+  };
+}
+
+/**
  * Drop path: remove a carried quantity and return the pile
  * record for the shell to spawn (pileState.spawn or equivalent;
  * the shell passes its player position as x/z — systems never

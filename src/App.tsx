@@ -419,15 +419,12 @@
  *   it. Harvest behavior is otherwise unchanged — the same
  *   scatter-first candidate, the same pressUse path, and
  *   with no pile in range USE behaves exactly as before.
- *   DISCLOSED, NOT HIDDEN: no Systems listener for
- *   'pile:pickup-requested' exists at this tip (the grant
- *   pieces exist — grantFromPile() + pileState.take() — but
- *   nothing subscribes), so the shell bridges the grant
- *   itself, reusing Systems' grant function: grant what fits,
- *   take exactly that much (partial, remainder stays), then
- *   refresh + save + feedback. When Systems' own listener
- *   lands, this bridge comes out — two granters would
- *   double-fire feedback and saves. LIMITS: touch USE only
+ *   Systems' listener owns the grant now (systems/piles.ts
+ *   handlePilePickupRequest, landed on DEV's bridge-out
+ *   signal): grant what fits, take exactly that much
+ *   (partial, remainder stays), then refresh + save +
+ *   feedback; missing pile grants nothing, full pack takes
+ *   nothing + note. LIMITS: touch USE only
  *   (desktop has no USE affordance — desktop pile pickup
  *   needs a button or a key, follow-up); if piles should
  *   outrank ground outright, that is a one-line priority
@@ -436,11 +433,9 @@
  *   shell's 'pile:pickup-requested' grant bridge is removed
  *   (App.tsx only). The touch USE handler STILL emits
  *   'pile:pickup-requested' { pileId } — the emit stays, only
- *   the shell granter goes. GAP, STATED PLAINLY: until
- *   Systems' listener lands, the emit has no granter and USE
- *   pile pickup does nothing on WIP; Systems' listener
- *   (built, held) lands only after DEV signals this removal,
- *   and this landing's report is that signal. Two granters
+ *   the shell granter goes. GAP CLOSED by Systems' listener
+ *   landing the same day (DEV's bridge-out signal): the emit
+ *   has a granter again. Two granters
  *   on one event would double-fire feedback and saves, so
  *   the listener must never land while the bridge lives.
  * - STUMP INDICATION, LIVE (Adam, 2026-10-26): a
@@ -590,7 +585,10 @@ import {
   PersonalInventory,
   displayNameFor,
 } from './systems/inventory';
-import { dropFromInventory } from './systems/piles';
+import {
+  dropFromInventory,
+  handlePilePickupRequest,
+} from './systems/piles';
 import { executeCraft } from './systems/crafting-execution';
 import {
   HungerState,
@@ -1298,6 +1296,45 @@ export default function App() {
     const offPiles = bus.on('piles:inRange', ({ piles: inRange }) => {
       setPiles(inRange);
     });
+    // Systems' 'pile:pickup-requested' listener (see the header
+    // + systems/piles.ts): the SOLE granter on the event since
+    // the shell bridge came out (b23a042). Behavior mirrors
+    // the bridge exactly — missing pile: silent nothing; full
+    // pack: Pack-full note, no take, no refresh/save; grant:
+    // refresh + save + Picked-up feedback, anchored at the pile.
+    const offSystemsPilePickup = bus.on(
+      'pile:pickup-requested',
+      ({ pileId }) => {
+        const outcome = handlePilePickupRequest(
+          pileId,
+          pileState,
+          inventory,
+        );
+        if (!outcome.found) return;
+        const anchor = projectAnchor(outcome.x, outcome.z, 'scatter');
+        if (outcome.granted <= 0) {
+          if (anchor) {
+            showFeedback(
+              `Pack full — no room for ${displayNameFor(outcome.item)}.`,
+              'blocked',
+              anchor.x,
+              anchor.y,
+            );
+          }
+          return;
+        }
+        refreshInventory();
+        saveNow();
+        if (anchor) {
+          showFeedback(
+            `Picked up ${outcome.granted} ${displayNameFor(outcome.item)}.`,
+            'gain',
+            anchor.x,
+            anchor.y,
+          );
+        }
+      },
+    );
     // The shell's one harvest outcome listener (see the header):
     // presses resolve through it into the shell's inventory, and
     // its completed/failed/progress events drive the feedback below.
@@ -1437,6 +1474,7 @@ export default function App() {
       offLooked();
       offInRange();
       offPiles();
+      offSystemsPilePickup();
       offCompleted();
       offFailed();
       offProgress();
