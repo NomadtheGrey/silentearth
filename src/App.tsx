@@ -537,6 +537,23 @@
  *   id→group map — no Systems file touch, no recipe field,
  *   canCraft/execution untouched. Unmapped recipes would
  *   trail under "Other" rather than vanish (none today).
+ * - PAUSE UI HALF, LIVE (Adam, 2026-10-26 — core 54e525c, DEV
+ *   brief): the shell gates its timers on 'game:pause-changed'
+ *   via a pausedRef (intervals/rAF close over the ref, never
+ *   state) + a paused state driving a small "Paused" badge
+ *   (new PausedIndicator, bottom-centre above the LocationChip,
+ *   pointer-events-none, badge only). Gated: the 1 s hunger
+ *   timer (hunger.tick + advanceLighting + Systems fire ticks
+ *   — the 25 s friction wait no longer flips to 'ready'
+ *   mid-pause), the turn-stick rAF loop (still schedules, no
+ *   delta applied, no dt jump on resume), and the FPS sampler
+ *   (paused frames discarded, fresh sample on resume).
+ *   Deliberately NOT gated: feedback-chip timeouts (transient
+ *   UI, expiry mid-pause loses nothing). NO trigger wiring
+ *   here — no visibilitychange/blur listener, no auto/tap
+ *   resume; triggers plug into setPaused only after Adam
+ *   answers. Until then the badge is dormant (nothing sets
+ *   the flag yet) and the gates stand ready.
  * POINTER DISCIPLINE: overlays are pointer-events-none except the
  * small interactive pieces (HUD buttons, panels, harvest buttons),
  * so world clicks — including the first-person mouse-capture click
@@ -597,6 +614,7 @@ import { ContextMenu } from './ui/ContextMenu';
 import type { ContextAction } from './ui/types';
 import { TouchControls } from './ui/TouchControls';
 import { LocationChip } from './ui/LocationChip';
+import { PausedIndicator } from './ui/PausedIndicator';
 import {
   OptionsModal,
   fontClassFor,
@@ -1100,6 +1118,17 @@ export default function App() {
   const feedbackCounterRef = useRef(0);
   const feedbackTimersRef = useRef<Map<string, number>>(new Map());
 
+  // PAUSE (Adam, 2026-10-26 — core 54e525c): the engine pause
+  // flag, mirrored for the shell. The ref is what the timers
+  // read (intervals/rAF loops close over it, never over state);
+  // the state drives the Paused indicator. Both are set ONLY
+  // by the 'game:pause-changed' subscription in the boot
+  // effect — NO trigger lives in this file (nothing sets the
+  // flag until Adam answers auto-vs-tap resume and
+  // visibility-vs-blur).
+  const pausedRef = useRef(false);
+  const [paused, setPaused] = useState(false);
+
   const refreshInventory = () => {
     setInventoryItems(inventory.stacksSnapshot().map(toInventoryItem));
     setCapacityText(
@@ -1266,6 +1295,12 @@ export default function App() {
 
   // Show a feedback chip for 4 seconds, then remove it. Caller-timed,
   // as ObjectFeedback requires — the chip itself owns no timer.
+  // Feedback chips are deliberately NOT pause-gated: their
+  // timeouts are transient UI, and one expiring mid-pause
+  // loses nothing (no stale chip on resume). Pausing them
+  // would need remaining-time bookkeeping — out of scope for
+  // this half; the gated clocks are hunger, lighting, and
+  // friction above, plus the turn-stick and FPS loops.
   const showFeedback = (text: string, tone: FeedbackTone, x: number, y: number) => {
     const id = `fb-${feedbackCounterRef.current++}`;
     setFeedbacks((current) => [...current, { id, text, tone, x, y }]);
@@ -1451,6 +1486,13 @@ export default function App() {
     // with an unchanged stage bails out in React, so
     // steady-state ticks cost no re-render.
     const hungerTimer = window.setInterval(() => {
+      // PAUSE GATE: while the engine flag is set, the shell
+      // clock freezes too — no hunger drain, no lighting
+      // advance, no Systems fire tick (including the 25 s
+      // friction wait, which must not flip to 'ready'
+      // mid-pause). The interval keeps firing but does
+      // nothing, so resume needs no restart.
+      if (pausedRef.current) return;
       hunger.tick(1);
       setHungerStage(hunger.stage());
       fireState.advanceLighting(Date.now());
@@ -1469,6 +1511,14 @@ export default function App() {
       setPlacedFires(fireState.snapshot());
       recomputeAnchors();
     };
+    // PAUSE SUBSCRIPTION (core 54e525c): the shell's half of the
+    // flag. The ref gates the timers (below + the turn-stick and
+    // FPS loops); the state drives the Paused indicator. Fires
+    // on CHANGE only (setPaused is idempotent), so no spam.
+    const offPause = bus.on('game:pause-changed', ({ paused: next }) => {
+      pausedRef.current = next;
+      setPaused(next);
+    });
     const offFirePlaced = bus.on('fire:placed', refreshFires);
     const offFireLighting = bus.on('fire:lighting', refreshFires);
     const offFireLit = bus.on('fire:lit', refreshFires);
@@ -1571,6 +1621,7 @@ export default function App() {
       window.removeEventListener('resize', onResize);
       window.removeEventListener('pagehide', onPageHide);
       offCamera();
+      offPause();
       offMoved();
       offLooked();
       offInRange();
@@ -2406,7 +2457,11 @@ export default function App() {
       const dt = Math.min(0.1, Math.max(0, (now - last) / 1000));
       last = now;
       const { x, y } = turnDeflectionRef.current;
-      if (x !== 0 || y !== 0) {
+      // PAUSE GATE: the loop keeps scheduling (and `last` keeps
+      // updating, so no dt jump on resume), but no look delta
+      // is applied while paused — the renderer is frozen, so a
+      // turn applied now would only surface as a jump later.
+      if (!pausedRef.current && (x !== 0 || y !== 0)) {
         playerRef.current?.addLookDelta(
           x * TURN_STICK_PX_PER_SEC * dt,
           -y * TURN_STICK_PX_PER_SEC * dt,
@@ -2524,6 +2579,15 @@ export default function App() {
     let frames = 0;
     let start = performance.now();
     const tick = (now: number): void => {
+      // PAUSE GATE: discard paused frames instead of sampling
+      // them, so the chip never reports a pause-inflated number
+      // and resume starts a fresh sample window.
+      if (pausedRef.current) {
+        frames = 0;
+        start = now;
+        raf = requestAnimationFrame(tick);
+        return;
+      }
       frames += 1;
       const elapsed = now - start;
       if (elapsed >= 1000) {
@@ -2980,6 +3044,11 @@ export default function App() {
           fps={fps}
         />
       ) : null}
+
+      {/* Paused badge: only while the engine flag is set. It
+        renders regardless of panels (a global state badge, not
+        a panel), pointer-events-none, so it never eats a tap. */}
+      {paused ? <PausedIndicator /> : null}
 
       {/* Camera transition overlay (vignette at rest, fade on switch). */}
       <CameraTransition switching={switching} />

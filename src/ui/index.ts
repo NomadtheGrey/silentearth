@@ -84,6 +84,7 @@ export { TouchControls } from './TouchControls';
 export type { TouchControlsProps } from './TouchControls';
 export { LocationChip } from './LocationChip';
 export type { LocationChipProps } from './LocationChip';
+export { PausedIndicator } from './PausedIndicator';
 export {
   OptionsModal,
   FONT_OPTIONS,
