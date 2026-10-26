@@ -42,9 +42,28 @@
  * sorted by distance — no re-sort here, and HarvestTarget carries
  * no distance field to sort by. Each button already names its
  * target (HarvestButton shows verb + name), and buttons are
- * thumb-sized (min 44 px tall). The column scrolls past 40vh so
- * a crowd of targets never covers the screen. A press on any
- * button reports its HarvestRequest through onHarvest; outcome
+ * thumb-sized (min 44 px tall). The column scrolls past its
+ * max height so a crowd of targets never covers the screen.
+ *
+ * TOP EDGE (Adam's live-phone report, 2026-10-26 — harvest
+ * buttons unclickable): the column is bottom-anchored at 52%,
+ * so its top edge is 48vh minus its height — on a short
+ * landscape viewport three buttons reached ~30 px from the
+ * top, straight under the top-2 z-40 slim bar (same z-40, later
+ * in DOM, so the bar painted over the top button and ate the
+ * tap). The max height below IS the top constraint: height is
+ * capped at 48vh minus a clearance T, so the top edge never
+ * rises above T — T = 112 px on narrow screens (a wrapped
+ * two-row slim bar ends at 104 px) and 60 px on screens 480 px
+ * and wider (a single-row bar, or the Hide HUD button, ends
+ * at 52 px), each with 8 px of clearance, and never below one
+ * button (56 px floor) so the column always shows something
+ * and scrolls for the rest. Bottom edge stays at 52% — the
+ * "just above the middle" placement is unchanged, only the
+ * visible count shrinks on short screens. The camera row that
+ * used to be a second overlap band is gone on WIP (it moved
+ * into Options); it still exists on main until the next merge.
+ * A press on any button reports its HarvestRequest through onHarvest; outcome
  * (items into inventory) is the next step, not this component.
  * NOTE: the targets' anchorX/anchorY are no longer consumed
  * here (position is screen-fixed now); the caller still computes
@@ -97,7 +116,14 @@ export function ProximityHarvestButtons({
     return null;
   }
   return (
-    <div className="pointer-events-auto absolute bottom-[52%] left-1/2 z-40 flex max-h-[40vh] w-max max-w-[calc(100vw-1rem)] -translate-x-1/2 flex-col items-center gap-2 overflow-y-auto px-1 py-1">
+    // TOP EDGE: bottom-anchored at 52%, so top = 48vh - height.
+    // Capping height at 48vh - T keeps the top edge at or below
+    // T (see the file doc for the bar measurements): 112 px on
+    // narrow screens, 60 px once the viewport is 480 px wide
+    // (single-row bar). 40vh still caps tall viewports, and the
+    // 56 px floor keeps at least one button visible; overflow
+    // scrolls inside the column, never under a top control.
+    <div className="pointer-events-auto absolute bottom-[52%] left-1/2 z-40 flex max-h-[min(40vh,max(56px,calc(48vh-112px)))] min-[480px]:max-h-[min(40vh,max(56px,calc(48vh-60px)))] w-max max-w-[calc(100vw-1rem)] -translate-x-1/2 flex-col items-center gap-2 overflow-y-auto px-1 py-1">
       {targets.map((target) => (
         <Fragment key={target.id}>
           {target.kind === 'scatter' && onRemove ? (
