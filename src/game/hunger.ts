@@ -50,8 +50,24 @@ export const TOO_HUNGRY_STAGE: HungerStage = 'starving';
  * (primary + secondaries), not just the berry roll — the dispatch
  * exempts sources, and a starving witch gathering berries should
  * not have to drop the wood she gathered alongside them.
+ *
+ * GATHER vs EAT (Adam, 2026-10-26, PINNED clarification): this
+ * exemption is about GATHERING only. Acorns stay gather-exempt
+ * (she can still forage them when too hungry), but EATING them
+ * requires the campfire cooking step — see COOK_REQUIRED_ITEMS.
+ * Berries carry no such note: they are eaten as gathered.
  */
 export const HUNGER_EXEMPT_ITEMS = ['ACORNS', 'BOG_BERRIES', 'ELDERBERRIES'] as const;
+
+/**
+ * Foods that must be cooked before eating (Adam, 2026-10-26,
+ * PINNED): acorns, and only acorns in this set. This is a
+ * contract for Systems' eating/cooking code — the engine half
+ * implements no eating, so nothing here gates it yet. When the
+ * fire system lands, its cooking step turns ACORNS into edible
+ * food; raw acorns must not count as eaten food.
+ */
+export const COOK_REQUIRED_ITEMS = ['ACORNS'] as const;
 
 /**
  * HOOKS, NOT BUILT (Adam's brief, explicit):
@@ -59,9 +75,13 @@ export const HUNGER_EXEMPT_ITEMS = ['ACORNS', 'BOG_BERRIES', 'ELDERBERRIES'] as 
  *   its yields join this exemption the same way (flag the trap
  *   source hungerExempt, or extend the exempt-items list) — no
  *   trap mechanics are invented here.
- * - Campfire cooking is a fire-system action, not yet built: when
- *   it exists, cooked food is hunger recovery through that system,
- *   not through this lockout — this module does not gate cooking.
+ * - Campfire cooking is a fire-system action, not yet built, and
+ *   is itself a TOO-HUNGRY EXCEPTION (Adam, 2026-10-26): a
+ *   starving witch can still cook — the future fire system must
+ *   not lock the cooking step behind hunger, or the acorn path
+ *   (forage when starving, then cook to eat) would deadlock.
+ *   Cooked food is hunger recovery through that system, not
+ *   through this lockout — this module does not gate cooking.
  * - Shelter/clothes do not touch hunger here; they plug into
  *   weather.exposureAt instead.
  */

@@ -722,7 +722,9 @@ export const SOURCES: HarvestSourceDef[] = [
       'Heavy structural logs that form the skeleton of true shelters. Hard to process. ' +
       'Lane-decided permit: spade-axe — the heavy-wood gate, route-symmetric ' +
       '(an axe-only gate would lock out spade-route players until convergence). ' +
-      'Acorns scatter around it (hunger-exempt food, Adam 2026-10-26).',
+      'Acorns scatter around it (gather-exempt food, Adam 2026-10-26 — ' +
+      'but acorns NEED COOKED: eating them requires the campfire ' +
+      'cooking step, Adam 2026-10-26).',
     harvestable: true,
     permitTier: 'spadeAxe',
     renewal: 'spawn-near-trees',

@@ -60,9 +60,12 @@
  * elderberries). Ground counts as harvest and is never exempt, so
  * ground is blocked too. The lockout sits after the permit check
  * and before any progress, yield, or state change: a locked-out
- * press consumes nothing and depletes nothing. Traps and campfire
- * cooking are HOOKS for when those systems exist (see hunger.ts),
- * not exceptions built here.
+ * press consumes nothing and depletes nothing. GATHER vs EAT
+ * (Adam, 2026-10-26): acorns stay gather-exempt but NEED COOKED
+ * — eating them requires the campfire cooking step, which is
+ * itself a too-hungry exception via the future fire system.
+ * Traps and campfire cooking are HOOKS for when those systems
+ * exist (see hunger.ts), not exceptions built here.
  *
  * INVENTORY SHAPE: HarvestInventory is structural — PersonalInventory
  * satisfies it (free() + add()). The listener checks the TOTAL
