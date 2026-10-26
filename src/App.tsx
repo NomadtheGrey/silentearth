@@ -1328,6 +1328,11 @@ export default function App() {
     const spawn = gen.findSpawn();
     player.x = spawn.x;
     player.z = spawn.z;
+    // Sky-trap fix (Adam 2026-10-26): regenerate does NOT recreate
+    // the player, so pitch would otherwise survive a seed change —
+    // re-default it to horizontal here (toggleCamera covers the
+    // mode-switch half via resetLook).
+    player.resetLook();
     renderer.setWorldGen(gen);
     setSeed(nextSeed);
     setPosition({ x: spawn.x, z: spawn.z });

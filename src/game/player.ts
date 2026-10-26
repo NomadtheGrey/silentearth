@@ -270,6 +270,25 @@ export class PlayerController {
     }
   };
 
+  /**
+   * Pitch default (sky-trap fix, Adam 2026-10-26): reset pitch to
+   * horizontal (0). Called when entering first-person (inside
+   * toggleCamera) and on world regenerate/new seed (App's
+   * regenerate) — pitch otherwise persists across mode switches
+   * and regenerations, so a witch left staring at the sky would
+   * stay staring at the sky in first-person. Only pitch moves:
+   * yaw, facing, and position are untouched. Emits 'player:looked'
+   * directly (not throttled — a discrete state change, like
+   * 'camera:switched') so proximity's look-down gate drops stale
+   * pitch immediately instead of waiting for the next mouse move.
+   * Third-person and behind views are unaffected in behavior —
+   * neither reads pitch for framing.
+   */
+  resetLook(): void {
+    this.pitch = 0;
+    bus.emit('player:looked', { pitch: 0, mode: this.mode });
+  }
+
   toggleCamera(): void {
     this.mode =
       this.mode === 'first'
@@ -278,6 +297,9 @@ export class PlayerController {
           ? 'behind'
           : 'first';
     if (this.mode === 'first') {
+      // Entering first-person re-defaults pitch to horizontal
+      // (sky-trap fix — see resetLook).
+      this.resetLook();
       // Best effort: a keydown counts as a user gesture for pointer lock.
       try {
         this.canvas?.requestPointerLock();
