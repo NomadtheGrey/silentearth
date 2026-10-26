@@ -408,6 +408,210 @@
  *   no longer consumed by the buttons (the shared projection
  *   pass still computes them for fire/placement anchors);
  *   removing harvest projection is a follow-up cleanup.
+ * - PILE PICKUP BY USE, LIVE (Adam, 2026-10-26): no new buttons,
+ *   no new screen — the touch USE press picks the nearest
+ *   in-range pile when no harvest target is nearer, emitting
+ *   'pile:pickup-requested' { pileId } (the channel's pile
+ *   field is 'item', not 'itemId' as the brief's shape said).
+ *   The pile wins on a tie with the harvest candidate (none
+ *   is NEARER then); ground sits at distance 0, so a pile at
+ *   her feet ties ground and wins, a farther pile loses to
+ *   it. Harvest behavior is otherwise unchanged — the same
+ *   scatter-first candidate, the same pressUse path, and
+ *   with no pile in range USE behaves exactly as before.
+ *   Systems' listener owns the grant now (systems/piles.ts
+ *   handlePilePickupRequest, landed on DEV's bridge-out
+ *   signal): grant what fits, take exactly that much
+ *   (partial, remainder stays), then refresh + save +
+ *   feedback; missing pile grants nothing, full pack takes
+ *   nothing + note. LIMITS: touch USE only
+ *   (desktop has no USE affordance — desktop pile pickup
+ *   needs a button or a key, follow-up); if piles should
+ *   outrank ground outright, that is a one-line priority
+ *   change for Adam's call.
+ * - PILE BRIDGE OUT (DEV sequencing plan, 2026-10-26): the
+ *   shell's 'pile:pickup-requested' grant bridge is removed
+ *   (App.tsx only). The touch USE handler STILL emits
+ *   'pile:pickup-requested' { pileId } — the emit stays, only
+ *   the shell granter goes. GAP CLOSED by Systems' listener
+ *   landing the same day (DEV's bridge-out signal): the emit
+ *   has a granter again. Two granters
+ *   on one event would double-fire feedback and saves, so
+ *   the listener must never land while the bridge lives.
+ * - STUMP INDICATION, LIVE (Adam, 2026-10-26): a
+ *   workstation-gated recipe that cannot be crafted for
+ *   station reasons now reads "Needs a tree stump to work
+ *   at." — retiring "Needs a workstation station.", which
+ *   named no stump at all. Requirement display only, in the
+ *   shell's availabilityNote (App); no game/systems file
+ *   touched, no presence-kind plumbing added — presence is
+ *   booleans only, so the shell cannot split stump from
+ *   crafted workstation or Stumpy upgrade. Other stations
+ *   keep the old template. FOLLOW-UP, NOT CHANGED: the menu
+ *   header line still reads "Nearby stations: workstation,
+ *   loom" — it lists station contexts, not kinds, so it
+ *   stays truthful but still does not name the stump.
+ * - STATION UI V1, LIVE (Adam, 2026-10-26): when she is at a
+ *   stump, a station panel appears in the HUD stack naming it
+ *   ("Tree stump") with one action: Craft, which opens the
+ *   crafting menu (already station-aware, so opening it at a
+ *   stump IS opening it with the stump active; no filtering
+ *   added, loom/hand recipes stay visible). The panel is a
+ *   capability list (StationPanel takes stationKind + an
+ *   actions array), so Move joins later as a second entry
+ *   without restructuring — Move is NOT built here and
+ *   nothing gates on tools she does not have yet. TRIGGER:
+ *   presence, not USE — the panel renders when workstation
+ *   presence is true and hides when she walks away, so
+ *   harvest USE is untouched by construction and no press is
+ *   swallowed. KIND NOTE: presence is booleans only and
+ *   workstation presence comes solely from stumps today, so
+ *   'stump' is the kind passed; the component maps all three
+ *   brief-named kinds (stump / workstation / Stumpy) so the
+ *   title follows from a prop when presence learns kinds.
+ * - INVENTORY DROP V1, LIVE (Adam, 2026-10-26 — "for next
+ *   pass"): every personal inventory row gains a Drop button
+ *   (storage rows never get one). One item per press, dropped
+ *   at her feet as a ground pile in the same pile system as
+ *   overflow — merges by item at the same spot, pick-up-able
+ *   later via the pile USE trigger. Shell wiring: Systems'
+ *   dropFromInventory(item, 1) validates + removes, then the
+ *   shell hands the record to pileState.drop() (no
+ *   pileState.spawn exists; drop() is the spawn equivalent
+ *   and emits pile:dropped for tracker + renderer). A failed
+ *   drop leaves the inventory exact (Systems builds the
+ *   record before removing; remove() throws before mutating).
+ *   Dropped piles ride the pending pile save wiring; no
+ *   separate save handling invented. Worn garments drop
+ *   without unwearing (mirroring deposit: bonus self-cancels
+ *   at count 0, returns on pickup). Quantity choice: one per
+ *   press, per the brief and Systems' V1 note — unless Adam
+ *   corrects it.
+ * - BELOW-PERMIT WORDING, LIVE (Adam, 2026-10-26 — "below
+ *   permit" too vague): a below-permit harvest failure now
+ *   reads "Needs {Tool}." (e.g. downed oak → "Needs
+ *   Axe-Trowel.") instead of "Harvest failed: below-permit."
+ *   The failed event carries no permit info, so the shell
+ *   reads the source's permitTier from SOURCE_BY_ID and maps
+ *   the tier to its tool item for displayNameFor; a lookup
+ *   miss falls back to the old wording. Other failure
+ *   reasons untouched; 'permit-tbd' stays as-is (no tool
+ *   decided there yet). App.tsx only.
+ * - PERSPECTIVE IN OPTIONS, LIVE (Adam, 2026-10-26 — the
+ *   toggle group obscured the harvest buttons): the
+ *   CameraToggle group is OUT of the HUD stack row and OUT
+ *   of the touch slim bar entirely, and lives as a
+ *   "Perspective" section in the Options modal's Settings
+ *   tab (a display preference beside the font — no new tab
+ *   for one control; the existing toggle component is
+ *   reused). App passes cameraMode + cycleToCamera through
+ *   new optional modal props; the section hides if no
+ *   perspective is passed. The toggle row wraps (flex-wrap)
+ *   so the long "Third-person overhead" label fits the
+ *   narrow touch bottom sheet. Slim bar is now Show HUD,
+ *   Inventory, Crafting, Options; stack row is Inventory,
+ *   Crafting, Options. The header readout still names the
+ *   current view in text.
+ * - DEPENDENCIES DISPLAY, LIVE (Adam, 2026-10-26 — "make sure all
+ *   dependencies are listed in the crafting ingredients"): every
+ *   recipe row now lists its dependencies after its ingredients —
+ *   upgradeFrom as "Upgrades from: {name} {held} / 1" (either/or
+ *   spade-axe: "Upgrades from: Spade or Axe-Trowel", held 1 if
+ *   either held else 0) and requires as "Requires present:
+ *   {name} {held} / {qty} (kept, not used up)". App mapping
+ *   only — no CraftingMenu change (rows are data-driven), no
+ *   recipe/execution change, and the predecessor is NOT added
+ *   to recipe.ingredients (execution removes ingredients AND
+ *   upgradeFrom separately — listing it there would consume
+ *   it twice). Station is not an ingredient line.
+ * - CRAFTING GROUPS, LIVE (Adam, 2026-10-26 — "group the
+ *   crafted items on the crafting screen"): SECTIONS in one
+ *   scroll, NOT tabs (the phone sheet already scrolls;
+ *   sections keep everything visible). 38 recipes, 6 groups
+ *   in this order — Tools, Homes, Fire & Workshop, Clothes,
+ *   Materials & Carrying, Traps — order within a group is the
+ *   current recipe order, empty groups never render.
+ *   CraftingMenu gains an optional `sections` prop (flat list
+ *   unchanged when absent; one shared row renderer, so
+ *   grouping changes layout only); App owns the UI-side
+ *   id→group map — no Systems file touch, no recipe field,
+ *   canCraft/execution untouched. Unmapped recipes would
+ *   trail under "Other" rather than vanish (none today).
+ * - PAUSE UI HALF, LIVE (Adam, 2026-10-26 — core 54e525c, DEV
+ *   brief): the shell gates its timers on 'game:pause-changed'
+ *   via a pausedRef (intervals/rAF close over the ref, never
+ *   state) + a paused state driving a small "Paused" badge
+ *   (new PausedIndicator, bottom-centre above the LocationChip,
+ *   pointer-events-none, badge only). Gated: the 1 s hunger
+ *   timer (hunger.tick + advanceLighting + Systems fire ticks
+ *   — the 25 s friction wait no longer flips to 'ready'
+ *   mid-pause), the turn-stick rAF loop (still schedules, no
+ *   delta applied, no dt jump on resume), and the FPS sampler
+ *   (paused frames discarded, fresh sample on resume).
+ *   Deliberately NOT gated: feedback-chip timeouts (transient
+ *   UI, expiry mid-pause loses nothing). NO trigger wiring
+ *   here — no visibilitychange/blur listener, no auto/tap
+ *   resume; triggers plug into setPaused only after Adam
+ *   answers. Until then the badge is dormant (nothing sets
+ *   the flag yet) and the gates stand ready.
+ * - PAUSE COMPLETION, LIVE (Adam, 2026-10-26 — both answers
+ *   now pinned; SUPERSEDES the dormant note above): resume is
+ *   TAP-TO-RESUME — the indicator is now a button reading
+ *   "Paused — tap to resume" and tapping it calls
+ *   pauseState.setPaused(false) (idempotent, so a stray second
+ *   tap emits nothing). And the trigger is wired: window blur
+ *   OR document hidden sets paused=true ("Switching Windows
+ *   should pause the game. If it's not playable, it should
+ *   pause"). NO auto-resume anywhere — focus/visible return
+ *   deliberately clears nothing; only the button resumes.
+ * - PILE SAVE WIRING, LIVE (Adam, 2026-10-26 — DEV brief,
+ *   merge #5 on hold until everything is built): piles are no
+ *   longer session-only. saveNow passes pileState.snapshot()
+ *   (mapped to item/quantity/x/z, the id dropped) as
+ *   draft.piles, so serializeSave writes them normalized,
+ *   order preserved, never merged; boot restore, inside the
+ *   saveRestoredRef guard after the renderer exists, drops
+ *   each saved pile back through pileState.drop() (merge-safe,
+ *   emits pile:dropped for tracker + renderer visuals; the
+ *   100 ms moved tick then surfaces in-range piles). The
+ *   guard also protects against a double restore doubling
+ *   quantities (drop merges by id). Regenerate clears piles
+ *   via setWorldGen and the next save snapshots the empty
+ *   set — a new world is a new pile set, by design. Old
+ *   saves load piles: []. App.tsx only; no format change
+ *   (SaveData.piles already existed).
+ * - DESKTOP PILE PICKUP, LIVE (Adam, 2026-10-26 — DEV brief,
+ *   second of two; SUPERSEDES the desktop limit in PILE
+ *   PICKUP BY USE above): desktop gets a visible button —
+ *   the brief's preferred path over a key, for
+ *   discoverability. It renders in the z-40 harvest overlay,
+ *   just below the harvest column (top 54%, centre, min
+ *   44 px, black/60 pill), only on desktop (touch keeps
+ *   USE) and only when the nearest pile would win under
+ *   the touch USE rules: piles are already tracker-sorted
+ *   nearest first within 2.5 m, and the button shows only
+ *   when pile.distance <= the harvest candidate's distance
+ *   (bus distance, shell-computed fallback; ground at 0, so
+ *   a pile at her feet ties ground and wins). Pressing it
+ *   emits the same 'pile:pickup-requested' { pileId } the
+ *   touch USE press emits — Systems' listener is still the
+ *   sole granter, and its existing refresh + save +
+ *   feedback subscriber handles the outcome. No new grant
+ *   logic, no key binding, no touch change. App.tsx only.
+ * - UMBRELLA DRIVING, LIVE (Adam, 2026-10-26 — DEV brief,
+ *   third App landing after the two pile briefs; Background's
+ *   graphic 961cbac landed first, so the setter exists): the
+ *   shell calls renderer.setCarriesUmbrella with Systems'
+ *   carriesUmbrella(inventory) whenever inventory changes —
+ *   in refreshInventory, which every inventory-changing
+ *   handler already flows through (harvest, craft, eat,
+ *   cook, place, wear, deposit, drop, pile pickup), plus a
+ *   boot call after the renderer exists for a restored
+ *   umbrella. No equip step, duplicates do not stack, one
+ *   boolean; the graphic itself (third-person only, witch
+ *   group child) stays renderer-owned and hidden by
+ *   default until this call. App.tsx only; no game/systems
+ *   change.
  * POINTER DISCIPLINE: overlays are pointer-events-none except the
  * small interactive pieces (HUD buttons, panels, harvest buttons),
  * so world clicks — including the first-person mouse-capture click
@@ -420,6 +624,7 @@ import { createWorldGen } from './game/worldgen';
 import { WorldRenderer } from './game/renderer';
 import { PlayerController } from './game/player';
 import { bus, type EventMap } from './game/events';
+import { pauseState } from './game/pause';
 import {
   createHarvestOutcomeListener,
   stationPresence,
@@ -431,6 +636,8 @@ import {
   type FireResult,
 } from './game/fireState';
 import { loomState } from './game/loomState';
+import { pileState, type PileTarget } from './game/pileState';
+import { SOURCE_BY_ID, type ToolTier } from './game/objects';
 import type { FireType } from './game/fire';
 import {
   shelterState,
@@ -457,15 +664,16 @@ import { HudShell } from './ui/HudShell';
 import { WitchHealth } from './ui/WitchHealth';
 import { HungerIndicator } from './ui/HungerIndicator';
 import { ShelteredIndicator } from './ui/ShelteredIndicator';
+import { StationPanel } from './ui/StationPanel';
 import { WornList, type WornGarment } from './ui/WornList';
 import { UmbrellaIcon } from './ui/UmbrellaIcon';
 import { FireState, type FireChipStatus } from './ui/FireState';
 import { PlacementPreview } from './ui/PlacementPreview';
 import { ContextMenu } from './ui/ContextMenu';
 import type { ContextAction } from './ui/types';
-import { CameraToggle } from './ui/CameraToggle';
 import { TouchControls } from './ui/TouchControls';
 import { LocationChip } from './ui/LocationChip';
+import { PausedIndicator } from './ui/PausedIndicator';
 import {
   OptionsModal,
   fontClassFor,
@@ -493,6 +701,10 @@ import {
   PersonalInventory,
   displayNameFor,
 } from './systems/inventory';
+import {
+  dropFromInventory,
+  handlePilePickupRequest,
+} from './systems/piles';
 import { executeCraft } from './systems/crafting-execution';
 import {
   HungerState,
@@ -538,6 +750,35 @@ interface ProgressItem {
   label: string;
   x: number;
   y: number;
+}
+
+// BELOW-PERMIT WORDING (Adam, 2026-10-26 — "below permit" is too
+// vague): a below-permit failure names the required tool instead
+// of the code word. The failed event carries no permit info, so
+// the shell reads the source's permitTier from SOURCE_BY_ID
+// (keyed by the same sourceId the tracker puts on the target)
+// and maps the tier to its tool item for displayNameFor. A
+// lookup miss, a 'hand' permit, or 'TBD' falls back to the old
+// wording rather than inventing a tool — 'hand' can never be
+// below-permit in practice (it is the lowest stage) and 'TBD'
+// fails as 'permit-tbd', not here. The wording names the tool
+// with no verb, so it reads right for both Harvest and Remove
+// presses, which share this handler.
+const PERMIT_TIER_TO_ITEM: Record<ToolTier, string> = {
+  trowel: ITEMS.gardenTrowel,
+  sharpTrowel: ITEMS.sharpTrowel,
+  spade: ITEMS.spade,
+  axeTrowel: ITEMS.axeTrowel,
+  spadeAxe: ITEMS.spadeAxe,
+  trundleTool: ITEMS.trundleTool,
+};
+
+function belowPermitText(sourceId: string): string {
+  const permit = SOURCE_BY_ID[sourceId]?.permitTier;
+  if (permit && permit !== 'hand' && permit !== 'TBD') {
+    return `Needs ${displayNameFor(PERMIT_TIER_TO_ITEM[permit])}.`;
+  }
+  return 'Harvest failed: below-permit.';
 }
 
 function formatWeights(weights: BiomeWeights): string {
@@ -588,6 +829,68 @@ const FIRE_NAME: Record<FireType, string> = {
   hearth: 'Hearth',
   kiln: 'Kiln',
   bloomery: 'Bloomery',
+};
+
+/**
+ * CRAFTING GROUPS (Adam, 2026-10-26 — "group the crafted items
+ * on the crafting screen"): SECTIONS in one scroll, NOT tabs —
+ * the phone sheet already scrolls, sections keep everything
+ * visible, tabs would hide recipes behind extra taps. UI-side
+ * id→group map (no Systems file touch, no recipe field added;
+ * a recipe field later is trivial if Adam wants it). Keys are
+ * recipe.id strings, verified against RECIPES at build time.
+ * Order within a group is the current recipe order (the shell
+ * filters, never re-sorts); a group with no recipes never
+ * renders. A recipe with no mapping falls into a trailing
+ * "Other" section rather than vanishing.
+ */
+const CRAFTING_GROUP_ORDER = [
+  'Tools',
+  'Homes',
+  'Fire & Workshop',
+  'Clothes',
+  'Materials & Carrying',
+  'Traps',
+];
+const CRAFTING_GROUP_BY_RECIPE_ID: Record<string, string> = {
+  'garden-trowel': 'Tools',
+  'sharp-trowel': 'Tools',
+  spade: 'Tools',
+  'axe-trowel': 'Tools',
+  'spade-axe': 'Tools',
+  'trundle-tool': 'Tools',
+  'primitive-lean-to': 'Homes',
+  'thatch-hut': 'Homes',
+  'wattle-and-daub-hut': 'Homes',
+  'woven-cottage-prototype': 'Homes',
+  'woven-cottage': 'Homes',
+  'small-wooden-hut': 'Homes',
+  'moss-cradle': 'Homes',
+  campfire: 'Fire & Workshop',
+  hearth: 'Fire & Workshop',
+  kiln: 'Fire & Workshop',
+  bloomery: 'Fire & Workshop',
+  'stumpy-workstation': 'Fire & Workshop',
+  'crafted-workstation': 'Fire & Workshop',
+  'potters-wheel': 'Fire & Workshop',
+  loom: 'Fire & Workshop',
+  'hooded-cloak': 'Clothes',
+  shawl: 'Clothes',
+  'pointy-hat': 'Clothes',
+  'mossy-mittens': 'Clothes',
+  'bog-boots': 'Clothes',
+  apron: 'Clothes',
+  umbrella: 'Clothes',
+  'twined-cordage': 'Materials & Carrying',
+  'clay-pot': 'Materials & Carrying',
+  'clay-brick': 'Materials & Carrying',
+  'small-basket': 'Materials & Carrying',
+  'large-basket': 'Materials & Carrying',
+  snare: 'Traps',
+  'fish-weir-trap': 'Traps',
+  'pot-trap': 'Traps',
+  pitfall: 'Traps',
+  deadfall: 'Traps',
 };
 
 /**
@@ -802,6 +1105,7 @@ export default function App() {
   const homeStoresRef = useRef(new Map<string, HomeStorage>());
   const homeStoreItemsRef = useRef(new Map<string, Set<string>>());
   const [eatNote, setEatNote] = useState<string | null>(null);
+  const [dropNote, setDropNote] = useState<string | null>(null);
   const [storageNote, setStorageNote] = useState<string | null>(null);
 
   const [seedInput, setSeedInput] = useState(bootSave?.seed ?? DEFAULT_SEED);
@@ -831,6 +1135,11 @@ export default function App() {
     ownedToolItem(inventory),
   );
   const [harvestTargets, setHarvestTargets] = useState<HarvestTarget[]>([]);
+  // In-range dropped piles (harvest overflow), nearest first per
+  // the tracker. Drives the touch USE fallback and the desktop
+  // pickup button (see handleTouchInteract + the desktop pile
+  // computation before return); piles get no screen of their own.
+  const [piles, setPiles] = useState<PileTarget[]>([]);
   // Harvest outcome feedback + multi-step progress, rendered
   // through WorldAnchor + ObjectFeedback / InteractionProgress.
   // Populated only by the outcome events (see the header) — never
@@ -869,11 +1178,29 @@ export default function App() {
   const feedbackCounterRef = useRef(0);
   const feedbackTimersRef = useRef<Map<string, number>>(new Map());
 
+  // PAUSE (Adam, 2026-10-26 — core 54e525c): the engine pause
+  // flag, mirrored for the shell. The ref is what the timers
+  // read (intervals/rAF loops close over it, never over state);
+  // the state drives the Paused indicator. The flag is SET by
+  // the trigger effect below (blur / hidden) and CLEARED only
+  // by the indicator's tap (tap-to-resume, pinned) — nothing
+  // here auto-resumes on focus return.
+  const pausedRef = useRef(false);
+  const [paused, setPaused] = useState(false);
+
   const refreshInventory = () => {
     setInventoryItems(inventory.stacksSnapshot().map(toInventoryItem));
     setCapacityText(
       `Carrying ${inventory.used()} / ${inventory.capacity()}`,
     );
+    // UMBRELLA DRIVING: every inventory change flows through
+    // here (harvest, craft, eat, cook, place, wear, deposit,
+    // drop, pile pickup), so the carried-umbrella graphic
+    // tracks the live inventory — no equip step, duplicates
+    // do not stack, one boolean to the renderer. Guarded:
+    // refreshInventory is never called before boot, but the
+    // ?. keeps an early call from crashing.
+    rendererRef.current?.setCarriesUmbrella(carriesUmbrella(inventory));
   };
 
   // Save meta mirror: seed / camera / position as of the latest
@@ -935,6 +1262,16 @@ export default function App() {
           looms: loomState.snapshot().map((loom) => ({
             x: loom.x,
             z: loom.z,
+          })),
+          // PILE SAVE WIRING: the live pile set rides every
+          // save (id dropped — serializeSave rebuilds nothing
+          // from it; it writes item/quantity/x/z normalized,
+          // order preserved, never merged).
+          piles: pileState.snapshot().map((pile) => ({
+            item: pile.item,
+            quantity: pile.quantity,
+            x: pile.x,
+            z: pile.z,
           })),
         }),
       );
@@ -1035,6 +1372,12 @@ export default function App() {
 
   // Show a feedback chip for 4 seconds, then remove it. Caller-timed,
   // as ObjectFeedback requires — the chip itself owns no timer.
+  // Feedback chips are deliberately NOT pause-gated: their
+  // timeouts are transient UI, and one expiring mid-pause
+  // loses nothing (no stale chip on resume). Pausing them
+  // would need remaining-time bookkeeping — out of scope for
+  // this half; the gated clocks are hunger, lighting, and
+  // friction above, plus the turn-stick and FPS loops.
   const showFeedback = (text: string, tone: FeedbackTone, x: number, y: number) => {
     const id = `fb-${feedbackCounterRef.current++}`;
     setFeedbacks((current) => [...current, { id, text, tone, x, y }]);
@@ -1123,10 +1466,32 @@ export default function App() {
             // Same skip rule as fires.
           }
         }
+        // PILE SAVE WIRING: re-place each saved pile through
+        // pileState.drop() — merge-safe by id, and it emits
+        // pile:dropped, so the tracker and the renderer pile
+        // group pick the restored piles up (the tracker's
+        // 100 ms moved tick surfaces the in-range set once
+        // the loop runs at the restored position). Saved
+        // piles are deserialize-validated (normalized ids,
+        // positive quantities, finite coords); drop() returns
+        // null for anything invalid instead of throwing, so
+        // no skip rule is needed here. Inside the
+        // saveRestoredRef guard, so a second boot-effect run
+        // cannot double-drop (drop merges, which would double
+        // quantities). Runs after the renderer exists, so
+        // setWorldGen's pile clear cannot wipe the restore.
+        for (const pile of saved.piles) {
+          pileState.drop(pile.item, pile.quantity, pile.x, pile.z);
+        }
         player.x = saved.position.x;
         player.z = saved.position.z;
       }
     }
+    // UMBRELLA DRIVING: initial visibility from the boot
+    // inventory — a restored umbrella shows, no umbrella
+    // leaves the renderer's default hidden standing. Later
+    // inventory changes drive it via refreshInventory above.
+    renderer.setCarriesUmbrella(carriesUmbrella(inventory));
     // Hunger wiring (see the header): the engine reads the stage
     // through this query — movement slowdown + harvest lockout.
     player.setHungerStageQuery(() => hunger.stage());
@@ -1163,6 +1528,48 @@ export default function App() {
       busTargetsRef.current = targets;
       recomputeAnchors();
     });
+    const offPiles = bus.on('piles:inRange', ({ piles: inRange }) => {
+      setPiles(inRange);
+    });
+    // Systems' 'pile:pickup-requested' listener (see the header
+    // + systems/piles.ts): the SOLE granter on the event since
+    // the shell bridge came out (b23a042). Behavior mirrors
+    // the bridge exactly — missing pile: silent nothing; full
+    // pack: Pack-full note, no take, no refresh/save; grant:
+    // refresh + save + Picked-up feedback, anchored at the pile.
+    const offSystemsPilePickup = bus.on(
+      'pile:pickup-requested',
+      ({ pileId }) => {
+        const outcome = handlePilePickupRequest(
+          pileId,
+          pileState,
+          inventory,
+        );
+        if (!outcome.found) return;
+        const anchor = projectAnchor(outcome.x, outcome.z, 'scatter');
+        if (outcome.granted <= 0) {
+          if (anchor) {
+            showFeedback(
+              `Pack full — no room for ${displayNameFor(outcome.item)}.`,
+              'blocked',
+              anchor.x,
+              anchor.y,
+            );
+          }
+          return;
+        }
+        refreshInventory();
+        saveNow();
+        if (anchor) {
+          showFeedback(
+            `Picked up ${outcome.granted} ${displayNameFor(outcome.item)}.`,
+            'gain',
+            anchor.x,
+            anchor.y,
+          );
+        }
+      },
+    );
     // The shell's one harvest outcome listener (see the header):
     // presses resolve through it into the shell's inventory, and
     // its completed/failed/progress events drive the feedback below.
@@ -1178,6 +1585,13 @@ export default function App() {
     // with an unchanged stage bails out in React, so
     // steady-state ticks cost no re-render.
     const hungerTimer = window.setInterval(() => {
+      // PAUSE GATE: while the engine flag is set, the shell
+      // clock freezes too — no hunger drain, no lighting
+      // advance, no Systems fire tick (including the 25 s
+      // friction wait, which must not flip to 'ready'
+      // mid-pause). The interval keeps firing but does
+      // nothing, so resume needs no restart.
+      if (pausedRef.current) return;
       hunger.tick(1);
       setHungerStage(hunger.stage());
       fireState.advanceLighting(Date.now());
@@ -1196,6 +1610,14 @@ export default function App() {
       setPlacedFires(fireState.snapshot());
       recomputeAnchors();
     };
+    // PAUSE SUBSCRIPTION (core 54e525c): the shell's half of the
+    // flag. The ref gates the timers (below + the turn-stick and
+    // FPS loops); the state drives the Paused indicator. Fires
+    // on CHANGE only (setPaused is idempotent), so no spam.
+    const offPause = bus.on('game:pause-changed', ({ paused: next }) => {
+      pausedRef.current = next;
+      setPaused(next);
+    });
     const offFirePlaced = bus.on('fire:placed', refreshFires);
     const offFireLighting = bus.on('fire:lighting', refreshFires);
     const offFireLit = bus.on('fire:lit', refreshFires);
@@ -1241,7 +1663,9 @@ export default function App() {
       const text =
         p.reason === 'inventory-full' && p.yields.length > 0
           ? `Pack full — ${p.yields.map((y) => `${y.item} × ${y.quantity}`).join(', ')} didn't fit.`
-          : `Harvest failed: ${p.reason}.`;
+          : p.reason === 'below-permit'
+            ? belowPermitText(p.sourceId)
+            : `Harvest failed: ${p.reason}.`;
       showFeedback(text, 'blocked', anchor.x, anchor.y);
     });
     const offProgress = bus.on('harvest:progress', (p) => {
@@ -1296,9 +1720,12 @@ export default function App() {
       window.removeEventListener('resize', onResize);
       window.removeEventListener('pagehide', onPageHide);
       offCamera();
+      offPause();
       offMoved();
       offLooked();
       offInRange();
+      offPiles();
+      offSystemsPilePickup();
       offCompleted();
       offFailed();
       offProgress();
@@ -1316,6 +1743,31 @@ export default function App() {
       playerRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // PAUSE TRIGGER (Adam, 2026-10-26 — "Switching Windows should
+  // pause the game. If it's not playable, it should pause"):
+  // the game pauses whenever it stops being playable — the tab
+  // is hidden OR the window loses focus (switching windows,
+  // switching apps, anything that takes the game off-screen).
+  // This SETS the flag only. It never clears it: resume is
+  // tap-only (pinned), so focus/visible return does NOT
+  // auto-resume — only the Paused button's tap calls
+  // setPaused(false). setPaused is idempotent, so a repeated
+  // blur/hidden event emits nothing.
+  useEffect(() => {
+    const pause = () => {
+      pauseState.setPaused(true);
+    };
+    const onVisibility = () => {
+      if (document.hidden) pause();
+    };
+    window.addEventListener('blur', pause);
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      window.removeEventListener('blur', pause);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
   }, []);
 
   const regenerate = () => {
@@ -1384,7 +1836,20 @@ export default function App() {
       checks[0];
     let availabilityNote: string | undefined;
     if (check.stationMismatch) {
-      availabilityNote = `Needs a ${check.requiredStation} station.`;
+      // STUMP INDICATION (Adam, 2026-10-26): the starter
+      // workstation IS a tree stump, but the old note read
+      // "Needs a workstation station." — naming no stump at
+      // all. Workstation-gated recipes now say so outright.
+      // Presence is booleans only (workstation/loom), so the
+      // shell cannot tell a stump from a crafted workstation
+      // or a Stumpy upgrade — this names the starter case the
+      // player actually meets, and no presence-kind plumbing
+      // was added to game files to split the kinds. Other
+      // stations keep the old template unchanged.
+      availabilityNote =
+        check.requiredStation === 'workstation'
+          ? 'Needs a tree stump to work at.'
+          : `Needs a ${check.requiredStation} station.`;
     } else if (check.missingIngredients.length > 0) {
       const first = check.missingIngredients[0];
       availabilityNote = `Missing ${first.item} (${first.held} / ${first.quantity}).`;
@@ -1394,18 +1859,59 @@ export default function App() {
       const first = check.missingRequirements[0];
       availabilityNote = `Requires ${first.item} present (${first.held} / ${first.quantity}).`;
     }
+    // DEPENDENCIES DISPLAY (Adam, 2026-10-26): upgradeFrom and
+    // requires are dependencies, not ingredients, and they must
+    // NOT be folded into recipe.ingredients — execution removes
+    // ingredients AND upgradeFrom separately, so listing the
+    // predecessor there would consume it twice. They ride as
+    // extra display rows after the ingredient rows instead:
+    // upgradeFrom as "Upgrades from: {name} {held} / 1"
+    // (either/or: "Spade or Axe-Trowel", held 1 if either held
+    // else 0), requires as "Requires present: {name} {held} /
+    // {qty} (kept, not used up)". Station is NOT a row —
+    // context, not an ingredient; the header and mismatch
+    // notes already cover it.
+    const dependencyRows: { name: string; amountText: string }[] = [];
+    if (recipe.upgradeFrom) {
+      const predecessors = Array.isArray(recipe.upgradeFrom)
+        ? recipe.upgradeFrom
+        : [recipe.upgradeFrom];
+      if (predecessors.length === 1) {
+        dependencyRows.push({
+          name: `Upgrades from: ${displayNameFor(predecessors[0])}`,
+          amountText: `${inventory.count(predecessors[0])} / 1`,
+        });
+      } else {
+        const held = predecessors.some((item) => inventory.count(item) > 0)
+          ? 1
+          : 0;
+        dependencyRows.push({
+          name: `Upgrades from: ${predecessors.map(displayNameFor).join(' or ')}`,
+          amountText: `${held} / 1`,
+        });
+      }
+    }
+    for (const requirement of recipe.requires ?? []) {
+      dependencyRows.push({
+        name: `Requires present: ${displayNameFor(requirement.item)}`,
+        amountText: `${inventory.count(requirement.item)} / ${requirement.quantity} (kept, not used up)`,
+      });
+    }
     return {
       id: recipe.id,
       name: recipe.name,
       description: `Makes ${recipe.output.quantity} × ${recipe.output.item}.`,
-      ingredients: recipe.ingredients.map((ingredient) => ({
-        name: ingredient.item,
-        amountText: `${inventory.count(ingredient.item)} / ${ingredient.quantity}`,
-        icon:
-          ingredient.item === UMBRELLA_ITEM_ID ? (
-            <UmbrellaIcon />
-          ) : undefined,
-      })),
+      ingredients: [
+        ...recipe.ingredients.map((ingredient) => ({
+          name: ingredient.item,
+          amountText: `${inventory.count(ingredient.item)} / ${ingredient.quantity}`,
+          icon:
+            ingredient.item === UMBRELLA_ITEM_ID ? (
+              <UmbrellaIcon />
+            ) : undefined,
+        })),
+        ...dependencyRows,
+      ],
       canCraft: check.ok,
       availabilityNote,
       icon:
@@ -1414,6 +1920,26 @@ export default function App() {
         ) : undefined,
     };
   });
+
+  // CRAFTING GROUPS: sections in DEV's group order, each filtered
+  // from the recipe-ordered menu rows above (never re-sorted);
+  // empty groups dropped here, and the menu drops them again
+  // defensively. Unmapped recipes (none today — all 38 map)
+  // trail under "Other" instead of vanishing.
+  const ungroupedRecipes = craftingRecipes.filter(
+    (recipe) => CRAFTING_GROUP_BY_RECIPE_ID[recipe.id] === undefined,
+  );
+  const craftingSections = [
+    ...CRAFTING_GROUP_ORDER.map((title) => ({
+      title,
+      recipes: craftingRecipes.filter(
+        (recipe) => CRAFTING_GROUP_BY_RECIPE_ID[recipe.id] === title,
+      ),
+    })).filter((section) => section.recipes.length > 0),
+    ...(ungroupedRecipes.length > 0
+      ? [{ title: 'Other', recipes: ungroupedRecipes }]
+      : []),
+  ];
 
   const handleCraft = (recipeId: string) => {
     const recipe = RECIPES.find((candidate) => candidate.id === recipeId);
@@ -1630,6 +2156,44 @@ export default function App() {
     } catch (error) {
       setStorageNote(
         error instanceof Error ? error.message : 'Could not take that.',
+      );
+    }
+    refreshInventory();
+    saveNow();
+  };
+
+  // INVENTORY DROP V1 (Adam, 2026-10-26 — "for next pass"):
+  // one item per press, dropped at her feet as a ground pile
+  // in the same pile system as overflow (merges by item at
+  // the same spot, pick-up-able later via the pile USE
+  // trigger). Systems validates + removes first — the pile
+  // record is built before the removal and remove() throws
+  // before mutating on insufficiency, so a failed drop leaves
+  // the inventory exactly as it was — then the shell hands
+  // the record to pileState.drop(), the spawn equivalent
+  // (no pileState.spawn exists; drop() creates/merges and
+  // emits pile:dropped for the tracker + renderer). Dropped
+  // piles ride the pending pile save wiring like overflow
+  // piles; no separate save handling is invented here.
+  // Worn garments drop like anything else (no unwear —
+  // mirroring deposit: the worn bonus already self-cancels
+  // when the carried count hits 0 via the setWorn re-sync,
+  // and returns if the garment is picked back up).
+  const handleDropItem = (itemId: string) => {
+    const player = playerRef.current;
+    if (!player) {
+      setDropNote('Could not drop that.');
+      return;
+    }
+    try {
+      const pile = dropFromInventory(itemId, 1, inventory, player.x, player.z);
+      pileState.drop(pile.item, pile.quantity, pile.x, pile.z);
+      inventory.setWorn(wardrobe.wornItemIds());
+      setWornGarments(wardrobe.wornGarments());
+      setDropNote(`Dropped 1 ${displayNameFor(itemId)}.`);
+    } catch (error) {
+      setDropNote(
+        error instanceof Error ? error.message : 'Could not drop that.',
       );
     }
     refreshInventory();
@@ -2017,7 +2581,11 @@ export default function App() {
       const dt = Math.min(0.1, Math.max(0, (now - last) / 1000));
       last = now;
       const { x, y } = turnDeflectionRef.current;
-      if (x !== 0 || y !== 0) {
+      // PAUSE GATE: the loop keeps scheduling (and `last` keeps
+      // updating, so no dt jump on resume), but no look delta
+      // is applied while paused — the renderer is frozen, so a
+      // turn applied now would only surface as a jump later.
+      if (!pausedRef.current && (x !== 0 || y !== 0)) {
         playerRef.current?.addLookDelta(
           x * TURN_STICK_PX_PER_SEC * dt,
           -y * TURN_STICK_PX_PER_SEC * dt,
@@ -2057,12 +2625,47 @@ export default function App() {
   // fallback — USE never harvests dirt while a bush is in
   // range. With no target at all, pressUse is not called
   // (menus and HUD buttons stay direct taps).
+  //
+  // PILE FALLBACK (Adam, 2026-10-26): no new buttons, no new
+  // screen — a pile in range is picked up by this same USE
+  // press when no harvest target is nearer. The tracker sorts
+  // piles nearest first, so piles[0] is the nearest pile; the
+  // harvest candidate's distance comes from the raw bus target
+  // (the UI target shape carries no distance field), falling
+  // back to a shell-computed distance if the bus entry is gone.
+  // The pile wins on a tie (no harvest target is NEARER then)
+  // — which matters because ground sits at distance 0: a pile
+  // she stands on ties ground and wins, while a pile farther
+  // than her feet loses to ground. Consequence, stated
+  // plainly: in third/behind with no scatter, ground is
+  // eligible at distance 0, so only a pile at her feet is
+  // reachable by USE; in first-person looking level, any
+  // in-range pile nearer than the scatter target wins. If piles
+  // should outrank ground outright, that is a one-line priority
+  // change for Adam's call, not this landing's.
+  // NOTE: this is the touch USE path only. Desktop has no USE
+  // affordance (harvest is by button click), so desktop pile
+  // pickup is a visible button instead — see DESKTOP PILE
+  // PICKUP in the header and the computation before return.
+  // Touch keeps USE; the button is desktop-only.
   const handleTouchInteract = (): void => {
     const player = playerRef.current;
     const target =
       harvestTargets.find((candidate) => candidate.kind === 'scatter') ??
       harvestTargets[0];
-    if (!player || !target) return;
+    if (!player) return;
+    const pile = piles[0];
+    if (pile) {
+      const candidateDistance = target
+        ? (busTargetsRef.current.find((t) => t.id === target.id)?.distance ??
+          Math.hypot(target.worldX - player.x, target.worldZ - player.z))
+        : Number.POSITIVE_INFINITY;
+      if (pile.distance <= candidateDistance) {
+        bus.emit('pile:pickup-requested', { pileId: pile.id });
+        return;
+      }
+    }
+    if (!target) return;
     player.pressUse({
       targetId: target.id,
       sourceId: target.sourceId,
@@ -2101,6 +2704,15 @@ export default function App() {
     let frames = 0;
     let start = performance.now();
     const tick = (now: number): void => {
+      // PAUSE GATE: discard paused frames instead of sampling
+      // them, so the chip never reports a pause-inflated number
+      // and resume starts a fresh sample window.
+      if (pausedRef.current) {
+        frames = 0;
+        start = now;
+        raf = requestAnimationFrame(tick);
+        return;
+      }
       frames += 1;
       const elapsed = now - start;
       if (elapsed >= 1000) {
@@ -2115,6 +2727,39 @@ export default function App() {
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
   }, []);
+
+  // DESKTOP PILE PICKUP (see the header): the nearest pile,
+  // but only when it would win under the touch USE rules —
+  // otherwise the button would contradict what USE would do.
+  // The tracker already limits piles to 2.5 m and sorts
+  // nearest first, so piles[0] is the candidate; its
+  // distance is the tracker's, and the harvest candidate is
+  // the same scatter-first pick handleTouchInteract uses
+  // (bus distance, shell-computed fallback from position
+  // state, which re-renders on the 10 Hz moved tick — so the
+  // button appears and disappears as she moves). Null on
+  // touch (USE already exists there) and null when a nearer
+  // harvest target wins: harvest that first, then the pile
+  // button appears. Pressing emits pile:pickup-requested;
+  // Systems' listener grants, the existing subscriber
+  // refreshes, saves, and feeds back.
+  const desktopPileTarget =
+    harvestTargets.find((candidate) => candidate.kind === 'scatter') ??
+    harvestTargets[0];
+  const desktopPileCandidateDistance = desktopPileTarget
+    ? (busTargetsRef.current.find((t) => t.id === desktopPileTarget.id)
+        ?.distance ??
+      Math.hypot(
+        desktopPileTarget.worldX - position.x,
+        desktopPileTarget.worldZ - position.z,
+      ))
+    : Number.POSITIVE_INFINITY;
+  const desktopPilePickup =
+    !isTouch &&
+    piles.length > 0 &&
+    piles[0].distance <= desktopPileCandidateDistance
+      ? piles[0]
+      : null;
 
   return (
     <div
@@ -2214,6 +2859,20 @@ export default function App() {
           onHarvest={handleHarvest}
           onRemove={handleRemove}
         />
+        {desktopPilePickup ? (
+          <button
+            type="button"
+            onClick={() =>
+              bus.emit('pile:pickup-requested', {
+                pileId: desktopPilePickup.id,
+              })
+            }
+            className="pointer-events-auto absolute left-1/2 top-[54%] min-h-[44px] -translate-x-1/2 rounded-full bg-black/60 px-4 py-2 text-sm font-medium text-[#f0ead6]"
+          >
+            Pick up {displayNameFor(desktopPilePickup.item)} ×{' '}
+            {desktopPilePickup.quantity}
+          </button>
+        ) : null}
       </div>
 
       {/* HUD shell: needs row (awaiting survival systems) + HUD block. */}
@@ -2295,11 +2954,6 @@ export default function App() {
             >
               Options
             </button>
-            <CameraToggle
-              perspective={cameraMode}
-              comfortable={isTouch}
-              onChange={(picked) => cycleToCamera(picked)}
-            />
           </div>
           <div className="mt-3">
             <WitchHealth />
@@ -2326,6 +2980,21 @@ export default function App() {
               houseName={shelterHouseName}
             />
           </div>
+          {stationPresenceValue.workstation ? (
+            <div className="mt-2">
+              <StationPanel
+                stationKind="stump"
+                actions={[
+                  {
+                    id: 'craft',
+                    label: 'Craft',
+                    onSelect: () => setCraftingOpen(true),
+                  },
+                ]}
+                comfortable={isTouch}
+              />
+            </div>
+          ) : null}
           {placement ? (
             <div className="mt-2 rounded bg-black/50 px-2 py-1 text-sm">
               <p>Placing {placement.label} at your feet.</p>
@@ -2399,11 +3068,6 @@ export default function App() {
             >
               Options
             </button>
-            <CameraToggle
-              perspective={cameraMode}
-              comfortable
-              onChange={(picked) => cycleToCamera(picked)}
-            />
           </div>
         ) : (
           <button
@@ -2447,6 +3111,7 @@ export default function App() {
             onEatItem={handleEatItem}
             storage={storageSection}
             onDepositItem={handleDepositItem}
+            onDropItem={handleDropItem}
             capacityText={capacityText}
             onClose={() => setInventoryOpen(false)}
             comfortable={isTouch}
@@ -2455,6 +3120,7 @@ export default function App() {
         {craftingOpen ? (
           <CraftingMenu
             recipes={craftingRecipes}
+            sections={craftingSections}
             stationNote={stationNote}
             comfortable={isTouch}
             selectedRecipeId={selectedRecipeId}
@@ -2471,6 +3137,11 @@ export default function App() {
         {eatNote ? (
           <p className="rounded bg-black/50 px-2 py-1 text-xs text-stone-200">
             {eatNote}
+          </p>
+        ) : null}
+        {dropNote ? (
+          <p className="rounded bg-black/50 px-2 py-1 text-xs text-stone-200">
+            {dropNote}
           </p>
         ) : null}
       </div>
@@ -2520,11 +3191,13 @@ export default function App() {
         />
       ) : null}
 
-      {/* Options modal (tabbed; Settings first, font only). */}
+      {/* Options modal (tabbed; Settings first: font + perspective). */}
       {optionsOpen ? (
         <OptionsModal
           font={font}
           onFontChange={handleFontChange}
+          perspective={cameraMode}
+          onPerspectiveChange={(picked) => cycleToCamera(picked)}
           onClose={() => setOptionsOpen(false)}
           comfortable={isTouch}
         />
@@ -2542,6 +3215,15 @@ export default function App() {
           biomePercent={dominantBiome.percent}
           fps={fps}
         />
+      ) : null}
+
+      {/* Paused control: only while the engine flag is set. It
+        renders regardless of panels (a global state control,
+        not a panel). The wrapper is pointer-events-none, but
+        the button itself takes its own tap — that tap is the
+        resume (tap-to-resume, pinned). */}
+      {paused ? (
+        <PausedIndicator onResume={() => pauseState.setPaused(false)} />
       ) : null}
 
       {/* Camera transition overlay (vignette at rest, fade on switch). */}

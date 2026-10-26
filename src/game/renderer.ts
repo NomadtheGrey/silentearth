@@ -27,7 +27,7 @@ import type { WorldGen } from './worldgen';
 import { PlayerController } from './player';
 import { marshWeight } from './biomes';
 import { SOURCE_FOR_KIND } from './objects';
-import { buildKindGeometry, buildWitch, vertexLambert } from './models';
+import { buildKindGeometry, buildUmbrella, buildWitch, vertexLambert } from './models';
 import { ProximityTracker } from './proximity';
 import {
   harvestState,
@@ -42,6 +42,9 @@ import { FIRE_DEFS } from './fire';
 import { shelterState, HOUSE_DEFS } from './shelter';
 import { loomState } from './loomState';
 import { pileState } from './pileState';
+import { pauseState } from './pause';
+import { SkyRig } from './sky';
+import { SEASON_START_MONTH, seasonalWeatherAt } from './weather';
 import { createBiomeTexture, TEXTURE_REPEAT } from './terrain';
 import {
   CHUNK_SIZE,
@@ -119,6 +122,8 @@ export class WorldRenderer {
   private raf = 0;
   private chunks = new Map<string, LoadedChunk>();
   private witch: THREE.Group;
+  /** Carried umbrella graphic (models.ts), attached to the witch. */
+  private umbrella: THREE.Group;
   private gen: WorldGen;
   private player: PlayerController;
   /** Proximity tracker: engine-owned, subscribes to 'player:moved' and
@@ -148,6 +153,15 @@ export class WorldRenderer {
    * the placed-group unsubscribe list (same dispose path).
    */
   private pileGroup: THREE.Group | null = null;
+  /**
+   * Sky rig (Adam 2026-10-26): dome + sun + moon + stars + clouds
+   * + the lights they drive. Owns the day/night time driver (see
+   * sky.ts) — the renderer just feeds it dt + seasonal weather.
+   */
+  private sky: SkyRig | null = null;
+  /** Stored so the sky rig can drive them (were anonymous before). */
+  private sunLight: THREE.DirectionalLight | null = null;
+  private hemiLight: THREE.HemisphereLight | null = null;
   /** Accumulated time for flame flicker (loop-driven). */
   private flameTime = 0;
   private worldTickAcc = 0;
@@ -228,10 +242,17 @@ export class WorldRenderer {
     // Dim October light: the woods are watching, not sunbathing.
     this.scene.fog = new THREE.FogExp2(0x1a2018, 0.008);
     this.scene.background = new THREE.Color(0x1a2018);
-    this.scene.add(new THREE.HemisphereLight(0x9aa88a, 0x2a2018, 0.9));
-    const sun = new THREE.DirectionalLight(0xd8d0b0, 0.8);
-    sun.position.set(40, 60, 20);
-    this.scene.add(sun);
+    this.hemiLight = new THREE.HemisphereLight(0x9aa88a, 0x2a2018, 0.9);
+    this.scene.add(this.hemiLight);
+    this.sunLight = new THREE.DirectionalLight(0xd8d0b0, 0.8);
+    this.sunLight.position.set(40, 60, 20);
+    this.scene.add(this.sunLight);
+    // Sky with content (Adam 2026-10-26): replaces the flat
+    // background color as the visible sky (the background color
+    // stays only as a fallback behind the dome). The rig drives
+    // these same lights from the sun/moon, so light follows the
+    // bodies by construction.
+    this.sky = new SkyRig(this.scene, this.camera, this.sunLight, this.hemiLight, String(gen.seed));
 
     // The witch herself: detailed procedural figure (dress, bodice,
     // shawl, head, brimmed hat, arms, boots — models.ts), still
@@ -239,9 +260,32 @@ export class WorldRenderer {
     // third-person, hidden in first-person (you are the witch there).
     this.witch = buildWitch();
     this.scene.add(this.witch);
+    // Carried umbrella (Adam 2026-10-26): held in her right hand,
+    // canopy beside the hat, slight outward tilt. Attached to the
+    // witch group, so it inherits third-person-only visibility
+    // (hidden in first-person, where you are the witch). Default
+    // hidden — the shell drives it via setCarriesUmbrella (below).
+    this.umbrella = buildUmbrella();
+    this.umbrella.visible = false;
+    this.umbrella.position.set(0.58, 1.08, 0.05);
+    this.umbrella.rotation.z = -0.12;
+    this.witch.add(this.umbrella);
 
     window.addEventListener('resize', this.onResize);
     this.loop();
+  }
+
+  /**
+   * Carried-umbrella visibility (Adam 2026-10-26). The shell calls
+   * this when the inventory changes, passing Systems'
+   * carriesUmbrella(inventory): the graphic shows exactly when an
+   * umbrella is carried — no equip step, and duplicates do not
+   * stack, so the shell passes a plain boolean and one graphic is
+   * all there ever is. App-side driving is UI's follow-up; until
+   * the shell calls this, the umbrella stays hidden (default).
+   */
+  setCarriesUmbrella(carried: boolean): void {
+    if (this.umbrella) this.umbrella.visible = carried;
   }
 
   /** Ground detail texture for a chunk: the dominant biome's procedural
@@ -294,6 +338,11 @@ export class WorldRenderer {
     pileState.clear();
     this.rebuildPileGroup();
     this.gen = wrapGenWithState(gen);
+    // A new world gets a new sky: fresh stars for the seed + the
+    // cycle restarts at dawn. Skipped on the dispose path
+    // (disposed is already true there) — dispose() removes the
+    // rig itself below instead of rebuilding it.
+    if (!this.disposed) this.sky?.setSeed(String(gen.seed));
     this.proximity.setGen(this.gen);
     this.disposeGroundTextures();
     for (const [key, loaded] of this.chunks) {
@@ -321,6 +370,8 @@ export class WorldRenderer {
     cancelAnimationFrame(this.raf);
     window.removeEventListener('resize', this.onResize);
     this.setWorldGen(this.gen); // clears chunks (also disposes meshes)
+    this.sky?.dispose();
+    this.sky = null;
     this.disposeGroundTextures();
     this.renderer.dispose();
     this.renderer.domElement.remove();
@@ -798,6 +849,16 @@ export class WorldRenderer {
     if (this.disposed) return;
     this.raf = requestAnimationFrame(this.loop);
     const dt = Math.min(this.clock.getDelta(), 0.1);
+    // PAUSE GATE (Adam 2026-10-26 — see pause.ts): while paused
+    // the loop schedules its next frame but simulates nothing —
+    // no player update, no sky advance, no world tick, no render.
+    // The canvas keeps its last frame, so the view reads frozen.
+    // getDelta is still consumed above so resume sees no spike
+    // (the 0.1 clamp would cap it anyway). NOTHING here sets or
+    // clears the flag — the trigger (visibilitychange and/or
+    // blur) is Adam's open choice and plugs into
+    // pauseState.setPaused + the 'game:pause-changed' event.
+    if (pauseState.isPaused()) return;
     this.player.update(dt);
     this.stream();
     this.worldTickAcc += dt;
@@ -860,6 +921,16 @@ export class WorldRenderer {
       );
       this.camera.lookAt(this.player.x, 0, this.player.z);
     }
+
+    // Sky: day/night driver + sun/moon/stars/clouds + lights.
+    // Month stays the season-start input (no calendar yet — see
+    // sky.ts); weather is the seasonal query at her position.
+    this.sky?.update(dt, {
+      month: SEASON_START_MONTH,
+      weather: seasonalWeatherAt(this.gen, this.player.x, this.player.z, SEASON_START_MONTH),
+      playerX: this.player.x,
+      playerZ: this.player.z,
+    });
 
     this.renderer.render(this.scene, this.camera);
   };

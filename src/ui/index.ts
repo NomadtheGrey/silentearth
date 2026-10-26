@@ -36,6 +36,8 @@ export { PlacementPreview } from './PlacementPreview';
 export type { PlacementPreviewProps } from './PlacementPreview';
 export { ShelteredIndicator } from './ShelteredIndicator';
 export type { ShelteredIndicatorProps } from './ShelteredIndicator';
+export { StationPanel } from './StationPanel';
+export type { StationPanelProps, StationAction, StationKind } from './StationPanel';
 export { WornList } from './WornList';
 export type { WornListProps, WornGarment } from './WornList';
 export { UmbrellaIcon } from './UmbrellaIcon';
@@ -75,13 +77,14 @@ export type { HudShellProps } from './HudShell';
 export { InventoryPanel } from './InventoryPanel';
 export type { InventoryPanelProps } from './InventoryPanel';
 export { CraftingMenu } from './CraftingMenu';
-export type { CraftingMenuProps } from './CraftingMenu';
+export type { CraftingMenuProps, CraftingMenuSection } from './CraftingMenu';
 export { CameraToggle } from './CameraToggle';
 export type { CameraToggleProps } from './CameraToggle';
 export { TouchControls } from './TouchControls';
 export type { TouchControlsProps } from './TouchControls';
 export { LocationChip } from './LocationChip';
 export type { LocationChipProps } from './LocationChip';
+export { PausedIndicator } from './PausedIndicator';
 export {
   OptionsModal,
   FONT_OPTIONS,
@@ -91,6 +94,8 @@ export {
   fontClassFor,
 } from './OptionsModal';
 export type { OptionsModalProps, FontId } from './OptionsModal';
+export { BUILD_HISTORY } from './buildHistory';
+export type { BuildRecord } from './buildHistory';
 export { Popup } from './Popup';
 export type { PopupProps } from './Popup';
 export type {

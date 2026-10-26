@@ -273,10 +273,14 @@ const DRAFT_RECIPES: Recipe[] = [
     status: 'draft',
     output: { item: ITEMS.twinedCordage, quantity: 1 },
     ingredients: [i(ITEMS.tenderVines, 2)],
-    station: 'workstation',
+    station: 'hand',
     notes:
-      'DRAFT. Tender-Vines 2 -> 1 cordage. Workstation jobs include raw ' +
-      'ingredients that do not require fire; cordage is the named example.',
+      'DRAFT. Tender-Vines 2 -> 1 cordage, twisted by hand anywhere — ' +
+      'no stump or workstation needed (Adam\'s ruling, 2026-10-26: ' +
+      'cordage is hand-crafted). Explicit station "hand" (not ' +
+      'unstated) so the UI shows "by hand" plainly; the first ' +
+      'recipe to use "hand". She can twist cordage before ' +
+      'finding a stump; the trowel itself still needs one.',
   },
 
   // --- Tool ladder: ONE tool, evolving. Upgrade costs, not rebuilds.

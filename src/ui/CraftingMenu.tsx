@@ -13,12 +13,33 @@
  * arrive from the Systems lane, instead of inventing a recipe list.
  */
 
+import { useState } from 'react';
 import type { CraftingRecipe } from './types';
 import { UI_THEMES, type UiThemeName } from './themes';
 import { WitchMark } from './WitchyArt';
 
+export interface CraftingMenuSection {
+  title: string;
+  recipes: CraftingRecipe[];
+}
+
 export interface CraftingMenuProps {
   recipes: CraftingRecipe[];
+  /**
+   * Optional sections to group the recipes under headings in one
+   * scroll (no tabs). When provided, the menu renders these
+   * sections (skipping any with no recipes) instead of the flat
+   * list; `recipes` still feeds the empty state. The caller owns
+   * the grouping — this menu never invents one. Sections render
+   * as a collapsed-by-default ACCORDION (Adam, 2026-10-26):
+   * all headers visible, none open on entry; tapping a header
+   * expands it and collapses any other open section (one open
+   * at a time); each header carries its readiness count
+   * ("{title} — {craftable} of {total} craftable", computed
+   * from the recipes' existing canCraft flags) so a collapsed
+   * section hides nothing important.
+   */
+  sections?: CraftingMenuSection[];
   /** Caller-supplied nearby-stations line, e.g. "Nearby stations: workstation, loom". */
   stationNote?: string;
   /** Id of the selected recipe, if any. Undefined = nothing selected. */
@@ -37,6 +58,7 @@ export interface CraftingMenuProps {
 
 export function CraftingMenu({
   recipes,
+  sections,
   stationNote,
   selectedRecipeId,
   onSelectRecipe,
@@ -46,6 +68,11 @@ export function CraftingMenu({
   theme = 'hearth',
 }: CraftingMenuProps) {
   const t = UI_THEMES[theme];
+  // ACCORDION state (presentation only, menu-internal): which
+  // section is open, if any. null = all collapsed, which is the
+  // entry state — the menu remounts when reopened, so every
+  // entry starts collapsed. The caller never manages this.
+  const [openSection, setOpenSection] = useState<string | null>(null);
   const closeBtn = comfortable
     ? 'rounded px-3 py-2 text-sm min-h-[44px] ' + t.button
     : 'rounded px-2 py-1 text-sm ' + t.button;
@@ -54,6 +81,76 @@ export function CraftingMenu({
       t.primary
     : 'mt-2 rounded px-3 py-1 text-sm disabled:cursor-not-allowed disabled:opacity-40 ' +
       t.primary;
+  // One row renderer shared by the flat list and the sectioned
+  // list, so grouping changes layout only, never row content.
+  const renderRecipe = (recipe: CraftingRecipe) => {
+    const selected = recipe.id === selectedRecipeId;
+    return (
+      <li
+        key={recipe.id}
+        className={
+          'rounded px-2 py-2 ' +
+          (selected ? t.selected : 'bg-stone-800/60')
+        }
+      >
+        <button
+          type="button"
+          onClick={() => onSelectRecipe?.(recipe.id)}
+          aria-pressed={selected}
+          className="w-full text-left"
+        >
+          <span className="flex items-center gap-1.5 font-medium">
+            {recipe.icon ? (
+              <span className="inline-flex shrink-0">{recipe.icon}</span>
+            ) : null}
+            {recipe.name}
+          </span>
+          {recipe.description ? (
+            <span className="mt-1 block text-sm text-stone-300">
+              {recipe.description}
+            </span>
+          ) : null}
+        </button>
+        <ul className="mt-1 flex flex-col gap-0.5 text-sm text-stone-300">
+          {recipe.ingredients.map((ingredient, index) => (
+            <li key={index} className="flex items-center gap-1.5">
+              {ingredient.icon ? (
+                <span className="inline-flex shrink-0">
+                  {ingredient.icon}
+                </span>
+              ) : null}
+              {ingredient.name}
+              {ingredient.amountText ? (
+                <span className={'ml-2 ' + t.muted}>
+                  {ingredient.amountText}
+                </span>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+        {recipe.availabilityNote ? (
+          <p className={'mt-1 text-sm ' + t.muted}>
+            {recipe.availabilityNote}
+          </p>
+        ) : null}
+        <button
+          type="button"
+          disabled={!recipe.canCraft}
+          onClick={() => onCraft?.(recipe.id)}
+          className={craftBtn}
+        >
+          Craft
+        </button>
+      </li>
+    );
+  };
+  // Sections, when provided, skip their empty groups; the flat
+  // list is the fallback when no sections are passed.
+  const shownSections = (sections ?? []).filter(
+    (section) => section.recipes.length > 0,
+  );
+  const isEmpty =
+    sections !== undefined ? shownSections.length === 0 : recipes.length === 0;
   return (
     <section aria-label="Crafting" className={'rounded p-3 ' + t.panel}>
       <div className="mb-2 flex items-center justify-between gap-2">
@@ -79,74 +176,50 @@ export function CraftingMenu({
         <p className={'mb-2 text-sm ' + t.muted}>{stationNote}</p>
       ) : null}
 
-      {recipes.length === 0 ? (
+      {isEmpty ? (
         <p className={'italic ' + t.muted}>
           No recipes yet — recipes arrive from the Systems lane.
         </p>
-      ) : (
-        <ul className="flex flex-col gap-2">
-          {recipes.map((recipe) => {
-            const selected = recipe.id === selectedRecipeId;
+      ) : sections !== undefined ? (
+        <div className="flex flex-col gap-4">
+          {shownSections.map((section) => {
+            const open = openSection === section.title;
+            const craftable = section.recipes.filter(
+              (recipe) => recipe.canCraft,
+            ).length;
             return (
-              <li
-                key={recipe.id}
-                className={
-                  'rounded px-2 py-2 ' +
-                  (selected ? t.selected : 'bg-stone-800/60')
-                }
-              >
+              <div key={section.title}>
                 <button
                   type="button"
-                  onClick={() => onSelectRecipe?.(recipe.id)}
-                  aria-pressed={selected}
-                  className="w-full text-left"
+                  aria-expanded={open}
+                  onClick={() =>
+                    setOpenSection((current) =>
+                      current === section.title ? null : section.title,
+                    )
+                  }
+                  className={
+                    'flex w-full items-center justify-between gap-2 text-left text-sm font-semibold ' +
+                    t.heading +
+                    (comfortable ? ' min-h-[44px]' : '')
+                  }
                 >
-                  <span className="flex items-center gap-1.5 font-medium">
-                    {recipe.icon ? (
-                      <span className="inline-flex shrink-0">{recipe.icon}</span>
-                    ) : null}
-                    {recipe.name}
+                  <span>
+                    {section.title} — {craftable} of{' '}
+                    {section.recipes.length} craftable
                   </span>
-                  {recipe.description ? (
-                    <span className="mt-1 block text-sm text-stone-300">
-                      {recipe.description}
-                    </span>
-                  ) : null}
+                  <span aria-hidden="true">{open ? '▾' : '▸'}</span>
                 </button>
-                <ul className="mt-1 flex flex-col gap-0.5 text-sm text-stone-300">
-                  {recipe.ingredients.map((ingredient, index) => (
-                    <li key={index} className="flex items-center gap-1.5">
-                      {ingredient.icon ? (
-                        <span className="inline-flex shrink-0">
-                          {ingredient.icon}
-                        </span>
-                      ) : null}
-                      {ingredient.name}
-                      {ingredient.amountText ? (
-                        <span className={'ml-2 ' + t.muted}>
-                          {ingredient.amountText}
-                        </span>
-                      ) : null}
-                    </li>
-                  ))}
-                </ul>
-                {recipe.availabilityNote ? (
-                  <p className={'mt-1 text-sm ' + t.muted}>
-                    {recipe.availabilityNote}
-                  </p>
+                {open ? (
+                  <ul className="mt-1 flex flex-col gap-2">
+                    {section.recipes.map(renderRecipe)}
+                  </ul>
                 ) : null}
-                <button
-                  type="button"
-                  disabled={!recipe.canCraft}
-                  onClick={() => onCraft?.(recipe.id)}
-                  className={craftBtn}
-                >
-                  Craft
-                </button>
-              </li>
+              </div>
             );
           })}
-        </ul>
+        </div>
+      ) : (
+        <ul className="flex flex-col gap-2">{recipes.map(renderRecipe)}</ul>
       )}
     </section>
   );

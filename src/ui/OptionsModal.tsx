@@ -10,6 +10,17 @@
  * tab means adding one entry plus its panel branch — no other
  * tab and no other setting is invented here. The Settings tab
  * holds exactly one setting for now: the UI font dropdown.
+ * The SECOND tab is Build history (Adam, 2026-10-26): the
+ * recent build records from buildHistory.ts, newest first,
+ * capped at 20, each with what changed, why, the date, and
+ * the merge reference.
+ *
+ * PERSPECTIVE (Adam, 2026-10-26): the camera-perspective
+ * buttons live HERE, in the Settings tab beside the font —
+ * a display preference beside another display preference —
+ * because the toggle group in the HUD bars obscured the
+ * harvest buttons on the phone. The bars carry no camera
+ * control anymore; Options is the one door to it.
  *
  * FONT SETTING (Adam, 2026-10-26): three families, in this
  * order — IM Fell English (the default when nothing is
@@ -31,6 +42,9 @@
 
 import { useEffect, useState } from 'react';
 import { UI_THEMES, type UiThemeName } from './themes';
+import { BUILD_HISTORY } from './buildHistory';
+import { CameraToggle } from './CameraToggle';
+import type { CameraPerspective } from './types';
 
 export type FontId = 'im-fell' | 'alegreya' | 'eb-garamond';
 
@@ -93,7 +107,10 @@ export function fontClassFor(font: FontId): string {
 }
 
 /** Tab scaffold: one entry per tab, in display order. */
-const OPTION_TABS = [{ id: 'settings', label: 'Settings' }] as const;
+const OPTION_TABS = [
+  { id: 'settings', label: 'Settings' },
+  { id: 'history', label: 'Build history' },
+] as const;
 
 type OptionsTabId = (typeof OPTION_TABS)[number]['id'];
 
@@ -102,6 +119,14 @@ export interface OptionsModalProps {
   font: FontId;
   /** Called when the player picks a font. */
   onFontChange?: (font: FontId) => void;
+  /**
+   * Current camera perspective, owned by the caller.
+   * Omitted = no Perspective section (the modal stays usable
+   * without camera state); passed = the section renders.
+   */
+  perspective?: CameraPerspective;
+  /** Called when the player picks a perspective. */
+  onPerspectiveChange?: (perspective: CameraPerspective) => void;
   /** Called when the modal is closed. */
   onClose?: () => void;
   /** Bottom-sheet layout + thumb-sized controls on touch. Default false. */
@@ -113,6 +138,8 @@ export interface OptionsModalProps {
 export function OptionsModal({
   font,
   onFontChange,
+  perspective,
+  onPerspectiveChange,
   onClose,
   comfortable = false,
   theme = 'mire',
@@ -216,6 +243,46 @@ export function OptionsModal({
               <p className={'mt-3 text-lg ' + fontClassFor(font)}>
                 {selectedLabel}
               </p>
+              {perspective !== undefined ? (
+                <div className="mt-4">
+                  <p
+                    className={'mb-1 block text-sm font-medium ' + t.heading}
+                  >
+                    Perspective
+                  </p>
+                  <CameraToggle
+                    perspective={perspective}
+                    comfortable={comfortable}
+                    onChange={onPerspectiveChange}
+                  />
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+          {activeTab === 'history' ? (
+            <div>
+              {BUILD_HISTORY.length === 0 ? (
+                <p className={'italic ' + t.muted}>No build records yet.</p>
+              ) : (
+                <ul className="flex flex-col gap-3">
+                  {BUILD_HISTORY.map((record) => (
+                    <li key={record.sha}>
+                      <p
+                        className={'text-sm font-medium ' + t.heading}
+                      >
+                        {record.what}
+                      </p>
+                      <p className={'mt-0.5 text-xs ' + t.muted}>
+                        {record.date} · {record.merge} · PR #{record.pr} ·{' '}
+                        {record.sha}
+                      </p>
+                      <p className={'mt-1 text-sm ' + t.muted}>
+                        {record.why}
+                      </p>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
           ) : null}
         </div>

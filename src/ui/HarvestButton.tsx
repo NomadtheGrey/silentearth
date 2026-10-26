@@ -19,6 +19,14 @@
  * unless the caller overrides it per target; the bus carries no
  * verb, so the verb is presentation, not data.
  *
+ * GLYPH VISIBILITY (Adam, 2026-10-26): the old 14 px glyphs
+ * read as digits on a phone — the leaf oval as "0", the
+ * uprooted plant's thin stem as "1". All three glyphs are now
+ * 22 px, and each is shaped so it cannot read as a digit: the
+ * leaf carries a stem sticking out below its body, the soil
+ * dots are larger and spread, and the uprooted plant's roots
+ * fan in curves instead of straight parallel strokes.
+ *
  * REMOVE (Adam, 2026-10-26): alongside normal harvest, she may
  * TOTALLY REMOVE a plant — more resources at once, but the plant
  * is gone permanently (no regrow), for clearing ground for a
@@ -53,22 +61,23 @@ export interface HarvestButtonProps {
 function KindGlyph({ kind }: { kind: HarvestTarget['kind'] }) {
   if (kind === 'ground') {
     return (
-      <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
-        <circle cx="3" cy="10" r="1.6" fill="#a8a29e" />
-        <circle cx="7" cy="12" r="1.6" fill="#a8a29e" />
-        <circle cx="11" cy="10" r="1.6" fill="#a8a29e" />
-        <circle cx="5" cy="6" r="1.4" fill="#78716c" />
-        <circle cx="9" cy="6" r="1.4" fill="#78716c" />
+      <svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true">
+        <circle cx="5" cy="15" r="2.6" fill="#a8a29e" />
+        <circle cx="11" cy="18" r="2.6" fill="#a8a29e" />
+        <circle cx="17" cy="15" r="2.6" fill="#a8a29e" />
+        <circle cx="8" cy="9" r="2.2" fill="#78716c" />
+        <circle cx="14" cy="9" r="2.2" fill="#78716c" />
       </svg>
     );
   }
   return (
-    <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
+    <svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true">
       <path
-        d="M 7,13 C 2,10 2,4 7,1 C 12,4 12,10 7,13 Z"
+        d="M 11,18 C 4,14 4,4 11,1 C 18,4 18,14 11,18 Z"
         fill="#5c823d"
       />
-      <path d="M 7,3 L 7,12" stroke="#2d451e" strokeWidth="1" fill="none" />
+      <path d="M 11,4 L 11,15" stroke="#2d451e" strokeWidth="1.5" fill="none" />
+      <path d="M 11,18 L 11,21" stroke="#2d451e" strokeWidth="1.5" fill="none" />
     </svg>
   );
 }
@@ -87,13 +96,18 @@ export interface RemoveButtonProps {
 /** Small uprooted plant: stem, leaf, and exposed roots. */
 function UprootGlyph() {
   return (
-    <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
-      <path d="M 7,1 L 7,8" stroke="#5c823d" strokeWidth="1.5" fill="none" />
+    <svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true">
+      <path d="M 11,1 L 11,13" stroke="#5c823d" strokeWidth="2" fill="none" />
       <path
-        d="M 7,3 C 4,2 3,4 4,6 C 6,6 7,5 7,3 Z"
+        d="M 11,4 C 6,2 4,5 6,8 C 9,8 11,6 11,4 Z"
         fill="#5c823d"
       />
-      <path d="M 7,8 L 5,12 M 7,8 L 7,12 M 7,8 L 9,12" stroke="#a8a29e" strokeWidth="1" fill="none" />
+      <path
+        d="M 11,13 C 9,16 7,18 6,21 M 11,13 L 11,21 M 11,13 C 13,16 15,18 16,21"
+        stroke="#a8a29e"
+        strokeWidth="1.5"
+        fill="none"
+      />
     </svg>
   );
 }

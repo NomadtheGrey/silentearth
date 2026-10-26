@@ -183,6 +183,15 @@ export interface EventMap {
   };
   'pile:pickup-requested': { pileId: string };
   /**
+   * Pause state changed (Adam 2026-10-26: pause when not in
+   * focus — core flag + shell gate, see pause.ts). The shell
+   * gates its timers (hunger interval, turn-stick rAF, FPS
+   * sampler, feedback timers) on this; UI's "Paused" indicator
+   * surface reads it too. Fires on CHANGE only (setPaused is
+   * idempotent) — a redundant set emits nothing.
+   */
+  'game:pause-changed': { paused: boolean };
+  /**
    * The dominant-biome weather regime changed at her position
    * (emitted by the proximity tracker — see weather.ts for the
    * query/event split). The payload carries the full blended
