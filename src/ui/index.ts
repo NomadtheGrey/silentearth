@@ -28,6 +28,19 @@ export { InteractionProgress } from './InteractionProgress';
 export type { InteractionProgressProps } from './InteractionProgress';
 export { WitchHealth } from './WitchHealth';
 export type { WitchHealthProps } from './WitchHealth';
+export { CAMERA_FRAMING, CAMERA_TRANSITION } from './cameraPresentation';
+export type { CameraFraming } from './cameraPresentation';
+export {
+  MOTION_PRESENTATION,
+  FACING_EASE_MS,
+} from './motionPresentation';
+export type { MotionState, MotionPresentation } from './motionPresentation';
+export { CameraTransition } from './CameraTransition';
+export type { CameraTransitionProps } from './CameraTransition';
+export { WitchMotion } from './WitchMotion';
+export type { WitchMotionProps } from './WitchMotion';
+export { CameraPerspectiveCard } from './CameraPerspectiveCard';
+export type { CameraPerspectiveCardProps } from './CameraPerspectiveCard';
 export { HudShell } from './HudShell';
 export type { HudShellProps } from './HudShell';
 export { InventoryPanel } from './InventoryPanel';
