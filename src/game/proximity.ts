@@ -126,6 +126,20 @@ export function groundSourceAt(gen: WorldGen, x: number, z: number): GroundMater
   return GROUND_MATERIAL_BY_ID.dirt;
 }
 
+/**
+ * Stable scatter target id, shared with depletion (harvest.ts): the
+ * same id must be computed from a generated object and from a button
+ * press, or depletion could never match its target. Format:
+ * 'scatter:<cx>,<cz>:<kind>:<x.toFixed(2)>,<z.toFixed(2)>'.
+ */
+export function scatterTargetId(
+  cx: number,
+  cz: number,
+  obj: { kind: string; x: number; z: number },
+): string {
+  return `scatter:${cx},${cz}:${obj.kind}:${obj.x.toFixed(2)},${obj.z.toFixed(2)}`;
+}
+
 /** The ground target at (x, z): always distance 0, always "in range"
  *  by proximity — whether its BUTTON appears is the look-down gate,
  *  decided by the caller/tracker, not here. */
@@ -175,7 +189,7 @@ export function findInRange(
         const distance = Math.hypot(obj.x - x, obj.z - z);
         if (distance > HARVEST_RANGE) continue;
         scatter.push({
-          id: `scatter:${cx},${cz}:${obj.kind}:${obj.x.toFixed(2)},${obj.z.toFixed(2)}`,
+          id: scatterTargetId(cx, cz, obj),
           sourceId: source.id,
           kind: 'scatter',
           x: obj.x,

@@ -86,6 +86,58 @@ export interface EventMap {
     x: number;
     z: number;
   };
+  /**
+   * A harvest press resolved into items (harvest.ts outcome listener).
+   * UI shows feedback from this and refreshes inventory. cx/cz are
+   * the chunk containing the target, so the renderer can reload just
+   * that chunk (the harvested object vanishes). Yields are already
+   * merged by item (one entry per item).
+   */
+  'harvest:completed': {
+    targetId: string;
+    sourceId: string;
+    kind: 'scatter' | 'ground';
+    x: number;
+    z: number;
+    cx: number;
+    cz: number;
+    yields: { item: string; quantity: number }[];
+  };
+  /**
+   * A multi-step harvest (prototype TUG/STOMP) advanced but has not
+   * finished: progress is 0..1, no items granted, nothing depleted.
+   * UI shows progress from this; the next press on the same target
+   * continues from this progress.
+   */
+  'harvest:progress': {
+    targetId: string;
+    sourceId: string;
+    progress: number;
+  };
+  /**
+   * A harvest press that granted NOTHING (failure/feedback event).
+   * All-or-nothing: on any failure, no items move, nothing depletes,
+   * and multi-step progress is NOT consumed (a capacity failure at
+   * full progress leaves progress at 1, so freeing space and pressing
+   * again collects without redoing the steps). 'yields' carries the
+   * attempted yields on 'inventory-full' only, so UI can name what
+   * did not fit; it is empty otherwise.
+   */
+  'harvest:failed': {
+    targetId: string;
+    sourceId: string;
+    kind: 'scatter' | 'ground';
+    reason:
+      | 'out-of-range'
+      | 'already-harvested'
+      | 'below-permit'
+      | 'permit-tbd'
+      | 'anchor'
+      | 'not-harvestable'
+      | 'target-mismatch'
+      | 'inventory-full';
+    yields: { item: string; quantity: number }[];
+  };
 }
 
 type Handler<E> = (payload: E) => void;

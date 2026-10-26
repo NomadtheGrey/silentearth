@@ -25,6 +25,7 @@ import { marshWeight } from './biomes';
 import { SOURCE_FOR_KIND } from './objects';
 import type { MeshShape } from './objects';
 import { ProximityTracker } from './proximity';
+import { harvestState, wrapGenWithDepletion } from './harvest';
 import { createBiomeTexture, TEXTURE_REPEAT } from './terrain';
 import {
   CHUNK_SIZE,
@@ -196,6 +197,8 @@ export class WorldRenderer {
    *  mechanics, not presentation — the renderer only hosts it so no
    *  App.tsx wiring (and no claim) is needed to get it running. */
   private proximity: ProximityTracker;
+  /** Unsubscribe for the harvest:completed chunk reload (below). */
+  private unsubHarvestCompleted: (() => void) | null = null;
   private disposed = false;
   /** One shared procedural ground texture per biome (+ marsh), built from
    *  the current world seed. Cached, never per-chunk, so texture cost
@@ -207,9 +210,25 @@ export class WorldRenderer {
     gen: WorldGen,
     player: PlayerController,
   ) {
-    this.gen = gen;
+    // Depletion filtering lives on the generator the renderer (and its
+    // proximity tracker) actually use: harvested objects vanish from
+    // freshly generated chunks, so they stop rendering AND stop
+    // appearing as targets. The outcome listener (shell-owned, see
+    // harvest.ts) marks depletion in the shared harvestState.
+    this.gen = wrapGenWithDepletion(gen);
     this.player = player;
-    this.proximity = new ProximityTracker(gen);
+    this.proximity = new ProximityTracker(this.gen);
+    // Chunk reload on harvest completion: the harvested chunk is
+    // rebuilt from the (now filtered) generator, so the object
+    // visibly vanishes instead of lingering until the player walks
+    // away and the chunk streams out.
+    this.unsubHarvestCompleted = bus.on('harvest:completed', (p) => {
+      if (p.kind !== 'scatter') return;
+      const key = this.chunkKey(p.cx, p.cz);
+      if (!this.chunks.has(key)) return;
+      this.unloadChunk(p.cx, p.cz);
+      this.loadChunk(p.cx, p.cz);
+    });
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.setSize(container.clientWidth, container.clientHeight);
@@ -290,8 +309,10 @@ export class WorldRenderer {
 
   /** Swap the world generator (seed change): drop all chunks, re-stream. */
   setWorldGen(gen: WorldGen): void {
-    this.gen = gen;
-    this.proximity.setGen(gen);
+    // A new seed is a new world: depletion + progress do not carry over.
+    harvestState.clear();
+    this.gen = wrapGenWithDepletion(gen);
+    this.proximity.setGen(this.gen);
     this.disposeGroundTextures();
     for (const [key, loaded] of this.chunks) {
       this.disposeLoaded(loaded);
@@ -309,6 +330,8 @@ export class WorldRenderer {
 
   dispose(): void {
     this.disposed = true;
+    this.unsubHarvestCompleted?.();
+    this.unsubHarvestCompleted = null;
     this.proximity.dispose();
     cancelAnimationFrame(this.raf);
     window.removeEventListener('resize', this.onResize);
