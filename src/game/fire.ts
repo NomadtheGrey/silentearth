@@ -33,6 +33,24 @@
  * only, and no code path reads the candle. This flag stays until
  * his call lands; do not wire the candle in quietly.
  *
+ * LIGHT DIRECTION (Adam, 2026-10-26 — NOTED, NOT A BUILD ORDER:
+ * do not pull this into the fire/shelters round): when light
+ * work lands, it looks like this —
+ * - Day/night cycle ~10 minutes (Adam's "maybe" = starting
+ *   value, tunable, NOT pinned).
+ * - Darkness is a REAL mechanic: night is genuinely dark, not
+ *   cosmetic.
+ * - She carries a candle (personal light).
+ * - Torches are craftable for MORE light (brighter than the
+ *   candle).
+ * - AFTER torches, candles can be made for PLACING on the map
+ *   where she needs them (placeable lights).
+ * - Sequence: carried candle → torch → placeable candles.
+ * Nothing here builds any of it: no cycle, no darkness
+ * mechanic, no torch item, no placeable candle entity. And
+ * carried light does NOT settle the candle-as-starter flag
+ * above — that call is still open.
+ *
  * SCOPE BOUNDARIES: placement here is a cost-free engine
  * primitive — recipe/cost gating lives with Systems + UI, not in
  * placeFire. Lit fires STAY lit in this MVP: no extinguish, fuel,
