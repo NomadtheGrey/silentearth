@@ -56,12 +56,13 @@
  * stay temperate: the profile ranges already are (no monsoon,
  * no deep-freeze mechanics anywhere), so this ruling changes
  * NO numbers — it pins the frame future values must stay in.
- * PLACE (same ruling): the exact place is NOT named on the map
- * — location is conveyed LATER via clues/background details,
- * not a map label or named place. Do NOT build named-place
- * content in this round; clue/background details are future
- * content. Specific region is still TBD (Adam has not picked
- * one) — nothing here guesses it.
+ * PLACE (Adam, 2026-10-26, PINNED): GREAT LAKES / UPPER
+ * MIDWEST — Michigan, Wisconsin, northern Indiana/Ohio.
+ * The exact place is NOT named on the map — location is
+ * conveyed LATER via clues/background details, not a map
+ * label or named place. Do NOT build named-place content in
+ * this round; clue/background details are future content.
+ * No exact spot is named here either, per that rule.
  *
  * HOOKS, NOT BUILT (Adam's brief, explicit):
  * - Shelter modifier: the housing system does not exist yet, but
