@@ -445,6 +445,24 @@
  *   header line still reads "Nearby stations: workstation,
  *   loom" — it lists station contexts, not kinds, so it
  *   stays truthful but still does not name the stump.
+ * - STATION UI V1, LIVE (Adam, 2026-10-26): when she is at a
+ *   stump, a station panel appears in the HUD stack naming it
+ *   ("Tree stump") with one action: Craft, which opens the
+ *   crafting menu (already station-aware, so opening it at a
+ *   stump IS opening it with the stump active; no filtering
+ *   added, loom/hand recipes stay visible). The panel is a
+ *   capability list (StationPanel takes stationKind + an
+ *   actions array), so Move joins later as a second entry
+ *   without restructuring — Move is NOT built here and
+ *   nothing gates on tools she does not have yet. TRIGGER:
+ *   presence, not USE — the panel renders when workstation
+ *   presence is true and hides when she walks away, so
+ *   harvest USE is untouched by construction and no press is
+ *   swallowed. KIND NOTE: presence is booleans only and
+ *   workstation presence comes solely from stumps today, so
+ *   'stump' is the kind passed; the component maps all three
+ *   brief-named kinds (stump / workstation / Stumpy) so the
+ *   title follows from a prop when presence learns kinds.
  * POINTER DISCIPLINE: overlays are pointer-events-none except the
  * small interactive pieces (HUD buttons, panels, harvest buttons),
  * so world clicks — including the first-person mouse-capture click
@@ -495,6 +513,7 @@ import { HudShell } from './ui/HudShell';
 import { WitchHealth } from './ui/WitchHealth';
 import { HungerIndicator } from './ui/HungerIndicator';
 import { ShelteredIndicator } from './ui/ShelteredIndicator';
+import { StationPanel } from './ui/StationPanel';
 import { WornList, type WornGarment } from './ui/WornList';
 import { UmbrellaIcon } from './ui/UmbrellaIcon';
 import { FireState, type FireChipStatus } from './ui/FireState';
@@ -2466,6 +2485,21 @@ export default function App() {
               houseName={shelterHouseName}
             />
           </div>
+          {stationPresenceValue.workstation ? (
+            <div className="mt-2">
+              <StationPanel
+                stationKind="stump"
+                actions={[
+                  {
+                    id: 'craft',
+                    label: 'Craft',
+                    onSelect: () => setCraftingOpen(true),
+                  },
+                ]}
+                comfortable={isTouch}
+              />
+            </div>
+          ) : null}
           {placement ? (
             <div className="mt-2 rounded bg-black/50 px-2 py-1 text-sm">
               <p>Placing {placement.label} at your feet.</p>
