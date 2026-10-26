@@ -78,6 +78,8 @@ export { CraftingMenu } from './CraftingMenu';
 export type { CraftingMenuProps } from './CraftingMenu';
 export { CameraToggle } from './CameraToggle';
 export type { CameraToggleProps } from './CameraToggle';
+export { TouchControls } from './TouchControls';
+export type { TouchControlsProps } from './TouchControls';
 export { Popup } from './Popup';
 export type { PopupProps } from './Popup';
 export type {

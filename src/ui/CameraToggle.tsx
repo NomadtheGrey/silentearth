@@ -20,6 +20,8 @@ export interface CameraToggleProps {
   perspective: CameraPerspective;
   /** Called when the player picks a perspective. */
   onChange?: (perspective: CameraPerspective) => void;
+  /** Thumb-sized option buttons (44 px targets) on touch. Default false. */
+  comfortable?: boolean;
   /** Accent look for the active button. Default "mire". */
   theme?: UiThemeName;
 }
@@ -32,6 +34,7 @@ const OPTIONS: Array<{ value: CameraPerspective; label: string }> = [
 export function CameraToggle({
   perspective,
   onChange,
+  comfortable = false,
   theme = 'mire',
 }: CameraToggleProps) {
   const t = UI_THEMES[theme];
@@ -50,7 +53,9 @@ export function CameraToggle({
             aria-pressed={active}
             onClick={() => onChange?.(option.value)}
             className={
-              'rounded px-3 py-1 text-sm text-stone-100 ' +
+              (comfortable
+                ? 'rounded px-3 py-2 text-sm min-h-[44px] text-stone-100 '
+                : 'rounded px-3 py-1 text-sm text-stone-100 ') +
               (active ? t.active : 'bg-stone-700 hover:bg-stone-600')
             }
           >

@@ -70,6 +70,8 @@ export interface InventoryPanelProps {
   capacityText?: string;
   /** Called when the panel is closed. Optional. */
   onClose?: () => void;
+  /** Thumb-sized action buttons (44 px targets) on touch. Default false. */
+  comfortable?: boolean;
   /** Look for the panel. Default "mire" (gathering / the world outside). */
   theme?: UiThemeName;
 }
@@ -86,9 +88,16 @@ export function InventoryPanel({
   onDepositItem,
   capacityText,
   onClose,
+  comfortable = false,
   theme = 'mire',
 }: InventoryPanelProps) {
   const t = UI_THEMES[theme];
+  const actionBtn = comfortable
+    ? 'rounded bg-[#3a4436] px-3 py-2 text-sm min-h-[44px] hover:bg-[#4a5546]'
+    : 'rounded bg-[#3a4436] px-2 py-1 text-xs hover:bg-[#4a5546]';
+  const closeBtn = comfortable
+    ? 'rounded px-3 py-2 text-sm min-h-[44px] ' + t.button
+    : 'rounded px-2 py-1 text-sm ' + t.button;
   return (
     <section aria-label="Inventory" className={'rounded p-3 ' + t.panel}>
       <div className="mb-1 flex items-center justify-between gap-2">
@@ -98,7 +107,7 @@ export function InventoryPanel({
             type="button"
             onClick={onClose}
             aria-label="Close inventory"
-            className={'rounded px-2 py-1 text-sm ' + t.button}
+            className={closeBtn}
           >
             Close
           </button>
@@ -151,7 +160,7 @@ export function InventoryPanel({
                     type="button"
                     onClick={() => onPlaceItem(item.id)}
                     aria-label={`Place ${item.name}`}
-                    className="rounded bg-[#3a4436] px-2 py-1 text-xs hover:bg-[#4a5546]"
+                    className={actionBtn}
                   >
                     Place
                   </button>
@@ -161,7 +170,7 @@ export function InventoryPanel({
                     type="button"
                     onClick={() => onEatItem(item.id)}
                     aria-label={`Eat ${item.name}`}
-                    className="rounded bg-[#3a4436] px-2 py-1 text-xs hover:bg-[#4a5546]"
+                    className={actionBtn}
                   >
                     Eat
                   </button>
@@ -171,7 +180,7 @@ export function InventoryPanel({
                     type="button"
                     onClick={() => onDepositItem(item.id)}
                     aria-label={`Deposit ${item.name} at ${storage.label}`}
-                    className="rounded bg-[#3a4436] px-2 py-1 text-xs hover:bg-[#4a5546]"
+                    className={actionBtn}
                   >
                     Deposit
                   </button>
@@ -219,7 +228,7 @@ export function InventoryPanel({
                       type="button"
                       onClick={() => storage.onWithdrawItem?.(item.id)}
                       aria-label={`Withdraw ${item.name} from ${storage.label}`}
-                      className="rounded bg-[#3a4436] px-2 py-1 text-xs hover:bg-[#4a5546]"
+                      className={actionBtn}
                     >
                       Withdraw
                     </button>
