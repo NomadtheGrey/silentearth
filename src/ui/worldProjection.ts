@@ -21,6 +21,11 @@
  * - Third-person: position player + offset, lookAt (player.x, 0,
  *   player.z) — the overhead camera looks at the player on the
  *   ground.
+ * - Behind: position player minus facing-forward x distance at
+ *   behind height, lookAt player plus facing-forward x look-ahead
+ *   at look height — the over-shoulder camera, mirroring the
+ *   renderer branch exactly (same BEHIND_* constants, passed in
+ *   as arguments like thirdOffset).
  *
  * BEHIND THE CAMERA: project() returns null when the point is
  * behind the camera (NDC z outside the visible range). Callers
@@ -52,13 +57,22 @@ export interface ProjectionInput {
   /** First-person yaw in radians. */
   yaw: number;
   /** Current perspective. */
-  mode: 'first' | 'third';
+  mode: 'first' | 'third' | 'behind';
+  /** Witch facing in radians (forward = (sin facing, cos facing)). */
+  facing: number;
   /** Viewport aspect (width / height) at call time. */
   aspect: number;
   /** First-person eye height (PLAYER_EYE_HEIGHT in constants). */
   eyeHeight: number;
   /** Third-person camera offset (THIRD_PERSON_OFFSET in constants). */
   thirdOffset: { x: number; y: number; z: number };
+  /** Behind camera framing (BEHIND_* in constants). */
+  behindCamera: {
+    distance: number;
+    height: number;
+    lookAhead: number;
+    lookHeight: number;
+  };
 }
 
 /** Screen position in percent (0–100), matching WorldAnchor's x/y. */
@@ -84,6 +98,19 @@ export function projectWorldToScreen(
     camera.position.set(input.playerX, input.eyeHeight, input.playerZ);
     camera.rotation.order = 'YXZ';
     camera.rotation.set(input.pitch, input.yaw, 0);
+  } else if (input.mode === 'behind') {
+    const fx = Math.sin(input.facing);
+    const fz = Math.cos(input.facing);
+    camera.position.set(
+      input.playerX - fx * input.behindCamera.distance,
+      input.behindCamera.height,
+      input.playerZ - fz * input.behindCamera.distance,
+    );
+    camera.lookAt(
+      input.playerX + fx * input.behindCamera.lookAhead,
+      input.behindCamera.lookHeight,
+      input.playerZ + fz * input.behindCamera.lookAhead,
+    );
   } else {
     camera.position.set(
       input.playerX + input.thirdOffset.x,

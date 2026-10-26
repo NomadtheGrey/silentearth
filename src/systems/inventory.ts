@@ -312,6 +312,17 @@ export interface InventoryStack {
   quantity: number;
 }
 
+/**
+ * Result of addPartial(): the normalized item, how much actually
+ * landed in the pack, and how much did not fit. granted +
+ * remainder === the requested quantity, always.
+ */
+export interface PartialGrant {
+  item: ItemId;
+  granted: number;
+  remainder: number;
+}
+
 /** Thrown by add() when a non-gear addition would exceed capacity. */
 export class InventoryCapacityError extends Error {
   readonly item: ItemId;
@@ -383,6 +394,31 @@ export class PersonalInventory implements CraftingInventory {
       throw new InventoryCapacityError(id, quantity, this.free());
     }
     this.stacks.set(id, this.count(id) + quantity);
+  }
+
+  /**
+   * Partial grant (harvest overflow, 2026-10-26): add what fits,
+   * return the remainder instead of throwing. granted + remainder
+   * always equals the requested quantity, and a full pack grants
+   * 0 with the whole quantity as remainder — never a throw for
+   * lack of room (invalid quantities still throw, exactly like
+   * add()). Gear and worn garments always fit in full, mirroring
+   * canCarry()/add(): adding a basket while full must still work.
+   * The harvest listener uses this to split fits vs remainder;
+   * the remainder becomes a ground pile (see ./piles.ts), never
+   * silently dropped. add() itself is unchanged — crafting keeps
+   * its hard cap and its atomicity.
+   */
+  addPartial(item: ItemId, quantity: number): PartialGrant {
+    assertPositiveInteger(quantity, 'addPartial');
+    const id = normalizeItemId(item);
+    const granted = isCarryingGear(id) || this.worn.has(id)
+      ? quantity
+      : Math.min(quantity, this.free());
+    if (granted > 0) {
+      this.stacks.set(id, this.count(id) + granted);
+    }
+    return { item: id, granted, remainder: quantity - granted };
   }
 
   remove(item: ItemId, quantity: number): void {

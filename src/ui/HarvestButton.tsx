@@ -111,7 +111,7 @@ export function RemoveButton({
       onClick={() => onRemove?.(target)}
       aria-label={`${removeLabel} ${target.name} permanently`}
       className={
-        'flex items-center gap-2 rounded-full px-3 py-1.5 text-sm shadow-lg transition-transform hover:scale-105 ' +
+        'flex min-h-[44px] items-center gap-2 rounded-full px-3 py-1.5 text-sm shadow-lg transition-transform hover:scale-105 ' +
         t.panel
       }
     >
@@ -138,7 +138,7 @@ export function HarvestButton({
       onClick={() => onHarvest?.(harvestRequestFor(target))}
       aria-label={`${action} ${target.name}`}
       className={
-        'flex items-center gap-2 rounded-full px-3 py-1.5 text-sm shadow-lg transition-transform hover:scale-105 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:scale-100 ' +
+        'flex min-h-[44px] items-center gap-2 rounded-full px-3 py-1.5 text-sm shadow-lg transition-transform hover:scale-105 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:scale-100 ' +
         t.panel
       }
     >

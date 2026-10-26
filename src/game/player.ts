@@ -232,6 +232,17 @@ export class PlayerController {
       -1.45,
       Math.min(1.45, this.pitch - dy * LOOK_SENSITIVITY),
     );
+    // Behind view: look-drag rotates FACING, not just the
+    // view — the behind camera sits behind facing, so without
+    // this a standing-still look would change nothing on
+    // screen. Facing = yaw + PI keeps the existing convention
+    // (yaw = 0 faces -z; forward from facing is (sin facing,
+    // cos facing); forward-walking in first-person already
+    // yields facing = yaw + PI). Movement keeps setting
+    // facing from travel direction, as in every mode.
+    if (this.mode === 'behind') {
+      this.facing = this.yaw + Math.PI;
+    }
     const now = performance.now();
     if (now - this.lastLookEmit >= 100) {
       this.lastLookEmit = now;
@@ -259,9 +270,36 @@ export class PlayerController {
     }
   };
 
+  /**
+   * Pitch default (sky-trap fix, Adam 2026-10-26): reset pitch to
+   * horizontal (0). Called when entering first-person (inside
+   * toggleCamera) and on world regenerate/new seed (App's
+   * regenerate) — pitch otherwise persists across mode switches
+   * and regenerations, so a witch left staring at the sky would
+   * stay staring at the sky in first-person. Only pitch moves:
+   * yaw, facing, and position are untouched. Emits 'player:looked'
+   * directly (not throttled — a discrete state change, like
+   * 'camera:switched') so proximity's look-down gate drops stale
+   * pitch immediately instead of waiting for the next mouse move.
+   * Third-person and behind views are unaffected in behavior —
+   * neither reads pitch for framing.
+   */
+  resetLook(): void {
+    this.pitch = 0;
+    bus.emit('player:looked', { pitch: 0, mode: this.mode });
+  }
+
   toggleCamera(): void {
-    this.mode = this.mode === 'first' ? 'third' : 'first';
+    this.mode =
+      this.mode === 'first'
+        ? 'third'
+        : this.mode === 'third'
+          ? 'behind'
+          : 'first';
     if (this.mode === 'first') {
+      // Entering first-person re-defaults pitch to horizontal
+      // (sky-trap fix — see resetLook).
+      this.resetLook();
       // Best effort: a keydown counts as a user gesture for pointer lock.
       try {
         this.canvas?.requestPointerLock();
@@ -315,9 +353,12 @@ export class PlayerController {
       stage === 'hungry' || stage === 'too-hungry' ? HUNGRY_SPEED_MULTIPLIER : 1;
     const speed = PLAYER_SPEED * terrain * hunger * magnitude;
 
-    if (this.mode === 'first') {
+    if (this.mode === 'first' || this.mode === 'behind') {
       // Movement relative to view yaw (yaw = 0 faces -z). Rotate the local
       // input (fx = right, fz = back) by yaw around Y into world space.
+      // Behind view shares this branch: yaw-relative movement IS
+      // facing-relative there, because applyLook syncs facing to
+      // view direction in behind mode (see below).
       const sin = Math.sin(this.yaw);
       const cos = Math.cos(this.yaw);
       const wx = fx * cos + fz * sin;

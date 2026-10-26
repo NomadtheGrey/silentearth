@@ -8,8 +8,9 @@
  * reported through `onChange`. This control never switches a camera,
  * never reads engine state, and owns no mode of its own.
  *
- * Perspectives are the redesign's pinned player choice: first-person
- * or third-person overhead. Labels are plain words, not engine terms.
+ * Perspectives are the redesign's pinned player choice: first-person,
+ * third-person overhead, or behind-the-witch follow. Labels are
+ * plain words, not engine terms.
  */
 
 import type { CameraPerspective } from './types';
@@ -29,6 +30,7 @@ export interface CameraToggleProps {
 const OPTIONS: Array<{ value: CameraPerspective; label: string }> = [
   { value: 'first', label: 'First-person' },
   { value: 'third', label: 'Third-person overhead' },
+  { value: 'behind', label: 'Behind' },
 ];
 
 export function CameraToggle({

@@ -21,6 +21,20 @@
  * - hunger meter value, wardrobe worn list
  * - placed fires (type + position + lit flag), placed houses
  *   (type + position + stored contents), placed looms (position)
+ * - ground piles (item + quantity + position, see ./piles.ts):
+ *   the harvest-overflow remainder. Piles are OPTIONAL on read
+ *   (an old save without them loads with piles: []) and always
+ *   written by serializeSave — so the version STAYS 1 on
+ *   purpose: bumping to 2 would make Adam's existing v1 save
+ *   unreadable (fresh start, progress lost) for an additive
+ *   field, and old code already ignores unknown fields. A v2
+ *   is a migration decision for later, not this landing.
+ *   APP WIRING FOLLOWS THE PILE ENTITY (Background): saveNow
+ *   passes the pile singleton's snapshot as draft.piles, and
+ *   boot restore re-places each saved pile through the
+ *   entity spawner, the same shape as fires/houses/looms.
+ *   Until that wiring lands, piles are session-only — stated,
+ *   not silent.
  *
  * WHAT IS RECORDED BUT NOT RESTORED (stated, not silent):
  * - A fire's LIT state is saved (lit: true/false) but restore
@@ -58,6 +72,7 @@
 // ---------------------------------------------------------------------------
 
 import { normalizeItemId } from './inventory';
+import type { GroundPile } from './piles';
 
 /** Storage key. The version rides inside the document too. */
 export const SAVE_KEY = 'silentearth-save-v1';
@@ -65,7 +80,8 @@ export const SAVE_KEY = 'silentearth-save-v1';
 /** The only save version this code reads or writes. */
 export const SAVE_VERSION = 1;
 
-export type SaveCameraMode = 'first' | 'third';
+/** 'behind' added 2026-10-26 (UI's third perspective): before this, a save made in behind view reloaded as fresh, because deserialize rejected the mode. */
+export type SaveCameraMode = 'first' | 'third' | 'behind';
 
 export interface SavedFire {
   type: string;
@@ -99,6 +115,8 @@ export interface SaveData {
   fires: SavedFire[];
   houses: SavedHouse[];
   looms: SavedLoom[];
+  /** Ground piles (harvest overflow); [] for old saves. */
+  piles: GroundPile[];
 }
 
 /** Draft input to serializeSave — the shell's live values. */
@@ -117,6 +135,17 @@ export interface SaveDraft {
     contents: ReadonlyArray<{ item: string; quantity: number }>;
   }>;
   looms: ReadonlyArray<{ x: number; z: number }>;
+  /**
+   * Ground piles from the pile source (Background's singleton,
+   * once it lands). OPTIONAL so existing saveNow call sites
+   * keep compiling unchanged until that wiring exists.
+   */
+  piles?: ReadonlyArray<{
+    item: string;
+    quantity: number;
+    x: number;
+    z: number;
+  }>;
 }
 
 /**
@@ -180,6 +209,25 @@ export function serializeSave(draft: SaveDraft): SaveData {
       contents: normalizeStacks(house.contents),
     })),
     looms: draft.looms.map((loom) => ({ x: loom.x, z: loom.z })),
+    // Piles: normalized ids, invalid entries dropped (same
+    // filtering rule as normalizeStacks). Order preserved —
+    // positions matter, so piles are never merged here.
+    piles: (draft.piles ?? [])
+      .filter(
+        (pile) =>
+          typeof pile.item === 'string' &&
+          pile.item.length > 0 &&
+          Number.isInteger(pile.quantity) &&
+          pile.quantity > 0 &&
+          Number.isFinite(pile.x) &&
+          Number.isFinite(pile.z),
+      )
+      .map((pile) => ({
+        item: normalizeItemId(pile.item),
+        quantity: pile.quantity,
+        x: pile.x,
+        z: pile.z,
+      })),
   };
 }
 
@@ -225,7 +273,11 @@ export function deserializeSave(value: unknown): SaveData | null {
     if (value.version !== SAVE_VERSION) return null;
     if (!isFiniteNumber(value.savedAt)) return null;
     if (typeof value.seed !== 'string' || value.seed.length === 0) return null;
-    if (value.cameraMode !== 'first' && value.cameraMode !== 'third') {
+    if (
+      value.cameraMode !== 'first' &&
+      value.cameraMode !== 'third' &&
+      value.cameraMode !== 'behind'
+    ) {
       return null;
     }
     if (!isPosition(value.position)) return null;
@@ -278,6 +330,36 @@ export function deserializeSave(value: unknown): SaveData | null {
       if (!isPosition(entry)) return null;
       looms.push({ x: entry.x, z: entry.z });
     }
+    // Piles are optional on read: an old v1 save without them
+    // loads with piles: []. When present, a malformed entry
+    // makes the whole document corrupt (same strictness as
+    // fires/houses — a half-valid pile list must not restore
+    // piles onto wrong positions).
+    const piles: GroundPile[] = [];
+    if (value.piles !== undefined) {
+      if (!Array.isArray(value.piles)) return null;
+      for (const entry of value.piles) {
+        if (!isRecord(entry)) return null;
+        if (typeof entry.item !== 'string' || entry.item.length === 0) {
+          return null;
+        }
+        if (
+          !Number.isInteger(entry.quantity) ||
+          (entry.quantity as number) <= 0
+        ) {
+          return null;
+        }
+        if (!isFiniteNumber(entry.x) || !isFiniteNumber(entry.z)) {
+          return null;
+        }
+        piles.push({
+          item: normalizeItemId(entry.item),
+          quantity: entry.quantity as number,
+          x: entry.x,
+          z: entry.z,
+        });
+      }
+    }
     return {
       version: SAVE_VERSION,
       savedAt: value.savedAt,
@@ -290,6 +372,7 @@ export function deserializeSave(value: unknown): SaveData | null {
       fires,
       houses,
       looms,
+      piles,
     };
   } catch {
     return null;

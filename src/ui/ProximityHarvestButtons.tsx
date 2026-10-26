@@ -4,11 +4,16 @@
  *
  * Silent Earth redesign — proximity harvest buttons (UI lane, presentation only).
  *
- * The layer that turns in-range targets into buttons, world-anchored:
- * each target gets a HarvestButton inside a WorldAnchor at the
- * target's screen point, so the button sits on the thing it harvests
- * — a bush, a log, or the ground underfoot. No separate screen,
- * no panel, no list: the world itself is the menu.
+ * The layer that turns in-range targets into buttons, screen-fixed:
+ * one column fixed just above the middle of the screen (bottom
+ * edge at 52% of view height, so it grows upward, never over the
+ * middle), holding a button per target. The world-anchored
+ * version slid up behind screen UI as the camera moved; this
+ * version stays put, so every in-range target stays reachable
+ * and tappable. No separate screen, no panel: the column is
+ * the menu, and it renders above panel layers (z-40) and below
+ * modals (z-50) — the caller places this component in a z-40
+ * overlay for that layering to hold.
  *
  * Appearance and disappearance are the caller's doing, by design:
  * the caller passes ONLY in-range targets, mapped from the bus's
@@ -32,10 +37,20 @@
  * output is the gate. A caller bypassing the tracker owns
  * gating for the targets it passes directly.
  *
- * Render this inside a relatively-positioned overlay (e.g. HudShell)
- * so the anchors position against the game view. A press on any
+ * Order is the passed order: the tracker emits the ground target
+ * first when eligible (it is at her feet, so nearest) and scatter
+ * sorted by distance — no re-sort here, and HarvestTarget carries
+ * no distance field to sort by. Each button already names its
+ * target (HarvestButton shows verb + name), and buttons are
+ * thumb-sized (min 44 px tall). The column scrolls past 40vh so
+ * a crowd of targets never covers the screen. A press on any
  * button reports its HarvestRequest through onHarvest; outcome
  * (items into inventory) is the next step, not this component.
+ * NOTE: the targets' anchorX/anchorY are no longer consumed
+ * here (position is screen-fixed now); the caller still computes
+ * them in its shared projection pass, which also serves fire
+ * and placement anchors. Removing harvest projection is a
+ * follow-up cleanup, not part of this position-only change.
  *
  * REMOVE OPTION (Adam, 2026-10-26): when the caller passes
  * onRemove, each SCATTER target also gets a RemoveButton stacked
@@ -49,7 +64,6 @@
  */
 
 import { Fragment } from 'react';
-import { WorldAnchor } from './WorldAnchor';
 import { HarvestButton, RemoveButton } from './HarvestButton';
 import type { HarvestTarget, HarvestRequest } from './proximityHarvest';
 import type { UiThemeName } from './themes';
@@ -83,34 +97,32 @@ export function ProximityHarvestButtons({
     return null;
   }
   return (
-    <>
+    <div className="pointer-events-auto absolute bottom-[52%] left-1/2 z-40 flex max-h-[40vh] w-max max-w-[calc(100vw-1rem)] -translate-x-1/2 flex-col items-center gap-2 overflow-y-auto px-1 py-1">
       {targets.map((target) => (
         <Fragment key={target.id}>
-          <WorldAnchor x={target.anchorX} y={target.anchorY} interactive>
-            {target.kind === 'scatter' && onRemove ? (
-              <div className="flex flex-col items-center gap-1">
-                <HarvestButton
-                  target={target}
-                  onHarvest={onHarvest}
-                  theme={theme}
-                />
-                <RemoveButton
-                  target={target}
-                  onRemove={onRemove}
-                  removeLabel={removeLabel}
-                  theme={theme}
-                />
-              </div>
-            ) : (
+          {target.kind === 'scatter' && onRemove ? (
+            <div className="flex flex-col items-center gap-1">
               <HarvestButton
                 target={target}
                 onHarvest={onHarvest}
                 theme={theme}
               />
-            )}
-          </WorldAnchor>
+              <RemoveButton
+                target={target}
+                onRemove={onRemove}
+                removeLabel={removeLabel}
+                theme={theme}
+              />
+            </div>
+          ) : (
+            <HarvestButton
+              target={target}
+              onHarvest={onHarvest}
+              theme={theme}
+            />
+          )}
         </Fragment>
       ))}
-    </>
+    </div>
   );
 }

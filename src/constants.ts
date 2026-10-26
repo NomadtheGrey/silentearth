@@ -41,6 +41,19 @@ export const PLAYER_SPEED = 5;
 export const PLAYER_EYE_HEIGHT = 1.7;
 /** Third-person overhead follow offset (above + behind the witch). */
 export const THIRD_PERSON_OFFSET = { x: 0, y: 16, z: 10 };
+/**
+ * Behind-the-witch follow framing (Adam, 2026-10-26 — starting
+ * tunables for his pin pass, NOT pinned): the camera sits this
+ * far behind her facing at this height, looking at a point this
+ * far ahead of her at this height — her back in frame low, the
+ * view ahead dominating. Forward from facing is (sin facing,
+ * cos facing); see player.ts. Shared by the renderer and the
+ * UI projection helper so both place from the same numbers.
+ */
+export const BEHIND_CAMERA_DISTANCE = 3.5;
+export const BEHIND_CAMERA_HEIGHT = 2.4;
+export const BEHIND_LOOK_AHEAD = 4;
+export const BEHIND_LOOK_HEIGHT = 1.2;
 /** Default world seed (a string; any string is a valid seed). */
 export const DEFAULT_SEED = 'silent-earth-001';
 /** Keys that toggle the camera. Both work; V is the documented one. */

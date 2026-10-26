@@ -116,6 +116,13 @@ export interface EventMap {
     yields: { item: string; quantity: number }[];
     /** Which action produced this completion ('harvest' or 'remove'). */
     action: 'harvest' | 'remove';
+    /**
+     * Overflow that did not fit (harvest overflow, Adam 2026-10-26):
+     * what fits is in `yields`; the rest dropped as ground piles at
+     * the target's spot (see pileState.ts). Absent when everything
+     * fit. UI renders granted + dropped separately.
+     */
+    dropped?: { item: string; quantity: number }[];
   };
   /**
    * A multi-step harvest (prototype TUG/STOMP) advanced but has not
@@ -130,12 +137,14 @@ export interface EventMap {
   };
   /**
    * A harvest press that granted NOTHING (failure/feedback event).
-   * All-or-nothing: on any failure, no items move, nothing shrinks or is removed,
-   * and multi-step progress is NOT consumed (a capacity failure at
-   * full progress leaves progress at 1, so freeing space and pressing
-   * again collects without redoing the steps). 'yields' carries the
-   * attempted yields on 'inventory-full' only, so UI can name what
-   * did not fit; it is empty otherwise.
+   * On any failure, no items move, nothing shrinks or is removed,
+   * and multi-step progress is NOT consumed. NOTE (harvest
+   * overflow, Adam 2026-10-26): capacity is no longer a failure —
+   * a harvest that does not fit COMPLETES with the overflow
+   * dropped as ground piles (see pileState.ts), so 'inventory-full'
+   * is no longer emitted by this listener; the reason literal
+   * stays in the union for compatibility, and 'yields' still
+   * carries attempted yields on it should any caller emit it.
    */
   'harvest:failed': {
     targetId: string;
@@ -155,6 +164,24 @@ export interface EventMap {
       | 'too-hungry';
     yields: { item: string; quantity: number }[];
   };
+  /**
+   * Dropped piles (harvest overflow, Adam 2026-10-26 — see
+   * pileState.ts). 'pile:dropped' fires for a NEW pile only;
+   * 'pile:changed' fires when a drop merges into an existing pile
+   * or a pickup takes part of one; 'pile:removed' fires when a
+   * pile empties. The tracker carries in-range piles separately
+   * as 'piles:inRange' (change-only, like 'harvest:inRange').
+   * 'pile:pickup-requested' is UI's future pile button → Systems'
+   * pickup grant listener (Systems' half, not emitted by the
+   * engine yet — no pile buttons exist until UI builds them).
+   */
+  'pile:dropped': { id: string; item: string; quantity: number; x: number; z: number };
+  'pile:changed': { id: string; item: string; quantity: number; x: number; z: number };
+  'pile:removed': { id: string };
+  'piles:inRange': {
+    piles: { id: string; item: string; quantity: number; x: number; z: number; distance: number }[];
+  };
+  'pile:pickup-requested': { pileId: string };
   /**
    * The dominant-biome weather regime changed at her position
    * (emitted by the proximity tracker — see weather.ts for the

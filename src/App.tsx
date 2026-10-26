@@ -297,6 +297,117 @@
  *   ~36 px, clear of the stick and USE buttons (which end
  *   96 px up) and of the top HUD bars; desktop gets the same
  *   chip, small and unobtrusive, and is otherwise unchanged.
+ * - TURNING FIX, LIVE (Adam, 2026-10-26): first-person
+ *   turning could not happen on a portrait phone because the
+ *   expanded touch stack (max-w-sm ≈ full phone width, z-30)
+ *   sat over the look field (right half, z-20), and an open
+ *   bottom sheet (60vh) plus the stack together covered the
+ *   full height — no open world left to drag on. Two changes,
+ *   both size/placement, no z-order hack, no panel behaviour
+ *   change: (1) the expanded touch stack is capped at
+ *   max-w-[46vw], so the right half stays open world in every
+ *   touch state (desktop keeps max-w-sm); (2) Hide HUD —
+ *   already a fixed top-right control outside the stack and
+ *   the sheets (z-40, visible in every expanded state) — now
+ *   also closes both panels, so one tap fully reclaims the
+ *   look field. Panel taps and scrolling are untouched
+ *   (pointer-events-auto + overflow-y throughout, 44 px
+ *   targets kept). Per-state look geometry: collapsed, no
+ *   panels — right half free except the slim bar + corners;
+ *   collapsed + sheet — middle band free, sheet Close one
+ *   tap; expanded, no panels — right half free; expanded +
+ *   sheet — right half upper 40% free, Hide one tap; a
+ *   perspective switch with panels open strands nothing
+ *   because Hide stays visible above the sheet. The one
+ *   exception is an open modal (z-50), which closes in one
+ *   tap via its X or backdrop. Look deltas are direction-
+ *   neutral (addLookDelta gateless both ways), so left and
+ *   right turn symmetric once the field is uncovered.
+ * - TURNING FIX, PART 2 — TOUCH SENSITIVITY (Adam, 2026-10-26):
+ *   Adam's answers (no panels open, three worlds, fresh drag
+ *   failing) killed panel coverage as the whole story, so the
+ *   no-panels path was probed: handlers verified correct
+ *   (start/move/end/cancel all guard the touch id, deltas
+ *   fire every move, no bounds check, applyTouchLook gateless,
+ *   engine yaw -= dx * 0.0025); collapsed/no-panels coverage
+ *   audited (nothing over the right half — slim bar top strip
+ *   only, HudShell needs div null when collapsed, empty panels
+ *   column zero-height, chip + transition pointer-events-none,
+ *   WorldAnchor pointer-events-none except small button rects);
+ *   stuck-id cleared (end + cancel both clear on matching id,
+ *   stick/look separated by id, no remount path). What
+ *   reproduces is sensitivity + right-edge travel: 40 px =
+ *   5.7°, 60 px = 8.6° at mouse sensitivity, and a right-drag
+ *   from a natural thumb start caps at ~90 px (12.9°) where a
+ *   left-drag reaches 300 px (43°). Fix: shell-side
+ *   TOUCH_LOOK_SCALE = 3 (effective 0.0075 rad/px, engine
+ *   mouse sensitivity untouched, pitch clamp still applies):
+ *   40 px = 17°, 60 px = 26°, max-right 90 px = 39°.
+ *   Lane-decided starting value for Adam's pin pass.
+ * - BEHIND CAMERA, LIVE (Adam, 2026-10-26): a third player-chosen
+ *   perspective — over-shoulder follow. The camera sits 3.5 m
+ *   behind her facing at 2.4 m height, looking at a point 4 m
+ *   ahead at 1.2 m (BEHIND_* tunables in constants, starting
+ *   values for Adam's pin pass): her back in frame low, the
+ *   view ahead dominating — not the +16 m overhead, not ground
+ *   level. V/C cycles first → third → behind; the CameraToggle
+ *   picks directly (the shell steps the engine toggle forward
+ *   to the picked mode, since one toggle is one step). Facing
+ *   rule (behind view only): movement is yaw-relative, which
+ *   is facing-relative because look-drag syncs facing to view
+ *   direction in behind mode (player.ts); the camera follows
+ *   behind facing, so standing-still looks turn the view.
+ *   Third-person overhead stays world-aligned; its ground
+ *   fallback rule (ground only when no scatter in range)
+ *   covers behind too via the tracker's non-first branch.
+ *   Witch mesh visible in behind (and third), hidden in first.
+ *   Desktop mouse-look stays first-person-only (pointer-lock
+ *   gate untouched): desktop behind turning works via walking
+ *   plus V/C. FLAG, pre-merge Systems follow-up (not this
+ *   lane's file, deliberately untouched): save validation
+ *   still accepts only first/third — a save made in behind
+ *   mode reloads as a fresh start until Systems accepts
+ *   'behind' in deserializeSave. Do not merge this view to
+ *   main until that one-liner lands.
+ * - TURN STICK, LIVE (Adam, 2026-10-26, his direct order after
+ *   a playtest): a second joystick for turning, like the move
+ *   stick. The x3 drag fix treated perception, but Adam's real
+ *   problem was travel: his thumb rests near the right edge
+ *   (~half an inch of right travel), and a center-started drag
+ *   misses or clips the right-half look field. The stick is
+ *   bounded by its own radius, not the screen edge, and it is
+ *   rate-based: hold it deflected and the view keeps turning
+ *   (full deflection 1200 drag-px/s = 3 rad/s, TURN_STICK_
+ *   PX_PER_SEC, starting value for his pin pass) — no more
+ *   re-sliding for a big turn. Placement: 128 px ring above
+ *   USE, bottom-right (16 px gap), same pulse-until-first-use
+ *   pattern as MOVE with a TURN label; rendered after the
+ *   look field so its touches land on the stick. The shell
+ *   holds the deflection in a frame loop feeding the existing
+ *   addLookDelta — no engine change, no game/systems files.
+ *   Drag-look, the move stick, and USE are unchanged; the
+ *   stick and look track separate touches, so all three can
+ *   run at once.
+ * - SCREEN-FIXED HARVEST BUTTONS, LIVE (Adam, 2026-10-26):
+ *   proximity buttons no longer ride WorldAnchor projection
+ *   (they slid up behind screen UI as the camera moved).
+ *   They now render as one column fixed just above screen
+ *   middle (bottom edge at 52% of view height, growing
+ *   upward, scrolling past 40vh), in passed order — ground
+ *   first when eligible (at her feet, so nearest), then
+ *   scatter by distance; no re-sort, and HarvestTarget
+ *   carries no distance field. Each button already names
+ *   its target (verb + name); buttons are now thumb-sized
+ *   (min 44 px tall). Remove stays stacked under Harvest
+ *   for scatter only, never for ground. LAYERING: the
+ *   buttons live in their own z-40 overlay — above panels
+ *   (z-30), below modals (z-50); a z-40 child inside the
+ *   z-30 world overlay would still paint under the panels.
+ *   Target data and harvest behavior are unchanged;
+ *   position only. NOTE: the targets' anchorX/anchorY are
+ *   no longer consumed by the buttons (the shared projection
+ *   pass still computes them for fire/placement anchors);
+ *   removing harvest projection is a follow-up cleanup.
  * POINTER DISCIPLINE: overlays are pointer-events-none except the
  * small interactive pieces (HUD buttons, panels, harvest buttons),
  * so world clicks — including the first-person mouse-capture click
@@ -331,6 +442,10 @@ import {
   DEFAULT_SEED,
   PLAYER_EYE_HEIGHT,
   THIRD_PERSON_OFFSET,
+  BEHIND_CAMERA_DISTANCE,
+  BEHIND_CAMERA_HEIGHT,
+  BEHIND_LOOK_AHEAD,
+  BEHIND_LOOK_HEIGHT,
 } from './constants';
 import type { CameraMode, BiomeWeights } from './types';
 import { Wardrobe, GARMENTS } from './systems/clothes';
@@ -515,6 +630,30 @@ interface PlacementMode {
  * a pin-pass change to the number flows through untouched.
  */
 const UMBRELLA_ITEM_ID = ITEMS.umbrella;
+
+/**
+ * Touch look scale (turning fix, Adam 2026-10-26): touch
+ * travel is far shorter than mouse travel, so raw pixels
+ * under-turn — a 40 px thumb slide is 5.7° at the mouse
+ * 0.0025 rad/px, and a right-drag from a natural thumb start
+ * caps at ~90 px (12.9°) where a left-drag reaches 300 px
+ * (43°). x3 (effective 0.0075 rad/px): 40 px = 17°,
+ * 60 px = 26°, max-right 90 px = 39°. Lane-decided starting
+ * value for Adam's pin pass; the engine's mouse sensitivity
+ * and pitch clamp are untouched.
+ */
+const TOUCH_LOOK_SCALE = 3;
+
+/**
+ * Turn-stick rate: full stick deflection feeds the engine's
+ * addLookDelta this many drag-equivalent px per second — 3
+ * rad/s at the engine's 0.0025 rad/px, so a 90° turn takes
+ * ~0.5 s at full deflection, ~1 s at half. Lane-decided
+ * starting value for Adam's pin pass; pitch uses the same
+ * rate and the engine's ±1.45 clamp still applies. The dead
+ * zone lives in TouchControls (0.25, same as the move stick).
+ */
+const TURN_STICK_PX_PER_SEC = 1200;
 
 /**
  * Foods that gain an Eat button in the inventory panel:
@@ -832,9 +971,16 @@ export default function App() {
       pitch: player.pitch,
       yaw: player.yaw,
       mode: player.mode,
+      facing: player.facing,
       aspect: width / height,
       eyeHeight: PLAYER_EYE_HEIGHT,
       thirdOffset: THIRD_PERSON_OFFSET,
+      behindCamera: {
+        distance: BEHIND_CAMERA_DISTANCE,
+        height: BEHIND_CAMERA_HEIGHT,
+        lookAhead: BEHIND_LOOK_AHEAD,
+        lookHeight: BEHIND_LOOK_HEIGHT,
+      },
     });
     if (!point) return null;
     if (kind === 'ground') {
@@ -1182,6 +1328,11 @@ export default function App() {
     const spawn = gen.findSpawn();
     player.x = spawn.x;
     player.z = spawn.z;
+    // Sky-trap fix (Adam 2026-10-26): regenerate does NOT recreate
+    // the player, so pitch would otherwise survive a seed change —
+    // re-default it to horizontal here (toggleCamera covers the
+    // mode-switch half via resetLook).
+    player.resetLook();
     renderer.setWorldGen(gen);
     setSeed(nextSeed);
     setPosition({ x: spawn.x, z: spawn.z });
@@ -1834,9 +1985,67 @@ export default function App() {
   // math and the throttled player:looked emit, with NO mode
   // gate and NO pointer-lock gate by design — pitch stays
   // consistent across mode switches, and third-person
-  // ground gating ignores pitch by its own rule.
+  // ground gating ignores pitch by its own rule. Touch
+  // deltas are scaled by TOUCH_LOOK_SCALE (see the const):
+  // taps are unaffected, since they fire interact, not
+  // look deltas.
   const applyTouchLook = (dx: number, dy: number): void => {
-    playerRef.current?.addLookDelta(dx, dy);
+    playerRef.current?.addLookDelta(
+      dx * TOUCH_LOOK_SCALE,
+      dy * TOUCH_LOOK_SCALE,
+    );
+  };
+
+  // Turn stick: TouchControls reports a deflection; the shell
+  // holds it and turns continuously — a held stick keeps
+  // turning without re-sliding, which is the whole point
+  // (drag-look is displacement-based: no travel, no turn).
+  // The loop feeds the engine's existing addLookDelta, so no
+  // engine change: x right turns right, y up looks up (the
+  // engine's dy is screen-down positive, so y is negated).
+  // At zero deflection the loop idles; dt is clamped so a
+  // backgrounded tab cannot jump the view on return.
+  const turnDeflectionRef = useRef({ x: 0, y: 0 });
+  const applyTurn = (x: number, y: number): void => {
+    turnDeflectionRef.current = { x, y };
+  };
+  useEffect(() => {
+    if (!isTouch) return undefined;
+    let frame = 0;
+    let last = performance.now();
+    const step = (now: number): void => {
+      const dt = Math.min(0.1, Math.max(0, (now - last) / 1000));
+      last = now;
+      const { x, y } = turnDeflectionRef.current;
+      if (x !== 0 || y !== 0) {
+        playerRef.current?.addLookDelta(
+          x * TURN_STICK_PX_PER_SEC * dt,
+          -y * TURN_STICK_PX_PER_SEC * dt,
+        );
+      }
+      frame = requestAnimationFrame(step);
+    };
+    frame = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(frame);
+  }, [isTouch]);
+
+  // Camera pick (toggle control): V/C cycles one step, but
+  // the toggle control picks a perspective directly — with
+  // three modes, picking is NOT one toggle. Step the engine
+  // toggle forward until the picked mode is reached (at most
+  // two steps; the engine's mode advances synchronously per
+  // call, and camera:switched reports each step). Reads the
+  // live engine mode, not React state, so a stale render
+  // cannot double-step.
+  const cycleToCamera = (picked: CameraMode): void => {
+    const order: CameraMode[] = ['first', 'third', 'behind'];
+    const player = playerRef.current;
+    if (!player || player.mode === picked) return;
+    let steps = order.indexOf(picked) - order.indexOf(player.mode);
+    if (steps < 0) steps += order.length;
+    for (let i = 0; i < steps; i += 1) {
+      player.toggleCamera();
+    }
   };
 
   // USE / still-tap interact: the nearest in-range object,
@@ -1917,13 +2126,8 @@ export default function App() {
       {/* 3D viewport */}
       <div ref={containerRef} className="absolute inset-0" />
 
-      {/* World-anchored overlay: harvest buttons + outcome feedback. */}
+      {/* World-anchored overlay: fire chips, menus, feedback. */}
       <div className="pointer-events-none absolute inset-0 z-30">
-        <ProximityHarvestButtons
-          targets={harvestTargets}
-          onHarvest={handleHarvest}
-          onRemove={handleRemove}
-        />
         {fireAnchors.map(({ fire, x, y }) => {
           const status: FireChipStatus = fire.lit
             ? 'lit'
@@ -1998,6 +2202,20 @@ export default function App() {
         ))}
       </div>
 
+      {/* Screen-fixed harvest buttons: above panels (z-30), below
+        modals (z-50). The buttons live in their own z-40 overlay
+        because a z-40 child inside the z-30 overlay above would
+        still paint under the z-30 panels (stacking contexts).
+        The column itself positions just above screen middle;
+        see ProximityHarvestButtons. */}
+      <div className="pointer-events-none absolute inset-0 z-40">
+        <ProximityHarvestButtons
+          targets={harvestTargets}
+          onHarvest={handleHarvest}
+          onRemove={handleRemove}
+        />
+      </div>
+
       {/* HUD shell: needs row (awaiting survival systems) + HUD block. */}
       <HudShell hideNeeds={isTouch && hudCollapsed}>
         {(!isTouch || !hudCollapsed) ? (
@@ -2008,7 +2226,16 @@ export default function App() {
               // clearance (bottom-24 offset + 128 px ring =
               // 224 px), so the expanded stack never slides
               // under the stick on portrait — 13rem did.
-              ? 'pointer-events-auto m-2 max-w-sm max-h-[calc(100vh-18rem)] overflow-y-auto pr-1 ' +
+              // TURNING FIX: max-w-[46vw], not max-w-sm — the
+              // look field is the right half (w-1/2) at z-20
+              // and the stack sits above it (z-30), so a
+              // full-width stack on portrait swallowed the
+              // look field and first-person drags could not
+              // turn. 46vw keeps the stack left of half width
+              // on any viewport, so the right half stays open
+              // world; the stack still scrolls (overflow-y)
+              // and its buttons keep 44 px targets.
+              ? 'pointer-events-auto m-2 max-w-[46vw] max-h-[calc(100vh-18rem)] overflow-y-auto pr-1 ' +
                 touchScrollbar
               : 'pointer-events-auto m-2 max-w-sm'
           }
@@ -2019,7 +2246,9 @@ export default function App() {
               Camera:{' '}
               {cameraMode === 'first'
                 ? 'First-person'
-                : 'Third-person overhead'}{' '}
+                : cameraMode === 'behind'
+                  ? 'Behind (over-shoulder)'
+                  : 'Third-person overhead'}{' '}
               <span className="opacity-60">(press V or C)</span>
             </p>
             <p>
@@ -2069,11 +2298,7 @@ export default function App() {
             <CameraToggle
               perspective={cameraMode}
               comfortable={isTouch}
-              onChange={(picked) => {
-                if (picked !== cameraMode) {
-                  playerRef.current?.toggleCamera();
-                }
-              }}
+              onChange={(picked) => cycleToCamera(picked)}
             />
           </div>
           <div className="mt-3">
@@ -2177,17 +2402,23 @@ export default function App() {
             <CameraToggle
               perspective={cameraMode}
               comfortable
-              onChange={(picked) => {
-                if (picked !== cameraMode) {
-                  playerRef.current?.toggleCamera();
-                }
-              }}
+              onChange={(picked) => cycleToCamera(picked)}
             />
           </div>
         ) : (
           <button
             type="button"
-            onClick={() => setHudCollapsed(true)}
+            // One tap reclaims the look field: collapsing the
+            // stack alone would leave an open bottom sheet
+            // (60vh) covering the look field's lower half,
+            // so Hide also closes both panels. Panel state is
+            // view-only — inventory, crafting, and wardrobe
+            // state live on, reopening restores the same rows.
+            onClick={() => {
+              setHudCollapsed(true);
+              setInventoryOpen(false);
+              setCraftingOpen(false);
+            }}
             aria-label="Hide HUD panels to reveal the game"
             className="pointer-events-auto absolute right-2 top-2 z-40 min-h-[44px] rounded bg-black/50 px-3 py-2 text-sm"
           >
@@ -2283,6 +2514,7 @@ export default function App() {
       {isTouch ? (
         <TouchControls
           onMove={applyTouchMove}
+          onTurn={applyTurn}
           onLook={applyTouchLook}
           onInteract={handleTouchInteract}
         />

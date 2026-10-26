@@ -5,7 +5,7 @@
  * Silent Earth redesign — touch controls (UI lane, presentation +
  * gesture state only).
  *
- * Three pieces, all visible before first use (Adam's phone rule,
+ * Four pieces, all visible before first use (Adam's phone rule,
  * BioForge 2026-10-14: invisible-until-touched controls are not
  * acceptable):
  * - Left thumbstick: a solid MOVE ring + knob that pulses until
@@ -17,6 +17,16 @@
  *   (lookEnabled); the shell leaves it enabled in both modes
  *   because the engine applies look deltas gateless and keeps
  *   pitch consistent across mode switches.
+ * - Right thumbstick: a solid TURN ring + knob above the USE
+ *   button, same size and pulse-until-first-use pattern as MOVE.
+ *   It reports a deflection, not a drag: the shell holds the
+ *   deflection and turns continuously while it is held, so a
+ *   big turn needs no re-sliding. Added 2026-10-26 after
+ *   Adam's playtest found drag-look's travel too short: a
+ *   thumb resting near the right edge has only ~half an inch
+ *   of right travel, and a center-started drag misses or clips
+ *   the right-half look field. The stick is bounded by its own
+ *   radius, not by the screen edge.
  * - USE button, bottom-right, thumb-sized (64 px).
  *
  * GESTURE OWNERSHIP (BioForge v1 lesson, required): a look-drag
@@ -28,7 +38,8 @@
  * NO SPRINT, NO JUMP: Silent Earth movement is walk only
  * (slowed by hunger/bog). The stick reports a walk vector; it
  * never reports a run or a jump. Multi-touch is tracked by
- * touch identifier, so stick and look work simultaneously.
+ * touch identifier, so move stick, turn stick, and look work
+ * simultaneously, each under its own touch.
  *
  * No game logic lives here: vectors and interactions are
  * reported through callbacks, and the shell decides what they
@@ -40,6 +51,8 @@ import { useRef, useState, type TouchEvent as ReactTouchEvent } from 'react';
 export interface TouchControlsProps {
   /** Stick vector: x = right positive, y = forward positive, each -1..1. */
   onMove?: (x: number, y: number) => void;
+  /** Turn-stick deflection: x = right positive, y = up positive, each -1..1. */
+  onTurn?: (x: number, y: number) => void;
   /** Look deltas in CSS pixels (same scale the shell's mouse look uses). */
   onLook?: (dx: number, dy: number) => void;
   /** USE press, or a short still tap on the look field. */
@@ -58,16 +71,21 @@ const TAP_MAX_MOVE = 12;
 
 export function TouchControls({
   onMove,
+  onTurn,
   onLook,
   onInteract,
   lookEnabled = true,
 }: TouchControlsProps) {
   const [stickUsed, setStickUsed] = useState(false);
+  const [turnUsed, setTurnUsed] = useState(false);
   const [lookUsed, setLookUsed] = useState(false);
   const [knob, setKnob] = useState({ x: 0, y: 0 });
+  const [turnKnob, setTurnKnob] = useState({ x: 0, y: 0 });
 
   const stickTouchId = useRef<number | null>(null);
   const stickCenter = useRef({ x: 0, y: 0 });
+  const turnTouchId = useRef<number | null>(null);
+  const turnCenter = useRef({ x: 0, y: 0 });
   const lookTouchId = useRef<number | null>(null);
   const lookLast = useRef({ x: 0, y: 0 });
   const lookStart = useRef({ x: 0, y: 0, time: 0, maxMove: 0 });
@@ -121,6 +139,60 @@ export function TouchControls({
         stickTouchId.current = null;
         setKnob({ x: 0, y: 0 });
         onMove?.(0, 0);
+      }
+    }
+  };
+
+  // Turn stick: the move stick's math and touch-id pattern,
+  // reporting a deflection the shell holds (see the header).
+  // Same travel, same dead zone, same knob behaviour.
+  const updateTurn = (clientX: number, clientY: number): void => {
+    let vx = (clientX - turnCenter.current.x) / STICK_TRAVEL;
+    let vy = (turnCenter.current.y - clientY) / STICK_TRAVEL;
+    const len = Math.hypot(vx, vy);
+    if (len > 1) {
+      vx /= len;
+      vy /= len;
+    }
+    if (len < STICK_DEAD_ZONE) {
+      vx = 0;
+      vy = 0;
+    }
+    setTurnKnob({ x: vx * STICK_TRAVEL, y: -vy * STICK_TRAVEL });
+    onTurn?.(vx, vy);
+  };
+
+  const handleTurnStart = (e: ReactTouchEvent<HTMLDivElement>): void => {
+    if (turnTouchId.current !== null) return;
+    const touch = e.changedTouches[0];
+    const rect = e.currentTarget.getBoundingClientRect();
+    turnTouchId.current = touch.identifier;
+    turnCenter.current = {
+      x: rect.left + rect.width / 2,
+      y: rect.top + rect.height / 2,
+    };
+    setTurnUsed(true);
+    updateTurn(touch.clientX, touch.clientY);
+  };
+
+  const handleTurnMove = (e: ReactTouchEvent<HTMLDivElement>): void => {
+    if (turnTouchId.current === null) return;
+    e.preventDefault();
+    for (let i = 0; i < e.changedTouches.length; i += 1) {
+      const touch = e.changedTouches[i];
+      if (touch.identifier === turnTouchId.current) {
+        updateTurn(touch.clientX, touch.clientY);
+      }
+    }
+  };
+
+  const handleTurnEnd = (e: ReactTouchEvent<HTMLDivElement>): void => {
+    if (turnTouchId.current === null) return;
+    for (let i = 0; i < e.changedTouches.length; i += 1) {
+      if (e.changedTouches[i].identifier === turnTouchId.current) {
+        turnTouchId.current = null;
+        setTurnKnob({ x: 0, y: 0 });
+        onTurn?.(0, 0);
       }
     }
   };
@@ -237,6 +309,39 @@ export function TouchControls({
             className="absolute left-1/2 top-1/2 h-14 w-14 rounded-full bg-[#f0ead6]/90 shadow"
             style={{
               transform: `translate(calc(-50% + ${knob.x}px), calc(-50% + ${knob.y}px))`,
+            }}
+          />
+        </div>
+      </div>
+
+      {/* Turn stick: rendered after the look field so its
+        touches land on the stick, not the field beneath it
+        (same DOM-order rule as the USE button). Sits above
+        USE with a gap, clear of the DRAG TO LOOK cue. */}
+      <div
+        className="pointer-events-auto absolute bottom-44 right-4 touch-none"
+        onTouchStart={handleTurnStart}
+        onTouchMove={handleTurnMove}
+        onTouchEnd={handleTurnEnd}
+        onTouchCancel={handleTurnEnd}
+      >
+        <div
+          className={
+            'relative flex h-32 w-32 items-center justify-center rounded-full border-2 bg-black/30 ' +
+            (turnUsed
+              ? 'border-[#f0ead6]/50'
+              : 'border-[#f0ead6]/80 animate-pulse')
+          }
+        >
+          {!turnUsed ? (
+            <span className="absolute -top-6 text-xs tracking-widest text-[#f0ead6]">
+              TURN
+            </span>
+          ) : null}
+          <div
+            className="absolute left-1/2 top-1/2 h-14 w-14 rounded-full bg-[#f0ead6]/90 shadow"
+            style={{
+              transform: `translate(calc(-50% + ${turnKnob.x}px), calc(-50% + ${turnKnob.y}px))`,
             }}
           />
         </div>

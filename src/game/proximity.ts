@@ -65,6 +65,11 @@
  * - No occlusion yet: range is distance only, through objects and
  *   walls alike. That is a known limit for a later pass, not a bug
  *   to paper over here.
+ * - Dropped piles (harvest overflow, Adam 2026-10-26) ride a
+ *   SEPARATE channel, 'piles:inRange' (see recomputePiles): piles
+ *   are not harvest targets, so they never appear in
+ *   'harvest:inRange' and pressing one is Systems' pickup grant,
+ *   not a harvest press.
  */
 
 import { bus } from './events';
@@ -76,9 +81,11 @@ import {
   GROUND_MATERIAL_BY_ID,
   type GroundMaterialDef,
 } from './objects';
+import type { CameraMode } from '../types';
 import { harvestState, scatterTargetId } from './harvestState';
 import { weatherAt, type CurrentWeather } from './weather';
 import { shelterState, shelterAt } from './shelter';
+import { pileState } from './pileState';
 
 export { scatterTargetId };
 import type { WorldGen } from './worldgen';
@@ -226,12 +233,14 @@ export class ProximityTracker {
   private lastIds = new Set<string>();
   private lastX: number | null = null;
   private lastZ: number | null = null;
-  private lastMode: 'first' | 'third' = 'third';
+  private lastMode: CameraMode = 'third';
   private lastPitch = 0;
   /** Dominant biome of the last emitted 'weather:changed'. */
   private lastWeatherDominant: string | null = null;
   /** Shelter multiplier of the last emitted 'shelter:changed'. */
   private lastShelterMultiplier: number | null = null;
+  /** Keys (id:quantity) of the last emitted 'piles:inRange'. */
+  private lastPileKeys = new Set<string>();
   private unsubscribes: (() => void)[] = [];
 
   constructor(gen: WorldGen, subscribe = true) {
@@ -248,6 +257,13 @@ export class ProximityTracker {
           this.lastMode = p.mode;
           this.recompute();
         }),
+        // Piles change without movement (a harvest at her feet
+        // drops one instantly), so pile events re-evaluate the
+        // piles channel directly — movement alone would miss a
+        // pile dropped while standing still.
+        bus.on('pile:dropped', () => this.recomputePiles()),
+        bus.on('pile:changed', () => this.recomputePiles()),
+        bus.on('pile:removed', () => this.recomputePiles()),
       ];
     }
   }
@@ -255,6 +271,10 @@ export class ProximityTracker {
   setGen(gen: WorldGen): void {
     this.gen = gen;
     this.lastIds = new Set();
+    // A new seed is a new world: piles do not carry over either
+    // (pileState.clear() runs in the renderer's setWorldGen), so
+    // the next piles recompute re-emits even an empty set afresh.
+    this.lastPileKeys = new Set();
     // A new seed is a new world: re-emit the weather regime even
     // if the dominant biome happens to match the old world's.
     this.lastWeatherDominant = null;
@@ -264,7 +284,32 @@ export class ProximityTracker {
   update(x: number, z: number): HarvestTarget[] {
     this.lastX = x;
     this.lastZ = z;
-    return this.recompute();
+    const targets = this.recompute();
+    // Movement changes pile distances too (a pile can enter or
+    // leave range without any pile event firing).
+    this.recomputePiles();
+    return targets;
+  }
+
+  /**
+   * Dropped-pile channel (harvest overflow, Adam 2026-10-26):
+   * piles are NOT harvest targets and never ride 'harvest:inRange'
+   * — they carry their own change-only event, keyed by id AND
+   * quantity so a merge-increase or partial take re-emits (UI
+   * re-renders the pile's quantity). Pickup itself is Systems'
+   * half; this channel is only the "piles near you" signal.
+   */
+  private recomputePiles(): void {
+    if (this.lastX === null || this.lastZ === null) return;
+    const piles = pileState.pilesInRange(this.lastX, this.lastZ, HARVEST_RANGE);
+    const keys = new Set(piles.map((p) => `${p.id}:${p.quantity}`));
+    const changed =
+      keys.size !== this.lastPileKeys.size ||
+      [...keys].some((k) => !this.lastPileKeys.has(k));
+    if (changed) {
+      this.lastPileKeys = keys;
+      bus.emit('piles:inRange', { piles });
+    }
   }
 
   private recompute(): HarvestTarget[] {
