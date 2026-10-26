@@ -20,7 +20,7 @@
  *   createHarvestOutcomeListener({
  *     gen: () => genRef.current,          // current world generator
  *     inventory,                          // Systems' PersonalInventory
- *     getToolTier: () => toolTierQuery(), // Systems' held-tool query
+ *     getToolTier: () => ownedTier(inventory), // Systems' owned-tool.ts
  *   })
  *
  * returns an unsubscribe function. The renderer does NOT call this
@@ -28,16 +28,26 @@
  * filtering + chunk reload, which work off the shared harvestState
  * below regardless of who instantiated the listener.
  *
- * TOOL QUERY SHAPE (agreed shape, now landed — no tool state is
- * duplicated here): getToolTier returns the witch's current tool as
- * a ToolTier, or null when she holds no tool. Systems' held-tool
- * module (src/systems/held-tool.ts, landed in parallel) already
- * provides exactly this: HeldToolState.toolTier() returns
+ * TOOL QUERY SHAPE — OWNED TIER, NOT EQUIPPED (Adam, 2026-10-26,
+ * correcting the brief's word): there is NO equipping anywhere in
+ * the loop. Owning the tool is sufficient to use it, because it is
+ * the only tool. getToolTier therefore returns the OWNED tier: null
+ * before she has made a tool (hands), advancing when she crafts /
+ * upgrades — she owns exactly one tier at a time, since upgrades
+ * consume the predecessor. No tool state is duplicated here.
+ * Systems' owned-tool module (src/systems/owned-tool.ts) provides
+ * exactly this value: ownedTier(inventory) returns
  * BackgroundToolTier | null with literals matching ToolTier by
- * name, null for hands — the shell passes
- * () => heldToolState.toolTier(). If no query is supplied, the
- * default () => null applies: hand-permitted sources and ground
- * work, tool-gated sources correctly fail 'below-permit'.
+ * name, null for none — the shell passes
+ * () => ownedTier(inventory). The owned tier is read from the
+ * inventory itself (highest-stage ladder tool present), so there
+ * is no held/equipped state for this listener to disagree with:
+ * Systems' earlier held-tool module (HeldToolState, equip() /
+ * unequip()) was deleted in the same correction and must not be
+ * referenced — any code still importing './systems/held-tool' is
+ * stale. If no query is supplied, the default () => null applies:
+ * hand-permitted sources and ground work, tool-gated sources
+ * correctly fail 'below-permit'.
  *
  * INVENTORY SHAPE: HarvestInventory is structural — PersonalInventory
  * satisfies it (free() + add()). The listener checks the TOTAL
@@ -136,7 +146,7 @@ export interface HarvestInventory {
   add(item: string, quantity: number): void;
 }
 
-/** Tool query shape (see header for the Systems item -> tier mapping). */
+/** Owned-tier query shape (see header: owned, never equipped). */
 export type ToolTierQuery = () => ToolTier | null;
 
 export interface HarvestOutcomeDeps {
