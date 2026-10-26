@@ -20,6 +20,14 @@ export interface InventoryPanelProps {
   selectedItemId?: string;
   /** Called when the player picks an item. Optional. */
   onSelectItem?: (id: string) => void;
+  /**
+   * Item ids that can be placed in the world (fires, houses).
+   * Items in this set gain a Place button. Omitted = no Place
+   * buttons; placement itself is the caller's job.
+   */
+  placeableIds?: ReadonlySet<string>;
+  /** Called when the player presses Place on an item. Optional. */
+  onPlaceItem?: (id: string) => void;
   /** Caller-supplied capacity line, e.g. a total the system provides. */
   capacityText?: string;
   /** Called when the panel is closed. Optional. */
@@ -32,6 +40,8 @@ export function InventoryPanel({
   items,
   selectedItemId,
   onSelectItem,
+  placeableIds,
+  onPlaceItem,
   capacityText,
   onClose,
   theme = 'mire',
@@ -64,14 +74,15 @@ export function InventoryPanel({
         <ul className="flex flex-col gap-1">
           {items.map((item) => {
             const selected = item.id === selectedItemId;
+            const placeable = placeableIds?.has(item.id) ?? false;
             return (
-              <li key={item.id}>
+              <li key={item.id} className="flex items-center gap-1">
                 <button
                   type="button"
                   onClick={() => onSelectItem?.(item.id)}
                   aria-pressed={selected}
                   className={
-                    'flex w-full items-baseline justify-between gap-2 rounded px-2 py-1 text-left ' +
+                    'flex flex-1 items-baseline justify-between gap-2 rounded px-2 py-1 text-left ' +
                     (selected ? t.selected : 'hover:bg-stone-800')
                   }
                 >
@@ -89,6 +100,16 @@ export function InventoryPanel({
                     </span>
                   ) : null}
                 </button>
+                {placeable && onPlaceItem ? (
+                  <button
+                    type="button"
+                    onClick={() => onPlaceItem(item.id)}
+                    aria-label={`Place ${item.name}`}
+                    className="rounded bg-[#3a4436] px-2 py-1 text-xs hover:bg-[#4a5546]"
+                  >
+                    Place
+                  </button>
+                ) : null}
               </li>
             );
           })}

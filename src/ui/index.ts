@@ -31,7 +31,7 @@ export type { WitchHealthProps } from './WitchHealth';
 export { HungerIndicator } from './HungerIndicator';
 export type { HungerIndicatorProps, HungerStage } from './HungerIndicator';
 export { FireState } from './FireState';
-export type { FireStateProps, FireKind, FireStateValue } from './FireState';
+export type { FireStateProps, FireKind, FireChipStatus } from './FireState';
 export { PlacementPreview } from './PlacementPreview';
 export type { PlacementPreviewProps } from './PlacementPreview';
 export { ShelteredIndicator } from './ShelteredIndicator';

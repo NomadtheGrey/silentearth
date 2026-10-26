@@ -2,17 +2,19 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * Silent Earth redesign — worn-list display (UI lane, presentation only).
+ * Silent Earth redesign — wardrobe display + wear/remove
+ * (UI lane, presentation only).
  *
- * The wardrobe line in the HUD: which of the five garments she
- * is wearing, plus one protection note at most. It is light on
- * purpose — a list of names and a single note line, never a
- * heavy panel. It owns no wardrobe logic: the caller passes the
- * worn set, and the caller passes the protection note text.
- * This component holds NO protection table and computes NO
- * percentages, so it cannot drift from the engine's numbers —
- * the caller (App, which may import game code) computes the
- * note from the engine's own garment table.
+ * The wardrobe section in the HUD: the five garments, one row
+ * each, with what she is doing about it — worn, carried (with
+ * a Wear button), or not owned — plus two note lines at most:
+ * a protection note and a carrying-bonus note. It is light on
+ * purpose: five short rows and two lines, never a heavy panel.
+ * It owns no wardrobe logic: the caller passes the worn set,
+ * the carried set, and both note texts, and reports wear /
+ * remove presses through callbacks. The caller (App, which may
+ * import game/systems code) owns the Wardrobe, the capacity
+ * arithmetic, and the weather table.
  *
  * GARMENT IDS mirror the engine's GarmentId in game/weather.ts
  * by name ('cloak' | 'shawl' | 'pointyHat' | 'mossyMittens' |
@@ -21,30 +23,30 @@
  * This file defines its own id type rather than importing game
  * code, keeping the src/ui/ boundary this directory holds.
  *
- * BONUS DIVERGENCE — READ THIS, DO NOT SMOOTH OVER: the round
- * brief lists worn bonuses as hat +1, shawl +3, cloak +6, but
- * those numbers match NO table in the repo or docs, and the
- * brief lists no bonus for mittens or boots. The engine's only
- * garment numbers are the weather module's per-element
- * percentages (lane-decided, flagged for Adam's pin pass):
- * cloak rain 40% / wind 30%, shawl cold 30%, Pointy Hat rain
- * 15%, Mossy Mittens cold 15%, bog boots wet 40% (plus the
- * boots' separate bog-travel mitigation). Until Adam reconciles
- * the two scales, this component shows whatever protection note
- * the caller supplies from the ENGINE's table — the numbers the
- * player actually experiences — and the +1/+3/+6 scale is
- * flagged in the round report for his call, not rendered as if
- * it were the engine.
+ * TWO BONUS AXES — DO NOT CONFUSE THEM (both real, both
+ * separate):
+ * - Carrying bonus (PINNED, Adam 2026-10-26, via Systems'
+ *   Wardrobe.wornCapacityBonus): cloak +6, shawl +3, Pointy
+ *   Hat +1, mittens +0, bog boots +0 — extra carrying room
+ *   while the garment is worn AND carried. Wearing does not
+ *   consume the garment, and a worn garment is not counted
+ *   against personal capacity.
+ * - Weather protection (engine table, game/weather.ts,
+ *   lane-decided percentages flagged for Adam's pin pass):
+ *   cloak rain 40% / wind 30%, shawl cold 30%, Pointy Hat
+ *   rain 15%, Mossy Mittens cold 15%, bog boots wet 40%
+ *   (plus the boots' separate bog-travel mitigation).
+ * The caller supplies each note from its own source; this
+ * component holds NO table and computes NO number, so it
+ * cannot drift from either source.
  *
- * WIRING — READ THIS: at the time this file was written, no
- * wardrobe system exists in the repo (no garment items, no
- * garment recipes — the loom itself is craftable, its products
- * are TBD — and no worn set is tracked anywhere). So App
- * passes an empty worn set today. That is factual, not a
- * placeholder guess: with no garments in the world, she wears
- * nothing, and the protection note reads none. The moment a
- * wardrobe system tracks a worn set, App passes it through
- * and this list fills in.
+ * LOOM GAP — FLAGGED: garment recipes carry station 'loom',
+ * and no loom station presence exists yet (a crafted loom is
+ * an inventory item, not a placed station the crafting shell
+ * can detect), so garments cannot be crafted in play today.
+ * The wardrobe below is wired to the real Wardrobe and will
+ * fill in the moment garments can be obtained; until then
+ * most rows honestly read "not owned".
  */
 
 /**
@@ -59,16 +61,37 @@ export type WornGarment =
   | 'bogBoots';
 
 export interface WornListProps {
-  /** Garments currently worn, caller-supplied. Empty = wearing none. */
+  /** Garments currently worn, caller-supplied. */
   worn: readonly WornGarment[];
+  /** Garments currently carried, caller-supplied. */
+  carried: readonly WornGarment[];
+  /** Called when the player presses Wear on a carried garment. */
+  onWear?: (garment: WornGarment) => void;
+  /** Called when the player presses Remove on a worn garment. */
+  onRemove?: (garment: WornGarment) => void;
   /**
    * One-line protection note, caller-supplied from the engine's
    * garment table (e.g. "Protection: rain 49% · wind 30%").
    * Omitted = no note line.
    */
   protectionNote?: string;
+  /**
+   * One-line carrying-bonus note, caller-supplied from the
+   * Wardrobe (e.g. "Carrying bonus +9"). Omitted = no line.
+   */
+  capacityNote?: string;
+  /** Caller-supplied note line (e.g. a wear/remove error). */
+  note?: string | null;
   className?: string;
 }
+
+const WORN_ORDER: WornGarment[] = [
+  'cloak',
+  'shawl',
+  'pointyHat',
+  'mossyMittens',
+  'bogBoots',
+];
 
 const WORN_WORD: Record<WornGarment, string> = {
   cloak: 'Hooded cloak',
@@ -80,25 +103,63 @@ const WORN_WORD: Record<WornGarment, string> = {
 
 export function WornList({
   worn,
+  carried,
+  onWear,
+  onRemove,
   protectionNote,
+  capacityNote,
+  note,
   className,
 }: WornListProps) {
   return (
     <div
-      aria-label="Worn garments"
+      aria-label="Wardrobe"
       className={'text-sm text-stone-100 ' + (className ?? '')}
     >
-      <p>
-        Wearing:{' '}
-        {worn.length === 0 ? (
-          <span className="italic text-stone-400">none</span>
-        ) : (
-          worn.map((garment) => WORN_WORD[garment]).join(', ')
-        )}
-      </p>
+      <p className="text-xs text-stone-400">Wardrobe</p>
+      <ul className="mt-1 flex flex-col gap-1">
+        {WORN_ORDER.map((garment) => {
+          const isWorn = worn.includes(garment);
+          const isCarried = carried.includes(garment);
+          return (
+            <li
+              key={garment}
+              className="flex items-center justify-between gap-2"
+            >
+              <span>
+                {WORN_WORD[garment]}{' '}
+                <span className="text-xs text-stone-400">
+                  {isWorn ? '— worn' : isCarried ? '— carried' : '— not owned'}
+                </span>
+              </span>
+              {isWorn ? (
+                <button
+                  type="button"
+                  onClick={() => onRemove?.(garment)}
+                  className="pointer-events-auto rounded bg-[#3a4436] px-2 py-0.5 text-xs hover:bg-[#4a5546]"
+                >
+                  Remove
+                </button>
+              ) : isCarried ? (
+                <button
+                  type="button"
+                  onClick={() => onWear?.(garment)}
+                  className="pointer-events-auto rounded bg-[#3a4436] px-2 py-0.5 text-xs hover:bg-[#4a5546]"
+                >
+                  Wear
+                </button>
+              ) : null}
+            </li>
+          );
+        })}
+      </ul>
       {protectionNote ? (
-        <p className="text-xs text-stone-400">{protectionNote}</p>
+        <p className="mt-1 text-xs text-stone-400">{protectionNote}</p>
       ) : null}
+      {capacityNote ? (
+        <p className="text-xs text-stone-400">{capacityNote}</p>
+      ) : null}
+      {note ? <p className="text-xs text-red-300">{note}</p> : null}
     </div>
   );
 }

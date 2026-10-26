@@ -8,9 +8,9 @@
  * readout folded into the HUD (camera, position, ground here,
  * chunks, seed), WitchHealth unwired (awaiting health system),
  * HungerIndicator live on the real Systems stage (see the hunger
- * note below), WornList + ShelteredIndicator in the HUD,
- * FireState + PlacementPreview staged unmounted (see the MVP
- * notes below),
+ * note below), interactive WornList + live ShelteredIndicator
+ * in the HUD, placed-fire chips + lighting menus + placement
+ * mode in the world overlay (see the MVP notes below),
  * InventoryPanel on the real PersonalInventory, CraftingMenu on
  * the real Systems recipes + canCraft + executeCraft (the helper
  * App wiring is meant to call, which also reports the owned tool),
@@ -98,59 +98,78 @@
  *   too-hungry yields the honest error, not a silent no-op).
  *   No eat button is built in this round (stage wiring only,
  *   per the brief); Systems' eat() is the follow-up surface.
- *   Hunger is not health: WitchHealth is untouched.
- * - FIRE UI (Adam, 2026-10-26): campfire / hearth / kiln /
- *   bloomery are craftable TODAY through the existing
- *   CraftingMenu (draft recipes, unstated stations), and they
- *   land in inventory as items. What does NOT exist yet is
- *   placement, fire state, or cooking execution — the fire
- *   system is explicitly not yet built — so FireState (lit /
- *   unlit / cooking chip at the object) and PlacementPreview
- *   (shared ghost preview for fire + shelter placement) are
- *   staged UNMOUNTED in src/ui/, verified, awaiting fire
- *   objects and their state. No fire state is invented, no
- *   flame mesh is duplicated (3D flames are Background's
- *   renderer), and cooking stays open-fire in the docs (stick
- *   or fire-buried, never pot cooking). Fire actions, when
- *   fire objects land, ride the existing ContextMenu with
- *   caller-supplied actions. CANDLE NOTE: the avatar /
- *   portrait candle is untouched, and nothing here assumes
+ *   Cooked acorns are now eatable through it (nutrition 20,
+ *   lane-decided) once cooking exists. Hunger is not health:
+ *   WitchHealth is untouched.
+ * - FIRE UI, LIVE (Adam, 2026-10-26): placement + lighting
+ *   are wired to the engine's placed-fire machine. A carried
+ *   fire item (campfire / hearth / kiln / bloomery, crafted
+ *   through CraftingMenu) gains a Place button in the
+ *   inventory panel; pressing it opens placement mode with
+ *   the PlacementPreview ghost at her feet (free placement,
+ *   no zones/plots — she walks anywhere, places there), and
+ *   Place here drops the fire at her position AND consumes
+ *   the carried item (the engine primitives are cost-free,
+ *   so UI-side consumption is the gating — placing without
+ *   it would duplicate the item). Every placed fire gets an
+ *   anchored FireState chip (unlit / lighting / lit, with
+ *   click count or friction phase); tapping an unlit fire
+ *   opens its lighting menu (ContextMenu): flint (disabled
+ *   without a carried flint — the engine leaves flint
+ *   possession to the caller) or friction (rub, wait,
+ *   rub — the 1 s game clock advances the wait to ready).
+ *   No flame mesh is duplicated (3D flames are Background's
+ *   renderer). COOKING BRIDGE GAP, FLAGGED: Systems' cook()
+ *   takes a Systems FireState (seconds-based lighting), and
+ *   engine lit is a separate flag on a placed fire — the two
+ *   models do not share a lit state, so no cook button is
+ *   wired yet (a cook against the wrong fire would be worse
+ *   than none). Cooking UI waits on the lanes agreeing
+ *   which state owns lit, or a bridge from engine lit to
+ *   the cooking gate. Cooking stays open-fire (stick or
+ *   fire-buried, never pot cooking). CANDLE NOTE: the avatar
+ *   / portrait candle is untouched, and nothing here assumes
  *   the candle lights fires — that relation is flagged open
  *   for Adam's call.
- * - SHELTER UI (Adam, 2026-10-26): house recipes (lean-to,
- *   thatch hut, woven cottage, small wooden hut) are craftable
- *   TODAY through CraftingMenu, but placement does not exist
- *   yet — no house positions, no placed-house state — so the
- *   sheltered indicator mounts with sheltered=false (the
- *   weather module's current default: unsheltered until
- *   housing supplies positions) and reads "Unsheltered". The
- *   moment housing supplies placed positions, App passes the
- *   real value and the "Sheltered" pill appears at home.
- *   Placement is free (no zones/plots) when it lands, and the
- *   staged PlacementPreview carries no plot frame. HOME
- *   STORAGE, FLAGGED: no home inventory exists yet, so
- *   nothing is surfaced; when one lands it rides the EXISTING
- *   InventoryPanel pattern (items + capacity text), which
- *   already fits — no separate storage panel is invented.
- * - CLOTHES UI (Adam, 2026-10-26): the loom itself is
- *   craftable TODAY through CraftingMenu (draft recipe), but
- *   its products are TBD and NO garment items or garment
- *   recipes exist yet — so no garment can be crafted or worn
- *   today. WornList mounts with the factual empty set
- *   ("Wearing: none", "Protection: none", computed from the
- *   engine's own garment table via clothingRemaining, not a
- *   UI-side table). BONUS DIVERGENCE, FLAGGED NOT SMOOTHED:
- *   the brief lists hat +1, shawl +3, cloak +6, but those
- *   numbers match no table in the repo or docs, and list no
- *   bonus for mittens or boots; the engine's only garment
- *   numbers are the weather module's per-element percentages
- *   (lane-decided, flagged for pin pass: cloak rain 40% /
- *   wind 30%, shawl cold 30%, Pointy Hat rain 15%, Mossy
- *   Mittens cold 15%, bog boots wet 40% + bog-travel
- *   mitigation). Until Adam reconciles the two scales, the
- *   UI shows the engine's percentages (the protection the
- *   player actually experiences), and the +1/+3/+6 scale is
- *   flagged here for his call, not rendered as engine truth.
+ * - SHELTER UI, LIVE (Adam, 2026-10-26): house recipes
+ *   (lean-to, thatch hut, woven cottage, small wooden hut)
+ *   are craftable through CraftingMenu, and a carried house
+ *   item gains the same Place button + preview + Place here
+ *   flow as fires (merged cottage stage: both recipe items
+ *   place a woven cottage). The sheltered indicator reads
+ *   the engine's live shelter tracking: shelter:changed on
+ *   movement, plus a direct recompute on placement (placing
+ *   at her feet does not move her, so the movement tracker
+ *   alone would lag) — "Sheltered at {house}" within 6 m
+ *   of a placed house, "Unsheltered" otherwise. Placement
+ *   is free (no zones/plots) and the preview carries no
+ *   plot frame. HOME STORAGE TRANSFER, FLAGGED NEXT
+ *   SURFACE: Systems' HomeStorage exists per placed house,
+ *   but deposit/withdraw UI is not built in this landing
+ *   (it needs item selection across two inventories); when
+ *   it lands it rides the EXISTING InventoryPanel pattern
+ *   (items + capacity text) — no separate storage panel is
+ *   invented here.
+ * - CLOTHES UI, LIVE (Adam, 2026-10-26): the shell owns one
+ *   Wardrobe; the HUD wardrobe lists all five garments with
+ *   Wear (carried) / Remove (worn) buttons, and both note
+ *   lines from their own sources. CORRECTION to the earlier
+ *   landing's divergence flag: the brief's hat +1, shawl +3,
+ *   cloak +6 are PINNED worn CARRYING bonuses (Systems'
+ *   Wardrobe.wornCapacityBonus; mittens +0, boots +0) —
+ *   a separate axis from the engine's weather percentages
+ *   (cloak rain 40% / wind 30%, shawl cold 30%, Pointy Hat
+ *   rain 15%, Mossy Mittens cold 15%, bog boots wet 40% +
+ *   bog-travel mitigation, lane-decided for pin pass). The
+ *   UI shows both, each from its source, and holds no table
+ *   itself. Wearing does not consume the garment; capacity
+ *   follows via inventory.setWorn after every wear/remove.
+ *   LOOM GAP, FLAGGED: garment recipes carry station 'loom',
+ *   and no loom station presence exists yet (a crafted loom
+ *   is an inventory item, not a placed station the shell can
+ *   detect), so garments cannot be crafted in play today —
+ *   the wardrobe is wired and will fill in the moment
+ *   garments can be obtained.
  *
  * POINTER DISCIPLINE: overlays are pointer-events-none except the
  * small interactive pieces (HUD buttons, panels, harvest buttons),
@@ -171,16 +190,33 @@ import {
 } from './game/harvest';
 import { BIOME_BY_ID } from './game/biomes';
 import {
+  fireState,
+  type PlacedFire,
+  type FireResult,
+} from './game/fireState';
+import type { FireType } from './game/fire';
+import {
+  shelterState,
+  shelterAt,
+  HOUSE_DEFS,
+  type HouseType,
+} from './game/shelter';
+import {
   DEFAULT_SEED,
   PLAYER_EYE_HEIGHT,
   THIRD_PERSON_OFFSET,
 } from './constants';
 import type { CameraMode, BiomeWeights } from './types';
+import { Wardrobe, GARMENTS } from './systems/clothes';
 import { HudShell } from './ui/HudShell';
 import { WitchHealth } from './ui/WitchHealth';
 import { HungerIndicator } from './ui/HungerIndicator';
 import { ShelteredIndicator } from './ui/ShelteredIndicator';
 import { WornList, type WornGarment } from './ui/WornList';
+import { FireState, type FireChipStatus } from './ui/FireState';
+import { PlacementPreview } from './ui/PlacementPreview';
+import { ContextMenu } from './ui/ContextMenu';
+import type { ContextAction } from './ui/types';
 import { CameraToggle } from './ui/CameraToggle';
 import { InventoryPanel } from './ui/InventoryPanel';
 import { CraftingMenu } from './ui/CraftingMenu';
@@ -208,7 +244,7 @@ import {
   type OwnedToolItem,
 } from './systems/owned-tool';
 import { canCraft, type StationContext } from './systems/crafting';
-import { RECIPES } from './systems/recipes';
+import { ITEMS, RECIPES } from './systems/recipes';
 
 type BusHarvestTarget = EventMap['harvest:inRange']['targets'][number];
 
@@ -245,6 +281,60 @@ function clampPercent(value: number): number {
   return Math.min(98, Math.max(2, value));
 }
 
+/** Carried fire item id → engine fire type, for placement. */
+const FIRE_ITEM_TO_TYPE: Record<string, FireType> = {
+  [ITEMS.campfire]: 'campfire',
+  [ITEMS.hearth]: 'hearth',
+  [ITEMS.kiln]: 'kiln',
+  [ITEMS.bloomery]: 'bloomery',
+};
+
+/**
+ * Carried house item id → engine house type, for placement.
+ * The merged cottage stage: both recipe items map to
+ * wovenCottage (wattle-and-daub + woven cottage are one stage).
+ */
+const HOUSE_ITEM_TO_TYPE: Record<string, HouseType> = {
+  [ITEMS.primitiveLeanTo]: 'leanTo',
+  [ITEMS.thatchHut]: 'thatchHut',
+  [ITEMS.wattleAndDaubHut]: 'wovenCottage',
+  [ITEMS.wovenCottage]: 'wovenCottage',
+  [ITEMS.smallWoodenHut]: 'smallWoodenHut',
+};
+
+/** Item ids the inventory panel offers a Place button for. */
+const PLACEABLE_IDS: ReadonlySet<string> = new Set([
+  ...Object.keys(FIRE_ITEM_TO_TYPE),
+  ...Object.keys(HOUSE_ITEM_TO_TYPE),
+]);
+
+const FIRE_NAME: Record<FireType, string> = {
+  campfire: 'Campfire',
+  hearth: 'Hearth',
+  kiln: 'Kiln',
+  bloomery: 'Bloomery',
+};
+
+/**
+ * Type predicate for failed fire results. This repo's tsconfig
+ * does not narrow a discriminated union on `.ok` (non-strict),
+ * so failure branches go through this predicate — the settled
+ * pattern for union results here.
+ */
+function isFireFailure(
+  result: FireResult,
+): result is { ok: false; reason: string } {
+  return !result.ok;
+}
+
+/** One placement in progress: what, and what engine type it becomes. */
+interface PlacementMode {
+  itemId: string;
+  label: string;
+  fireType?: FireType;
+  houseType?: HouseType;
+}
+
 export default function App() {
   const containerRef = useRef<HTMLDivElement>(null);
   const rendererRef = useRef<WorldRenderer | null>(null);
@@ -276,6 +366,38 @@ export default function App() {
     hunger.stage(),
   );
 
+  // The shell owns the one wardrobe, like the one inventory and
+  // the one hunger meter. Wear/remove go through it; capacity
+  // follows via inventory.setWorn (see the handlers below).
+  const wardrobeRef = useRef<Wardrobe | null>(null);
+  if (wardrobeRef.current === null) {
+    wardrobeRef.current = new Wardrobe();
+  }
+  const wardrobe = wardrobeRef.current;
+  const [wornGarments, setWornGarments] = useState<WornGarment[]>(() =>
+    wardrobe.wornGarments(),
+  );
+  const [wardrobeNote, setWardrobeNote] = useState<string | null>(null);
+
+  // Live shelter state, from the engine's shelter tracking
+  // (shelter:changed on movement, shelter:placed on placement).
+  const [sheltered, setSheltered] = useState(false);
+  const [shelterHouseName, setShelterHouseName] = useState<
+    string | undefined
+  >(undefined);
+
+  /** Apply a sheltering house id (null = unsheltered) to HUD state. */
+  const applyShelterHouse = (houseId: string | null) => {
+    if (houseId === null) {
+      setSheltered(false);
+      setShelterHouseName(undefined);
+      return;
+    }
+    const house = shelterState.snapshot().find((h) => h.id === houseId);
+    setSheltered(true);
+    setShelterHouseName(house ? HOUSE_DEFS[house.type].name : undefined);
+  };
+
   const [seedInput, setSeedInput] = useState(DEFAULT_SEED);
   const [seed, setSeed] = useState(DEFAULT_SEED);
   const [cameraMode, setCameraMode] = useState<CameraMode>('third');
@@ -302,6 +424,25 @@ export default function App() {
   // by invented yields or progress.
   const [feedbacks, setFeedbacks] = useState<FeedbackItem[]>([]);
   const [progressItems, setProgressItems] = useState<ProgressItem[]>([]);
+
+  // Placed fires (engine singleton, read fresh on every event),
+  // their projected anchors, the fire whose menu is open, and
+  // the placement in progress (ref mirrors state so the
+  // first-render recomputeAnchors closure sees it fresh).
+  const [placedFires, setPlacedFires] = useState<PlacedFire[]>(() =>
+    fireState.snapshot(),
+  );
+  const [fireAnchors, setFireAnchors] = useState<
+    { fire: PlacedFire; x: number; y: number }[]
+  >([]);
+  const [selectedFireId, setSelectedFireId] = useState<string | null>(null);
+  const [placement, setPlacement] = useState<PlacementMode | null>(null);
+  const [placementAnchor, setPlacementAnchor] = useState<{
+    x: number;
+    y: number;
+  } | null>(null);
+  const [placementNote, setPlacementNote] = useState<string | null>(null);
+  const placementRef = useRef<PlacementMode | null>(null);
 
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>(() =>
     inventory
@@ -380,7 +521,10 @@ export default function App() {
 
   // Re-project the last in-range targets from current player state.
   // Every camera change (move, look, switch, resize) flows through
-  // an event that calls this.
+  // an event that calls this. Placed fires re-project here too
+  // (scatter rule: dropped when off-screen/behind), and the
+  // placement preview — when a placement is in progress —
+  // projects at her feet (ground rule: clamped, always visible).
   const recomputeAnchors = () => {
     const projected: HarvestTarget[] = [];
     for (const target of busTargetsRef.current) {
@@ -398,6 +542,22 @@ export default function App() {
       });
     }
     setHarvestTargets(projected);
+    const fires: { fire: PlacedFire; x: number; y: number }[] = [];
+    for (const fire of fireState.snapshot()) {
+      const anchor = projectAnchor(fire.x, fire.z, 'scatter');
+      if (!anchor) continue;
+      fires.push({ fire, x: anchor.x, y: anchor.y });
+    }
+    setFireAnchors(fires);
+    const mode = placementRef.current;
+    if (mode) {
+      const player = playerRef.current;
+      setPlacementAnchor(
+        player ? projectAnchor(player.x, player.z, 'ground') : null,
+      );
+    } else {
+      setPlacementAnchor(null);
+    }
   };
 
   // Show a feedback chip for 4 seconds, then remove it. Caller-timed,
@@ -478,13 +638,37 @@ export default function App() {
       getToolTier: () => ownedTier(inventory),
       getHungerStage: () => hunger.stage(),
     });
-    // Hunger clock: drain in real seconds and refresh the HUD
-    // stage. setHungerStage with an unchanged stage bails out
-    // in React, so steady-state ticks cost no re-render.
+    // Game clock: drain hunger in real seconds and refresh the
+    // HUD stage, and advance friction lighting waits (display:
+    // 'waiting' → 'ready' once the wait passes). setHungerStage
+    // with an unchanged stage bails out in React, so
+    // steady-state ticks cost no re-render.
     const hungerTimer = window.setInterval(() => {
       hunger.tick(1);
       setHungerStage(hunger.stage());
+      fireState.advanceLighting(Date.now());
     }, 1000);
+    // Placed-fire + shelter subscriptions: fires re-read from
+    // the engine singleton on every fire event; shelter applies
+    // the live tracking event, or a direct recompute on
+    // placement (placing at her feet does not move her, so the
+    // movement-driven tracker would not fire on its own).
+    const refreshFires = () => {
+      setPlacedFires(fireState.snapshot());
+      recomputeAnchors();
+    };
+    const offFirePlaced = bus.on('fire:placed', refreshFires);
+    const offFireLighting = bus.on('fire:lighting', refreshFires);
+    const offFireLit = bus.on('fire:lit', refreshFires);
+    const offShelterPlaced = bus.on('shelter:placed', () => {
+      const p = playerRef.current;
+      if (!p) return;
+      const s = shelterAt(p.x, p.z, shelterState.snapshot());
+      applyShelterHouse(s.houseId);
+    });
+    const offShelterChanged = bus.on('shelter:changed', ({ houseId }) => {
+      applyShelterHouse(houseId);
+    });
     const offCompleted = bus.on('harvest:completed', (p) => {
       refreshInventory();
       setProgressItems((current) =>
@@ -569,6 +753,11 @@ export default function App() {
       offCompleted();
       offFailed();
       offProgress();
+      offFirePlaced();
+      offFireLighting();
+      offFireLit();
+      offShelterPlaced();
+      offShelterChanged();
       unsubHarvestOutcome();
       offLoaded();
       offUnloaded();
@@ -667,6 +856,191 @@ export default function App() {
     bus.emit('harvest:requested', request);
   };
 
+  const handleWear = (garment: WornGarment) => {
+    const def = GARMENTS.find((g) => g.backgroundId === garment);
+    if (!def) return;
+    try {
+      wardrobe.wear(inventory, def.item);
+      inventory.setWorn(wardrobe.wornItemIds());
+      setWornGarments(wardrobe.wornGarments());
+      setWardrobeNote(null);
+    } catch (error) {
+      setWardrobeNote(
+        error instanceof Error ? error.message : 'Could not wear that.',
+      );
+    }
+    refreshInventory();
+  };
+
+  const handleRemoveGarment = (garment: WornGarment) => {
+    const def = GARMENTS.find((g) => g.backgroundId === garment);
+    if (!def) return;
+    wardrobe.remove(def.slot);
+    inventory.setWorn(wardrobe.wornItemIds());
+    setWornGarments(wardrobe.wornGarments());
+    setWardrobeNote(null);
+    refreshInventory();
+  };
+
+  const handlePlaceItem = (itemId: string) => {
+    const fireType = FIRE_ITEM_TO_TYPE[itemId];
+    const houseType = HOUSE_ITEM_TO_TYPE[itemId];
+    if (!fireType && !houseType) return;
+    const label =
+      inventoryItems.find((i) => i.id === itemId)?.name ?? itemId;
+    const mode: PlacementMode = { itemId, label, fireType, houseType };
+    placementRef.current = mode;
+    setPlacement(mode);
+    setPlacementNote(null);
+    setInventoryOpen(false);
+    recomputeAnchors();
+  };
+
+  const handlePlaceConfirm = () => {
+    const mode = placementRef.current;
+    if (!mode) return;
+    const player = playerRef.current;
+    if (!player) return;
+    // Cost gating lives with UI here: the engine primitives are
+    // cost-free, so placing consumes the carried item — placing
+    // without consuming would duplicate it.
+    if (inventory.count(mode.itemId) < 1) {
+      setPlacementNote(
+        'Nothing to place — that item is no longer carried.',
+      );
+      placementRef.current = null;
+      setPlacement(null);
+      setPlacementAnchor(null);
+      return;
+    }
+    try {
+      if (mode.fireType) {
+        fireState.placeFire(mode.fireType, player.x, player.z);
+      } else if (mode.houseType) {
+        shelterState.placeHouse(mode.houseType, player.x, player.z);
+      }
+      inventory.remove(mode.itemId, 1);
+    } catch (error) {
+      setPlacementNote(
+        error instanceof Error ? error.message : 'Placement failed.',
+      );
+      return;
+    }
+    placementRef.current = null;
+    setPlacement(null);
+    setPlacementAnchor(null);
+    setPlacementNote(null);
+    refreshInventory();
+  };
+
+  const handlePlaceCancel = () => {
+    placementRef.current = null;
+    setPlacement(null);
+    setPlacementAnchor(null);
+    setPlacementNote(null);
+  };
+
+  /** Lighting menu actions for one placed fire, caller-decided. */
+  const fireMenuActions = (fire: PlacedFire): ContextAction[] => {
+    if (fire.lit) return [{ id: 'close', label: 'Close' }];
+    if (fire.lighting?.method === 'flint') {
+      return [
+        {
+          id: 'click-flint',
+          label: `Click flint (${fire.lighting.clicks} of 3)`,
+        },
+        { id: 'close', label: 'Close' },
+      ];
+    }
+    if (fire.lighting?.method === 'friction') {
+      return [
+        {
+          id: 'rub',
+          label:
+            fire.lighting.phase === 'ready' ? 'Rub — light it' : 'Rub',
+          hint:
+            fire.lighting.phase === 'ready'
+              ? undefined
+              : 'Wait for the wait to end, then rub',
+        },
+        { id: 'close', label: 'Close' },
+      ];
+    }
+    const hasFlint = inventory.count(ITEMS.flint) > 0;
+    return [
+      {
+        id: 'light-flint',
+        label: 'Light with flint',
+        disabled: !hasFlint,
+        disabledNote: hasFlint ? undefined : 'Needs a carried flint',
+      },
+      {
+        id: 'light-friction',
+        label: 'Light with friction (slow)',
+        hint: 'Rub, wait, rub',
+      },
+      { id: 'close', label: 'Close' },
+    ];
+  };
+
+  const handleFireAction = (fireId: string, actionId: string) => {
+    const fire = fireState.get(fireId);
+    if (!fire) return;
+    const anchor = fireAnchors.find((a) => a.fire.id === fireId) ?? null;
+    const say = (text: string, tone: FeedbackTone) => {
+      if (anchor) showFeedback(text, tone, anchor.x, anchor.y);
+    };
+    if (actionId === 'close') {
+      setSelectedFireId(null);
+      return;
+    }
+    if (actionId === 'light-flint') {
+      const result = fireState.startLighting(fireId, 'flint', Date.now());
+      if (isFireFailure(result)) {
+        say(`Cannot light: ${result.reason}.`, 'blocked');
+        return;
+      }
+      say('Flint ready — click flint 3 times.', 'info');
+    } else if (actionId === 'click-flint') {
+      const result = fireState.flintClick(fireId);
+      if (isFireFailure(result)) {
+        say(`Cannot click: ${result.reason}.`, 'blocked');
+        return;
+      }
+      if (result.fire.lit) {
+        say('Lit!', 'gain');
+        setSelectedFireId(null);
+      } else if (
+        result.fire.lighting &&
+        result.fire.lighting.method === 'flint'
+      ) {
+        say(`Click ${result.fire.lighting.clicks} of 3.`, 'info');
+      }
+    } else if (actionId === 'light-friction') {
+      const result = fireState.startLighting(fireId, 'friction', Date.now());
+      if (isFireFailure(result)) {
+        say(`Cannot light: ${result.reason}.`, 'blocked');
+        return;
+      }
+      say('Rubbing… wait, then rub again.', 'info');
+    } else if (actionId === 'rub') {
+      const result = fireState.frictionRub(fireId, Date.now());
+      if (isFireFailure(result)) {
+        say(
+          result.reason === 'still-waiting'
+            ? 'Still waiting — rub again when ready.'
+            : `Cannot rub: ${result.reason}.`,
+          'blocked',
+        );
+        return;
+      }
+      say('Lit!', 'gain');
+      setSelectedFireId(null);
+    }
+    setPlacedFires(fireState.snapshot());
+    recomputeAnchors();
+  };
+
   const handleRemove = (target: HarvestTarget) => {
     // Same shape as a harvest press, action 'remove' (Background's
     // documented shape, 2003619): the outcome listener resolves
@@ -676,18 +1050,31 @@ export default function App() {
     bus.emit('harvest:requested', removeRequestFor(target));
   };
 
-  // Wardrobe + shelter hooks (see the header): no wardrobe
-  // system and no housing state exist yet, so the worn set is
-  // empty and sheltered is false — the engine's current truth,
-  // not guesses. The protection note comes from the engine's
-  // own garment table via clothingRemaining.
-  const wornGarments: WornGarment[] = [];
-  const sheltered = false;
+  // Wardrobe notes (see the header): the worn set is live
+  // Wardrobe state; carried comes from inventory counts; both
+  // notes come from their own sources (engine garment table
+  // for protection, Wardrobe for the PINNED carrying bonus).
+  const carriedGarments: WornGarment[] = GARMENTS.filter(
+    (g) => inventory.count(g.item) > 0,
+  ).map((g) => g.backgroundId);
   const wornRemaining = clothingRemaining(wornGarments);
   const protectionNote =
     wornGarments.length === 0
       ? 'Protection: none'
       : `Protection: rain ${Math.round((1 - wornRemaining.rain) * 100)}% · wind ${Math.round((1 - wornRemaining.wind) * 100)}% · cold ${Math.round((1 - wornRemaining.cold) * 100)}% · wet ${Math.round((1 - wornRemaining.wet) * 100)}%`;
+  const capacityBonus = wardrobe.wornCapacityBonus();
+  const capacityNote =
+    capacityBonus > 0 ? `Carrying bonus +${capacityBonus}` : undefined;
+
+  // The fire whose lighting menu is open, with its anchor.
+  const selectedFire =
+    selectedFireId === null
+      ? undefined
+      : placedFires.find((f) => f.id === selectedFireId);
+  const selectedFireAnchor =
+    selectedFire === undefined
+      ? null
+      : (fireAnchors.find((a) => a.fire.id === selectedFire.id) ?? null);
 
   return (
     <div className="relative w-full h-screen bg-[#121612] overflow-hidden font-mono text-[#f0ead6]">
@@ -701,6 +1088,61 @@ export default function App() {
           onHarvest={handleHarvest}
           onRemove={handleRemove}
         />
+        {fireAnchors.map(({ fire, x, y }) => {
+          const status: FireChipStatus = fire.lit
+            ? 'lit'
+            : fire.lighting
+              ? 'lighting'
+              : 'unlit';
+          const detail =
+            fire.lighting?.method === 'flint'
+              ? `Clicks ${fire.lighting.clicks} of 3`
+              : fire.lighting?.method === 'friction'
+                ? fire.lighting.phase === 'ready'
+                  ? 'Ready — rub!'
+                  : 'Waiting…'
+                : undefined;
+          return (
+            <Fragment key={fire.id}>
+              <WorldAnchor x={x} y={y} interactive>
+                <FireState
+                  kind={fire.type}
+                  status={status}
+                  lightingDetail={detail}
+                  onSelect={() => {
+                    if (fire.lit) {
+                      showFeedback(`${FIRE_NAME[fire.type]} lit.`, 'info', x, y);
+                    } else {
+                      setSelectedFireId(fire.id);
+                    }
+                  }}
+                />
+              </WorldAnchor>
+            </Fragment>
+          );
+        })}
+        {selectedFire && selectedFireAnchor ? (
+          <WorldAnchor
+            x={selectedFireAnchor.x}
+            y={selectedFireAnchor.y}
+            interactive
+          >
+            <ContextMenu
+              objectName={FIRE_NAME[selectedFire.type]}
+              actions={fireMenuActions(selectedFire)}
+              onSelect={(id) => handleFireAction(selectedFire.id, id)}
+              onClose={() => setSelectedFireId(null)}
+            />
+          </WorldAnchor>
+        ) : null}
+        {placement && placementAnchor ? (
+          <PlacementPreview
+            x={placementAnchor.x}
+            y={placementAnchor.y}
+            label={placement.label}
+            valid
+          />
+        ) : null}
         {feedbacks.map((feedback) => (
           <Fragment key={feedback.id}>
             <WorldAnchor x={feedback.x} y={feedback.y}>
@@ -773,11 +1215,46 @@ export default function App() {
             <HungerIndicator stage={hungerStage} />
           </div>
           <div className="mt-2">
-            <WornList worn={wornGarments} protectionNote={protectionNote} />
+            <WornList
+              worn={wornGarments}
+              carried={carriedGarments}
+              onWear={handleWear}
+              onRemove={handleRemoveGarment}
+              protectionNote={protectionNote}
+              capacityNote={capacityNote}
+              note={wardrobeNote}
+            />
           </div>
           <div className="mt-2">
-            <ShelteredIndicator sheltered={sheltered} />
+            <ShelteredIndicator
+              sheltered={sheltered}
+              houseName={shelterHouseName}
+            />
           </div>
+          {placement ? (
+            <div className="mt-2 rounded bg-black/50 px-2 py-1 text-sm">
+              <p>Placing {placement.label} at your feet.</p>
+              <div className="mt-1 flex gap-2">
+                <button
+                  type="button"
+                  onClick={handlePlaceConfirm}
+                  className="rounded bg-[#3a4436] px-2 py-0.5 text-xs hover:bg-[#4a5546]"
+                >
+                  Place here
+                </button>
+                <button
+                  type="button"
+                  onClick={handlePlaceCancel}
+                  className="rounded bg-[#3a4436] px-2 py-0.5 text-xs hover:bg-[#4a5546]"
+                >
+                  Cancel
+                </button>
+              </div>
+              {placementNote ? (
+                <p className="mt-1 text-xs text-red-300">{placementNote}</p>
+              ) : null}
+            </div>
+          ) : null}
         </div>
       </HudShell>
 
@@ -788,6 +1265,8 @@ export default function App() {
             items={inventoryItems}
             selectedItemId={selectedItemId}
             onSelectItem={setSelectedItemId}
+            placeableIds={PLACEABLE_IDS}
+            onPlaceItem={handlePlaceItem}
             capacityText={capacityText}
             onClose={() => setInventoryOpen(false)}
           />
