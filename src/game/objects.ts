@@ -43,6 +43,13 @@
  *   trowel amount (base 1, same 25% bonus) pending his word — flagged,
  *   not silently settled.
  *   Clay stays out of every OTHER source; only silt ground yields it.
+ * - GENERAL HARVEST RULE (Adam, 2026-10-26): every harvest follows
+ *   clay's shape (base + 25% chance of +1, rising per harvest stage)
+ *   plus a permit tier (hard gate, yield 0 below it, progression
+ *   starting at 1 + 25% at the permit). Every harvestable source
+ *   carries a permitTier field; only silt's is pinned (trowel) —
+ *   all other gates are 'TBD' for Adam's pin pass, none invented.
+ *   See HARVEST_STAGES / harvestYieldForTool below.
  * - No other quantities are invented: the prototype carries no
  *   per-harvest amounts, so other sources carry item ids + secondary
  *   chances only. Amounts belong to the later harvest system /
@@ -80,24 +87,49 @@ export type ToolTier =
   | 'trundleTool';
 
 /**
- * Clay tool-tier groups, lowest to highest. Each group is one rank:
- * spade and axe-trowel share a rank because they are alternative routes
- * to the same convergence (spade-axe), not one better than the other.
+ * GENERAL HARVEST RULE (Adam, 2026-10-26 — extends the clay table to
+ * all harvests). Every harvest follows the same shape as clay: a base
+ * amount + a chance of a +1 bonus, rising per tool stage — plus a
+ * PERMIT TIER, the lowest tool stage that permits harvesting at all:
+ * - Below the permit tier: cannot harvest, yield 0. Hard gate, not a
+ *   low yield.
+ * - At the permit tier: base 1 + bonus chance of +1 (→2). This is the
+ *   START of that harvestable's progression, whatever stage the permit
+ *   sits at.
+ * - Each tool stage above the permit: base rises by 1 (2 + chance →3,
+ *   then 3 + chance →4, etc.).
+ * - Bonus chance: 25% as the standing default (clay's number), uniform
+ *   across stages, unless a harvestable is later given its own number.
+ *
+ * HARVEST STAGES (one model for clay and for everything else): sharp
+ * trowel is a SHARPENING of the trowel stage, not a separate harvest
+ * stage — so trowel and sharp trowel share stage 0. This is what makes
+ * the general rule reproduce clay's pinned table exactly (permit stage
+ * 0 → trowel 1, spade stage 1 → 2, spade-axe stage 2 → 3, trundle stage
+ * 3 → 4). Counting sharp as its own stage would wrongly give spade
+ * base 3 above a trowel permit. Spade and axe-trowel share a stage
+ * because they are alternative routes to the same convergence.
  */
-export const CLAY_TOOL_TIER_GROUPS: ToolTier[][] = [
-  ['trowel'],
-  ['sharpTrowel'],
+export const HARVEST_STAGES: ToolTier[][] = [
+  ['trowel', 'sharpTrowel'],
   ['spade', 'axeTrowel'],
   ['spadeAxe'],
   ['trundleTool'],
 ];
 
-/** Rank of a tool in the clay ladder, or -1 when she has no tool at all
- *  (no tool = no clay yield). Pure ordering data, not a harvest system. */
-export function toolTierRank(tier: ToolTier | null): number {
+/** Harvest stage of a tool, or -1 when she has no tool at all.
+ *  Pure ordering data, not a harvest system. */
+export function harvestStageRank(tier: ToolTier | null): number {
   if (!tier) return -1;
-  return CLAY_TOOL_TIER_GROUPS.findIndex((group) => group.includes(tier));
+  return HARVEST_STAGES.findIndex((stage) => stage.includes(tier));
 }
+
+/**
+ * Standing default bonus chance for the +1 harvest bonus (Adam's clay
+ * number, 2026-10-26): 25%, uniform across stages. A harvestable may
+ * later be given its own number; until then this is the number.
+ */
+export const HARVEST_BONUS_CHANCE = 0.25; // Same value as CLAY_BONUS_CHANCE, by design.
 
 /**
  * The bonus chance for the +1 clay bonus (Adam, 2026-10-26, starting
@@ -115,13 +147,12 @@ export interface ClayYieldTier {
 }
 
 /**
- * Clay yield per tier group, in CLAY_TOOL_TIER_GROUPS order (Adam,
- * 2026-10-26): base rises by 1 per tier, +1 bonus on top at every tier.
- * Sharp trowel (group 1) is not named in Adam's table, so it holds the
- * trowel amount (base 1) pending his word — see the header note.
+ * Clay yield per harvest stage, in HARVEST_STAGES order (Adam,
+ * 2026-10-26): base rises by 1 per stage, +1 bonus on top at every
+ * stage. Sharp trowel shares the trowel stage, so it holds the trowel
+ * amount (base 1) pending Adam's word — see the header note.
  */
-export const CLAY_YIELD_BY_TIER_GROUP: ClayYieldTier[] = [
-  { base: 1, bonus: 1, bonusChance: CLAY_BONUS_CHANCE },
+export const CLAY_YIELD_BY_STAGE: ClayYieldTier[] = [
   { base: 1, bonus: 1, bonusChance: CLAY_BONUS_CHANCE },
   { base: 2, bonus: 1, bonusChance: CLAY_BONUS_CHANCE },
   { base: 3, bonus: 1, bonusChance: CLAY_BONUS_CHANCE },
@@ -129,22 +160,71 @@ export const CLAY_YIELD_BY_TIER_GROUP: ClayYieldTier[] = [
 ];
 
 /** Clay yield for a tool, or null when she has no tool (no clay yield).
- *  Pure lookup data, not a harvest system. */
+ *  Pure lookup data, not a harvest system. This is the general rule
+ *  applied with permit stage 0 (trowel); see harvestYieldForTool. */
 export function clayYieldForTool(tier: ToolTier | null): ClayYieldTier | null {
-  const rank = toolTierRank(tier);
-  if (rank < 0) return null;
-  return CLAY_YIELD_BY_TIER_GROUP[rank];
+  const stage = harvestStageRank(tier);
+  if (stage < 0) return null;
+  return CLAY_YIELD_BY_STAGE[stage];
 }
 
 /**
  * A tool-gated yield: present only when she holds at least the required
- * tool, and scaled upward along the tier groups via yieldByTierGroup.
+ * tool, and scaled upward along the harvest stages via yieldByStage.
  */
 export interface ToolGatedYield {
   item: ItemId;
   requiresTool: ToolTier;
-  tierGroups: ToolTier[][];
-  yieldByTierGroup: ClayYieldTier[];
+  stages: ToolTier[][];
+  yieldByStage: ClayYieldTier[];
+}
+
+/**
+ * Permit tier for a harvest source: the lowest tool tier that permits
+ * harvesting it at all. 'TBD' means Adam has not named this source's
+ * gate yet — the field exists and the pattern is modelled, but no gate
+ * is invented. (Silt's permit is the trowel, per the clay rule.)
+ */
+export type PermitTier = ToolTier | 'TBD';
+
+/** Outcome of the general harvest pattern for one source + tool. */
+export type HarvestYieldOutcome =
+  | { permitted: true; base: number; bonus: number; bonusChance: number }
+  | {
+      permitted: false;
+      reason: 'not-harvestable' | 'below-permit' | 'permit-tbd';
+    };
+
+/**
+ * The general harvest pattern (Adam, 2026-10-26) for a source's PRIMARY
+ * yield amount. Secondary drops keep their prototype chances and are
+ * NOT scaled by this function; multi-step shapes (TUG, STOMP) are
+ * unchanged — this governs the amount once the harvest succeeds.
+ * Pure lookup data, not a harvest system: it does not roll the bonus,
+ * prompt, or change inventory — the later harvest system does that,
+ * using these numbers.
+ */
+export function harvestYieldForTool(
+  source: HarvestSourceDef,
+  tier: ToolTier | null,
+): HarvestYieldOutcome {
+  if (!source.harvestable || source.permitTier === null) {
+    return { permitted: false, reason: 'not-harvestable' };
+  }
+  if (source.permitTier === 'TBD') {
+    return { permitted: false, reason: 'permit-tbd' };
+  }
+  const permitStage = harvestStageRank(source.permitTier);
+  const stage = harvestStageRank(tier);
+  if (stage < permitStage) {
+    return { permitted: false, reason: 'below-permit' };
+  }
+  return {
+    permitted: true,
+    base: 1 + (stage - permitStage),
+    bonus: 1,
+    bonusChance: source.bonusChance ?? HARVEST_BONUS_CHANCE,
+  };
 }
 
 /** A prototype-carried secondary drop: item + chance + prototype message. */
@@ -208,6 +288,20 @@ export interface HarvestSourceDef {
   /** False for ground character (bog patch, standing water, marsh grass):
    *  present in the world, yields nothing, harvest system must skip it. */
   harvestable: boolean;
+  /**
+   * Permit tier (general harvest rule, Adam 2026-10-26): the lowest tool
+   * tier that permits harvesting this source at all. 'TBD' = Adam has
+   * not named this source's gate yet — no gate invented. null = not a
+   * harvestable source (ground character). Every harvestable source
+   * carries this field; only silt's is pinned (trowel, clay rule).
+   */
+  permitTier: ToolTier | 'TBD' | null;
+  /**
+   * Bonus chance for this source's primary-yield +1 bonus. Omitted
+   * means the standing default HARVEST_BONUS_CHANCE (0.25); a source
+   * may later be given its own number by Adam.
+   */
+  bonusChance?: number;
   /** Primary yield, when harvestable. */
   primaryYield?: ItemId;
   /** Prototype-carried secondary yields (empty when the prototype had none). */
@@ -243,6 +337,7 @@ export const SOURCES: HarvestSourceDef[] = [
       'Thick hanging vines, scenery twin of the harvestable vine strands. ' +
       'The harvestable form is tenderVines below; this tangle marks dense growth.',
     harvestable: false,
+    permitTier: null,
     secondaryYields: [],
     provenance: 'draft',
     biomes: ['mirewood', 'tanglewood', 'creekBottom', 'oldfieldRise'],
@@ -255,6 +350,7 @@ export const SOURCES: HarvestSourceDef[] = [
     description:
       'Low brush and saplings — young, brittle growth that snaps for framing.',
     harvestable: true,
+    permitTier: 'TBD',
     primaryYield: 'SNAP_WOOD',
     secondaryYields: [SPORES_25],
     provenance: 'draft',
@@ -267,6 +363,7 @@ export const SOURCES: HarvestSourceDef[] = [
     name: 'Fallen Log',
     description: 'A plain fallen log, lighter than downed oak — framing wood, not structure.',
     harvestable: true,
+    permitTier: 'TBD',
     primaryYield: 'SNAP_WOOD',
     secondaryYields: [],
     provenance: 'draft',
@@ -281,6 +378,7 @@ export const SOURCES: HarvestSourceDef[] = [
       'Dark peaty ground, not a harvestable object. Bog growth (bogGrowth) ' +
       'grows on and around it; peat moss is harvested from the moss carpet.',
     harvestable: false,
+    permitTier: null,
     secondaryYields: [],
     provenance: 'draft',
     biomes: ['mirewood', 'deepBog', 'creekBottom', 'oldfieldRise'],
@@ -294,6 +392,7 @@ export const SOURCES: HarvestSourceDef[] = [
       'Shallow standing water — ground character, not a source. Silt and ' +
       'stones are harvested at creek beds, not from open water.',
     harvestable: false,
+    permitTier: null,
     secondaryYields: [],
     provenance: 'draft',
     biomes: ['mirewood', 'deepBog', 'creekBottom'],
@@ -307,6 +406,7 @@ export const SOURCES: HarvestSourceDef[] = [
       'A standing tree. Its snapped lower limbs are snap-wood; felling a ' +
       'whole tree is not part of this source (no such mechanic is invented here).',
     harvestable: true,
+    permitTier: 'TBD',
     primaryYield: 'SNAP_WOOD',
     secondaryYields: [],
     provenance: 'draft',
@@ -319,6 +419,7 @@ export const SOURCES: HarvestSourceDef[] = [
     name: 'Snap-Wood Thicket',
     description: 'Brittle dead branches and framing wood throughout the silt.',
     harvestable: true,
+    permitTier: 'TBD',
     primaryYield: 'SNAP_WOOD',
     secondaryYields: [SPORES_25],
     provenance: 'prototype',
@@ -331,6 +432,7 @@ export const SOURCES: HarvestSourceDef[] = [
     name: 'Tender-Vine Strands',
     description: 'Primary binding and lashing for all structural work.',
     harvestable: true,
+    permitTier: 'TBD',
     primaryYield: 'TENDER_VINES',
     secondaryYields: [SPORES_25],
     multiStep: {
@@ -349,6 +451,7 @@ export const SOURCES: HarvestSourceDef[] = [
     name: 'Peat Moss Carpet',
     description: 'Spongy insulation and flooring that drinks up dampness.',
     harvestable: true,
+    permitTier: 'TBD',
     primaryYield: 'PEAT_MOSS',
     secondaryYields: [SPORES_25],
     provenance: 'prototype',
@@ -368,6 +471,7 @@ export const SOURCES: HarvestSourceDef[] = [
       'tier (CLAY_BONUS_CHANCE, starting value). Silt ground is the ' +
       'ONLY source that yields clay.',
     harvestable: true,
+    permitTier: 'trowel',
     primaryYield: 'RIVER_SLUDGE',
     secondaryYields: [
       {
@@ -380,8 +484,8 @@ export const SOURCES: HarvestSourceDef[] = [
       {
         item: 'CLAY',
         requiresTool: 'trowel',
-        tierGroups: CLAY_TOOL_TIER_GROUPS,
-        yieldByTierGroup: CLAY_YIELD_BY_TIER_GROUP,
+        stages: HARVEST_STAGES,
+        yieldByStage: CLAY_YIELD_BY_STAGE,
       },
     ],
     provenance: 'prototype',
@@ -396,6 +500,7 @@ export const SOURCES: HarvestSourceDef[] = [
       'Smooth basalt shaped by moving water. Useful for grinding or weighing — ' +
       'and river stone is the pinned whetstone (kept, no loss) for sharpening.',
     harvestable: true,
+    permitTier: 'TBD',
     primaryYield: 'RIVER_STONE',
     secondaryYields: [
       {
@@ -417,6 +522,7 @@ export const SOURCES: HarvestSourceDef[] = [
       'and, per the arc ruling, Primal Bone stays with a reagent hint in its ' +
       'description for when the magic layer opens. Survival first, magic hinted.',
     harvestable: true,
+    permitTier: 'TBD',
     primaryYield: 'BONE',
     secondaryYields: [],
     provenance: 'prototype',
@@ -429,6 +535,7 @@ export const SOURCES: HarvestSourceDef[] = [
     name: 'Salt Crust',
     description: 'Sharp, grey mineral deposits found where moisture has evaporated. High potency.',
     harvestable: true,
+    permitTier: 'TBD',
     primaryYield: 'SALT_CRYSTAL',
     secondaryYields: [
       {
@@ -447,6 +554,7 @@ export const SOURCES: HarvestSourceDef[] = [
     name: 'Downed Oak',
     description: 'Heavy structural logs that form the skeleton of true shelters. Hard to process.',
     harvestable: true,
+    permitTier: 'TBD',
     primaryYield: 'DOWNED_OAK',
     secondaryYields: [
       {
@@ -479,6 +587,7 @@ export const SOURCES: HarvestSourceDef[] = [
       '(prototype STUMP, isWorkstation) — it is an anchor to upgrade into a ' +
       'workstation, not a consumable harvest. Later wiring must not consume it.',
     harvestable: true,
+    permitTier: 'TBD',
     primaryYield: 'STUMP',
     secondaryYields: [],
     provenance: 'prototype',
@@ -493,6 +602,7 @@ export const SOURCES: HarvestSourceDef[] = [
       'Tall reeds of the marsh and creek edge — the marsh\'s harvestable fiber. ' +
       'Reeds bind like vines; the yield maps to the existing fiber item.',
     harvestable: true,
+    permitTier: 'TBD',
     primaryYield: 'TENDER_VINES',
     secondaryYields: [],
     provenance: 'draft',
@@ -508,6 +618,7 @@ export const SOURCES: HarvestSourceDef[] = [
       'Grassy marsh ground cover — the reedy, grassy face of marsh character. ' +
       'Scenery/ground cover, not a harvest source; the marsh harvest is the reed bed.',
     harvestable: false,
+    permitTier: null,
     secondaryYields: [],
     provenance: 'draft',
     biomes: [],
@@ -522,6 +633,7 @@ export const SOURCES: HarvestSourceDef[] = [
       'Tufty bog plants crowning a bog patch — the living face of the bog, ' +
       'distinct from the dark peat ground beneath it. Yields peat moss.',
     harvestable: true,
+    permitTier: 'TBD',
     primaryYield: 'PEAT_MOSS',
     secondaryYields: [SPORES_25],
     provenance: 'draft',
