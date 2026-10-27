@@ -47,9 +47,11 @@
  *     NOT stack with the large basket's 50 lb (the 'stack'
  *     total, 95 lb, is closed — it survives only as the
  *     unruled branch of the `largeBasketMode` option, which
- *     wiring does not pass). The question went open → pinned
- *     within the day (DEV confirmed it open, then Adam pinned
- *     replace); this header now states the pin. The mode
+ *     wiring does not pass). History, full chain: 10-26
+ *     replace pin → 10-27 open under the pin note (DEV
+ *     confirmed it open) → 10-27 replace ruling, final
+ *     (Adam, "for simplicity"); this header now states the
+ *     pin. The mode
  *     stays a required constructor option with NO default:
  *     shell construction passes the pinned value explicitly
  *     — new PersonalInventory({ largeBasketMode: 'replace' })
