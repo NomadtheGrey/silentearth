@@ -43,6 +43,14 @@ export interface BuildRecord {
 
 const ALL_RECORDS: BuildRecord[] = [
   {
+    merge: 'Merge #9',
+    pr: 19,
+    sha: '24c1547',
+    date: '2026-10-27',
+    what: 'Carrying in pounds, tool rides free, large basket replaces the small, multi-kind piles (entity + grant + menu + whole-pile take-all listener), flint findable + water bodies visible, flint alias completing the lighting path, build-history #8 entry.',
+    why: 'Pounds she can read, a tool that rides free, and piles that hold many kinds and give them back one kind at a time or whole — with flint findable at last, the lighting path she already had finally works from the ground up.',
+  },
+  {
     merge: 'Merge #8',
     pr: 17,
     sha: '3f568d8',
