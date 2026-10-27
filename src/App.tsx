@@ -804,6 +804,38 @@
  *   route is NOT rebuilt here — the inventory torch
  *   rows' Light button already covers it (flint route
  *   only). App.tsx only.
+ * - INTRO MODAL, LIVE (Adam, 2026-10-27 — DEV brief):
+ *   a first-run modal that explains the game briefly, says
+ *   who you're playing, then gives bullet points. Opens
+ *   when no save exists at boot (a corrupt save reads as
+ *   null, so it reads as fresh too); dismissing sets it
+ *   false for the session, and a player who never saves
+ *   sees it again next launch — the trigger working as
+ *   briefed, not a bug. Re-openable any time from the new
+ *   Introduction section in Options (Settings tab, after
+ *   Perspective): "Show introduction" closes Options and
+ *   opens the intro (Adam's re-open pin). Copy is DRAFT
+ *   for Adam's pin pass: game in two sentences (sixty
+ *   years on, Great Lakes wilds growing back wet and
+ *   strange), who (a witch, alone in the wilds — NO
+ *   invented name or origin story, none pinned), then
+ *   bullets: Adam's five in his words (Harvest; Find
+ *   food; Hunger is real; Discover your true abilities;
+ *   Discover what happened) plus the other core loops
+ *   ONLY as built (Build shelter; Craft tools; Light
+ *   fires; Explore) — no promised unbuilt system, and
+ *   ruins NOT listed as playable ("discover what
+ *   happened" is a direction, not a built feature).
+ *   Dismissal is X + backdrop tap + Escape, the same
+ *   trio as OptionsModal, so the Esc/[X]-out-of-any-
+ *   modal brief is met by construction here; the footer
+ *   line teaches the Options re-open path. No pause
+ *   wiring: the modal is read-and-dismiss, and the world
+ *   ticking behind it on a first run is trivial
+ *   (nothing placed, hunger 1 point per 30 seconds).
+ *   The LocationChip hides while the intro is open, like
+ *   any other modal. New IntroModal.tsx + OptionsModal
+ *   section + App wiring.
  * - TORCH DRIVING, LIVE (Adam, 2026-10-27 — DEV brief,
  *   umbrella precedent): the shell calls renderer.
  *   setCarriesLitTorch(inventory.count(ITEMS.litTorch)
@@ -991,6 +1023,7 @@ import {
   saveFontChoice,
   type FontId,
 } from './ui/OptionsModal';
+import { IntroModal } from './ui/IntroModal';
 import { InventoryPanel } from './ui/InventoryPanel';
 import { CraftingMenu } from './ui/CraftingMenu';
 import { ProximityHarvestButtons } from './ui/ProximityHarvestButtons';
@@ -3415,6 +3448,13 @@ export default function App() {
   // save file. No stored choice reads as IM Fell English.
   const [font, setFont] = useState<FontId>(loadFontChoice);
   const [optionsOpen, setOptionsOpen] = useState(false);
+  // Intro modal: open on first run — no save at boot (a corrupt
+  // save reads as null, so it reads as fresh too). Dismissing
+  // sets it false for the session; a player who never saves
+  // sees it again next launch, which is the trigger working
+  // as briefed, not a bug. Re-open any time from the
+  // Introduction section in Options (Settings tab).
+  const [introOpen, setIntroOpen] = useState(() => bootSave === null);
   const handleFontChange = (next: FontId): void => {
     setFont(next);
     saveFontChoice(next);
@@ -4172,7 +4212,21 @@ export default function App() {
           onFontChange={handleFontChange}
           perspective={cameraMode}
           onPerspectiveChange={(picked) => cycleToCamera(picked)}
+          onShowIntro={() => {
+            setOptionsOpen(false);
+            setIntroOpen(true);
+          }}
           onClose={() => setOptionsOpen(false)}
+          comfortable={isTouch}
+        />
+      ) : null}
+
+      {/* Intro modal: first run (no save at boot) + re-openable
+        from Options. Same z-50 shell as OptionsModal; the two
+        never stack (opening the intro closes Options). */}
+      {introOpen ? (
+        <IntroModal
+          onClose={() => setIntroOpen(false)}
           comfortable={isTouch}
         />
       ) : null}
@@ -4222,7 +4276,7 @@ export default function App() {
         collapsed on touch (it lives outside the collapsible
         stack). It hides only while a panel or the modal is
         open, where it would sit on top of the bottom sheet. */}
-      {!inventoryOpen && !craftingOpen && !optionsOpen ? (
+      {!inventoryOpen && !craftingOpen && !optionsOpen && !introOpen ? (
         <LocationChip
           x={position.x}
           z={position.z}
