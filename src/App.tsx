@@ -708,6 +708,40 @@
  *   flagged: "Sleep until sunrise". No new panel, no
  *   other invented text. App + ShelteredIndicator +
  *   events.ts (restored, not re-authored).
+ * - CAMPFIRE TAP FIX, LIVE (Adam, 2026-10-27 — DEV brief,
+ *   live-phone UX break): Adam tapped a campfire's
+ *   "Campfire" button and got a harvest failure instead of
+ *   the lighting menu. MECHANISM CORRECTION, stated
+ *   plainly: the brief's double-fire (a chip tap ALSO
+ *   firing tap-to-harvest) does NOT reproduce in code —
+ *   the chip button lives in a separate subtree from the
+ *   look field, in a higher stacking context (z-30 world
+ *   overlay above the z-20 touch controls), so a precise
+ *   chip tap cannot reach the look-field handlers. What
+ *   DOES reproduce: the chip's touch target was ~28 px
+ *   tall (py-1 text-sm), below the 44 px touch rule, so
+ *   a thumb tap aimed at the chip easily misses it — and
+ *   a miss on the right half lands on the look field,
+ *   which harvests ground (distance 0, always eligible)
+ *   and at too-hungry reports "Harvest failed:
+ *   too-hungry.", masking the lighting menu. FIX: the
+ *   chip button is now min 44 px tall, and it stops
+ *   touchstart propagation so a chip tap can never
+ *   double as a look-field tap whatever the future DOM
+ *   order (no preventDefault — that would swallow the
+ *   click itself). LIGHTING PATH VERIFIED HUNGER-FREE
+ *   end to end in code (not just at fed): chip onSelect
+ *   → setSelectedFireId → ContextMenu → handleFireAction
+ *   → engine startLighting/flintClick consults nothing
+ *   about hunger; chips render regardless of hunger; menu
+ *   actions gate only on flint possession and lighting
+ *   phase. No change needed on that path. TAP PRIORITY
+ *   PROPOSED, NOT BUILT (see the DEV report): a world
+ *   tap near a fire should prefer the fire menu over
+ *   ground harvest (scatter still first) — that changes
+ *   what every world tap near a fire does, so it waits
+ *   on DEV/Adam approval rather than shipping silently.
+ *   FireState.tsx + this bullet only.
  * - TRAP SAVE WIRING, LIVE (Adam, 2026-10-27 — DEV brief,
  *   Systems format half 4f3fa69): placed traps survive a
  *   refresh — saveNow passes trapState.snapshot() as

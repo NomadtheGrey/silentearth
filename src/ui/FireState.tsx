@@ -13,6 +13,16 @@
  * state; the caller (the engine lighting machine) owns what
  * those mean and when they change.
  *
+ * TOUCH TARGET (Adam, 2026-10-27 — campfire tap break): the
+ * button is at least 44 px tall, the touch rule. A smaller
+ * chip is easily missed by a thumb, and a missed tap on the
+ * right half lands on the look field, which harvests ground
+ * and at too-hungry reports a harvest failure instead of
+ * opening this menu. The button also stops touchstart
+ * propagation so a chip tap can never double as a
+ * look-field tap, whatever the future DOM order (no
+ * preventDefault — that would swallow the click itself).
+ *
  * Kinds are the fire ladder as placed: campfire, hearth, kiln,
  * bloomery. The chip is a button when the caller passes
  * onSelect (tap a fire to open its lighting menu); otherwise
@@ -110,8 +120,11 @@ export function FireState({
       <button
         type="button"
         onClick={onSelect}
+        onTouchStart={(e) => {
+          e.stopPropagation();
+        }}
         aria-label={`${KIND_WORD[kind]}: ${word}`}
-        className={'pointer-events-auto ' + style}
+        className={'pointer-events-auto min-h-[44px] ' + style}
       >
         {inner}
       </button>
