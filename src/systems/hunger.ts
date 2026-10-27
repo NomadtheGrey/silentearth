@@ -44,9 +44,10 @@
  *   indicator instead). This is a wiring/alignment step for the
  *   main chat, not a second stage vocabulary.
  * - Drain: full → empty in HUNGER_SECONDS_TO_EMPTY real seconds
- *   (starting tunable). tick() takes REAL seconds; if the game
- *   clock later runs at a different rate, wiring scales the dt it
- *   passes in — this module does not invent a game clock.
+ *   (PINNED rate, Adam 2026-10-27: 1 point per 30 seconds).
+ *   tick() takes REAL seconds; if the game clock later runs at
+ *   a different rate, wiring scales the dt it passes in — this
+ *   module does not invent a game clock.
  *
  * ------------------------------------------------------------------
  * EAT:
@@ -143,9 +144,13 @@ export const HUNGER_TOO_HUNGRY_THRESHOLD = 15;
 
 /**
  * Real seconds for a full meter to drain to empty, at the default
- * tick rate. Starting tunable: 1800 s = 30 real minutes.
+ * tick rate. PINNED (Adam, 2026-10-27): 3000 s = 50 real minutes
+ * — 1 point per 30 seconds. Reason, Adam's words: the old rate
+ * starved her out just trying to find apples. Stage timings
+ * follow automatically (thresholds unchanged): full → hungry
+ * 30 min (60 points), full → too-hungry 42.5 min (85 points).
  */
-export const HUNGER_SECONDS_TO_EMPTY = 1800;
+export const HUNGER_SECONDS_TO_EMPTY = 3000;
 
 // ---------------------------------------------------------------------------
 // Food — shared contract ids + lane-decided nutrition
