@@ -182,6 +182,7 @@ export const ITEM_ID_ALIASES: Readonly<Record<string, ItemId>> = {
   POISON_MUSHROOMS: 'poison-mushrooms',
   EDIBLE_MUSHROOM: 'edible-mushroom',
   POISON_MUSHROOM: 'poison-mushroom',
+  APPLE: 'apple',
 };
 
 /**
@@ -272,6 +273,7 @@ export const ITEM_DISPLAY_NAMES: Readonly<Record<string, string>> = {
   'poison-mushrooms': 'Poison Mushrooms',
   'edible-mushroom': 'Edible Mushroom',
   'poison-mushroom': 'Poison Mushroom',
+  apple: 'Apple',
 };
 
 /**

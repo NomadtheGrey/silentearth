@@ -186,6 +186,15 @@ export const FOOD_EDIBLE_MUSHROOM: ItemId = 'EDIBLE_MUSHROOM';
 export const FOOD_POISON_MUSHROOMS: ItemId = 'POISON_MUSHROOMS';
 /** Background's source spelling of the poison mushroom. */
 export const FOOD_POISON_MUSHROOM: ItemId = 'POISON_MUSHROOM';
+/**
+ * Apples — eaten RAW, as gathered, like berries (Adam, 2026-10-27).
+ * No cook gate, no poison variant, no invented effects. Source
+ * spelling APPLE (Background's apple-tree sources, parallel
+ * landing) holds its own food-table entry and display name,
+ * dual-spelling pattern as the mushroom amendment. Nutrition
+ * +10: berry parity, LANE-DECIDED, for Adam's pin pass.
+ */
+export const FOOD_APPLE: ItemId = 'APPLE';
 
 /**
  * Plain warning carried by the poison mushroom (Adam, 2026-10-26,
@@ -198,7 +207,7 @@ export const POISON_MUSHROOM_WARNING: string =
 
 /**
  * Foods eaten directly: berries as gathered, acorns once cooked,
- * mushrooms as gathered.
+ * mushrooms as gathered, apples raw as gathered.
  * SPELLING NOTE (2026-10-26 id fix): these are the NORMALIZED
  * (kebab) ids, derived from the FOOD_* harvest-spelling constants
  * above — because this list's live consumer is App's FOOD_IDS
@@ -214,6 +223,7 @@ export const FOOD_ITEMS: ReadonlyArray<ItemId> = [
   FOOD_COOKED_ACORNS,
   FOOD_MUSHROOMS,
   FOOD_EDIBLE_MUSHROOM,
+  FOOD_APPLE,
 ].map(normalizeItemId);
 
 /**
@@ -231,6 +241,7 @@ export const COOK_REQUIRED_ITEMS: ReadonlyArray<ItemId> = [FOOD_ACORNS];
  * raw acorns carried in the first hunger draft, now earned
  * through cooking instead of granted raw). Mushrooms 10: a
  * modest gathered bite, bog-berry tier, for Adam's pin pass.
+ * Apples 10: berry parity, LANE-DECIDED, for Adam's pin pass.
  */
 export const FOOD_NUTRITION: Readonly<Record<string, number>> = {
   [FOOD_BOG_BERRIES]: 10,
@@ -238,6 +249,7 @@ export const FOOD_NUTRITION: Readonly<Record<string, number>> = {
   [FOOD_COOKED_ACORNS]: 20,
   [FOOD_MUSHROOMS]: 10,
   [FOOD_EDIBLE_MUSHROOM]: 10,
+  [FOOD_APPLE]: 10,
 };
 
 /**
