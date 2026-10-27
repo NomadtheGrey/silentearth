@@ -764,6 +764,21 @@
  *   anywhere: large replace-vs-stack stays OPEN (70 if
  *   replaces, 95 if stacks) — the header reads
  *   capacityLb only. InventoryPanel + App + types only.
+ * - PILE CHIP + MENU, LIVE (Adam, 2026-10-27 — DEV brief,
+ *   on Systems' take-N + deposit 0e16c91): every in-range
+ *   pile gets a world-anchored chip (item + ×count,
+ *   fire-chip pattern, 44 px touch target); tap opens
+ *   Take one / Take all / Deposit one / Deposit all,
+ *   scoped to the pile's item (deposit disabled when
+ *   she carries none of it). Take calls
+ *   handlePileTakeRequest directly (1 / pile quantity);
+ *   deposit calls depositIntoPile + one pileState.drop
+ *   with the pile's EXACT x/z verbatim — a deposit to a
+ *   gone pile still lands at those coords, and the chip
+ *   refreshes straight from pileState after every menu
+ *   action. USE (touch) + desktop button keep take-all
+ *   as the fast path; exact-number picker not built.
+ *   PileChip + App only.
  * - TRAP SAVE WIRING, LIVE (Adam, 2026-10-27 — DEV brief,
  *   Systems format half 4f3fa69): placed traps survive a
  *   refresh — saveNow passes trapState.snapshot() as
@@ -810,6 +825,7 @@ import {
 } from './game/fireState';
 import { loomState } from './game/loomState';
 import { pileState, type PileTarget } from './game/pileState';
+import { HARVEST_RANGE } from './game/proximity';
 import { trapState } from './game/trapState';
 import type { TrapType } from './game/traps';
 import { harvestState } from './game/harvestState';
@@ -849,6 +865,7 @@ import { UmbrellaIcon } from './ui/UmbrellaIcon';
 import { FireState, type FireChipStatus } from './ui/FireState';
 import { PlacementPreview } from './ui/PlacementPreview';
 import { ContextMenu } from './ui/ContextMenu';
+import { PileChip } from './ui/PileChip';
 import type { ContextAction } from './ui/types';
 import { TouchControls } from './ui/TouchControls';
 import { LocationChip } from './ui/LocationChip';
@@ -884,8 +901,10 @@ import {
   weightOf,
 } from './systems/inventory';
 import {
+  depositIntoPile,
   dropFromInventory,
   handlePilePickupRequest,
+  handlePileTakeRequest,
 } from './systems/piles';
 import { executeCraft } from './systems/crafting-execution';
 import {
@@ -1397,10 +1416,13 @@ export default function App() {
   const [harvestTargets, setHarvestTargets] = useState<HarvestTarget[]>([]);
   // In-range dropped piles (harvest overflow), nearest first per
   // the tracker. Drives the touch USE fallback, the touch
-  // PICK UP label, and the desktop pickup button (see
-  // handleTouchInteract + the pile computations before
-  // return); piles get no screen of their own.
+  // PICK UP label, the desktop pickup button, and the pile
+  // chips + menu (see handleTouchInteract + the pile
+  // computations before return + pileMenuActions /
+  // handlePileAction). Ref mirrors state so the
+  // first-render recomputeAnchors closure sees piles fresh.
   const [piles, setPiles] = useState<PileTarget[]>([]);
+  const pilesRef = useRef<PileTarget[]>([]);
   // Harvest outcome feedback + multi-step progress, rendered
   // through WorldAnchor + ObjectFeedback / InteractionProgress.
   // Populated only by the outcome events (see the header) — never
@@ -1419,6 +1441,14 @@ export default function App() {
     { fire: PlacedFire; x: number; y: number }[]
   >([]);
   const [selectedFireId, setSelectedFireId] = useState<string | null>(null);
+  // Pile chips (projected anchors, fire-chip pattern) and the
+  // pile whose menu is open. The selected pile is the chip's
+  // target snapshot at tap time — its x/z are the pile's true
+  // coords verbatim, which the deposit path reuses exactly.
+  const [pileAnchors, setPileAnchors] = useState<
+    { pile: PileTarget; x: number; y: number }[]
+  >([]);
+  const [selectedPile, setSelectedPile] = useState<PileTarget | null>(null);
   const [placement, setPlacement] = useState<PlacementMode | null>(null);
   const [placementAnchor, setPlacementAnchor] = useState<{
     x: number;
@@ -1641,6 +1671,13 @@ export default function App() {
       fires.push({ fire, x: anchor.x, y: anchor.y });
     }
     setFireAnchors(fires);
+    const pileAnchorsNext: { pile: PileTarget; x: number; y: number }[] = [];
+    for (const pile of pilesRef.current) {
+      const anchor = projectAnchor(pile.x, pile.z, 'scatter');
+      if (!anchor) continue;
+      pileAnchorsNext.push({ pile, x: anchor.x, y: anchor.y });
+    }
+    setPileAnchors(pileAnchorsNext);
     const mode = placementRef.current;
     if (mode) {
       const player = playerRef.current;
@@ -1650,6 +1687,22 @@ export default function App() {
     } else {
       setPlacementAnchor(null);
     }
+  };
+
+  // Re-derive the in-range pile list straight from pileState
+  // (same range + nearest-first order as the tracker's
+  // piles:inRange channel). Menu take/deposit call this after
+  // acting, so the chip reflects the new pile state even when
+  // the acted pile is gone: a deposit to a gone pile creates
+  // a pile at those coords, and the chip must appear — never
+  // assume the pile survived.
+  const refreshPilesFromState = () => {
+    const player = playerRef.current;
+    if (!player) return;
+    const inRange = pileState.pilesInRange(player.x, player.z, HARVEST_RANGE);
+    pilesRef.current = inRange;
+    setPiles(inRange);
+    recomputeAnchors();
   };
 
   // Show a feedback chip for 4 seconds, then remove it. Caller-timed,
@@ -1881,7 +1934,9 @@ export default function App() {
       recomputeAnchors();
     });
     const offPiles = bus.on('piles:inRange', ({ piles: inRange }) => {
+      pilesRef.current = inRange;
       setPiles(inRange);
+      recomputeAnchors();
     });
     // Systems' 'pile:pickup-requested' listener (see the header
     // + systems/piles.ts): the SOLE granter on the event since
@@ -2840,6 +2895,129 @@ export default function App() {
     recomputeAnchors();
   };
 
+  // Pile menu actions (chip menu, Adam's full pile ruling):
+  // selective take + deposit, scoped to the pile's item.
+  // Deposit is disabled when she carries none of it (the
+  // menu reads the live count at render, and the press
+  // re-reads it — a stale enabled button can never
+  // deposit what is not there).
+  const pileMenuActions = (pile: PileTarget): ContextAction[] => {
+    const carried = inventory.count(pile.item as ItemId);
+    const noCarried = carried <= 0;
+    const needNote = `Needs carried ${displayNameFor(pile.item)}`;
+    return [
+      { id: 'take-one', label: 'Take one' },
+      { id: 'take-all', label: 'Take all', hint: `× ${pile.quantity}` },
+      {
+        id: 'deposit-one',
+        label: 'Deposit one',
+        disabled: noCarried,
+        disabledNote: noCarried ? needNote : undefined,
+      },
+      {
+        id: 'deposit-all',
+        label: 'Deposit all',
+        hint: noCarried ? undefined : `× ${carried}`,
+        disabled: noCarried,
+        disabledNote: noCarried ? needNote : undefined,
+      },
+      { id: 'close', label: 'Close' },
+    ];
+  };
+
+  // Pile menu press. The menu closes on every press; the
+  // action itself mirrors the take-all listener's outcome
+  // handling (missing pile: silent; full pack: Pack-full
+  // note, no refresh/save; grant: refresh + save +
+  // feedback). Take calls Systems' menu handler directly
+  // (no bus listener for it — 1 for Take one, the pile's
+  // quantity for Take all; the handler caps at the live
+  // pile quantity). Deposit calls depositIntoPile + one
+  // pileState.drop with the pile's EXACT x/z verbatim —
+  // never rounded, never recomputed from her position —
+  // so a deposit to a gone pile still lands at those
+  // coords (drop creates when nothing matches). Both
+  // paths refresh the chip straight from pileState after
+  // acting (see refreshPilesFromState).
+  const handlePileAction = (pile: PileTarget, actionId: string) => {
+    setSelectedPile(null);
+    // Menu feedback: the pile's anchor when visible, else
+    // her feet (ground rule, always visible) — a menu
+    // action's result must never vanish silently.
+    const sayAt = (x: number, z: number, text: string, tone: FeedbackTone) => {
+      const player = playerRef.current;
+      const anchor =
+        projectAnchor(x, z, 'scatter') ??
+        (player ? projectAnchor(player.x, player.z, 'ground') : null);
+      if (anchor) showFeedback(text, tone, anchor.x, anchor.y);
+    };
+    if (actionId === 'take-one' || actionId === 'take-all') {
+      const quantity = actionId === 'take-one' ? 1 : pile.quantity;
+      const outcome = handlePileTakeRequest(
+        pile.id,
+        quantity,
+        pileState,
+        inventory,
+      );
+      if (!outcome.found) return;
+      if (outcome.granted <= 0) {
+        sayAt(
+          outcome.x,
+          outcome.z,
+          `Pack full — no room for ${displayNameFor(outcome.item)}.`,
+          'blocked',
+        );
+        return;
+      }
+      refreshInventory();
+      saveNow();
+      refreshPilesFromState();
+      sayAt(
+        outcome.x,
+        outcome.z,
+        outcome.granted === outcome.requested
+          ? `Picked up ${outcome.granted} ${displayNameFor(outcome.item)}.`
+          : `Picked up ${outcome.granted} of ${outcome.requested} ${displayNameFor(outcome.item)}.`,
+        'gain',
+      );
+      return;
+    }
+    if (actionId === 'deposit-one' || actionId === 'deposit-all') {
+      const carried = inventory.count(pile.item as ItemId);
+      const quantity = actionId === 'deposit-one' ? 1 : carried;
+      if (quantity <= 0) return;
+      try {
+        const record = depositIntoPile(
+          {
+            item: pile.item as ItemId,
+            quantity: pile.quantity,
+            x: pile.x,
+            z: pile.z,
+          },
+          quantity,
+          inventory,
+        );
+        pileState.drop(record.item, record.quantity, record.x, record.z);
+        refreshInventory();
+        saveNow();
+        refreshPilesFromState();
+        sayAt(
+          record.x,
+          record.z,
+          `Deposited ${record.quantity} ${displayNameFor(record.item)}.`,
+          'gain',
+        );
+      } catch (error) {
+        sayAt(
+          pile.x,
+          pile.z,
+          error instanceof Error ? error.message : 'Could not deposit that.',
+          'blocked',
+        );
+      }
+    }
+  };
+
   const handleRemove = (target: HarvestTarget) => {
     // Same shape as a harvest press, action 'remove' (Background's
     // documented shape, 2003619): the outcome listener resolves
@@ -2921,6 +3099,12 @@ export default function App() {
     selectedFire === undefined
       ? null
       : (fireAnchors.find((a) => a.fire.id === selectedFire.id) ?? null);
+
+  // The pile whose menu is open, with its anchor.
+  const selectedPileAnchor =
+    selectedPile === null
+      ? null
+      : (pileAnchors.find((a) => a.pile.id === selectedPile.id) ?? null);
 
   // TOUCH CONTROLS (phone build — see the header): coarse-pointer
   // devices get the touch layer and the collapsible HUD; desktop
@@ -3248,6 +3432,17 @@ export default function App() {
             </Fragment>
           );
         })}
+        {pileAnchors.map(({ pile, x, y }) => (
+          <Fragment key={pile.id}>
+            <WorldAnchor x={x} y={y} interactive>
+              <PileChip
+                name={displayNameFor(pile.item)}
+                quantity={pile.quantity}
+                onSelect={() => setSelectedPile(pile)}
+              />
+            </WorldAnchor>
+          </Fragment>
+        ))}
         {selectedFire && selectedFireAnchor ? (
           <WorldAnchor
             x={selectedFireAnchor.x}
@@ -3259,6 +3454,20 @@ export default function App() {
               actions={fireMenuActions(selectedFire)}
               onSelect={(id) => handleFireAction(selectedFire.id, id)}
               onClose={() => setSelectedFireId(null)}
+            />
+          </WorldAnchor>
+        ) : null}
+        {selectedPile && selectedPileAnchor ? (
+          <WorldAnchor
+            x={selectedPileAnchor.x}
+            y={selectedPileAnchor.y}
+            interactive
+          >
+            <ContextMenu
+              objectName={`${displayNameFor(selectedPile.item)} × ${selectedPile.quantity}`}
+              actions={pileMenuActions(selectedPile)}
+              onSelect={(id) => handlePileAction(selectedPile, id)}
+              onClose={() => setSelectedPile(null)}
             />
           </WorldAnchor>
         ) : null}
