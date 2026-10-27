@@ -167,6 +167,11 @@ import {
   type StationContext,
 } from './crafting';
 import { WORN_CAPACITY_BONUS } from './clothes';
+import {
+  isLadderTool,
+  ownedToolItem,
+  type OwnedToolItem,
+} from './owned-tool';
 import { ITEMS, type ItemId, type Recipe } from './recipes';
 
 /** Pinned numbers, in POUNDS — see the header. Change only on Adam's word. */
@@ -557,22 +562,43 @@ export class PersonalInventory implements CraftingInventory {
    * add()). The fit is floor(free weight / item weight): a
    * 0.25 lb item with 0.4 lb free grants 1, not 1.6. Gear and
    * worn garments always fit in full, mirroring canCarry() /
-   * add(): adding a basket while full must still work. The
-   * harvest listener uses this to split fits vs remainder;
-   * the remainder becomes a ground pile (see ./piles.ts), never
+   * add(): adding a basket while full must still work. TOOLS
+   * (Adam's 2026-10-27 amendment) grant by POST-ADD fit, not
+   * by floor division: a first tool grants in full even from
+   * a full pack (it is uncounted once held), while a second
+   * unit counts — so a full pack grants 1 of 2 spades, and an
+   * upgrade that would displace a counted predecessor grants
+   * only if the post-add weight still fits. The harvest
+   * listener uses this to split fits vs remainder; the
+   * remainder becomes a ground pile (see ./piles.ts), never
    * silently dropped. add() itself is unchanged — crafting keeps
    * its hard cap and its atomicity.
    */
   addPartial(item: ItemId, quantity: number): PartialGrant {
     assertPositiveInteger(quantity, 'addPartial');
     const id = normalizeItemId(item);
-    const granted =
-      isCarryingGear(id) || this.worn.has(id)
-        ? quantity
-        : Math.min(
-            quantity,
-            Math.floor(this.freeUnits() / weightUnits(id)),
-          );
+    let granted: number;
+    if (isCarryingGear(id) || this.worn.has(id)) {
+      granted = quantity;
+    } else if (isLadderTool(id)) {
+      // Tool case: largest grant whose POST-ADD weight fits.
+      // Post-add weight is monotonic in the grant (adding more
+      // of one item never lightens the pack), so the first
+      // failure ends the search.
+      granted = 0;
+      for (let g = 1; g <= quantity; g++) {
+        if (this.fitsAfterAdd(id, g)) {
+          granted = g;
+        } else {
+          break;
+        }
+      }
+    } else {
+      granted = Math.min(
+        quantity,
+        Math.floor(this.freeUnits() / weightUnits(id)),
+      );
+    }
     if (granted > 0) {
       this.stacks.set(id, this.count(id) + granted);
     }
@@ -657,9 +683,11 @@ export class PersonalInventory implements CraftingInventory {
 
   /**
    * Contents weight in pounds: every stack except carrying gear
-   * and worn garments, quantity × weight. Computed in integer
-   * 0.05 lb units and converted once, so 0.1 lb items never
-   * drift (ten bog-berries weigh exactly 1 lb, not 0.999...).
+   * and worn garments, quantity × weight — MINUS exactly one
+   * unit of the owned tool (Adam's 2026-10-27 amendment).
+   * Computed in integer 0.05 lb units and converted once, so
+   * 0.1 lb items never drift (ten bog-berries weigh exactly
+   * 1 lb, not 0.999...).
    */
   used(): number {
     return this.usedUnits() / POUND_UNITS_PER_LB;
@@ -670,15 +698,63 @@ export class PersonalInventory implements CraftingInventory {
     return this.used();
   }
 
-  /** Contents weight in integer 0.05 lb units (exact; the math unit). */
-  private usedUnits(): number {
+  /**
+   * Contents weight in integer 0.05 lb units (exact; the math
+   * unit), for an explicit stack map and owned tool. Exclusions,
+   * in precedence order: carrying gear and worn garments exclude
+   * the WHOLE stack (existing rule); the owned tool excludes
+   * exactly ONE unit (Adam's 2026-10-27 amendment — she holds
+   * one tool at a time, so a second tool id or a duplicate unit
+   * counts at its table weight). The trundle-tool is gear, so
+   * it exits on the gear branch and is never double-exempted
+   * as a tool.
+   */
+  private usedUnitsFor(
+    stacks: Map<ItemId, number>,
+    owned: OwnedToolItem,
+  ): number {
     let total = 0;
-    for (const [item, quantity] of this.stacks) {
-      if (!isCarryingGear(item) && !this.worn.has(item)) {
+    for (const [item, quantity] of stacks) {
+      if (isCarryingGear(item) || this.worn.has(item)) {
+        continue;
+      }
+      if (item === owned && quantity >= 1) {
+        total += (quantity - 1) * weightUnits(item);
+      } else {
         total += quantity * weightUnits(item);
       }
     }
     return total;
+  }
+
+  /** Current contents weight in integer 0.05 lb units. */
+  private usedUnits(): number {
+    return this.usedUnitsFor(this.stacks, ownedToolItem(this));
+  }
+
+  /** Capacity in integer 0.05 lb units. */
+  private capacityUnits(): number {
+    return this.capacityBreakdown().total * POUND_UNITS_PER_LB;
+  }
+
+  /**
+   * Would the pack still fit AFTER adding quantity of item?
+   * Post-add semantics matter for tools: the added tool may
+   * BECOME the owned tool, and the previously owned tool then
+   * counts at its table weight — so the check runs against
+   * the merged stacks with the post-add owned tool, never
+   * against used + quantity × weight. (A first tool therefore
+   * fits even a full pack; an upgrade fits only if the pack
+   * still holds the displaced predecessor's weight.)
+   */
+  private fitsAfterAdd(id: ItemId, quantity: number): boolean {
+    const merged = new Map(this.stacks);
+    merged.set(id, (merged.get(id) ?? 0) + quantity);
+    const probe = { count: (it: ItemId) => merged.get(it) ?? 0 };
+    return (
+      this.usedUnitsFor(merged, ownedToolItem(probe)) <=
+      this.capacityUnits()
+    );
   }
 
   /** Remaining free weight in integer 0.05 lb units (never below 0). */
@@ -697,18 +773,16 @@ export class PersonalInventory implements CraftingInventory {
 
   /**
    * Would this addition fit? Gear and worn garments always fit
-   * (they are not counted). Other items fit when used weight +
-   * added weight <= capacity, compared in integer units.
+   * (they are not counted). Everything else is judged POST-ADD
+   * (see fitsAfterAdd): a first tool fits even a full pack,
+   * because it is uncounted once held.
    */
   canCarry(item: ItemId, quantity: number): boolean {
     const id = normalizeItemId(item);
     if (isCarryingGear(id) || this.worn.has(id)) {
       return true;
     }
-    return (
-      this.usedUnits() + quantity * weightUnits(id) <=
-      this.capacityBreakdown().total * POUND_UNITS_PER_LB
-    );
+    return this.fitsAfterAdd(id, quantity);
   }
 
   // --- Inspection / cloning ---
