@@ -748,6 +748,22 @@
  *   what every world tap near a fire does, so it waits
  *   on DEV/Adam approval rather than shipping silently.
  *   FireState.tsx + this bullet only.
+ * - LIT-FIRE MENU FIX, LIVE (Adam, 2026-10-27 — DEV brief,
+ *   torch build: a lit fire's chip must actually OPEN its
+ *   menu): the chip onSelect used to show "{name} lit."
+ *   feedback for a lit fire and never open the menu, so
+ *   the lit menu's cook actions were unreachable — the
+ *   menu only opened while unlit or lighting. FIX: the
+ *   chip now opens the menu in every state (unlit,
+ *   lighting, lit); the lit menu itself already existed
+ *   (Cook acorns stick/buried, disabled without carried
+ *   acorns, + Close). The lit menu is also the torch
+ *   pill's host: the additional "light torches" pill
+ *   (ONLY when she carries >=1 unlit torch, one press
+ *   lights ALL carried unlit torches) stays HELD until
+ *   Systems' batch lighting API lands and DEV signals
+ *   with the API name — no guessed API, no dead UI.
+ *   App.tsx only (chip onSelect + this bullet).
  * - WEIGHT DISPLAY, LIVE (Adam, 2026-10-27 — DEV brief,
  *   unheld on Systems' tool-exclusion fix 8d0aff2):
  *   personal capacity is pounds now. Panel header reads
@@ -3560,13 +3576,7 @@ export default function App() {
                   kind={fire.type}
                   status={status}
                   lightingDetail={detail}
-                  onSelect={() => {
-                    if (fire.lit) {
-                      showFeedback(`${FIRE_NAME[fire.type]} lit.`, 'info', x, y);
-                    } else {
-                      setSelectedFireId(fire.id);
-                    }
-                  }}
+                  onSelect={() => setSelectedFireId(fire.id)}
                 />
               </WorldAnchor>
             </Fragment>
