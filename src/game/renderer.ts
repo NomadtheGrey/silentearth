@@ -37,6 +37,8 @@ import {
   wrapGenWithState,
 } from './harvestState';
 import { terrainSpeedAt } from './movement';
+import { riverParamsFor, riverRibbonForChunk } from './river';
+import type { RiverParams } from './river';
 import { fireState } from './fireState';
 import { FIRE_DEFS } from './fire';
 import { shelterState, HOUSE_DEFS } from './shelter';
@@ -167,17 +169,26 @@ const KIND_RENDER: Record<ScatterKind, KindRender> = (() => {
   ][]) {
     table[kind] = {
       geometry: buildKindGeometry(source.mesh, kind),
-      material: vertexLambert(kind === 'standingWater' ? 0.75 : 1),
+      material: vertexLambert(kind === 'standingWater' || kind === 'pond' ? 0.75 : 1),
       baseY: source.mesh.baseY,
     };
   }
   return table;
 })();
 
+/** Shared river water material (one band, translucent like standing water). */
+const RIVER_MATERIAL = new THREE.MeshLambertMaterial({
+  color: 0x35708c,
+  transparent: true,
+  opacity: 0.75,
+  side: THREE.DoubleSide,
+});
+
 interface LoadedChunk {
   group: THREE.Group;
   meshes: THREE.InstancedMesh[];
   ground: THREE.Mesh;
+  river: THREE.Mesh | null;
 }
 
 /**
@@ -254,6 +265,8 @@ export class WorldRenderer {
   private clock = new THREE.Clock();
   private raf = 0;
   private chunks = new Map<string, LoadedChunk>();
+  /** River course for the current world (seed + spawn); null until set. */
+  private riverParams: RiverParams | null = null;
   private witch: THREE.Group;
   /** Carried umbrella graphic (models.ts), attached to the witch. */
   private umbrella: THREE.Group;
@@ -324,6 +337,10 @@ export class WorldRenderer {
     // loadChunk). The outcome listener (shell-owned, see
     // harvest.ts) marks state in the shared harvestState.
     this.gen = wrapGenWithState(gen);
+    // The river course is a pure function of seed + spawn, so it
+    // is computed once per world (here and in setWorldGen) rather
+    // than per chunk.
+    this.riverParams = riverParamsFor(String(gen.seed), gen.findSpawn());
     this.player = player;
     // Terrain slow wiring (Adam, 2026-10-26, PINNED): the
     // renderer owns both the generator and the player, so it
@@ -531,6 +548,7 @@ export class WorldRenderer {
     trapState.clear();
     this.rebuildTrapGroup();
     this.gen = wrapGenWithState(gen);
+    this.riverParams = riverParamsFor(String(gen.seed), gen.findSpawn());
     // A new world gets a new sky: fresh stars for the seed + the
     // cycle restarts at dawn. Skipped on the dispose path
     // (disposed is already true there) — dispose() removes the
@@ -660,8 +678,24 @@ export class WorldRenderer {
       // (models.ts), so one instanced mesh carries the whole model.
     }
 
+    // River: the world's winding water band (Adam 2026-10-27,
+    // visibility only). One ribbon segment per chunk, quads
+    // owned by midpoint — no overlaps, no gaps at borders.
+    let river: THREE.Mesh | null = null;
+    if (this.riverParams) {
+      const ribbon = riverRibbonForChunk(this.riverParams, cx, cz);
+      if (ribbon) {
+        const geo = new THREE.BufferGeometry();
+        geo.setAttribute('position', new THREE.Float32BufferAttribute(ribbon.positions, 3));
+        geo.setIndex(ribbon.indices);
+        geo.computeVertexNormals();
+        river = new THREE.Mesh(geo, RIVER_MATERIAL);
+        group.add(river);
+      }
+    }
+
     this.scene.add(group);
-    this.chunks.set(key, { group, meshes, ground });
+    this.chunks.set(key, { group, meshes, ground, river });
     bus.emit('world:chunkLoaded', { cx, cz, objectCount: data.objects.length });
   }
 
@@ -672,6 +706,9 @@ export class WorldRenderer {
   private disposeLoaded(loaded: LoadedChunk): void {
     this.scene.remove(loaded.group);
     for (const mesh of loaded.meshes) mesh.dispose();
+    // The river ribbon owns its geometry (the material is shared,
+    // like the kind materials, and is NOT disposed).
+    loaded.river?.geometry.dispose();
     loaded.ground.geometry.dispose();
     (loaded.ground.material as THREE.Material).dispose();
   }
