@@ -1082,6 +1082,38 @@
  *   arrows home; arriving hides them. App.tsx only.
  *   nearCreek wiring from the adapter is a follow-up,
  *   not this pass.
+ * - LOOK ACTION, LIVE (Adam, 2026-10-27 — DEV-approved
+ *   claim + target + content, Systems NameSight
+ *   ccab7ff): a Look button beside the harvest actions
+ *   (first row of the harvest column, above the nearest
+ *   target's button) + a result line under it. Press
+ *   looks closely at the NEAREST SCATTER target
+ *   (kind-keyed; ground dirt/mud/grass is not a thing
+ *   to look at — flagged: the brief's ground-first order
+ *   is a harvest rule, and ground has no portions in
+ *   DEV's table, so LOOK skips it rather than showing
+ *   dead dirt names; DEV can redirect to verbatim
+ *   ground-first in one line). The shell owns one
+ *   NameSight; press records look(key, portions) and
+ *   shows display (known prefix joined ' - ') or the
+ *   plain name when nothing is known (unlisted kinds
+ *   record an empty look and show the plain name, per
+ *   DEV's null rule — flagged: empty looks count toward
+ *   practice). Result hides when the target leaves
+ *   range; regenerate clears the line (knowledge itself
+ *   persists — it is hers, not the world's). Portions
+ *   live in UI-owned src/ui/lookPortions.ts, DEV's
+ *   DRAFT table verbatim (17 kinds × 3 portions,
+ *   flagged draft for Adam's pin pass) — nothing
+ *   beyond the table is invented. Owl hook: boot calls
+ *   setOwlOwned(false) — the charm is later, its id
+ *   not decided, never invented. Save: nameSight rides
+ *   saveNow + boot restore (check-not-set block).
+ *   No hunger gate (looking is observation). New
+ *   LookButton.tsx + lookPortions.ts + App wiring +
+ *   one optional lookNode prop on
+ *   ProximityHarvestButtons (UI-owned file; claim
+ *   surface grew by that prop — stated plainly).
  * POINTER DISCIPLINE: overlays are pointer-events-none except the
  * small interactive pieces (HUD buttons, panels, harvest buttons),
  * so world clicks — including the first-person mouse-capture click
@@ -1126,6 +1158,8 @@ import {
   CampDivination,
 } from './systems/divination';
 import { stillWatersNear } from './game/waterProximity';
+import { NameSight } from './systems/name-sight';
+import { portionsForKind, lookKeyForTarget } from './ui/lookPortions';
 import { cycleSplit } from './game/sky';
 import { createSleepListener } from './game/sleep';
 import {
@@ -1160,6 +1194,7 @@ import type { ContextAction } from './ui/types';
 import { TouchControls } from './ui/TouchControls';
 import { LocationChip } from './ui/LocationChip';
 import { ScryButton } from './ui/ScryButton';
+import { LookButton } from './ui/LookButton';
 import { PausedIndicator } from './ui/PausedIndicator';
 import { Popup } from './ui/Popup';
 import {
@@ -1781,6 +1816,19 @@ export default function App() {
   // show/hide through renderer.setCampArrowsVisible.
   const divinationRef = useRef(new CampDivination());
   const [scryVisible, setScryVisible] = useState(false);
+  // LOOK action (Adam 2026-10-27 — DEV-approved claim +
+  // target + content, Systems NameSight ccab7ff): the shell
+  // owns one NameSight; a press looks closely at the
+  // nearest SCATTER target (kind-keyed) and shows what is
+  // known (or the plain name). Owl hook: boot sets
+  // not-owned (the charm is later, its id not decided,
+  // never invented). The result line belongs to one
+  // target id and hides when that target leaves range.
+  const nameSightRef = useRef(new NameSight());
+  const [lookResult, setLookResult] = useState<{
+    targetId: string;
+    text: string;
+  } | null>(null);
   // Pile chips (projected anchors, fire-chip pattern) and the
   // pile whose menu is open. The menu is LIVE, not a tap-time
   // snapshot: selectedPileId names the pile, and the menu
@@ -1943,6 +1991,11 @@ export default function App() {
           // restore validates on load and drops id-less
           // entries). A path of torches survives refresh.
           torches: torchState.snapshot(),
+          // LOOK SAVE WIRING: the live look counts ride
+          // every save (snapshot as-is, first-look order;
+          // serialize writes them verbatim, restore
+          // validates on load). Knowledge survives refresh.
+          nameSight: nameSightRef.current.snapshot(),
           // WORLD-STATE SAVE WIRING: harvest state, sky
           // cycle, and facing ride every save (all three
           // draft fields optional — serialize defaults
@@ -2219,11 +2272,21 @@ export default function App() {
             })),
         );
         harvestState.restore(bootSaved.harvestState);
+        // LOOK SAVE WIRING (same pre-construction pattern):
+        // nameSight.restore() is silent and replaces; the
+        // shell's NameSight starts empty, so a second
+        // boot-effect run cannot re-restore over gameplay
+        // looks (guarded by the same check as traps).
+        nameSightRef.current.restore(bootSaved.nameSight ?? []);
       }
     }
     const renderer = new WorldRenderer(container, gen, player);
     player.attach(renderer.domElement);
     rendererRef.current = renderer;
+    // LOOK owl hook (hook only): the owl charm is a later
+    // charm (fashioned/enchanted, id not decided), so the
+    // shell wires not-owned until charm ownership lands.
+    nameSightRef.current.setOwlOwned(false);
     playerRef.current = player;
     if (!saveRestoredRef.current) {
       saveRestoredRef.current = true;
@@ -2679,6 +2742,10 @@ export default function App() {
     divinationRef.current.dismiss();
     renderer.setCampArrowsVisible(false);
     setScryVisible(false);
+    // A new world clears the shown LOOK line (its target is
+    // gone); the NameSight counts persist — knowledge is
+    // hers, not the world's.
+    setLookResult(null);
     setBiomeText(formatWeights(gen.weightsAt(spawn.x, spawn.z)));
     bus.emit('world:seedSet', { seed: nextSeed });
     recomputeAnchors();
@@ -3519,6 +3586,33 @@ export default function App() {
     setScryVisible(false);
   };
 
+  // LOOK press (DEV-approved target: nearest in-range
+  // harvest target, kind-keyed): the button targets the
+  // nearest SCATTER target only. Ground (dirt/mud/grass)
+  // is skipped by design, flagged: ground-first order is
+  // a harvest rule, ground is not a thing to look closely
+  // at, and DEV's table holds no ground portions — a
+  // ground LOOK would only ever show a dead plain name
+  // while counting toward practice. DEV can redirect to
+  // verbatim ground-first in one line (drop the scatter
+  // filter). Unlisted scatter kinds record an empty look
+  // and show the plain name, per DEV's null rule (flagged:
+  // empty looks count toward practice). No hunger gate:
+  // looking is observation, not action.
+  const handleLook = () => {
+    const target = harvestTargets.find((t) => t.kind === 'scatter');
+    if (!target) return;
+    const key = lookKeyForTarget(target);
+    if (!key) return;
+    const result = nameSightRef.current.look(key, portionsForKind(key) ?? []);
+    setLookResult({ targetId: target.id, text: result.display ?? target.name });
+    saveNow();
+  };
+
+  // The LOOK button's target, derived for the overlay: the
+  // nearest scatter target (first scatter in tracker order).
+  const lookTarget = harvestTargets.find((t) => t.kind === 'scatter');
+
   // Pile menu actions (chip menu, Adam's full pile ruling):
   // selective take + deposit, scoped to the pile's item.
   // Deposit is disabled when she carries none of it (the
@@ -4273,6 +4367,18 @@ export default function App() {
           targets={harvestTargets}
           onHarvest={handleHarvest}
           onRemove={handleRemove}
+          lookNode={
+            lookTarget ? (
+              <div className="flex flex-col items-center gap-1">
+                <LookButton onPress={handleLook} />
+                {lookResult && lookResult.targetId === lookTarget.id ? (
+                  <p className="max-w-[calc(100vw-1rem)] rounded-full bg-black/60 px-4 py-2 text-center text-sm font-medium text-[#f0ead6]">
+                    {lookResult.text}
+                  </p>
+                ) : null}
+              </div>
+            ) : undefined
+          }
         />
         {desktopPilePickup ? (
           <button
