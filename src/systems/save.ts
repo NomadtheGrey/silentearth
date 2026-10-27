@@ -29,6 +29,16 @@
  *   unreadable (fresh start, progress lost) for an additive
  *   field, and old code already ignores unknown fields. A v2
  *   is a migration decision for later, not this landing.
+ * - placed traps (id + type + position, structural shape of
+ *   the game layer's PlacedTrap — no game import): same
+ *   additive-field rule as piles (old saves load traps: []),
+ *   but DELIBERATELY more lenient on read than piles (see
+ *   deserializeSave): invalid trap entries pass through and
+ *   trapState.restore() validates + drops them, so a bad trap
+ *   record can never corrupt the whole document. Serialize
+ *   writes traps as-is (ids saved verbatim — restore()
+ *   recomputes its id counter from the max id suffix, so
+ *   later placeTrap ids cannot collide).
  *   APP WIRING FOLLOWS THE PILE ENTITY (Background): saveNow
  *   passes the pile singleton's snapshot as draft.piles, and
  *   boot restore re-places each saved pile through the
@@ -103,6 +113,21 @@ export interface SavedLoom {
   z: number;
 }
 
+/**
+ * A placed trap, as saved. Structural mirror of the game
+ * layer's PlacedTrap (src/game/traps.ts) by literal — systems
+ * does not import game modules. `type` is the trap recipe id
+ * (== its output item for all five traps); `id` is saved
+ * verbatim (trap:<type>:<n>) so restore() can recompute its
+ * counter from the max suffix.
+ */
+export interface SavedTrap {
+  id: string;
+  type: string;
+  x: number;
+  z: number;
+}
+
 export interface SaveData {
   version: typeof SAVE_VERSION;
   savedAt: number;
@@ -117,6 +142,8 @@ export interface SaveData {
   looms: SavedLoom[];
   /** Ground piles (harvest overflow); [] for old saves. */
   piles: GroundPile[];
+  /** Placed traps (craft-placed); [] for old saves. */
+  traps: SavedTrap[];
 }
 
 /** Draft input to serializeSave — the shell's live values. */
@@ -143,6 +170,17 @@ export interface SaveDraft {
   piles?: ReadonlyArray<{
     item: string;
     quantity: number;
+    x: number;
+    z: number;
+  }>;
+  /**
+   * Placed traps from trapState.snapshot(). OPTIONAL so
+   * existing saveNow call sites keep compiling unchanged
+   * until the App wiring lands (UI's parallel brief).
+   */
+  traps?: ReadonlyArray<{
+    id: string;
+    type: string;
     x: number;
     z: number;
   }>;
@@ -209,6 +247,18 @@ export function serializeSave(draft: SaveDraft): SaveData {
       contents: normalizeStacks(house.contents),
     })),
     looms: draft.looms.map((loom) => ({ x: loom.x, z: loom.z })),
+    // Traps: written AS-IS (ids + types verbatim, no filtering,
+    // no normalization — trap ids/types are not inventory ids).
+    // Invalid entries are restore()'s problem, not serialize's:
+    // trapState.restore() validates (isTrapType + finite coords
+    // + non-empty id) and drops them, and recomputes its id
+    // counter from the max id suffix.
+    traps: (draft.traps ?? []).map((trap) => ({
+      id: trap.id,
+      type: trap.type,
+      x: trap.x,
+      z: trap.z,
+    })),
     // Piles: normalized ids, invalid entries dropped (same
     // filtering rule as normalizeStacks). Order preserved —
     // positions matter, so piles are never merged here.
@@ -360,6 +410,27 @@ export function deserializeSave(value: unknown): SaveData | null {
         });
       }
     }
+    // Traps are optional on read: an old v1 save without them
+    // loads with traps: []. DELIBERATE deviation from the piles
+    // strictness above: when present, entries pass through
+    // UNVALIDATED — trapState.restore() validates (isTrapType
+    // + finite coords + non-empty id) and drops bad records,
+    // so a bad trap entry can never corrupt the whole document
+    // the way a bad pile entry does. A non-array traps field
+    // (not an entry problem) loads as [] — the section drops,
+    // the document survives.
+    const traps: SavedTrap[] = [];
+    if (value.traps !== undefined && Array.isArray(value.traps)) {
+      for (const entry of value.traps) {
+        if (!isRecord(entry)) continue;
+        traps.push({
+          id: entry.id as string,
+          type: entry.type as string,
+          x: entry.x as number,
+          z: entry.z as number,
+        });
+      }
+    }
     return {
       version: SAVE_VERSION,
       savedAt: value.savedAt,
@@ -373,6 +444,7 @@ export function deserializeSave(value: unknown): SaveData | null {
       houses,
       looms,
       piles,
+      traps,
     };
   } catch {
     return null;
