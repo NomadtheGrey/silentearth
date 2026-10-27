@@ -247,6 +247,21 @@ export interface EventMap {
    */
   'loom:placed': { id: string; x: number; z: number };
   /**
+   * A torch was placed (torchState.placeTorch, Adam 2026-10-27
+   * — a carried lit torch planted to light an area or path).
+   * Free placement, cost-free engine primitive — the consume
+   * of one carried 'lit-torch' lives with Systems + UI.
+   * Renderer rebuilds the placed group from this; UI projects
+   * placed-torch chips from torchState.snapshot() + this event.
+   */
+  'torch:placed': { id: string; x: number; z: number };
+  /**
+   * A placed torch was picked back up (torchState.removeTorch).
+   * The pickup grant (return 'lit-torch', lit not unlit) lives
+   * with Systems. Renderer rebuilds the placed group from this.
+   */
+  'torch:removed': { id: string };
+  /**
    * A trap entity was placed (trapState.placeTrap, Adam's
    * rule: crafting a trap places it right there). Cost-free
    * engine primitive — recipe/cost gating lives with Systems

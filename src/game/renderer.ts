@@ -40,6 +40,7 @@ import { terrainSpeedAt } from './movement';
 import { riverParamsFor, riverRibbonForChunk } from './river';
 import type { RiverParams } from './river';
 import { fireState } from './fireState';
+import { torchState } from './torchState';
 import { FIRE_DEFS } from './fire';
 import { shelterState, HOUSE_DEFS } from './shelter';
 import { loomState } from './loomState';
@@ -277,6 +278,14 @@ export const TORCH_HAND: Readonly<{ x: number; y: number; z: number }> = {
   y: 1.02,
   z: 0.05,
 };
+/**
+ * How far a placed torch's stick sinks into the ground (the
+ * planting look, my call, flagged): the stick base sits 5 cm
+ * under the surface, so a placed torch reads as stuck in the
+ * ground, not floating on it. The placed light sits at
+ * TORCH_FLAME_Y - PLACED_TORCH_SINK.
+ */
+export const PLACED_TORCH_SINK = 0.05;
 
 /**
  * Rotate a witch-local (x, z) offset by a Y-rotation (facing)
@@ -314,6 +323,8 @@ export class WorldRenderer {
   private carriesLitTorch = false;
   /** Placed-fire point lights (scene-level, rebuilt with the placed group). */
   private fireLights: THREE.PointLight[] = [];
+  /** Placed-torch point lights (scene-level, rebuilt with the placed group). */
+  private torchLights: THREE.PointLight[] = [];
   private gen: WorldGen;
   private player: PlayerController;
   /** Proximity tracker: engine-owned, subscribes to 'player:moved' and
@@ -412,6 +423,8 @@ export class WorldRenderer {
       bus.on('fire:lit', rebuild),
       bus.on('shelter:placed', rebuild),
       bus.on('loom:placed', rebuild),
+      bus.on('torch:placed', rebuild),
+      bus.on('torch:removed', rebuild),
     );
     this.rebuildPlacedGroup();
     // Dropped piles rebuild on their own events (a pile dropped
@@ -618,6 +631,8 @@ export class WorldRenderer {
     fireState.clear();
     shelterState.clear();
     loomState.clear();
+    // Placed torches belong to the old world's map too.
+    torchState.clear();
     this.rebuildPlacedGroup();
     // Dropped piles belong to the old world's map too.
     pileState.clear();
@@ -887,6 +902,25 @@ export class WorldRenderer {
     this.fireLights.push(light);
   }
 
+  /**
+   * One scene-level point light for a placed torch, at its
+   * flame: the SAME torch profile as the carried light
+   * (80/30/2, flicker ±15%), now at a fixed position — it
+   * lights an area or path instead of following her.
+   */
+  private addTorchLight(x: number, z: number): void {
+    const light = new THREE.PointLight(
+      TORCH_LIGHT_COLOR,
+      TORCH_LIGHT_INTENSITY,
+      TORCH_LIGHT_DISTANCE,
+      TORCH_LIGHT_DECAY,
+    );
+    light.position.set(x, TORCH_FLAME_Y - PLACED_TORCH_SINK, z);
+    light.userData.phase = flamePhase(x, z);
+    this.scene.add(light);
+    this.torchLights.push(light);
+  }
+
   /** Rebuild all player-placed meshes (fires + houses + looms). */
   private rebuildPlacedGroup(): void {
     if (this.placedGroup) {
@@ -907,6 +941,10 @@ export class WorldRenderer {
     // through setWorldGen, which rebuilds from cleared state.
     for (const light of this.fireLights) this.scene.remove(light);
     this.fireLights = [];
+    // Placed-torch lights rebuild the same way: a placed torch
+    // is always lit, so its light lives and dies with its mesh.
+    for (const light of this.torchLights) this.scene.remove(light);
+    this.torchLights = [];
     const group = new THREE.Group();
     const box = (
       w: number,
@@ -1062,6 +1100,23 @@ export class WorldRenderer {
       roll.rotation.z = Math.PI / 2;
       lg.add(roll);
       group.add(lg);
+    }
+    for (const torch of torchState.snapshot()) {
+      // Planted torch (Adam 2026-10-27 — light an area or
+      // path): the carried torch model, stuck upright in the
+      // ground (planting look, my call — upright planted, not
+      // leaning: a path light needs no wall to lean on), sunk
+      // by PLACED_TORCH_SINK so it reads planted. Always lit:
+      // the flame meshes are basic-material (read lit in
+      // darkness) and the light below is always on. Scene-level
+      // like all placed entities — chunk reload never touches
+      // it, and save restore rebuilds it via the constructor's
+      // initial rebuildPlacedGroup (torchState.restore first).
+      const tg = new THREE.Group();
+      tg.position.set(torch.x, -PLACED_TORCH_SINK, torch.z);
+      tg.add(buildTorch());
+      group.add(tg);
+      this.addTorchLight(torch.x, torch.z);
     }
     this.scene.add(group);
     this.placedGroup = group;
@@ -1304,6 +1359,14 @@ export class WorldRenderer {
       light.intensity =
         FIRE_LIGHT_INTENSITY *
         (1 + FIRE_LIGHT_FLICKER_AMPLITUDE * fireLightFlicker(this.flameTime, light.userData.phase as number));
+    }
+    // Placed-torch lights flicker the same way, at the torch
+    // amplitude, each with its own position-hash phase so a
+    // path of torches does not sync.
+    for (const light of this.torchLights) {
+      light.intensity =
+        TORCH_LIGHT_INTENSITY *
+        (1 + TORCH_FLICKER_AMPLITUDE * fireLightFlicker(this.flameTime, light.userData.phase as number));
     }
 
     // Witch mesh follows the player; hidden in first-person.
