@@ -93,18 +93,22 @@
  *   creates when nothing matches) — nothing vanishes, and
  *   the shell's chip should refresh from pileState rather
  *   than assuming the pile survived.
- * - TAKE-ALL FAST PATH, INTERIM (flagged, needs a brief):
+ * - TAKE-ALL FAST PATH (whole pile, DEV brief 2026-10-27):
  *   handlePilePickupRequest() — the USE + desktop take-all
- *   listener — still takes the pile's FIRST kind only (its
- *   pre-multi-kind behavior, now explicit through the
- *   kind-scoped store take). Whole-pile take-all (all
- *   kinds, UI's definition) is NOT implemented here: it
- *   needs a briefed shape (listener extension iterating
- *   kinds in stacks order with weight partials, vs a
- *   UI-side per-kind loop) — flagged to DEV, not invented
- *   mid-landing. The menu's Take all is per-kind
+ *   listener — takes the WHOLE pile: kinds in stacks order,
+ *   partial by weight as today, remainder stays in the
+ *   pile, pile deleted + 'pile:removed' when no kinds
+ *   remain. The menu's Take all is per-kind
  *   (handlePileTakeRequest with the kind's quantity) and
- *   is unaffected.
+ *   is unaffected. PARITY (Adam, 2026-10-27, direct:
+ *   "Desktop functionality must match phone
+ *   functionality"): touch USE and the desktop button
+ *   emit the SAME 'pile:pickup-requested' event to this
+ *   one listener, so the grant matches by construction
+ *   on both — and the desktop button's label names the
+ *   whole pile (not just the first kind) when the pile
+ *   holds many kinds, so the label never understates
+ *   the action.
  */
 
 import {
@@ -220,25 +224,29 @@ export interface PileGrant {
  * + feedback from the outcome; the grant logic itself
  * lives here, beside grantFromPile.
  *
- * Sequence, mirroring the bridge exactly (so the swap is
- * behavior-identical): look the pile up; grant what fits
- * of its FIRST kind; take EXACTLY the granted amount of
- * that kind from the pile (partial: the remainder stays);
- * report. Stale/missing pile: silent nothing (found:
- * false). Full pack: granted 0, NO take call, and the
- * shell shows the Pack-full note without refresh or save.
- * The take's remaining is authoritative for the outcome
- * (it owns the pile); in single-threaded execution the
- * get → grant → take sequence cannot interleave, so
- * take.taken === granted in practice — the outcome still
- * reports take's numbers, never invented ones.
- * INTERIM (see the header's take-all note): this listener
- * takes the FIRST kind only. Whole-pile take-all needs a
- * briefed shape and is flagged to DEV, not built here.
- * PileStore is structural on purpose: Background's
- * pileState satisfies it without systems importing game
- * modules (stacks/x/z + kind-scoped take; the store pile's
- * id is addressed by the pileId argument, not read here).
+ * Sequence (whole pile, DEV brief 2026-10-27): look the
+ * pile up; for EACH kind in stacks order, grant what fits
+ * by weight (free weight shrinks as kinds are taken, so
+ * later kinds get whatever room remains); take EXACTLY
+ * the granted amount of each kind (partial: the remainder
+ * stays); report. Stale/missing pile: silent nothing
+ * (found: false). Full pack: granted 0, NO take calls at
+ * all, and the shell shows the Pack-full note without
+ * refresh or save. The take's remaining is authoritative
+ * per kind (it owns the pile); in single-threaded
+ * execution the get → grant → take sequence cannot
+ * interleave, so take.taken === granted in practice — the
+ * outcome still reports take's numbers, never invented
+ * ones. A kind taken to zero drops out of the stacks
+ * (entity-side); a pile with no kinds left is deleted
+ * with 'pile:removed'. The outcome carries per-kind
+ * taken + remaining lists (a single item/quantity cannot
+ * represent a whole-pile take truthfully) — the shell's
+ * feedback joins them. PileStore is structural on
+ * purpose: Background's pileState satisfies it without
+ * systems importing game modules (stacks/x/z +
+ * kind-scoped take; the store pile's id is addressed by
+ * the pileId argument, not read here).
  */
 export interface PileStore {
   get(
@@ -261,9 +269,12 @@ export type PilePickupOutcome =
   | {
       found: true;
       pileId: string;
-      item: ItemId;
+      /** Kinds actually taken, in the pile's stacks order. Empty when the pack was full. */
+      taken: { item: ItemId; granted: number }[];
+      /** Total items taken across kinds. */
       granted: number;
-      remaining: number;
+      /** Kinds left in the pile after the take, in stacks order. Empty when the pile was deleted. */
+      remaining: { item: ItemId; quantity: number }[];
       /** Pile position, for the shell's anchored feedback (same values the bridge used). */
       x: number;
       z: number;
@@ -278,33 +289,57 @@ export function handlePilePickupRequest(
   if (!pile || pile.stacks.length === 0) {
     return { found: false, pileId };
   }
-  // INTERIM first-kind behavior, explicit: the first stack
-  // is the pile's first kind (the old legacy item/quantity
-  // fields carried exactly this). Whole-pile take-all is
-  // the flagged open seam — not this function.
-  const first = pile.stacks[0];
-  const grant = grantFromPile(
-    { item: first.item, quantity: first.quantity, x: pile.x, z: pile.z },
-    inventory,
-  );
-  if (grant.granted <= 0) {
-    return {
-      found: true,
-      pileId,
-      item: normalizeItemId(first.item),
-      granted: 0,
-      remaining: first.quantity,
-      x: pile.x,
-      z: pile.z,
-    };
+  const taken: { item: ItemId; granted: number }[] = [];
+  const remaining: { item: ItemId; quantity: number }[] = [];
+  let total = 0;
+  // Copy the stacks list: store.take() splices kinds out of
+  // the live pile as they empty, and iterating the live
+  // array would SKIP the kind after every fully-taken one.
+  // Each stack object is visited once, so sharing the
+  // objects is safe — only the list itself is copied.
+  for (const stack of [...pile.stacks]) {
+    // Defensive only: the entity never holds a zero
+    // stack (kinds drop out at zero) — and addPartial
+    // throws on a non-positive quantity, so skip one
+    // rather than crashing the listener on bad state.
+    if (stack.quantity <= 0) continue;
+    const grant = grantFromPile(
+      { item: stack.item, quantity: stack.quantity, x: pile.x, z: pile.z },
+      inventory,
+    );
+    if (grant.granted <= 0) {
+      // Pack full (or this kind cannot fit): nothing taken
+      // for this kind, and NO take call — same discipline
+      // as the single-kind path. Later kinds face the same
+      // full pack, so they grant 0 too; the loop still
+      // visits them so `remaining` lists every kind left.
+      remaining.push({
+        item: normalizeItemId(stack.item),
+        quantity: stack.quantity,
+      });
+      continue;
+    }
+    // VERBATIM stack item: pileState matches kinds
+    // verbatim (see handlePileTakeRequest's spelling note).
+    const take = store.take(pileId, stack.item, grant.granted);
+    taken.push({ item: normalizeItemId(stack.item), granted: grant.granted });
+    total += grant.granted;
+    if (take.remaining > 0) {
+      remaining.push({
+        item: normalizeItemId(stack.item),
+        quantity: take.remaining,
+      });
+    }
+    // take.remaining === 0: the kind dropped out of the
+    // stacks; when it was the last kind, the entity
+    // deleted the pile with 'pile:removed'.
   }
-  const take = store.take(pileId, first.item, grant.granted);
   return {
     found: true,
     pileId,
-    item: normalizeItemId(first.item),
-    granted: grant.granted,
-    remaining: take.remaining,
+    taken,
+    granted: total,
+    remaining,
     x: pile.x,
     z: pile.z,
   };
