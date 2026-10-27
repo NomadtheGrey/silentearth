@@ -626,6 +626,12 @@
  *   acorns (cook first). Wording lane-decided, flagged;
  *   mushroom lines join when mushroom sources land.
  *   App.tsx + new ForageHint; no game/systems change.
+ * - DEFAULT PERSPECTIVE FIRST-PERSON, LIVE (Adam, 2026-10-26
+ *   — DEV brief, first of two briefs): both fresh-start
+ *   defaults move from 'third' to 'first' (boot camera
+ *   fallback + new-world meta default). Saved games keep
+ *   their saved cameraMode; V/C cycling + Options
+ *   perspective control untouched. App.tsx only.
  * POINTER DISCIPLINE: overlays are pointer-events-none except the
  * small interactive pieces (HUD buttons, panels, harvest buttons),
  * so world clicks — including the first-person mouse-capture click
@@ -1129,7 +1135,7 @@ export default function App() {
   const [seedInput, setSeedInput] = useState(bootSave?.seed ?? DEFAULT_SEED);
   const [seed, setSeed] = useState(bootSave?.seed ?? DEFAULT_SEED);
   const [cameraMode, setCameraMode] = useState<CameraMode>(
-    bootSave?.cameraMode ?? 'third',
+    bootSave?.cameraMode ?? 'first',
   );
   // Restored position is applied to the player in the boot effect
   // (which overwrites this state from the player); until then it
@@ -1228,7 +1234,7 @@ export default function App() {
   // singletons are read directly, never mirrored.
   const saveMetaRef = useRef({
     seed: DEFAULT_SEED,
-    cameraMode: 'third' as CameraMode,
+    cameraMode: 'first' as CameraMode,
     position: { x: 0, z: 0 },
   });
   useEffect(() => {
