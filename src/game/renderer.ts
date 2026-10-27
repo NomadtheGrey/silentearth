@@ -85,6 +85,69 @@ function lambert(color: number, opacity = 1): THREE.MeshLambertMaterial {
   return mat;
 }
 
+/**
+ * Unlit campfire height (Adam 2026-10-27 — "a pile of sticks
+ * would be fine"): the old campfire topped out at ~0.32 m (flat
+ * crossed logs), which read as nothing on a phone screen from
+ * overhead or first-person. The pile now rises to this height
+ * so the unlit fire reads at a glance. The lit flame's base
+ * sits just under it (see the campfire branch in
+ * rebuildPlacedGroup).
+ */
+export const CAMPFIRE_PILE_TOP_Y = 0.85;
+
+/** Stick colors for the tipi pile (warm browns, varied). */
+const CAMPFIRE_STICK_COLORS = [0x6b4a2f, 0x7a5a35, 0x5a4028];
+
+/**
+ * The unlit campfire mesh: stone ring + ash bed + crossed base
+ * logs + a tipi pile of six sticks leaning to CAMPFIRE_PILE_TOP_Y.
+ * Exported (not a rebuildPlacedGroup local) so a headless probe
+ * can measure it: 16 meshes, ~1.3 m wide, 0.85 m tall.
+ * Deterministic — no randomness, fixed angles and colors.
+ */
+export function buildCampfireGroup(): THREE.Group {
+  const g = new THREE.Group();
+  // Stone ring (7 stones) + ash bed, unchanged from the old fire.
+  for (let i = 0; i < 7; i++) {
+    const a = (i / 7) * Math.PI * 2;
+    const stone = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.18, 0.22), lambert(0x8a8a86));
+    stone.position.set(Math.cos(a) * 0.55, 0.09, Math.sin(a) * 0.55);
+    stone.rotation.y = a;
+    g.add(stone);
+  }
+  const ash = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.05, 0.9), lambert(0x2b2b2b));
+  ash.position.set(0, 0.03, 0);
+  g.add(ash);
+  // Crossed base logs — the pile's foot.
+  const base1 = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 1.1, 8), lambert(0x6b4a2f));
+  base1.position.set(0, 0.12, 0);
+  base1.rotation.z = Math.PI / 2;
+  base1.rotation.y = 0.5;
+  const base2 = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 1.1, 8), lambert(0x6b4a2f));
+  base2.position.set(0, 0.12, 0);
+  base2.rotation.z = Math.PI / 2;
+  base2.rotation.y = -0.5;
+  g.add(base1, base2);
+  // Tipi pile: six sticks leaning from the ring to the apex.
+  const up = new THREE.Vector3(0, 1, 0);
+  const apex = new THREE.Vector3(0, CAMPFIRE_PILE_TOP_Y, 0);
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * Math.PI * 2;
+    const base = new THREE.Vector3(Math.cos(a) * 0.42, 0.05, Math.sin(a) * 0.42);
+    const dir = apex.clone().sub(base);
+    const len = dir.length();
+    const stick = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.04, 0.055, len, 6),
+      lambert(CAMPFIRE_STICK_COLORS[i % CAMPFIRE_STICK_COLORS.length]),
+    );
+    stick.position.copy(base).addScaledVector(dir, 0.5);
+    stick.quaternion.setFromUnitVectors(up, dir.normalize());
+    g.add(stick);
+  }
+  return g;
+}
+
 /** One shared geometry per mesh shape, built from the source descriptors
  *  in src/game/objects.ts (fill-in landing, 2026-10-25). Landing 1's
  *  placeholder primitives are replaced by these: distinct silhouettes
@@ -766,23 +829,14 @@ export class WorldRenderer {
       fg.position.set(fire.x, 0, fire.z);
       const lit = fire.lit && FIRE_DEFS[fire.type].flameWhenLit;
       if (fire.type === 'campfire') {
-        // Stone ring (7 stones, not 5), ash bed, three crossed logs.
-        for (let i = 0; i < 7; i++) {
-          const a = (i / 7) * Math.PI * 2;
-          fg.add(box(0.22, 0.18, 0.22, 0x8a8a86, Math.cos(a) * 0.55, 0.09, Math.sin(a) * 0.55, a));
-        }
-        fg.add(box(0.9, 0.05, 0.9, 0x2b2b2b, 0, 0.03, 0));
-        const log1 = cyl(0.06, 0.06, 1.1, 0x6b4a2f, 0, 0.16, 0);
-        log1.rotation.z = Math.PI / 2;
-        log1.rotation.y = 0.5;
-        const log2 = cyl(0.06, 0.06, 1.1, 0x6b4a2f, 0, 0.16, 0);
-        log2.rotation.z = Math.PI / 2;
-        log2.rotation.y = -0.5;
-        const log3 = cyl(0.05, 0.05, 1.0, 0x5a4028, 0, 0.26, 0);
-        log3.rotation.z = Math.PI / 2;
-        log3.rotation.y = 1.1;
-        fg.add(log1, log2, log3);
-        if (lit) { fg.add(this.flameMesh(fire.x, fire.z, 0.25, 1)); this.addFireLight(fire.x, fire.z, 0.25, 1); }
+        // Visible pile of sticks (Adam 2026-10-27 — the old flat
+        // 0.32 m campfire read as nothing on a phone screen):
+        // stone ring + ash bed + crossed base logs + a tipi pile
+        // rising to CAMPFIRE_PILE_TOP_Y. The lit flame's base
+        // sits just under the pile top so it emerges from the
+        // sticks instead of hiding inside them.
+        fg.add(buildCampfireGroup());
+        if (lit) { fg.add(this.flameMesh(fire.x, fire.z, 0.75, 1)); this.addFireLight(fire.x, fire.z, 0.75, 1); }
       } else if (fire.type === 'hearth') {
         // Stone base, side pillars, mantel, dark firebox opening,
         // inner logs — a hearth, not a slab.
