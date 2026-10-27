@@ -39,6 +39,8 @@ const SCATTER_KINDS: ScatterKind[] = [
   'stump', 'reed', 'marshGrass', 'bogGrowth',
   // Meadow/forest landing (2026-10-26): flower, tallTree (scenery only).
   'flower', 'tallTree',
+  // Mushroom landing (2026-10-26): edible + poison lookalikes.
+  'edibleMushroom', 'poisonMushroom',
 ];
 
 export function createWorldGen(seed: string): WorldGen {

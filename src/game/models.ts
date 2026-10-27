@@ -214,6 +214,27 @@ export function buildKindGeometry(spec: MeshSpec, kind: ScatterKind): THREE.Buff
         part(blob(0.7), shade(e, 1.1), { p: [-0.55, extraDy - 0.7, -0.3] }),
       ]);
     }
+    case 'mushroom': {
+      // Toadstool: cream stem + dome cap in the spec color.
+      // The poison kind wears pale cap spots — the close-look
+      // tell against the plain edible cap (same silhouette).
+      const parts: THREE.BufferGeometry[] = [
+        part(cyl(0.045, 0.06, 0.3, 6), e, { p: [0, 0.15, 0] }),
+        part(sphere(0.22, 8, 6), c, { p: [0, 0.26, 0], s: [1, 0.6, 1] }),
+      ];
+      if (kind === 'poisonMushroom') {
+        const spots: [Vec3, number][] = [
+          [[0.12, 0.36, 0.08], 0.035],
+          [[-0.1, 0.38, -0.05], 0.03],
+          [[0.02, 0.4, -0.12], 0.04],
+          [[-0.14, 0.35, 0.1], 0.03],
+        ];
+        for (const [p, r] of spots) {
+          parts.push(part(sphere(r, 6, 5), 0xe8e0c8, { p, s: [1, 0.4, 1] }));
+        }
+      }
+      return merge(parts);
+    }
     case 'bush':
       return merge([
         part(blob(0.7), c),

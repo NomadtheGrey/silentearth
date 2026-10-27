@@ -121,7 +121,9 @@ export type ItemId =
   | 'GRASS'
   | 'ACORNS'
   | 'BOG_BERRIES'
-  | 'ELDERBERRIES';
+  | 'ELDERBERRIES'
+  | 'EDIBLE_MUSHROOM'
+  | 'POISON_MUSHROOM';
 
 /**
  * Tool ladder stages for tool-gated yields (the garden trowel and its
@@ -341,7 +343,8 @@ export type MeshShape =
   | 'crystal'
   | 'bone'
   | 'flower'
-  | 'tallTree';
+  | 'tallTree'
+  | 'mushroom';
 
 export interface MeshSpec {
   shape: MeshShape;
@@ -861,6 +864,37 @@ export const SOURCES: HarvestSourceDef[] = [
     provenance: 'draft',
     biomes: ['forest'],
     mesh: { shape: 'tallTree', color: 0x4a2e18, extraColor: 0x2f5a26, baseY: 1.6, extraY: 3.7 },
+  },
+  {
+    id: 'edibleMushroom',
+    kind: 'edibleMushroom',
+    name: 'Edible Mushroom',
+    description:
+      'Tan-capped mushroom, smooth with no spots — the safe one. ' +
+      'Its toxic lookalike wears a rust-red cap with pale spots; ' +
+      'when in doubt, leave it.',
+    harvestable: true,
+    permitTier: 'hand',
+    primaryYield: 'EDIBLE_MUSHROOM',
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['mirewood', 'deepBog', 'creekBottom', 'tanglewood', 'forest'],
+    mesh: { shape: 'mushroom', color: 0xa8793f, extraColor: 0xe8dcc0, baseY: 0.2 },
+  },
+  {
+    id: 'poisonMushroom',
+    kind: 'poisonMushroom',
+    name: 'Poison Mushroom',
+    description:
+      'WARNING — TOXIC, do not eat. Rust-red cap with pale spots, ' +
+      'the lookalike of the safe tan mushroom. Pretty, and poisonous.',
+    harvestable: true,
+    permitTier: 'hand',
+    primaryYield: 'POISON_MUSHROOM',
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['mirewood', 'deepBog', 'creekBottom', 'tanglewood', 'forest'],
+    mesh: { shape: 'mushroom', color: 0x9a4a28, extraColor: 0xe8dcc0, baseY: 0.2 },
   },
 ];
 
