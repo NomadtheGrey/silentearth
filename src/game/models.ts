@@ -48,7 +48,8 @@ import type { MeshSpec } from './objects';
 import { hashSeed, mulberry32 } from './seed';
 
 /** Ground-cover disc radii per kind (disc-shaped sources only). */
-const DISC_RADIUS: Partial<Record<ScatterKind, number>> = {
+/** Ground-disc radii by scatter kind (shared with waterProximity's pond edge). */
+export const DISC_RADIUS: Partial<Record<ScatterKind, number>> = {
   bogPatch: 1.4,
   standingWater: 1.2,
   pond: 4.5,
@@ -642,6 +643,48 @@ export function buildCandle(): THREE.Group {
 
 /** Flame-center height inside a buildTorch() group (stick bottom = 0). */
 export const TORCH_FLAME_Y = 0.8;
+
+/**
+ * Downward camp arrow (Adam 2026-10-27 — BIG, OBNOXIOUS,
+ * pointing DOWN from ABOVE): a 5 m arrow — 3.2 m shaft +
+ * 1.8 m head, apex down — in unlit vivid yellow, fog-free,
+ * drawn on top of everything (depthTest off, renderOrder
+ * 999): a divination marker, not a physical object, so trees
+ * and terrain never hide it. Group origin = shaft center;
+ * the renderer hangs it above a house at CAMP_ARROW_CENTER_Y.
+ */
+export function buildCampArrow(): THREE.Group {
+  const g = new THREE.Group();
+  const mat = new THREE.MeshBasicMaterial({ color: 0xffe600, fog: false, depthTest: false });
+  const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 3.2, 8), mat);
+  shaft.renderOrder = 999;
+  g.add(shaft);
+  const head = new THREE.Mesh(new THREE.ConeGeometry(0.9, 1.8, 12), mat);
+  head.rotation.x = Math.PI; // apex down
+  head.position.y = -2.5;
+  head.renderOrder = 999;
+  g.add(head);
+  return g;
+}
+
+/**
+ * Screen-edge camp arrow: a flat arrow in the camera's XY
+ * plane, pointing +Y by default — the renderer rotates it
+ * (rotation.z) toward the off-screen camp. Same unmissable
+ * yellow, fog-free, depthless, on top.
+ */
+export function buildEdgeArrow(): THREE.Group {
+  const g = new THREE.Group();
+  const mat = new THREE.MeshBasicMaterial({ color: 0xffe600, fog: false, depthTest: false });
+  const shaft = new THREE.Mesh(new THREE.BoxGeometry(0.28, 1.2, 0.05), mat);
+  shaft.renderOrder = 999;
+  g.add(shaft);
+  const head = new THREE.Mesh(new THREE.ConeGeometry(0.55, 0.9, 12), mat);
+  head.position.y = 1.05;
+  head.renderOrder = 999;
+  g.add(head);
+  return g;
+}
 
 /**
  * Carried torch (Adam 2026-10-27 — Systems torch item + batch

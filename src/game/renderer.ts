@@ -27,7 +27,7 @@ import type { WorldGen } from './worldgen';
 import { PlayerController } from './player';
 import { marshWeight } from './biomes';
 import { SOURCE_FOR_KIND } from './objects';
-import { buildCandle, buildKindGeometry, buildTorch, buildUmbrella, buildWitch, CANDLE_FLAME_Y, TORCH_FLAME_Y, vertexLambert } from './models';
+import { buildCampArrow, buildCandle, buildEdgeArrow, buildKindGeometry, buildTorch, buildUmbrella, buildWitch, CANDLE_FLAME_Y, TORCH_FLAME_Y, vertexLambert } from './models';
 import { ProximityTracker } from './proximity';
 import {
   harvestState,
@@ -41,6 +41,7 @@ import { riverParamsFor, riverRibbonForChunk } from './river';
 import type { RiverParams } from './river';
 import { fireState } from './fireState';
 import { torchState } from './torchState';
+import type { PlacedHouse } from './shelter';
 import { FIRE_DEFS } from './fire';
 import { shelterState, HOUSE_DEFS } from './shelter';
 import { loomState } from './loomState';
@@ -260,6 +261,48 @@ export function flamePhase(x: number, z: number): number {
 export function fireLightFlicker(flameTime: number, phase: number): number {
   return (Math.sin(flameTime * 10 + phase) + Math.sin(flameTime * 23 + phase + 1.7)) / 2;
 }
+/**
+ * Camp-arrow center height above a house: tip at 4.1 m (clears
+ * every house roof) and top at 9.1 m — BIG, as Adam ordered.
+ * Bob amplitude (metres, on flameTime — catches the eye).
+ * Screen-edge arrow depth in front of the camera (camera
+ * space) + NDC clamp (arrows sit just inside the frame).
+ */
+export const CAMP_ARROW_CENTER_Y = 7.5;
+export const CAMP_ARROW_BOB = 0.5;
+export const CAMP_EDGE_DEPTH = 8;
+export const CAMP_EDGE_CLAMP = 0.88;
+
+/**
+ * Screen-edge arrow placement for an off-screen camp (pure,
+ * probed). Input: the camp anchor's NDC (x, y) + whether it
+ * is behind the camera. Behind camps flip (project() mirrors
+ * behind-camera points) and are forced off-screen: a behind
+ * camp is never "in view", and its flipped NDC is pushed past
+ * the edge so the arrow lands on the frame pointing the turn
+ * direction instead of mid-screen. Returns the clamped edge
+ * position + the screen-space angle the arrow must point
+ * (rotation.z for a +Y arrow) + whether the camp is off-screen.
+ */
+export function edgeArrowTransform(ndcX: number, ndcY: number, behind: boolean): { x: number; y: number; angle: number; offScreen: boolean } {
+  let x = ndcX;
+  let y = ndcY;
+  if (behind) {
+    x = -x;
+    y = -y;
+    const m = Math.max(Math.abs(x), Math.abs(y));
+    if (m > 0 && m < 1.2) { x = (x / m) * 1.2; y = (y / m) * 1.2; }
+    else if (m === 0) { x = 0; y = 1.2; }
+  }
+  const offScreen = behind || Math.abs(x) > 1 || Math.abs(y) > 1;
+  const cx = Math.max(-CAMP_EDGE_CLAMP, Math.min(CAMP_EDGE_CLAMP, x));
+  const cy = Math.max(-CAMP_EDGE_CLAMP, Math.min(CAMP_EDGE_CLAMP, y));
+  const dx = x - cx;
+  const dy = y - cy;
+  const angle = dx === 0 && dy === 0 ? 0 : Math.atan2(-dx, dy);
+  return { x: cx, y: cy, angle, offScreen };
+}
+
 /** Witch-local hand position of the candle group (left hand). */
 export const CANDLE_HAND: Readonly<{ x: number; y: number; z: number }> = {
   x: -0.55,
@@ -325,6 +368,16 @@ export class WorldRenderer {
   private fireLights: THREE.PointLight[] = [];
   /** Placed-torch point lights (scene-level, rebuilt with the placed group). */
   private torchLights: THREE.PointLight[] = [];
+  /** Camp-arrow world group (one downward arrow per placed house). */
+  private campArrowGroup: THREE.Group | null = null;
+  /** Camp-arrow screen-edge arrows (camera children, one per placed house). */
+  private campEdgeArrows: { mesh: THREE.Group; house: PlacedHouse }[] = [];
+  /** True while a water scry has revealed the camp arrows (shell-driven setter). */
+  private campArrowsVisible = false;
+  /** Scratch vectors for the per-frame edge-arrow update (no per-frame allocation). */
+  private edgeAnchor = new THREE.Vector3();
+  private edgeToCamp = new THREE.Vector3();
+  private edgeForward = new THREE.Vector3();
   private gen: WorldGen;
   private player: PlayerController;
   /** Proximity tracker: engine-owned, subscribes to 'player:moved' and
@@ -427,6 +480,13 @@ export class WorldRenderer {
       bus.on('torch:removed', rebuild),
     );
     this.rebuildPlacedGroup();
+    // Camp arrows rebuild on house placement (houses restore
+    // by re-placing, which emits shelter:placed — no silent
+    // restore path to miss) + once here for restored houses
+    // placed before construction.
+    const rebuildCamps = (): void => this.rebuildCampArrows();
+    this.unsubPlaced.push(bus.on('shelter:placed', rebuildCamps));
+    this.rebuildCampArrows();
     // Dropped piles rebuild on their own events (a pile dropped
     // at her feet must appear without a chunk reload).
     const rebuildPiles = (): void => this.rebuildPileGroup();
@@ -451,6 +511,10 @@ export class WorldRenderer {
       0.1,
       1000,
     );
+    // The camera joins the scene graph so its children render:
+    // screen-edge camp arrows are camera children (HUD-like,
+    // always in front). The camera itself is never drawn.
+    this.scene.add(this.camera);
 
     // Dim October light: the woods are watching, not sunbathing.
     this.scene.fog = new THREE.FogExp2(0x1a2018, 0.008);
@@ -559,6 +623,25 @@ export class WorldRenderer {
   }
 
   /**
+   * Camp-arrow visibility (Adam 2026-10-27 — water scrying
+   * reveals the arrows; SCRY BUTTON RULING, superseding the
+   * no-button amendment: approach still water → Scry button
+   * appears → press → arrows). The shell (Systems'
+   * CampDivination state via App/UI) calls this on Scry press
+   * (true) and on arrival/dismiss (false); default hidden —
+   * arrows are the scry reward, not a permanent HUD. Reveal
+   * persists until arrival or dismiss per Systems' state —
+   * this setter only follows the shell, it holds whatever it
+   * was last told until called again. The button itself is
+   * UI's build, not this setter's.
+   */
+  setCampArrowsVisible(visible: boolean): void {
+    this.campArrowsVisible = visible;
+    if (this.campArrowGroup) this.campArrowGroup.visible = visible;
+    if (!visible) for (const edge of this.campEdgeArrows) edge.mesh.visible = false;
+  }
+
+  /**
    * Sky save seam (Adam 2026-10-27, follow-up to the persistence
    * round). SkyRig is renderer-owned and `sky` stays private — the
    * shell must NOT reach through to the rig (no public accessor, by
@@ -634,6 +717,8 @@ export class WorldRenderer {
     // Placed torches belong to the old world's map too.
     torchState.clear();
     this.rebuildPlacedGroup();
+    // Camp arrows belong to the old world's houses too.
+    this.rebuildCampArrows();
     // Dropped piles belong to the old world's map too.
     pileState.clear();
     this.rebuildPileGroup();
@@ -1123,6 +1208,49 @@ export class WorldRenderer {
   }
 
   /**
+   * Rebuild camp arrows from the placed-house list (Adam
+   * 2026-10-27 — big, obnoxious, pointing down from above):
+   * one world arrow above EACH placed house (her camps,
+   * plural — every house type is a camp), plus one
+   * screen-edge arrow per house as a camera child (hidden
+   * until its camp leaves the view). World arrows bob on
+   * flameTime in the loop; edge arrows are repositioned
+   * there per frame. Rebuilt on shelter:placed + setter
+   * toggle paths; setWorldGen clears via the empty snapshot.
+   */
+  private rebuildCampArrows(): void {
+    if (this.campArrowGroup) {
+      this.scene.remove(this.campArrowGroup);
+      this.campArrowGroup.traverse((obj) => {
+        if (obj instanceof THREE.Mesh) {
+          obj.geometry.dispose();
+          const mat = obj.material;
+          if (Array.isArray(mat)) mat.forEach((m) => m.dispose());
+          else mat.dispose();
+        }
+      });
+      this.campArrowGroup = null;
+    }
+    for (const edge of this.campEdgeArrows) this.camera.remove(edge.mesh);
+    this.campEdgeArrows = [];
+    const group = new THREE.Group();
+    for (const house of shelterState.snapshot()) {
+      const arrow = buildCampArrow();
+      arrow.position.set(house.x, CAMP_ARROW_CENTER_Y, house.z);
+      arrow.userData.phase = flamePhase(house.x, house.z);
+      arrow.userData.baseY = CAMP_ARROW_CENTER_Y;
+      group.add(arrow);
+      const edge = buildEdgeArrow();
+      edge.visible = false;
+      this.camera.add(edge);
+      this.campEdgeArrows.push({ mesh: edge, house });
+    }
+    group.visible = this.campArrowsVisible;
+    this.scene.add(group);
+    this.campArrowGroup = group;
+  }
+
+  /**
    * Rebuild the dropped-pile meshes (harvest overflow, Adam
    * 2026-10-26): one heap + marker flag per pile, phone-cheap
    * (3 meshes per pile, piles are few). The heap is a flattened
@@ -1454,6 +1582,35 @@ export class WorldRenderer {
       playerX: this.player.x,
       playerZ: this.player.z,
     });
+
+    // Camp arrows, after this frame's camera transform is set:
+    // world arrows bob (visible only while the scry setter is
+    // on); edge arrows track off-screen camps per frame
+    // (camera children, so they ride every view). updateMatrix
+    // World first — project() needs this frame's matrices, not
+    // last frame's (render would refresh them too late).
+    if (this.campArrowsVisible && this.campArrowGroup) {
+      for (const arrow of this.campArrowGroup.children) {
+        arrow.position.y =
+          (arrow.userData.baseY as number) +
+          CAMP_ARROW_BOB * Math.sin(this.flameTime * 2 + (arrow.userData.phase as number));
+      }
+      this.camera.updateMatrixWorld();
+      const halfH = Math.tan(THREE.MathUtils.degToRad(this.camera.fov / 2)) * CAMP_EDGE_DEPTH;
+      const halfW = halfH * this.camera.aspect;
+      this.camera.getWorldDirection(this.edgeForward);
+      for (const edge of this.campEdgeArrows) {
+        this.edgeAnchor.set(edge.house.x, CAMP_ARROW_CENTER_Y, edge.house.z);
+        this.edgeToCamp.copy(this.edgeAnchor).sub(this.camera.position);
+        const behind = this.edgeToCamp.dot(this.edgeForward) < 0;
+        this.edgeAnchor.project(this.camera);
+        const t = edgeArrowTransform(this.edgeAnchor.x, this.edgeAnchor.y, behind);
+        if (!t.offScreen) { edge.mesh.visible = false; continue; }
+        edge.mesh.visible = true;
+        edge.mesh.position.set(t.x * halfW, t.y * halfH, -CAMP_EDGE_DEPTH);
+        edge.mesh.rotation.set(0, 0, t.angle);
+      }
+    }
 
     this.renderer.render(this.scene, this.camera);
   };
