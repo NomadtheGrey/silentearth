@@ -424,14 +424,15 @@
  *   with no pile in range USE behaves exactly as before.
  *   Systems' listener owns the grant now (systems/piles.ts
  *   handlePilePickupRequest, landed on DEV's bridge-out
- *   signal): grant what fits, take exactly that much
- *   (partial, remainder stays), then refresh + save +
- *   feedback; missing pile grants nothing, full pack takes
- *   nothing + note. LIMITS: touch USE only
- *   (desktop has no USE affordance — desktop pile pickup
- *   needs a button or a key, follow-up); if piles should
- *   outrank ground outright, that is a one-line priority
- *   change for Adam's call.
+ *   signal): the WHOLE pile, kinds in stacks order,
+ *   partial by weight (remainder stays), then refresh +
+ *   save + feedback; missing pile grants nothing, full
+ *   pack takes nothing + note. Touch USE and the desktop
+ *   button emit the same event to that one listener, so
+ *   the grant matches on both (desktop/phone parity,
+ *   Adam 2026-10-27); if piles should outrank ground
+ *   outright, that is a one-line priority change for
+ *   Adam's call.
  * - PILE BRIDGE OUT (DEV sequencing plan, 2026-10-26): the
  *   shell's 'pile:pickup-requested' grant bridge is removed
  *   (App.tsx only). The touch USE handler STILL emits
@@ -805,11 +806,11 @@
  *   emptied pile closes it. Take passes the tapped kind
  *   (verbatim stack item — pileState matches verbatim);
  *   deposit passes the tapped kind + the pile's EXACT x/z
- *   verbatim. USE (touch) + desktop button UNCHANGED here:
- *   they still emit pile:pickup-requested, and Systems'
- *   listener still takes the FIRST kind only — whole-pile
- *   take-all is Systems' separately-briefed seam, and the
- *   menu's per-kind Take all is not blocked on it.
+ *   verbatim. USE (touch) + desktop button: they emit
+ *   pile:pickup-requested, and Systems' listener takes
+ *   the WHOLE pile (kinds in stacks order, partial by
+ *   weight, remainder stays); the menu's per-kind Take
+ *   all is unaffected.
  *   Exact-number picker not built. PileChip + App only.
  * - TRAP SAVE WIRING, LIVE (Adam, 2026-10-27 — DEV brief,
  *   Systems format half 4f3fa69): placed traps survive a
@@ -2003,10 +2004,14 @@ export default function App() {
     });
     // Systems' 'pile:pickup-requested' listener (see the header
     // + systems/piles.ts): the SOLE granter on the event since
-    // the shell bridge came out (b23a042). Behavior mirrors
-    // the bridge exactly — missing pile: silent nothing; full
-    // pack: Pack-full note, no take, no refresh/save; grant:
-    // refresh + save + Picked-up feedback, anchored at the pile.
+    // the shell bridge came out (b23a042) — touch USE and the
+    // desktop button emit the same event, so one listener
+    // grants both (desktop/phone parity by construction).
+    // Behavior: missing pile: silent nothing; full pack:
+    // Pack-full note, no take, no refresh/save; grant: the
+    // WHOLE pile (kinds in stacks order, partial by weight,
+    // remainder stays), then refresh + save + Picked-up
+    // feedback listing every kind taken, anchored at the pile.
     const offSystemsPilePickup = bus.on(
       'pile:pickup-requested',
       ({ pileId }) => {
@@ -2020,7 +2025,7 @@ export default function App() {
         if (outcome.granted <= 0) {
           if (anchor) {
             showFeedback(
-              `Pack full — no room for ${displayNameFor(outcome.item)}.`,
+              `Pack full — no room.`,
               'blocked',
               anchor.x,
               anchor.y,
@@ -2032,7 +2037,9 @@ export default function App() {
         saveNow();
         if (anchor) {
           showFeedback(
-            `Picked up ${outcome.granted} ${displayNameFor(outcome.item)}.`,
+            `Picked up ${outcome.taken
+              .map((t) => `${t.granted} ${displayNameFor(t.item)}`)
+              .join(', ')}.`,
             'gain',
             anchor.x,
             anchor.y,
@@ -3478,6 +3485,9 @@ export default function App() {
   // the pile button appears. Pressing emits
   // pile:pickup-requested; Systems' listener grants, the
   // existing subscriber refreshes, saves, and feeds back.
+  // Label names the whole pile (total count) when it holds
+  // many kinds — the grant takes everything, so naming
+  // only the first kind would understate the action.
   const desktopPilePickup =
     !isTouch &&
     pileWouldWin(
@@ -3659,8 +3669,12 @@ export default function App() {
             }
             className="pointer-events-auto absolute left-1/2 top-[54%] min-h-[44px] -translate-x-1/2 rounded-full bg-black/60 px-4 py-2 text-sm font-medium text-[#f0ead6]"
           >
-            Pick up {displayNameFor(desktopPilePickup.item)} ×{' '}
-            {desktopPilePickup.quantity}
+            {desktopPilePickup.stacks.length > 1
+              ? `Pick up pile × ${desktopPilePickup.stacks.reduce(
+                  (n, s) => n + s.quantity,
+                  0,
+                )}`
+              : `Pick up ${displayNameFor(desktopPilePickup.item)} × ${desktopPilePickup.quantity}`}
           </button>
         ) : null}
       </div>
