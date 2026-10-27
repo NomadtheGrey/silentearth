@@ -81,9 +81,15 @@
  *   it would never find food in play. Canonical ids:
  *     'ACORNS' (nuts), 'BOG_BERRIES' (berries),
  *     'ELDERBERRIES' (berries).
- *   v1 defines no other foods. (Food-candidates notes about
- *   elderberries needing cooking / sickening are NOT modelled in
- *   v1: eat() restores plainly for all three. A cook/sicken
+ *   Added 2026-10-26 (Adam, brief 2 of 2): 'MUSHROOMS'
+ *   (eaten as gathered, nutrition 10 lane-decided) and
+ *   'POISON_MUSHROOMS' (NOT food: no nutrition, no Eat
+ *   button, eat() refuses with a plain poison warning — no
+ *   sickness effect is modelled because no health system
+ *   exists; the effect is Adam's pin-pass proposal, not a
+ *   silent fake). (Food-candidates notes about elderberries
+ *   needing cooking / sickening are NOT modelled: eat()
+ *   restores plainly for eatable foods. A cook/sicken
  *   distinction is later work, if Adam wants it.)
  *
  * ------------------------------------------------------------------
@@ -149,9 +155,34 @@ export const FOOD_ELDERBERRIES: ItemId = 'ELDERBERRIES';
  * directly, unlike raw acorns (see COOK_REQUIRED_ITEMS).
  */
 export const FOOD_COOKED_ACORNS: ItemId = 'COOKED_ACORNS';
+/**
+ * Mushrooms — eaten as gathered, like berries (Adam, 2026-10-26,
+ * brief 2 of 2). No mushroom SOURCE grants them yet (no harvest
+ * yields mushrooms today — Background's follow-up); this is the
+ * food half only: the item, its nutrition, its Eat button.
+ */
+export const FOOD_MUSHROOMS: ItemId = 'MUSHROOMS';
+/**
+ * Poison mushrooms — NOT food. No nutrition, no Eat button (not
+ * in FOOD_ITEMS), and eat() refuses them with the warning below.
+ * No health system exists, so NO sickness effect is modelled:
+ * the refusal is the honest interim (see the proposal in the
+ * report), not a faked effect. No source grants these yet either.
+ */
+export const FOOD_POISON_MUSHROOMS: ItemId = 'POISON_MUSHROOMS';
 
 /**
- * Foods eaten directly: berries as gathered, acorns once cooked.
+ * Plain warning carried by the poison mushroom (Adam, 2026-10-26,
+ * brief 2 of 2): the description says outright that it is
+ * poisonous. eat() throws this text; the display name is
+ * "Poison Mushrooms" (inventory.ts).
+ */
+export const POISON_MUSHROOM_WARNING: string =
+  'poison mushrooms are poisonous — eating one will make you sick.';
+
+/**
+ * Foods eaten directly: berries as gathered, acorns once cooked,
+ * mushrooms as gathered.
  * SPELLING NOTE (2026-10-26 id fix): these are the NORMALIZED
  * (kebab) ids, derived from the FOOD_* harvest-spelling constants
  * above — because this list's live consumer is App's FOOD_IDS
@@ -165,6 +196,7 @@ export const FOOD_ITEMS: ReadonlyArray<ItemId> = [
   FOOD_BOG_BERRIES,
   FOOD_ELDERBERRIES,
   FOOD_COOKED_ACORNS,
+  FOOD_MUSHROOMS,
 ].map(normalizeItemId);
 
 /**
@@ -180,12 +212,14 @@ export const COOK_REQUIRED_ITEMS: ReadonlyArray<ItemId> = [FOOD_ACORNS];
  * food. LANE-DECIDED starting tunables (NOT pinned) — cooked
  * acorns included (MVP round, fire.ts output; 20 = the value
  * raw acorns carried in the first hunger draft, now earned
- * through cooking instead of granted raw).
+ * through cooking instead of granted raw). Mushrooms 10: a
+ * modest gathered bite, bog-berry tier, for Adam's pin pass.
  */
 export const FOOD_NUTRITION: Readonly<Record<string, number>> = {
   [FOOD_BOG_BERRIES]: 10,
   [FOOD_ELDERBERRIES]: 15,
   [FOOD_COOKED_ACORNS]: 20,
+  [FOOD_MUSHROOMS]: 10,
 };
 
 /**
@@ -212,6 +246,17 @@ export function isEatable(item: ItemId): boolean {
 /** True for a food that must be cooked first (acorns in v1), either spelling. */
 export function needsCooking(item: ItemId): boolean {
   return normalizeItemId(item) === normalizeItemId(FOOD_ACORNS);
+}
+
+/**
+ * True for poison mushrooms, either spelling. Poison is not food
+ * (isFood stays false) and not cook-required: it is refused
+ * outright by eat() with POISON_MUSHROOM_WARNING.
+ */
+export function isPoison(item: ItemId): boolean {
+  return (
+    normalizeItemId(item) === normalizeItemId(FOOD_POISON_MUSHROOMS)
+  );
 }
 
 /**
@@ -353,6 +398,15 @@ export function eat(
     throw new Error(
       `Cannot eat ${item}: it must be cooked first (campfire ` +
         `cooking, future fire system).`,
+    );
+  }
+  if (isPoison(item)) {
+    // Refused, nothing consumed — and deliberately NOT a faked
+    // sickness: no health system exists to model one. Adam's pin
+    // pass chooses the real effect (see the report's proposal);
+    // until then the game refuses rather than lying.
+    throw new Error(
+      `Cannot eat ${item}: ${POISON_MUSHROOM_WARNING}`,
     );
   }
   const nutrition = nutritionFor(item);
