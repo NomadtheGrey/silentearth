@@ -28,7 +28,13 @@
  *   of right travel, and a center-started drag misses or clips
  *   the right-half look field. The stick is bounded by its own
  *   radius, not by the screen edge.
- * - USE button, bottom-right, thumb-sized (64 px).
+ * - USE button, centred on the bottom row between the sticks,
+ *   thumb-sized (64 px), its centre on the sticks' axis —
+ *   symmetrical with MOVE and TURN (19 px clear each side at
+ *   390 px), not hugging one stick. When the shell passes
+ *   interactLabel, the button shows that label instead of
+ *   "USE" (a dropped pile about to be picked up reads
+ *   "PICK UP").
  *
  * GESTURE OWNERSHIP (BioForge v1 lesson, required): a look-drag
  * NEVER fires interact on release. Only two gestures interact:
@@ -58,6 +64,9 @@ export interface TouchControlsProps {
   onLook?: (dx: number, dy: number) => void;
   /** USE press, or a short still tap on the look field. */
   onInteract?: () => void;
+  /** When set, the USE button shows this label instead of "USE"
+    (the shell sets it when a dropped pile would win the press). */
+  interactLabel?: string;
   /** False hides the look field entirely (third-person has no look). */
   lookEnabled?: boolean;
 }
@@ -75,6 +84,7 @@ export function TouchControls({
   onTurn,
   onLook,
   onInteract,
+  interactLabel,
   lookEnabled = true,
 }: TouchControlsProps) {
   const [stickUsed, setStickUsed] = useState(false);
@@ -319,8 +329,8 @@ export function TouchControls({
         touches land on the stick, not the field beneath it
         (same DOM-order rule as the USE button). Level with
         MOVE on the bottom row (Adam 2026-10-26: the stacked
-        look was weird) — USE sits to its left with a 16 px
-        gap, clear of the DRAG TO LOOK cue. */}
+        look was weird) — USE sits centred between the sticks
+        on the same axis, clear of the DRAG TO LOOK cue. */}
       <div
         className="pointer-events-auto absolute bottom-24 right-4 touch-none"
         onTouchStart={handleTurnStart}
@@ -350,16 +360,28 @@ export function TouchControls({
         </div>
       </div>
 
+      {/* USE: centred between MOVE and TURN (left-1/2 +
+        -translate-x-1/2), its vertical centre on the sticks'
+        axis (bottom-32 lifts the 64 px button so its centre
+        meets the 128 px rings' centre, 160 px off the
+        bottom). At 390 px: MOVE [16, 144], USE [163, 227],
+        TURN [246, 374] — 19 px clear each side, no overlap;
+        the centred button straddles the look field's edge
+        but renders after it, so its touches land on the
+        button (same DOM-order rule as the sticks). */}
       <button
         type="button"
-        aria-label="Use: interact with the nearest in-range target"
-        className="pointer-events-auto absolute bottom-24 right-40 flex h-16 w-16 touch-none items-center justify-center rounded-full border-2 border-[#f0ead6]/80 bg-[#3a4436]/90 text-sm font-bold text-[#f0ead6]"
+        aria-label={
+          interactLabel ??
+          'Use: interact with the nearest in-range target'
+        }
+        className="pointer-events-auto absolute bottom-32 left-1/2 flex h-16 w-16 -translate-x-1/2 touch-none items-center justify-center whitespace-nowrap rounded-full border-2 border-[#f0ead6]/80 bg-[#3a4436]/90 text-sm font-bold text-[#f0ead6]"
         onTouchStart={(e) => {
           e.preventDefault();
           onInteract?.();
         }}
       >
-        USE
+        {interactLabel ?? 'USE'}
       </button>
     </div>
   );

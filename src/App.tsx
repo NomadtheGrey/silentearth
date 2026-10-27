@@ -102,9 +102,9 @@
  *   EAT BUTTON, LIVE (gap-closing round): inventory rows for
  *   foods gain an Eat button (same row-button pattern as
  *   Place). Berries and cooked acorns eat through Systems'
- *   eat() — one item, nutrition from its table (berries 10 /
- *   15, cooked acorns 20, lane-decided), stage refreshes at
- *   once. Raw acorns never reach eat(): their press shows
+ *   eat() — one item, nutrition from its table (berries 15 /
+ *   20, cooked acorns 25, Adam's 2026-10-27 +5 bump), stage
+ *   refreshes at once. Raw acorns never reach eat(): their press shows
  *   the cook-first note and consumes nothing (eat() itself
  *   would refuse with a stale "future fire system" message —
  *   the fire system exists now, so the shell says so in its
@@ -141,9 +141,9 @@
  *   and completes it when the engine reports lit or Cook
  *   is pressed, so cook() never runs against a vessel the
  *   engine hasn't lit. COST ASYMMETRY, FLAGGED: Systems'
- *   slow method consumes 1 snap-wood kindling, but engine
+ *   slow method consumes 1 dry-kindling, but engine
  *   friction charges nothing — the mirror charges kindling
- *   only when snap-wood is carried (named in the friction
+ *   only when dry-kindling is carried (named in the friction
  *   menu hint), engine lighting proceeds regardless, and a
  *   kindling-less friction fire cooks once kindling is
  *   carried and Cook is pressed (the press retries and
@@ -648,6 +648,100 @@
  *   and 16 px gaps, no overlap. Labels, pulse-until-first-use,
  *   touch ids, and gesture ownership unchanged. App.tsx
  *   bullet + TouchControls positions only.
+ * - USE CENTERED + PILE PICKUP FIX, LIVE (Adam, 2026-10-27
+ *   — DEV brief, two touch items in one landing): (1) USE
+ *   PLACEMENT — Adam: the USE button was awkwardly placed,
+ *   it should read symmetrical/centered; the placement is
+ *   the lane's judgment per his delegation. USE moves from
+ *   right-40 to dead centre between MOVE and TURN, its
+ *   vertical centre on the sticks' axis (bottom-32 lifts the
+ *   64 px button to the 128 px rings' centre). Geometry on
+ *   Adam's 390 px phone: MOVE [16, 144], USE [163, 227],
+ *   TURN [246, 374] — 19 px clear each side, no overlap;
+ *   the old row drooped (USE centre 32 px below the sticks'
+ *   axis) and hugged TURN. (2) DROPPED-ITEM PICKUP ON TOUCH
+ *   — BUG FIX, not just invisibility: investigation found
+ *   touch USE genuinely failed to pick piles. Ground sits
+ *   at distance 0 and is always eligible in third/behind
+ *   (and whenever looking down in first-person), so any
+ *   pile at a nonzero distance lost to ground and USE
+ *   harvested dirt instead of picking up — exact-0 is
+ *   essentially unreachable once she has moved off the
+ *   drop spot. Fix (the previously-flagged piles-outrank-
+ *   ground change, made inside this brief): the pile now
+ *   competes against SCATTER targets only; ground never
+ *   blocks a pickup. Scatter competition is unchanged, and
+ *   ground harvest via USE still works when no pile wins.
+ *   (3) DISCOVERABILITY: the USE button now reads "PICK
+ *   UP" whenever a pile would win the press — one shared
+ *   rule drives the label, the press, and the desktop
+ *   button, so the label can never lie about the press.
+ *   Label change flagged per the brief: the default "USE"
+ *   label is unchanged when no pile wins. TouchControls +
+ *   App.tsx only; gesture ownership, touch ids, and the
+ *   pulse-until-first-use sticks unchanged.
+ * - SLEEP BUTTON, LIVE (Adam, 2026-10-27 — DEV brief):
+ *   a Sleep control in the shelter indicator area (the
+ *   HUD stack, not the harvest column or the touch row).
+ *   It renders only when BOTH gates hold: sheltered by a
+ *   placed house (the engine's live sheltered state —
+ *   lean-to first, the house she has; any placed house
+ *   qualifies) AND night (the renderer's live sky cycle,
+ *   split by the engine's own cycleSplit at the world's
+ *   fixed SEASON_START_MONTH, read on the 1 s timer — no
+ *   shell season logic). Daytime shows no Sleep control.
+ *   The press emits 'sleep:requested' { x, z } — her
+ *   position at press time — and App owns the ONE
+ *   createSleepListener (Fill-in's sleep.ts, landed in
+ *   parallel as 69f5393): it checks night, then shelter
+ *   from the position, and jumps the sky to dawn,
+ *   time-only, no restore. Outcomes 'sleep:completed' /
+ *   'sleep:failed' need no UI action (the dawn jump hides
+ *   the button via the night gate; failures show nothing
+ *   per the brief's no-invented-text rule). REPAIR NOTE:
+ *   the first push of this landing (cf5f813) was built
+ *   from a stale base and its whole-file events.ts
+ *   clobbered Fill-in's landed sleep contract (the three
+ *   sleep entries + the sleep.ts import); the repair
+ *   restores that contract byte-identical and corrects
+ *   the emit to { x, z }. Label is the lane's pick,
+ *   flagged: "Sleep until sunrise". No new panel, no
+ *   other invented text. App + ShelteredIndicator +
+ *   events.ts (restored, not re-authored).
+ * - CAMPFIRE TAP FIX, LIVE (Adam, 2026-10-27 — DEV brief,
+ *   live-phone UX break): Adam tapped a campfire's
+ *   "Campfire" button and got a harvest failure instead of
+ *   the lighting menu. MECHANISM CORRECTION, stated
+ *   plainly: the brief's double-fire (a chip tap ALSO
+ *   firing tap-to-harvest) does NOT reproduce in code —
+ *   the chip button lives in a separate subtree from the
+ *   look field, in a higher stacking context (z-30 world
+ *   overlay above the z-20 touch controls), so a precise
+ *   chip tap cannot reach the look-field handlers. What
+ *   DOES reproduce: the chip's touch target was ~28 px
+ *   tall (py-1 text-sm), below the 44 px touch rule, so
+ *   a thumb tap aimed at the chip easily misses it — and
+ *   a miss on the right half lands on the look field,
+ *   which harvests ground (distance 0, always eligible)
+ *   and at too-hungry reports "Harvest failed:
+ *   too-hungry.", masking the lighting menu. FIX: the
+ *   chip button is now min 44 px tall, and it stops
+ *   touchstart propagation so a chip tap can never
+ *   double as a look-field tap whatever the future DOM
+ *   order (no preventDefault — that would swallow the
+ *   click itself). LIGHTING PATH VERIFIED HUNGER-FREE
+ *   end to end in code (not just at fed): chip onSelect
+ *   → setSelectedFireId → ContextMenu → handleFireAction
+ *   → engine startLighting/flintClick consults nothing
+ *   about hunger; chips render regardless of hunger; menu
+ *   actions gate only on flint possession and lighting
+ *   phase. No change needed on that path. TAP PRIORITY
+ *   PROPOSED, NOT BUILT (see the DEV report): a world
+ *   tap near a fire should prefer the fire menu over
+ *   ground harvest (scatter still first) — that changes
+ *   what every world tap near a fire does, so it waits
+ *   on DEV/Adam approval rather than shipping silently.
+ *   FireState.tsx + this bullet only.
  * - TRAP SAVE WIRING, LIVE (Adam, 2026-10-27 — DEV brief,
  *   Systems format half 4f3fa69): placed traps survive a
  *   refresh — saveNow passes trapState.snapshot() as
@@ -705,6 +799,8 @@ import {
   HOUSE_DEFS,
   type HouseType,
 } from './game/shelter';
+import { cycleSplit } from './game/sky';
+import { createSleepListener } from './game/sleep';
 import {
   DEFAULT_SEED,
   PLAYER_EYE_HEIGHT,
@@ -785,7 +881,7 @@ import {
   serializeSave,
   type SaveData,
 } from './systems/save';
-import { clothingRemaining } from './game/weather';
+import { clothingRemaining, SEASON_START_MONTH } from './game/weather';
 import {
   ownedTier,
   ownedToolItem,
@@ -1159,6 +1255,29 @@ export default function App() {
     setShelterHouseId(houseId);
   };
 
+  // Night gate for the sleep button, read from the live sky
+  // (see the 1 s timer): true when the engine's own cycle
+  // split says night at the world's fixed start month.
+  const [isNight, setIsNight] = useState(false);
+
+  // SLEEP (Adam, 2026-10-27): the button renders only when
+  // sheltered AND night (see the ShelteredIndicator wiring
+  // below) — daytime shows no Sleep control. The press emits
+  // the sleep request { x, z } — her position at press time
+  // — that the engine's sleep listener acts on: it checks
+  // night, then shelter (from the position), and jumps the
+  // sky to dawn, time-only, no restore. The one listener
+  // lives in the boot effect below (createSleepListener);
+  // outcomes 'sleep:completed'/'sleep:failed' need no UI
+  // action — the dawn jump hides the button via the night
+  // gate, and failures show nothing per the brief's
+  // no-invented-text rule.
+  const handleSleep = (): void => {
+    const player = playerRef.current;
+    if (!player) return;
+    bus.emit('sleep:requested', { x: player.x, z: player.z });
+  };
+
   // Gap-closing state (see the header): one Systems FireState
   // per placed fire (the cooking vessel), the engine lighting
   // path per fire (for the bridge's method mapping), and one
@@ -1203,9 +1322,10 @@ export default function App() {
   );
   const [harvestTargets, setHarvestTargets] = useState<HarvestTarget[]>([]);
   // In-range dropped piles (harvest overflow), nearest first per
-  // the tracker. Drives the touch USE fallback and the desktop
-  // pickup button (see handleTouchInteract + the desktop pile
-  // computation before return); piles get no screen of their own.
+  // the tracker. Drives the touch USE fallback, the touch
+  // PICK UP label, and the desktop pickup button (see
+  // handleTouchInteract + the pile computations before
+  // return); piles get no screen of their own.
   const [piles, setPiles] = useState<PileTarget[]>([]);
   // Harvest outcome feedback + multi-step progress, rendered
   // through WorldAnchor + ObjectFeedback / InteractionProgress.
@@ -1757,6 +1877,18 @@ export default function App() {
       for (const systemsFire of systemsFiresRef.current.values()) {
         systemsFire.tick(1);
       }
+      // Night gate for the sleep button: the renderer's live
+      // sky cycle, split by the engine's own cycleSplit at
+      // the world's fixed start month (the renderer feeds
+      // the sky SEASON_START_MONTH — see renderer.ts — so
+      // this matches the rendered sky exactly, no shell
+      // season logic). The sky does not advance while
+      // paused, so freezing this read inside the pause gate
+      // costs nothing.
+      const sky = rendererRef.current?.snapshotSky();
+      if (sky) {
+        setIsNight(!cycleSplit(sky.cycleT, SEASON_START_MONTH).isDay);
+      }
     }, 1000);
     // Placed-fire + shelter subscriptions: fires re-read from
     // the engine singleton on every fire event; shelter applies
@@ -1786,6 +1918,17 @@ export default function App() {
     });
     const offShelterChanged = bus.on('shelter:changed', ({ houseId }) => {
       applyShelterHouse(houseId);
+    });
+    // SLEEP LISTENER (Fill-in's sleep.ts, shell half): ONE
+    // listener for the shell, created here after the
+    // renderer exists. Deps are lazy closures over the
+    // live rig: cycleT from snapshotSky, dawn jump via
+    // restoreSky({ cycleT: 0 }). A second listener would
+    // double-emit the outcome events, so this is created
+    // exactly once in this effect and unsubscribed below.
+    const offSleep = createSleepListener({
+      getCycleT: () => rendererRef.current?.snapshotSky()?.cycleT ?? null,
+      restoreDawn: () => rendererRef.current?.restoreSky({ cycleT: 0 }),
     });
     // Autosave on pagehide: the last-chance write when she leaves
     // or refreshes. saveNow reads only refs + singletons (see its
@@ -1891,6 +2034,7 @@ export default function App() {
       offFireLit();
       offShelterPlaced();
       offShelterChanged();
+      offSleep();
       unsubHarvestOutcome();
       offLoaded();
       offUnloaded();
@@ -2415,9 +2559,9 @@ export default function App() {
    * the player presses Cook — so cook() never runs against
    * a vessel the engine hasn't lit, and never against a
    * stale one. COST ASYMMETRY, FLAGGED: Systems' slow method
-   * ('sticks') consumes 1 snap-wood as kindling, but the
+   * ('sticks') consumes 1 dry-kindling, but the
    * engine friction path charges nothing — so the mirror
-   * charges kindling only when snap-wood is carried, and
+   * charges kindling only when dry-kindling is carried, and
    * engine lighting proceeds regardless. A friction-lit fire
    * with no kindling cooks once kindling is carried and Cook
    * is pressed (the press retries the completion and says
@@ -2467,7 +2611,7 @@ export default function App() {
       );
     } catch {
       // Engine lighting is the authority and proceeds: a
-      // friction start without snap-wood kindling simply
+      // friction start without dry-kindling simply
       // leaves the vessel unlit until Cook retries it.
     }
   };
@@ -2526,7 +2670,7 @@ export default function App() {
       {
         id: 'light-friction',
         label: 'Light with friction (slow)',
-        hint: 'Rub, wait, rub · 1 snap-wood kindling readies it for cooking',
+        hint: 'Rub, wait, rub · 1 dry-kindling readies it for cooking',
       },
       { id: 'close', label: 'Close' },
     ];
@@ -2825,51 +2969,58 @@ export default function App() {
   // pressed through the engine's pressUse (which fires the
   // existing harvest:requested event; the outcome listener
   // re-validates range + permit, so a stale press fails
-  // safely). The tracker emits the ground target FIRST when
-  // eligible, so scatter is preferred and ground is the
+  // safely). Scatter is preferred and ground is the
   // fallback — USE never harvests dirt while a bush is in
   // range. With no target at all, pressUse is not called
   // (menus and HUD buttons stay direct taps).
   //
-  // PILE FALLBACK (Adam, 2026-10-26): no new buttons, no new
-  // screen — a pile in range is picked up by this same USE
-  // press when no harvest target is nearer. The tracker sorts
-  // piles nearest first, so piles[0] is the nearest pile; the
-  // harvest candidate's distance comes from the raw bus target
-  // (the UI target shape carries no distance field), falling
-  // back to a shell-computed distance if the bus entry is gone.
-  // The pile wins on a tie (no harvest target is NEARER then)
-  // — which matters because ground sits at distance 0: a pile
-  // she stands on ties ground and wins, while a pile farther
-  // than her feet loses to ground. Consequence, stated
-  // plainly: in third/behind with no scatter, ground is
-  // eligible at distance 0, so only a pile at her feet is
-  // reachable by USE; in first-person looking level, any
-  // in-range pile nearer than the scatter target wins. If piles
-  // should outrank ground outright, that is a one-line priority
-  // change for Adam's call, not this landing's.
+  // PILE FALLBACK, FIXED (Adam, 2026-10-27 — BUG FIX, see
+  // the header bullet): a pile in range is picked up by
+  // this same USE press when no SCATTER target is nearer.
+  // The tracker sorts piles nearest first, so piles[0] is
+  // the nearest pile; the scatter candidate's distance
+  // comes from the raw bus target (the UI target shape
+  // carries no distance field), falling back to a
+  // shell-computed distance if the bus entry is gone. The
+  // pile wins on a tie (no scatter target is NEARER then).
+  // Ground NEVER competes: ground sits at distance 0 and
+  // is always eligible in third/behind (and whenever
+  // looking down in first-person), so under the old
+  // scatter-first rule any pile at a nonzero distance
+  // lost to ground and USE harvested dirt instead of
+  // picking up. The one shared pileWouldWin rule below
+  // drives this press, the touch PICK UP label, and the
+  // desktop button, so all three always agree.
   // NOTE: this is the touch USE path only. Desktop has no USE
   // affordance (harvest is by button click), so desktop pile
   // pickup is a visible button instead — see DESKTOP PILE
   // PICKUP in the header and the computation before return.
   // Touch keeps USE; the button is desktop-only.
+  const pileWouldWin = (
+    pile: PileTarget | undefined,
+    scatter: HarvestTarget | undefined,
+    fromX: number,
+    fromZ: number,
+  ): boolean => {
+    if (!pile) return false;
+    if (!scatter) return true;
+    const scatterDistance =
+      busTargetsRef.current.find((t) => t.id === scatter.id)?.distance ??
+      Math.hypot(scatter.worldX - fromX, scatter.worldZ - fromZ);
+    return pile.distance <= scatterDistance;
+  };
   const handleTouchInteract = (): void => {
     const player = playerRef.current;
-    const target =
-      harvestTargets.find((candidate) => candidate.kind === 'scatter') ??
-      harvestTargets[0];
     if (!player) return;
+    const scatter = harvestTargets.find(
+      (candidate) => candidate.kind === 'scatter',
+    );
     const pile = piles[0];
-    if (pile) {
-      const candidateDistance = target
-        ? (busTargetsRef.current.find((t) => t.id === target.id)?.distance ??
-          Math.hypot(target.worldX - player.x, target.worldZ - player.z))
-        : Number.POSITIVE_INFINITY;
-      if (pile.distance <= candidateDistance) {
-        bus.emit('pile:pickup-requested', { pileId: pile.id });
-        return;
-      }
+    if (pile && pileWouldWin(pile, scatter, player.x, player.z)) {
+      bus.emit('pile:pickup-requested', { pileId: pile.id });
+      return;
     }
+    const target = scatter ?? harvestTargets[0];
     if (!target) return;
     player.pressUse({
       targetId: target.id,
@@ -2937,32 +3088,41 @@ export default function App() {
   // but only when it would win under the touch USE rules —
   // otherwise the button would contradict what USE would do.
   // The tracker already limits piles to 2.5 m and sorts
-  // nearest first, so piles[0] is the candidate; its
-  // distance is the tracker's, and the harvest candidate is
-  // the same scatter-first pick handleTouchInteract uses
-  // (bus distance, shell-computed fallback from position
-  // state, which re-renders on the 10 Hz moved tick — so the
-  // button appears and disappears as she moves). Null on
-  // touch (USE already exists there) and null when a nearer
-  // harvest target wins: harvest that first, then the pile
-  // button appears. Pressing emits pile:pickup-requested;
-  // Systems' listener grants, the existing subscriber
-  // refreshes, saves, and feeds back.
-  const desktopPileTarget =
-    harvestTargets.find((candidate) => candidate.kind === 'scatter') ??
-    harvestTargets[0];
-  const desktopPileCandidateDistance = desktopPileTarget
-    ? (busTargetsRef.current.find((t) => t.id === desktopPileTarget.id)
-        ?.distance ??
-      Math.hypot(
-        desktopPileTarget.worldX - position.x,
-        desktopPileTarget.worldZ - position.z,
-      ))
-    : Number.POSITIVE_INFINITY;
+  // nearest first, so piles[0] is the candidate; the shared
+  // pileWouldWin rule (scatter-only candidate, ground never
+  // competes; bus distance, shell-computed fallback from
+  // position state, which re-renders on the 10 Hz moved tick
+  // — so the button appears and disappears as she moves).
+  // Null on touch (USE already exists there) and null when
+  // a nearer scatter target wins: harvest that first, then
+  // the pile button appears. Pressing emits
+  // pile:pickup-requested; Systems' listener grants, the
+  // existing subscriber refreshes, saves, and feeds back.
   const desktopPilePickup =
     !isTouch &&
-    piles.length > 0 &&
-    piles[0].distance <= desktopPileCandidateDistance
+    pileWouldWin(
+      piles[0],
+      harvestTargets.find((candidate) => candidate.kind === 'scatter'),
+      position.x,
+      position.z,
+    )
+      ? piles[0]
+      : null;
+
+  // TOUCH PILE LABEL: the same shared rule, touch-only —
+  // when a pile would win the USE press, the USE button
+  // reads "PICK UP" (see TouchControls interactLabel).
+  // Position state (10 Hz tick) drives it, so the label
+  // appears and disappears as she moves, exactly like the
+  // desktop button.
+  const touchPilePickup =
+    isTouch &&
+    pileWouldWin(
+      piles[0],
+      harvestTargets.find((candidate) => candidate.kind === 'scatter'),
+      position.x,
+      position.z,
+    )
       ? piles[0]
       : null;
 
@@ -3184,6 +3344,8 @@ export default function App() {
             <ShelteredIndicator
               sheltered={sheltered}
               houseName={shelterHouseName}
+              onSleep={isNight ? handleSleep : undefined}
+              sleepLabel="Sleep until sunrise"
             />
           </div>
           {stationPresenceValue.workstation ? (
@@ -3394,6 +3556,7 @@ export default function App() {
           onTurn={applyTurn}
           onLook={applyTouchLook}
           onInteract={handleTouchInteract}
+          interactLabel={touchPilePickup ? 'PICK UP' : undefined}
         />
       ) : null}
 
