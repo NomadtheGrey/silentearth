@@ -52,6 +52,7 @@
 // Types
 // ---------------------------------------------------------------------------
 
+import { ownedStage } from './owned-tool';
 import {
   type CraftingStation,
   type Ingredient,
@@ -93,6 +94,14 @@ export interface CanCraftResult {
   missingUpgradeFrom: ItemId[];
   /** Required-but-not-consumed items held in short supply. */
   missingRequirements: MissingIngredient[];
+  /**
+   * Owned-tool-stage shortfall, when the recipe states a
+   * requiresToolStage and the owned stage falls short: the
+   * required stage and the stage actually held (-1 hands).
+   * Absent when the recipe states no stage or the stage is met.
+   * The shell reads this for the "Needs Spade."-style note.
+   */
+  toolStageShortfall?: { required: number; held: number };
   /** True when the recipe states a station and the context mismatches. */
   stationMismatch: boolean;
   /** The station the recipe requires, when it states one. */
@@ -144,6 +153,17 @@ export function canCraft(
     }
   }
 
+  // Owned-tool-stage rule: a stated requiresToolStage reads the
+  // owned stage from the inventory (owned-tool.ts) — never a
+  // literal item, so upgrading past the required tool cannot lock
+  // the recipe out. Unstated means no stage requirement.
+  const heldStage = ownedStage(inventory);
+  const toolStageShortfall =
+    recipe.requiresToolStage !== undefined &&
+    heldStage < recipe.requiresToolStage
+      ? { required: recipe.requiresToolStage, held: heldStage }
+      : undefined;
+
   // Station rule: unstated station passes anywhere; 'hand' passes
   // anywhere (including null); any other stated station must match.
   const stationMismatch =
@@ -155,6 +175,7 @@ export function canCraft(
     missingIngredients.length === 0 &&
     missingRequirements.length === 0 &&
     missingUpgradeFrom.length === 0 &&
+    toolStageShortfall === undefined &&
     !stationMismatch;
 
   return {
@@ -162,6 +183,7 @@ export function canCraft(
     missingIngredients,
     missingRequirements,
     missingUpgradeFrom,
+    toolStageShortfall,
     stationMismatch,
     requiredStation: recipe.station,
   };
@@ -226,6 +248,13 @@ export function craft(
         `Cannot craft ${recipe.name}: requires ${firstRequirement.quantity} ` +
           `${firstRequirement.item} present (not consumed), have ` +
           `${firstRequirement.held}.`,
+      );
+    }
+    if (check.toolStageShortfall) {
+      throw new Error(
+        `Cannot craft ${recipe.name}: requires owned tool stage ` +
+          `${check.toolStageShortfall.required} or better, have stage ` +
+          `${check.toolStageShortfall.held}.`,
       );
     }
     throw new Error(`Cannot craft ${recipe.name}: check failed.`);

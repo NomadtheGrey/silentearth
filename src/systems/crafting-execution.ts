@@ -58,11 +58,17 @@
  *    the owned tier exactly where it was. A failed craft leaves the
  *    inventory — and therefore the owned tier — untouched.
  *
- * 4. NO OWNED-TOOL GATE ON CRAFTING. Upgrade predecessors are
- *    inventory-based (crafting.ts), not owned-tier-based: crafting
- *    an upgrade does not require owning any particular tier, only
- *    holding the predecessor in inventory. This helper adds no
- *    such gate.
+ * 4. NO OWNED-TOOL GATE ON CRAFTING — except a recipe's own
+ *    requiresToolStage. Upgrade predecessors are inventory-based
+ *    (crafting.ts), not owned-tier-based: crafting an upgrade does
+ *    not require owning any particular tier, only holding the
+ *    predecessor in inventory. The ONE exception (Adam,
+ *    2026-10-26): a recipe may state requiresToolStage, a
+ *    minimum owned stage enforced here before anything is
+ *    consumed (pitfall: stage 1, spade tier or better). This is
+ *    NOT an upgrade-predecessor gate and NOT a literal item
+ *    requirement — it reads the owned stage, so upgrading past
+ *    the required tool never locks the recipe out.
  *
  * ------------------------------------------------------------------
  * RULED CONSTRUCTION (Adam, 2026-10-26): LARGE BASKET REPLACES
@@ -175,6 +181,22 @@ export function executeCraft(
         `${recipe.station}, but present stations are ` +
         `${describePresent(present)}.`,
     );
+  }
+
+  // Owned-tool-stage gate, before anything is consumed. A stated
+  // requiresToolStage reads the owned stage (owned-tool.ts) —
+  // never a literal item — so a spade-axe or trundle-tool holder
+  // with no 'spade' item in inventory still passes a stage-1
+  // requirement. Mirrors canCraft's gate; the engine's own check
+  // then agrees by construction.
+  if (recipe.requiresToolStage !== undefined) {
+    const heldStage = ownedStage(inventory);
+    if (heldStage < recipe.requiresToolStage) {
+      throw new Error(
+        `Cannot craft ${recipe.name}: requires owned tool stage ` +
+          `${recipe.requiresToolStage} or better, have stage ${heldStage}.`,
+      );
+    }
   }
 
   // Engine station for craftIntoInventory: the required station when

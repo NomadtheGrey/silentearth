@@ -163,6 +163,17 @@ export interface Recipe {
    */
   requires?: Ingredient[];
   /**
+   * Minimum OWNED tool stage (owned-tool.ts stages: -1 hands, 0
+   * trowel, 1 spade tier, 2 spade-axe, 3 trundle-tool) the crafter
+   * must hold. Present, not consumed — and NEVER a literal item:
+   * a literal 'spade' requirement would lock the recipe out the
+   * moment the tool upgrades past spade (upgrades consume the
+   * predecessor), so the gate reads the owned stage, not an item.
+   * Checked by canCraft (and executeCraft) alongside `requires`.
+   * First use: pitfall, stage 1 (Adam, 2026-10-26).
+   */
+  requiresToolStage?: number;
+  /**
    * Carrying-capacity bonus, containers only. The BONUS numbers are
    * Adam's pinned numbers; the COSTS beside them are draft. Where the
    * doc leaves a bonus open, this field is left off and the open
@@ -733,7 +744,11 @@ const DRAFT_RECIPES: Recipe[] = [
     status: 'draft',
     output: { item: ITEMS.snare, quantity: 1 },
     ingredients: [i(ITEMS.tenderVines, 2), i(ITEMS.snapWood, 2)],
-    notes: 'DRAFT — BRAINSTORM, NOTHING PICKED. Stakes.',
+    station: 'hand',
+    notes:
+      'DRAFT — BRAINSTORM, NOTHING PICKED. Stakes. Craftable by ' +
+      'hand anywhere — no workstation needed (Adam\'s ruling, ' +
+      '2026-10-26: traps are hand-crafted, cordage precedent).',
   },
   {
     id: 'fish-weir-trap',
@@ -741,7 +756,11 @@ const DRAFT_RECIPES: Recipe[] = [
     status: 'draft',
     output: { item: ITEMS.fishWeirTrap, quantity: 1 },
     ingredients: [i(ITEMS.tenderVines, 6), i(ITEMS.snapWood, 4)],
-    notes: 'DRAFT — BRAINSTORM, NOTHING PICKED. Woven funnel.',
+    station: 'hand',
+    notes:
+      'DRAFT — BRAINSTORM, NOTHING PICKED. Woven funnel. ' +
+      'Craftable by hand anywhere — no workstation needed ' +
+      '(Adam\'s ruling, 2026-10-26: traps are hand-crafted).',
   },
   {
     id: 'pot-trap',
@@ -749,8 +768,11 @@ const DRAFT_RECIPES: Recipe[] = [
     status: 'draft',
     output: { item: ITEMS.potTrap, quantity: 1 },
     ingredients: [i(ITEMS.clayPot, 1)],
+    station: 'hand',
     notes:
-      'DRAFT — BRAINSTORM, NOTHING PICKED. 1 clay pot, sunk in the creek.',
+      'DRAFT — BRAINSTORM, NOTHING PICKED. 1 clay pot, sunk in ' +
+      'the creek. Craftable by hand anywhere — no workstation ' +
+      'needed (Adam\'s ruling, 2026-10-26: traps are hand-crafted).',
   },
   {
     id: 'pitfall',
@@ -758,9 +780,17 @@ const DRAFT_RECIPES: Recipe[] = [
     status: 'draft',
     output: { item: ITEMS.pitfall, quantity: 1 },
     ingredients: [i(ITEMS.peatMoss, 2)],
+    station: 'hand',
+    requiresToolStage: 1,
     notes:
-      'DRAFT — BRAINSTORM, NOTHING PICKED. Dug with the trowel; peat ' +
-      'moss is the cover. No build cost beyond the cover.',
+      'DRAFT — BRAINSTORM, NOTHING PICKED. Dug with the spade, ' +
+      'not the trowel; peat moss is the cover. No build cost ' +
+      'beyond the cover. Requires spade tier or better (owned ' +
+      'tool stage 1+, present, not consumed) — a spade-axe or ' +
+      'trundle-tool qualifies; a literal spade item is NOT ' +
+      'required, so upgrading never locks her out (Adam\'s ' +
+      'ruling, 2026-10-26). Craftable by hand anywhere — no ' +
+      'workstation needed (traps are hand-crafted).',
   },
   {
     id: 'deadfall',
@@ -772,7 +802,11 @@ const DRAFT_RECIPES: Recipe[] = [
       i(ITEMS.tenderVines, 2),
       i(ITEMS.riverStone, 2),
     ],
-    notes: 'DRAFT — BRAINSTORM, NOTHING PICKED. River stone is the weight.',
+    station: 'hand',
+    notes:
+      'DRAFT — BRAINSTORM, NOTHING PICKED. River stone is the ' +
+      'weight. Craftable by hand anywhere — no workstation ' +
+      'needed (Adam\'s ruling, 2026-10-26: traps are hand-crafted).',
   },
 ];
 
