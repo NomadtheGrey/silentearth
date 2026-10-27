@@ -9,8 +9,16 @@
  * computes nothing about hunger itself and imports no game or
  * systems code). It names what to forage for, in the brief's
  * mappings: brush → elderberries, bog growth → bog berries,
- * downed oak → acorns (cook first). It checks no availability
- * and opens no panel — it is a hint line, not a guide page.
+ * ground acorns → acorns (cook first). It checks no
+ * availability and opens no panel — it is a hint line, not
+ * a guide page.
+ *
+ * ACORN MAPPING CHANGED (2026-10-26, DEV signal, verified in
+ * code): acorns used to ride downed oak as a secondary; the
+ * oak landing (6be0299) moved them to their own hand source,
+ * groundAcorns (hand permit, hunger-exempt, cook-first), and
+ * the log no longer drops them — so the line now names ground
+ * acorns, not downed oak. Wording lane-decided, flagged.
  *
  * WORDING IS LANE-DECIDED (flagged for Adam's pin pass): the
  * brief supplied the three mappings, the lane worded the line.
@@ -43,8 +51,8 @@ export function ForageHint({ stage }: ForageHintProps) {
       aria-label="Forage hint"
       className="mt-2 rounded bg-black/50 px-2 py-1 text-sm text-stone-100"
     >
-      Forage: brush → elderberries · bog growth → bog berries · downed
-      oak → acorns (cook first).
+      Forage: brush → elderberries · bog growth → bog berries · ground
+      acorns → acorns (cook first).
       <div>
         Mushrooms: tan plain cap is safe · rust cap with pale spots —
         do not eat. Look close before picking.
