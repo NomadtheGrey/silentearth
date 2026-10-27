@@ -174,15 +174,18 @@ export interface Recipe {
    */
   requiresToolStage?: number;
   /**
-   * Craft-places (Adam, 2026-10-26): crafting this recipe PLACES
-   * its output right there instead of granting an inventory item
-   * — executeCraft consumes the ingredients and emits
-   * 'trap:placed' {type, x, z} (player position at craft time).
-   * The shell's "Place trap here?" confirm gates BEFORE
-   * execution (No = abort, nothing consumed). First use: all
-   * five traps. Trap items already sitting in an inventory from
-   * earlier saves stay items for now (flagged edge, not solved
-   * here) — only fresh crafts place.
+   * Craft-places (Adam, 2026-10-26; DEV correction: Systems
+   * does NOT emit): crafting this recipe places right there
+   * instead of granting an inventory item — executeCraft
+   * consumes the ingredients and reports placedTrap {type},
+   * and the SHELL places via trapState.placeTrap(type,
+   * player.x, player.z) on that result (single-caller rule:
+   * that call is the one and only placer). The shell's "Place
+   * trap here?" confirm gates BEFORE execution (No = abort,
+   * nothing consumed). First use: all five traps. Trap items
+   * already sitting in an inventory from earlier saves stay
+   * items for now (flagged edge, not solved here) — only
+   * fresh crafts place.
    */
   placesTrap?: boolean;
   /**

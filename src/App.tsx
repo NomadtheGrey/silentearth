@@ -1982,38 +1982,27 @@ export default function App() {
     if (!recipe) return;
     const ownedBefore = ownedToolItem(inventory);
     try {
-      // Trap crafts place at her feet (Systems' place path):
-      // the shell passes position + a placer on every craft
-      // (harmless for ordinary grants — executeCraft ignores it
-      // unless the recipe places a trap). For traps this runs
-      // only on the confirm's Yes — the Popup above gates first,
-      // No/Close never reaches execution. SEAM (Background's
-      // placed-trap landing 8e5da78): the placer is trapState.
-      // placeTrap — it STORES the trap and emits 'trap:placed',
-      // and the renderer reads trapState. NEVER a raw bus.emit
-      // here: an event without the trapState record would leave
-      // renderer and state diverged. Exactly one placer per
-      // craft: this callback, via executeCraft — never both.
-      // RESTORED 2026-10-26: UI's forage-hints push (d500416)
-      // clobbered this wiring (whole-file push from a
-      // pre-placement App) — without it trap crafts throw for
-      // missing placement context and nothing places.
       const result = executeCraft(
         recipe,
         inventory,
         availableStations.length > 0 ? availableStations : null,
         hunger,
-        {
-          x: position.x,
-          z: position.z,
-          emitTrapPlaced: (payload) =>
-            trapState.placeTrap(
-              payload.type as TrapType,
-              payload.x,
-              payload.z,
-            ),
-        },
       );
+      // SINGLE-CALLER RULE (DEV correction, superseding the
+      // emit half of the original brief): Systems never places
+      // and never emits — on a placedTrap result the SHELL
+      // places, here, via trapState.placeTrap (stores the trap
+      // and emits 'trap:placed'; the renderer reads trapState).
+      // This call is the one and only placer per craft. For
+      // traps this runs only on the confirm's Yes — the Popup
+      // above gates first, No/Close never reaches execution.
+      if (result.placedTrap) {
+        trapState.placeTrap(
+          result.placedTrap.type as TrapType,
+          position.x,
+          position.z,
+        );
+      }
       setOwnedItem(result.owned);
       setCraftNote(
         result.placedTrap

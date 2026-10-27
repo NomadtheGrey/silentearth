@@ -70,25 +70,28 @@
  *    requirement — it reads the owned stage, so upgrading past
  *    the required tool never locks the recipe out.
  *
- * 5. TRAP CRAFTS PLACE, THEY DON'T GRANT (Adam, 2026-10-26).
+ * 5. TRAP CRAFTS REPORT, THEY DON'T GRANT — AND THEY DON'T
+ *    PLACE OR EMIT EITHER (Adam, 2026-10-26; DEV correction,
+ *    superseding the emit half of the original brief).
  *    A recipe with placesTrap set (all five traps) never enters
  *    inventory: on a confirmed craft this helper consumes the
- *    ingredients and calls the shell-provided emitTrapPlaced
- *    with {type, x, z} — the trap recipe id and the player
- *    position at craft time, from the TrapPlacementContext the
- *    shell passes. The bus itself lives in the shell/game
- *    layer, never here: this module takes only the callback.
- *    A trap craft WITHOUT placement context throws BEFORE
- *    anything is consumed (a wiring bug, failed loudly — never
- *    a silent inventory grant, which would break Adam's rule).
- *    The shell's "Place trap here?" confirm gates BEFORE this
- *    helper runs (No = abort, nothing consumed). Placing takes
- *    no capacity check: nothing enters the pack, so a full pack
- *    never blocks a placement. Hunger/station/tool-stage gates
- *    still apply in their usual order — trap CRAFTING is still
- *    building, so too-hungry still blocks it; the too-hungry
- *    trap exemption covers trap USE, once the set/check system
- *    exists, not trap crafting.
+ *    ingredients and reports success via placedTrap {type} —
+ *    and NOTHING else. It does not place, and it does not emit
+ *    'trap:placed' (the earlier callback-emit shape from
+ *    e37234e/762af40 is REMOVED by this landing). SINGLE-CALLER
+ *    RULE: the SHELL calls trapState.placeTrap(type, player.x,
+ *    player.z) on a placedTrap result — that call is the one
+ *    and only placer (it stores the trap and emits the event;
+ *    the renderer reads trapState). Systems in the emit path
+ *    would risk a second place per craft, so Systems stays out
+ *    of it entirely. The shell's "Place trap here?" confirm
+ *    gates BEFORE this helper runs (No = abort, nothing
+ *    consumed). Placing takes no capacity check: nothing enters
+ *    the pack, so a full pack never blocks a placement.
+ *    Hunger/station/tool-stage gates still apply in their usual
+ *    order — trap CRAFTING is still building, so too-hungry
+ *    still blocks it; the too-hungry trap exemption covers trap
+ *    USE, once the set/check system exists, not trap crafting.
  *
  * ------------------------------------------------------------------
  * RULED CONSTRUCTION (Adam, 2026-10-26): LARGE BASKET REPLACES
@@ -126,44 +129,22 @@ import type { CraftingStation, ItemId, Recipe } from './recipes';
  */
 export type StationInput = CraftingStation | CraftingStation[] | null;
 
-/**
- * Where a placed trap goes + how its placing happens.
- * The shell passes the player position at craft time and a
- * placer callback — the placing + event live in the shell/game
- * layer, so this module never imports them. `type` in the
- * payload is the trap recipe id (== its output item for all
- * five traps). SEAM (Background's placed-trap landing
- * 8e5da78): the callback MUST be trapState.placeTrap — it
- * stores the trap AND emits 'trap:placed', and the renderer
- * reads trapState. A raw bus.emit here would fire an event
- * with no trapState record behind it (renderer/state
- * divergence), and calling both would place twice. Exactly
- * one placer per craft: this callback, via executeCraft.
- */
-export interface TrapPlacementContext {
-  /** Player position at craft time — the placed trap's spot. */
-  x: number;
-  z: number;
-  /** Shell-provided placer (trapState.placeTrap). */
-  emitTrapPlaced: (payload: {
-    type: string;
-    x: number;
-    z: number;
-  }) => void;
-}
-
 export interface CraftExecutionResult {
   /**
    * What was crafted. When `placedTrap` is present, this output
-   * was PLACED, not added to inventory — the shell must not treat
-   * it as a grant (it is carried here for feedback naming only).
+   * was NOT added to inventory — the shell must not treat it as
+   * a grant (it is carried here for feedback naming only), and
+   * must place it via trapState.placeTrap (see header point 5).
    */
   output: { item: ItemId; quantity: number };
   /**
-   * Present only for placesTrap crafts: the placed trap's type
-   * (recipe id) and spot. Absent for every ordinary grant craft.
+   * Present only for placesTrap crafts: the trap's type (recipe
+   * id — == its output item for all five traps). The shell
+   * places it: trapState.placeTrap(type, player.x, player.z).
+   * Systems never places and never emits. Absent for every
+   * ordinary grant craft.
    */
-  placedTrap?: { type: string; x: number; z: number };
+  placedTrap?: { type: string };
   /** Owned tool after the craft, read from inventory ('none' if none). */
   owned: OwnedToolItem;
   /** Background-compatible tier of the owned tool, null for none. */
@@ -213,7 +194,6 @@ export function executeCraft(
   inventory: PersonalInventory,
   station: StationInput = null,
   hunger: HungerState | null = null,
-  trapPlacement: TrapPlacementContext | null = null,
 ): CraftExecutionResult {
   // Hunger gate, before anything is consumed.
   if (hunger !== null && hunger.isTooHungry()) {
@@ -269,16 +249,11 @@ export function executeCraft(
         ? null
         : station;
 
-  // TRAP PLACE PATH: a placesTrap craft never enters inventory.
-  // A missing placement context is a wiring bug — fail loudly
-  // BEFORE anything is consumed, never a silent inventory grant.
+  // TRAP REPORT PATH: a placesTrap craft never enters inventory
+  // and never places or emits — it consumes and reports success
+  // (placedTrap {type}), and the SHELL places via placeTrap on
+  // that result (header point 5, single-caller rule).
   if (recipe.placesTrap) {
-    if (trapPlacement === null) {
-      throw new Error(
-        `Cannot craft ${recipe.name}: trap crafts place at your ` +
-          `position, but no placement context was passed.`,
-      );
-    }
     // Ingredient / requirement / predecessor check, via the same
     // engine check the grant path uses — but the grant itself is
     // NOT run: placing takes no capacity check (nothing enters
@@ -336,15 +311,9 @@ export function executeCraft(
         inventory.remove(held, 1);
       }
     }
-    const placedTrap = {
-      type: recipe.id,
-      x: trapPlacement.x,
-      z: trapPlacement.z,
-    };
-    trapPlacement.emitTrapPlaced(placedTrap);
     return {
       output: { ...recipe.output },
-      placedTrap,
+      placedTrap: { type: recipe.id },
       owned: ownedToolItem(inventory),
       toolTier: ownedTier(inventory),
       harvestStage: ownedStage(inventory),
