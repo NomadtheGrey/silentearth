@@ -651,6 +651,8 @@ import {
 } from './game/fireState';
 import { loomState } from './game/loomState';
 import { pileState, type PileTarget } from './game/pileState';
+import { trapState } from './game/trapState';
+import type { TrapType } from './game/traps';
 import { SOURCE_BY_ID, type ToolTier } from './game/objects';
 import type { FireType } from './game/fire';
 import {
@@ -1974,18 +1976,46 @@ export default function App() {
     if (!recipe) return;
     const ownedBefore = ownedToolItem(inventory);
     try {
+      // Trap crafts place at her feet (Systems' place path):
+      // the shell passes position + its placement callback on
+      // every craft (harmless for ordinary grants —
+      // executeCraft ignores it unless the recipe places a
+      // trap). For traps this runs only on the confirm's Yes
+      // — the Popup above gates first, No/Close never reaches
+      // execution.
+      //
+      // Placement goes through trapState.placeTrap (store +
+      // emit), NOT a raw bus.emit: the renderer rebuilds its
+      // trap markers from trapState on 'trap:placed', so an
+      // event without a stored trap would render nothing.
+      // placesTrap is set only on the five trap recipes, whose
+      // ids are exactly TrapType — the cast is safe by
+      // construction. One placement per craft: executeCraft
+      // calls this once, placeTrap stores + emits once.
       const result = executeCraft(
         recipe,
         inventory,
         availableStations.length > 0 ? availableStations : null,
         hunger,
+        {
+          x: position.x,
+          z: position.z,
+          emitTrapPlaced: (placed) =>
+            trapState.placeTrap(
+              placed.type as TrapType,
+              placed.x,
+              placed.z,
+            ),
+        },
       );
       setOwnedItem(result.owned);
       setCraftNote(
-        `Crafted ${result.output.item} × ${result.output.quantity}.` +
-          (result.owned !== ownedBefore
-            ? ` Owned tool is now ${result.owned}.`
-            : ''),
+        result.placedTrap
+          ? `Placed ${displayNameFor(result.output.item)} here.`
+          : `Crafted ${result.output.item} × ${result.output.quantity}.` +
+              (result.owned !== ownedBefore
+                ? ` Owned tool is now ${result.owned}.`
+                : ''),
       );
     } catch (error) {
       setCraftNote(
