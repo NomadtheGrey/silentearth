@@ -153,6 +153,31 @@ export function createWorldGen(seed: string): WorldGen {
       });
     }
 
+    // Standing oaks (Adam, 2026-10-26 — same fix as downed oak):
+    // one cluster beside each standing tree in this chunk, on its
+    // OWN derived stream so the downed-oak clusters above stay
+    // byte-identical. Scenery tall trees (kind 'tallTree') are not
+    // standing trees and get no clusters (flagged). State-appended
+    // trees (regrown saplings) never reach this block — same as
+    // spawned logs beside downed oaks — so clusters sit beside
+    // worldgen-placed trees only.
+    const standingAcornRand = mulberry32(deriveSeed(seed, `acorns-standing:${cx},${cz}`));
+    const standingTrees = objects.filter((obj) => obj.kind === 'tree');
+    for (const tree of standingTrees) {
+      const angle = standingAcornRand() * Math.PI * 2;
+      const dist = 0.8 + standingAcornRand() * 1.2;
+      const ax = Math.min(Math.max(tree.x + Math.cos(angle) * dist, originX + 0.5), originX + CHUNK_SIZE - 0.5);
+      const az = Math.min(Math.max(tree.z + Math.sin(angle) * dist, originZ + 0.5), originZ + CHUNK_SIZE - 0.5);
+      objects.push({
+        kind: 'groundAcorns',
+        x: ax,
+        z: az,
+        y: 0,
+        scale: 0.7 + standingAcornRand() * 0.7,
+        rotY: standingAcornRand() * Math.PI * 2,
+      });
+    }
+
     return { cx, cz, objects };
   }
 

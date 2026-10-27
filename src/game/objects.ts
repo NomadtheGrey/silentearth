@@ -587,6 +587,7 @@ export const SOURCES: HarvestSourceDef[] = [
       'stays cleared (no saplings return there) — the house-plot case.',
     harvestable: true,
     permitTier: 'axeTrowel',
+    permitFamily: 'axe',
     removable: true,
     fellOnHarvest: true,
     primaryYield: 'SNAP_WOOD',
@@ -919,8 +920,8 @@ export const SOURCES: HarvestSourceDef[] = [
     kind: 'groundAcorns',
     name: 'Ground Acorns',
     description:
-      'Acorns on the ground around fallen oaks, hand-picked. Gather-exempt ' +
-      'nuts (Adam 2026-10-26) — but they NEED COOKED before eating ' +
+      'Acorns on the ground around oaks, fallen or standing, ' +
+      'hand-picked. Gather-exempt nuts (Adam 2026-10-26) — but they NEED COOKED before eating ' +
       '(campfire cooking step, Adam 2026-10-26).',
     harvestable: true,
     permitTier: 'hand',
