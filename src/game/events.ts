@@ -22,7 +22,6 @@
 import type { BiomeId, CameraMode } from '../types';
 import type { FireType, LightingMethod } from './fire';
 import type { HouseType } from './shelter';
-import type { SleepFailedReason } from './sleep';
 import type { TrapType } from './traps';
 import type { PermitTier } from './objects';
 
@@ -262,18 +261,14 @@ export interface EventMap {
    */
   'shelter:changed': { multiplier: number; houseId: string | null };
   /**
-   * Sleep until sunrise (Adam 2026-10-27 — see sleep.ts).
-   * 'sleep:requested' is UI's sleep button → the sleep outcome
-   * listener: her position at press time. 'sleep:completed'
-   * means the live sky jumped to dawn (cycleT 0) — time-only,
-   * no hunger/health restore, no player move. 'sleep:failed'
-   * carries one reason: 'not-night' (daytime press),
-   * 'not-sheltered' (no placed house within SHELTER_RADIUS),
-   * 'no-sky' (no live rig). Check order is night, then shelter.
+   * Sleep requested (UI sleep button, sheltered + night only):
+   * the engine jumps the sky to dawn, time-only, no restore.
+   * houseId is the sheltering house at press time (null if
+   * somehow unsheltered). Declared here so the UI half can
+   * emit it before the engine half lands — Background
+   * subscribes to this entry, it does not re-declare it.
    */
-  'sleep:requested': { x: number; z: number };
-  'sleep:completed': { x: number; z: number; cycleT: 0; houseId: string };
-  'sleep:failed': { x: number; z: number; reason: SleepFailedReason };
+  'sleep:requested': { houseId: string | null };
 }
 
 type Handler<E> = (payload: E) => void;

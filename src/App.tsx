@@ -680,6 +680,28 @@
  *   label is unchanged when no pile wins. TouchControls +
  *   App.tsx only; gesture ownership, touch ids, and the
  *   pulse-until-first-use sticks unchanged.
+ * - SLEEP BUTTON, LIVE (Adam, 2026-10-27 — DEV brief):
+ *   a Sleep control in the shelter indicator area (the
+ *   HUD stack, not the harvest column or the touch row).
+ *   It renders only when BOTH gates hold: sheltered by a
+ *   placed house (the engine's live sheltered state —
+ *   lean-to first, the house she has; any placed house
+ *   qualifies) AND night (the renderer's live sky cycle,
+ *   split by the engine's own cycleSplit at the world's
+ *   fixed SEASON_START_MONTH, read on the 1 s timer — no
+ *   shell season logic). Daytime shows no Sleep control.
+ *   The press emits 'sleep:requested' { houseId } — the
+ *   request the engine acts on (sky jumps to dawn,
+ *   time-only, no restore). CONTRACT NOTE, flagged: no
+ *   sleep channel existed at tip, and the typed bus
+ *   cannot emit an undeclared event, so this landing
+ *   adds the one type-only EventMap entry in events.ts
+ *   (no behavior) — Background subscribes to it, it does
+ *   not re-declare it. Until that listener lands the
+ *   press is a no-op by construction. Label is the lane's
+ *   pick, flagged: "Sleep until sunrise". No new panel,
+ *   no other invented text. App + ShelteredIndicator +
+ *   the one contract line.
  * - TRAP SAVE WIRING, LIVE (Adam, 2026-10-27 — DEV brief,
  *   Systems format half 4f3fa69): placed traps survive a
  *   refresh — saveNow passes trapState.snapshot() as
@@ -737,6 +759,7 @@ import {
   HOUSE_DEFS,
   type HouseType,
 } from './game/shelter';
+import { cycleSplit } from './game/sky';
 import {
   DEFAULT_SEED,
   PLAYER_EYE_HEIGHT,
@@ -817,7 +840,7 @@ import {
   serializeSave,
   type SaveData,
 } from './systems/save';
-import { clothingRemaining } from './game/weather';
+import { clothingRemaining, SEASON_START_MONTH } from './game/weather';
 import {
   ownedTier,
   ownedToolItem,
@@ -1189,6 +1212,21 @@ export default function App() {
     setSheltered(true);
     setShelterHouseName(house ? HOUSE_DEFS[house.type].name : undefined);
     setShelterHouseId(houseId);
+  };
+
+  // Night gate for the sleep button, read from the live sky
+  // (see the 1 s timer): true when the engine's own cycle
+  // split says night at the world's fixed start month.
+  const [isNight, setIsNight] = useState(false);
+
+  // SLEEP (Adam, 2026-10-27): the button renders only when
+  // sheltered AND night (see the ShelteredIndicator wiring
+  // below) — daytime shows no Sleep control. The press emits
+  // the sleep request the engine acts on: sky jumps to dawn,
+  // time-only, no restore. No listener exists yet —
+  // Background subscribes to 'sleep:requested'.
+  const handleSleep = (): void => {
+    bus.emit('sleep:requested', { houseId: shelterHouseId });
   };
 
   // Gap-closing state (see the header): one Systems FireState
@@ -1789,6 +1827,18 @@ export default function App() {
       // alongside the engine's (the bridge's tick half).
       for (const systemsFire of systemsFiresRef.current.values()) {
         systemsFire.tick(1);
+      }
+      // Night gate for the sleep button: the renderer's live
+      // sky cycle, split by the engine's own cycleSplit at
+      // the world's fixed start month (the renderer feeds
+      // the sky SEASON_START_MONTH — see renderer.ts — so
+      // this matches the rendered sky exactly, no shell
+      // season logic). The sky does not advance while
+      // paused, so freezing this read inside the pause gate
+      // costs nothing.
+      const sky = rendererRef.current?.snapshotSky();
+      if (sky) {
+        setIsNight(!cycleSplit(sky.cycleT, SEASON_START_MONTH).isDay);
       }
     }, 1000);
     // Placed-fire + shelter subscriptions: fires re-read from
@@ -3233,6 +3283,8 @@ export default function App() {
             <ShelteredIndicator
               sheltered={sheltered}
               houseName={shelterHouseName}
+              onSleep={isNight ? handleSleep : undefined}
+              sleepLabel="Sleep until sunrise"
             />
           </div>
           {stationPresenceValue.workstation ? (

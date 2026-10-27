@@ -33,6 +33,15 @@
  * invented here. If the existing panel cannot carry it, that
  * is a flag for the housing round, not a second panel built
  * in advance.
+ *
+ * SLEEP (Adam, 2026-10-27): when the caller passes onSleep,
+ * a Sleep button renders under the sheltered pill — and
+ * only there (never when unsheltered). The caller owns both
+ * gates: sheltered is this component's own branch, and the
+ * caller passes onSleep only at night, so daytime shows no
+ * Sleep control. No panel, no invented text beyond the
+ * caller's label; the press is the caller's emit, and the
+ * engine's dawn jump is the visible effect.
  */
 
 export interface ShelteredIndicatorProps {
@@ -41,12 +50,20 @@ export interface ShelteredIndicatorProps {
   /** Placed house name, caller-supplied. Shown only when sheltered. */
   houseName?: string;
   className?: string;
+  /** When set, a Sleep button renders under the sheltered pill.
+    The caller passes this only when sleeping is allowed (night)
+    — daytime shows no Sleep control. */
+  onSleep?: () => void;
+  /** Label for the Sleep button, caller-supplied wording. */
+  sleepLabel?: string;
 }
 
 export function ShelteredIndicator({
   sheltered,
   houseName,
   className,
+  onSleep,
+  sleepLabel,
 }: ShelteredIndicatorProps) {
   if (!sheltered) {
     return (
@@ -59,16 +76,25 @@ export function ShelteredIndicator({
     );
   }
   return (
-    <div
-      aria-label={
-        houseName ? `Sheltered at ${houseName}` : 'Sheltered'
-      }
-      className={
-        'rounded bg-black/50 px-2 py-1 text-sm text-stone-100 ' +
-        (className ?? '')
-      }
-    >
-      Sheltered{houseName ? ` at ${houseName}` : ''}
+    <div className={className ?? ''}>
+      <div
+        aria-label={
+          houseName ? `Sheltered at ${houseName}` : 'Sheltered'
+        }
+        className="rounded bg-black/50 px-2 py-1 text-sm text-stone-100"
+      >
+        Sheltered{houseName ? ` at ${houseName}` : ''}
+      </div>
+      {onSleep ? (
+        <button
+          type="button"
+          aria-label={sleepLabel ?? 'Sleep'}
+          onClick={onSleep}
+          className="mt-1 flex min-h-[44px] items-center justify-center rounded border-2 border-[#f0ead6]/80 bg-[#3a4436]/90 px-3 text-sm font-bold text-[#f0ead6]"
+        >
+          {sleepLabel ?? 'Sleep'}
+        </button>
+      ) : null}
     </div>
   );
 }
