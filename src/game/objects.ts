@@ -123,7 +123,8 @@ export type ItemId =
   | 'BOG_BERRIES'
   | 'ELDERBERRIES'
   | 'EDIBLE_MUSHROOM'
-  | 'POISON_MUSHROOM';
+  | 'POISON_MUSHROOM'
+  | 'APPLE';
 
 /**
  * Tool ladder stages for tool-gated yields (the garden trowel and its
@@ -359,7 +360,8 @@ export type MeshShape =
   | 'flower'
   | 'tallTree'
   | 'mushroom'
-  | 'acornCluster';
+  | 'acornCluster'
+  | 'appleTree';
 
 export interface MeshSpec {
   shape: MeshShape;
@@ -931,6 +933,26 @@ export const SOURCES: HarvestSourceDef[] = [
     provenance: 'draft',
     biomes: ['tanglewood', 'mirewood', 'oldfieldRise', 'saltFlat'],
     mesh: { shape: 'acornCluster', color: 0x6b4a2f, extraColor: 0x4a2e18, baseY: 0.08 },
+  },
+  {
+    id: 'appleTree',
+    kind: 'appleTree',
+    name: 'Apple Tree',
+    description:
+      'An old orchard apple tree (oldfieldRise + meadow remnants, Adam ' +
+      '2026-10-26, PINNED biomes) — fruit picked BY HAND, tree stays ' +
+      'living (shrink + regrow, never felled by the pick). Gather-exempt ' +
+      'fruit (Adam 2026-10-26 pin pass applies to the exemption). FELL ' +
+      'FOR WOOD IS OPEN (Adam 2026-10-27 brief): no fell verb exists for ' +
+      'this tree yet — timber still comes from standing trees.',
+    harvestable: true,
+    permitTier: 'hand',
+    hungerExempt: true,
+    primaryYield: 'APPLE',
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['oldfieldRise', 'meadow'],
+    mesh: { shape: 'appleTree', color: 0x4a2e18, extraColor: 0x4a7a30, baseY: 0 },
   },
 ];
 

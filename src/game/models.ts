@@ -55,9 +55,10 @@ const DISC_RADIUS: Partial<Record<ScatterKind, number>> = {
   riverSilt: 1.0,
 };
 
-/** Fixed food accents (not source colors): bog berries, flower center. */
+/** Fixed food accents (not source colors): bog berries, flower center, apples. */
 const BERRY_COLOR = 0x7a2a3a;
 const FLOWER_CENTER_COLOR = 0xf0d060;
+const APPLE_COLOR = 0xc82828;
 
 /** Lighten (>1) or darken (<1) a packed color, clamped to white. */
 function shade(hex: number, factor: number): number {
@@ -250,6 +251,31 @@ export function buildKindGeometry(spec: MeshSpec, kind: ScatterKind): THREE.Buff
         }
       }
       return merge(parts);
+    }
+    case 'appleTree': {
+      // Orchard apple tree: trunk + canopy blobs + red apple dots.
+      // Static dot positions, each centered ~on the main canopy
+      // sphere's surface (r 1.0 @ y 2.0) so the red reads half-proud
+      // against green at a glance — the mushroom-cap clarity rule.
+      // baseY 0, so parts sit at absolute heights (trunk 0–1.4,
+      // canopy to ~3.0); shrink scales the whole tree toward the
+      // ground, like any other kind.
+      const apples: THREE.BufferGeometry[] = [];
+      const dots: Vec3[] = [
+        [1.0, 2.0, 0], [-1.0, 2.0, 0], [0, 2.0, 1.0], [0, 2.0, -1.0],
+        [0.8, 2.6, 0], [-0.8, 2.6, 0], [0, 2.6, 0.8], [0, 2.6, -0.8],
+        [0.85, 1.5, 0], [-0.85, 1.5, 0],
+      ];
+      for (const p of dots) {
+        apples.push(part(sphere(0.1, 6, 5), APPLE_COLOR, { p }));
+      }
+      return merge([
+        part(cyl(0.14, 0.2, 1.4, 6), c, { p: [0, 0.7, 0] }),
+        part(blob(1.0), e, { p: [0, 2.0, 0] }),
+        part(blob(0.65), shade(e, 0.9), { p: [0.6, 1.7, 0.2] }),
+        part(blob(0.6), shade(e, 1.1), { p: [-0.55, 1.75, -0.2] }),
+        ...apples,
+      ]);
     }
     case 'bush':
       return merge([

@@ -46,6 +46,9 @@ const SCATTER_KINDS: ScatterKind[] = [
   // marshGrass (overlay/adjacency kinds), so a future mix weight
   // would just work.
   'groundAcorns',
+  // Apple landing (2026-10-27): first fruit tree, old orchard
+  // remnants in oldfieldRise + meadow (mix-driven, unlike acorns).
+  'appleTree',
 ];
 
 export function createWorldGen(seed: string): WorldGen {

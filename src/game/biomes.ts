@@ -124,7 +124,7 @@ export const BIOMES: BiomeDef[] = [
       bush: 0.20, tree: 0.18, snapWood: 0.15, tenderVines: 0.05, log: 0.05,
       riverStone: 0.10, bone: 0.05, peatMoss: 0.05, vine: 0.05, downedOak: 0.05,
       riverSilt: 0.02, saltCrystal: 0.02, bogPatch: 0.01, standingWater: 0.01,
-      stump: 0.02,
+      stump: 0.02, appleTree: 0.06,
     },
     // The pleasant neighbor: higher, drier, firm footing.
     anchor: {
@@ -191,14 +191,15 @@ export const BIOMES: BiomeDef[] = [
     mix: {
       flower: 0.28, bush: 0.16, snapWood: 0.08, tree: 0.04, log: 0.04,
       tenderVines: 0.05, riverStone: 0.05, peatMoss: 0.03, vine: 0.03,
-      bone: 0.01, stump: 0.01,
+      bone: 0.01, stump: 0.01, appleTree: 0.05,
     },
     // Pretty and open: light grass, flowers, scattered brush — the
     // pleasant far-out clearing. Drier and lower than Oldfield Rise
     // (which stays the near-spawn pleasant neighbor), and gated by
     // distance so it is never a start neighbor (see distance axis).
     // 'flower' is scenery only; everything yield-bearing here is an
-    // existing item shared with other biomes.
+    // existing item shared with other biomes — except appleTree, the
+    // first fruit tree (old orchard remnants, also in oldfieldRise).
     anchor: {
       wetness: { at: 0.35, sigma: 0.25 },
       elevation: { at: 0.55, sigma: 0.30 },
