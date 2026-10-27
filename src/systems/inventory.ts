@@ -333,6 +333,15 @@ export const ITEM_ID_ALIASES: Readonly<Record<string, ItemId>> = {
   EDIBLE_MUSHROOM: 'edible-mushroom',
   POISON_MUSHROOM: 'poison-mushroom',
   APPLE: 'apple',
+  // FLINT (Background e6853c6, DEV brief 2026-10-27): the
+  // flint source yields UPPER_SNAKE 'FLINT' like every
+  // other item, but this table had no FLINT entry — so
+  // granted flint stacked under 'FLINT' while the
+  // lighting menu counts 'flint' (ITEMS.flint), and flint
+  // lighting stayed unreachable despite the source
+  // landing. One line, Systems side (a lowercase yield
+  // from Background would break convention).
+  FLINT: ITEMS.flint,
 };
 
 /**
