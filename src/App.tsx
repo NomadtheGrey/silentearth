@@ -648,6 +648,38 @@
  *   and 16 px gaps, no overlap. Labels, pulse-until-first-use,
  *   touch ids, and gesture ownership unchanged. App.tsx
  *   bullet + TouchControls positions only.
+ * - USE CENTERED + PILE PICKUP FIX, LIVE (Adam, 2026-10-27
+ *   — DEV brief, two touch items in one landing): (1) USE
+ *   PLACEMENT — Adam: the USE button was awkwardly placed,
+ *   it should read symmetrical/centered; the placement is
+ *   the lane's judgment per his delegation. USE moves from
+ *   right-40 to dead centre between MOVE and TURN, its
+ *   vertical centre on the sticks' axis (bottom-32 lifts the
+ *   64 px button to the 128 px rings' centre). Geometry on
+ *   Adam's 390 px phone: MOVE [16, 144], USE [163, 227],
+ *   TURN [246, 374] — 19 px clear each side, no overlap;
+ *   the old row drooped (USE centre 32 px below the sticks'
+ *   axis) and hugged TURN. (2) DROPPED-ITEM PICKUP ON TOUCH
+ *   — BUG FIX, not just invisibility: investigation found
+ *   touch USE genuinely failed to pick piles. Ground sits
+ *   at distance 0 and is always eligible in third/behind
+ *   (and whenever looking down in first-person), so any
+ *   pile at a nonzero distance lost to ground and USE
+ *   harvested dirt instead of picking up — exact-0 is
+ *   essentially unreachable once she has moved off the
+ *   drop spot. Fix (the previously-flagged piles-outrank-
+ *   ground change, made inside this brief): the pile now
+ *   competes against SCATTER targets only; ground never
+ *   blocks a pickup. Scatter competition is unchanged, and
+ *   ground harvest via USE still works when no pile wins.
+ *   (3) DISCOVERABILITY: the USE button now reads "PICK
+ *   UP" whenever a pile would win the press — one shared
+ *   rule drives the label, the press, and the desktop
+ *   button, so the label can never lie about the press.
+ *   Label change flagged per the brief: the default "USE"
+ *   label is unchanged when no pile wins. TouchControls +
+ *   App.tsx only; gesture ownership, touch ids, and the
+ *   pulse-until-first-use sticks unchanged.
  * - TRAP SAVE WIRING, LIVE (Adam, 2026-10-27 — DEV brief,
  *   Systems format half 4f3fa69): placed traps survive a
  *   refresh — saveNow passes trapState.snapshot() as
@@ -1203,9 +1235,10 @@ export default function App() {
   );
   const [harvestTargets, setHarvestTargets] = useState<HarvestTarget[]>([]);
   // In-range dropped piles (harvest overflow), nearest first per
-  // the tracker. Drives the touch USE fallback and the desktop
-  // pickup button (see handleTouchInteract + the desktop pile
-  // computation before return); piles get no screen of their own.
+  // the tracker. Drives the touch USE fallback, the touch
+  // PICK UP label, and the desktop pickup button (see
+  // handleTouchInteract + the pile computations before
+  // return); piles get no screen of their own.
   const [piles, setPiles] = useState<PileTarget[]>([]);
   // Harvest outcome feedback + multi-step progress, rendered
   // through WorldAnchor + ObjectFeedback / InteractionProgress.
@@ -2825,51 +2858,58 @@ export default function App() {
   // pressed through the engine's pressUse (which fires the
   // existing harvest:requested event; the outcome listener
   // re-validates range + permit, so a stale press fails
-  // safely). The tracker emits the ground target FIRST when
-  // eligible, so scatter is preferred and ground is the
+  // safely). Scatter is preferred and ground is the
   // fallback — USE never harvests dirt while a bush is in
   // range. With no target at all, pressUse is not called
   // (menus and HUD buttons stay direct taps).
   //
-  // PILE FALLBACK (Adam, 2026-10-26): no new buttons, no new
-  // screen — a pile in range is picked up by this same USE
-  // press when no harvest target is nearer. The tracker sorts
-  // piles nearest first, so piles[0] is the nearest pile; the
-  // harvest candidate's distance comes from the raw bus target
-  // (the UI target shape carries no distance field), falling
-  // back to a shell-computed distance if the bus entry is gone.
-  // The pile wins on a tie (no harvest target is NEARER then)
-  // — which matters because ground sits at distance 0: a pile
-  // she stands on ties ground and wins, while a pile farther
-  // than her feet loses to ground. Consequence, stated
-  // plainly: in third/behind with no scatter, ground is
-  // eligible at distance 0, so only a pile at her feet is
-  // reachable by USE; in first-person looking level, any
-  // in-range pile nearer than the scatter target wins. If piles
-  // should outrank ground outright, that is a one-line priority
-  // change for Adam's call, not this landing's.
+  // PILE FALLBACK, FIXED (Adam, 2026-10-27 — BUG FIX, see
+  // the header bullet): a pile in range is picked up by
+  // this same USE press when no SCATTER target is nearer.
+  // The tracker sorts piles nearest first, so piles[0] is
+  // the nearest pile; the scatter candidate's distance
+  // comes from the raw bus target (the UI target shape
+  // carries no distance field), falling back to a
+  // shell-computed distance if the bus entry is gone. The
+  // pile wins on a tie (no scatter target is NEARER then).
+  // Ground NEVER competes: ground sits at distance 0 and
+  // is always eligible in third/behind (and whenever
+  // looking down in first-person), so under the old
+  // scatter-first rule any pile at a nonzero distance
+  // lost to ground and USE harvested dirt instead of
+  // picking up. The one shared pileWouldWin rule below
+  // drives this press, the touch PICK UP label, and the
+  // desktop button, so all three always agree.
   // NOTE: this is the touch USE path only. Desktop has no USE
   // affordance (harvest is by button click), so desktop pile
   // pickup is a visible button instead — see DESKTOP PILE
   // PICKUP in the header and the computation before return.
   // Touch keeps USE; the button is desktop-only.
+  const pileWouldWin = (
+    pile: PileTarget | undefined,
+    scatter: HarvestTarget | undefined,
+    fromX: number,
+    fromZ: number,
+  ): boolean => {
+    if (!pile) return false;
+    if (!scatter) return true;
+    const scatterDistance =
+      busTargetsRef.current.find((t) => t.id === scatter.id)?.distance ??
+      Math.hypot(scatter.worldX - fromX, scatter.worldZ - fromZ);
+    return pile.distance <= scatterDistance;
+  };
   const handleTouchInteract = (): void => {
     const player = playerRef.current;
-    const target =
-      harvestTargets.find((candidate) => candidate.kind === 'scatter') ??
-      harvestTargets[0];
     if (!player) return;
+    const scatter = harvestTargets.find(
+      (candidate) => candidate.kind === 'scatter',
+    );
     const pile = piles[0];
-    if (pile) {
-      const candidateDistance = target
-        ? (busTargetsRef.current.find((t) => t.id === target.id)?.distance ??
-          Math.hypot(target.worldX - player.x, target.worldZ - player.z))
-        : Number.POSITIVE_INFINITY;
-      if (pile.distance <= candidateDistance) {
-        bus.emit('pile:pickup-requested', { pileId: pile.id });
-        return;
-      }
+    if (pile && pileWouldWin(pile, scatter, player.x, player.z)) {
+      bus.emit('pile:pickup-requested', { pileId: pile.id });
+      return;
     }
+    const target = scatter ?? harvestTargets[0];
     if (!target) return;
     player.pressUse({
       targetId: target.id,
@@ -2937,32 +2977,41 @@ export default function App() {
   // but only when it would win under the touch USE rules —
   // otherwise the button would contradict what USE would do.
   // The tracker already limits piles to 2.5 m and sorts
-  // nearest first, so piles[0] is the candidate; its
-  // distance is the tracker's, and the harvest candidate is
-  // the same scatter-first pick handleTouchInteract uses
-  // (bus distance, shell-computed fallback from position
-  // state, which re-renders on the 10 Hz moved tick — so the
-  // button appears and disappears as she moves). Null on
-  // touch (USE already exists there) and null when a nearer
-  // harvest target wins: harvest that first, then the pile
-  // button appears. Pressing emits pile:pickup-requested;
-  // Systems' listener grants, the existing subscriber
-  // refreshes, saves, and feeds back.
-  const desktopPileTarget =
-    harvestTargets.find((candidate) => candidate.kind === 'scatter') ??
-    harvestTargets[0];
-  const desktopPileCandidateDistance = desktopPileTarget
-    ? (busTargetsRef.current.find((t) => t.id === desktopPileTarget.id)
-        ?.distance ??
-      Math.hypot(
-        desktopPileTarget.worldX - position.x,
-        desktopPileTarget.worldZ - position.z,
-      ))
-    : Number.POSITIVE_INFINITY;
+  // nearest first, so piles[0] is the candidate; the shared
+  // pileWouldWin rule (scatter-only candidate, ground never
+  // competes; bus distance, shell-computed fallback from
+  // position state, which re-renders on the 10 Hz moved tick
+  // — so the button appears and disappears as she moves).
+  // Null on touch (USE already exists there) and null when
+  // a nearer scatter target wins: harvest that first, then
+  // the pile button appears. Pressing emits
+  // pile:pickup-requested; Systems' listener grants, the
+  // existing subscriber refreshes, saves, and feeds back.
   const desktopPilePickup =
     !isTouch &&
-    piles.length > 0 &&
-    piles[0].distance <= desktopPileCandidateDistance
+    pileWouldWin(
+      piles[0],
+      harvestTargets.find((candidate) => candidate.kind === 'scatter'),
+      position.x,
+      position.z,
+    )
+      ? piles[0]
+      : null;
+
+  // TOUCH PILE LABEL: the same shared rule, touch-only —
+  // when a pile would win the USE press, the USE button
+  // reads "PICK UP" (see TouchControls interactLabel).
+  // Position state (10 Hz tick) drives it, so the label
+  // appears and disappears as she moves, exactly like the
+  // desktop button.
+  const touchPilePickup =
+    isTouch &&
+    pileWouldWin(
+      piles[0],
+      harvestTargets.find((candidate) => candidate.kind === 'scatter'),
+      position.x,
+      position.z,
+    )
       ? piles[0]
       : null;
 
@@ -3394,6 +3443,7 @@ export default function App() {
           onTurn={applyTurn}
           onLook={applyTouchLook}
           onInteract={handleTouchInteract}
+          interactLabel={touchPilePickup ? 'PICK UP' : undefined}
         />
       ) : null}
 
