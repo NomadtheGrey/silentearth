@@ -15,9 +15,16 @@
  * WORDING IS LANE-DECIDED (flagged for Adam's pin pass): the
  * brief supplied the three mappings, the lane worded the line.
  *
- * MUSHROOM LINES JOIN LATER: when mushroom sources land, their
- * mapping joins this line as a small follow-up — not a blocker
- * now, and nothing here invents a mushroom source meanwhile.
+ * MUSHROOM LINE (added 2026-10-26, DEV brief, now that sources
+ * landed at 8315d21): a second line names mushrooms and
+ * DISTINGUISHES them by cap — edible is the tan plain cap and
+ * is safe; poison is the rust cap with pale spots and is
+ * "do not eat". No poison symptoms are invented here: eat
+ * effects are Systems' proposal, not pinned, so the poison
+ * wording stops at "do not eat". "Look close before picking"
+ * is the brief's caution, carried verbatim in spirit.
+ * Wording is lane-decided, flagged for Adam's pin pass, as
+ * with the first line.
  */
 
 import type { HungerStage } from './HungerIndicator';
@@ -38,6 +45,10 @@ export function ForageHint({ stage }: ForageHintProps) {
     >
       Forage: brush → elderberries · bog growth → bog berries · downed
       oak → acorns (cook first).
+      <div>
+        Mushrooms: tan plain cap is safe · rust cap with pale spots —
+        do not eat. Look close before picking.
+      </div>
     </div>
   );
 }
