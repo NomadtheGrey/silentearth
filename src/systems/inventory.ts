@@ -225,6 +225,9 @@ export const ITEM_WEIGHT_LB: Readonly<Record<string, number>> = {
   [ITEMS.peatMoss]: 0.5,
   bone: 0.5,
   [ITEMS.flint]: 0.5,
+  // Lane judgment: stick + binding + tinder, light to carry.
+  [ITEMS.torch]: 0.5,
+  [ITEMS.litTorch]: 0.5,
   [ITEMS.pointyHat]: 0.5,
   [ITEMS.mossyMittens]: 0.5,
   // 1 lb
@@ -414,6 +417,8 @@ export const ITEM_DISPLAY_NAMES: Readonly<Record<string, string>> = {
   'mossy-mittens': 'Mossy Mittens',
   'bog-boots': 'Bog Boots',
   umbrella: 'Umbrella',
+  torch: 'Torch',
+  'lit-torch': 'Lit Torch',
   snare: 'Snare',
   'fish-weir-trap': 'Fish / Weir Trap',
   'pot-trap': 'Pot Trap',

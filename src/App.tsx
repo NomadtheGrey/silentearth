@@ -155,6 +155,26 @@
  *   the avatar / portrait candle is untouched, and nothing
  *   here assumes the candle lights fires — that relation
  *   is flagged open for Adam's call.
+ * - TORCH, LIVE (Adam, 2026-10-27 — DEV brief, all three
+ *   lanes): torch item + hand recipe (snap-wood 1 +
+ *   twined cordage 1 + dry kindling 1, DRAFT quantities
+ *   for the pin pass) + Systems batch lighting
+ *   (systems/torch.ts lightTorches: ONE press lights
+ *   EVERY carried unlit torch — at a lit fire, or with
+ *   carried flint + river-stone, both kept; no burnout,
+ *   no duration, no chain-lighting, all Adam-pinned).
+ *   Inventory torch rows gain a Light button (the FLINT
+ *   route only — no invented "nearby fire" range; the
+ *   fire route arrives with UI's lit-fire 'light torches'
+ *   pill, whose host menu already opens in every state
+ *   since UI's lit-menu fix fe7b304). Carried torch light
+ *   itself is Background's (Adam: well-lit to 6 m, dim to
+ *   at least 12 m, torch stays brighter than the candle —
+ *   exact values theirs, above the candle's new 30/22
+ *   from Fill-in 2766045; the starting candle already
+ *   went brighter, tuned together). Placeable candles NOT
+ *   in this order. App + InventoryPanel + systems only;
+ *   no game edits.
  * - SHELTER UI, LIVE (Adam, 2026-10-26): house recipes
  *   (lean-to, thatch hut, woven cottage, small wooden hut)
  *   are craftable through CraftingMenu, and a carried house
@@ -998,6 +1018,7 @@ import {
   type CraftingStation,
   type ItemId,
 } from './systems/recipes';
+import { lightTorches } from './systems/torch';
 
 type BusHarvestTarget = EventMap['harvest:inRange']['targets'][number];
 
@@ -1237,6 +1258,17 @@ const FOOD_IDS: ReadonlySet<string> = new Set([
   ...COOK_REQUIRED_ITEMS,
 ]);
 
+/**
+ * Items that gain a Light button in the inventory panel:
+ * unlit torches only (a lit torch is already lit — no dead
+ * button on it). The press is the FLINT route of Systems'
+ * batch lighting (flint + river-stone carried, both kept);
+ * the fire route arrives with UI's lit-fire 'light torches'
+ * pill, whose host menu opens in every state since UI's
+ * lit-menu fix fe7b304.
+ */
+const TORCH_IDS: ReadonlySet<string> = new Set([ITEMS.torch]);
+
 /** Engine house type → Systems house item (for HomeStorage). */
 const HOUSE_TYPE_TO_ITEM: Record<HouseType, string> = {
   leanTo: ITEMS.primitiveLeanTo,
@@ -1445,6 +1477,7 @@ export default function App() {
   const homeStoresRef = useRef(new Map<string, HomeStorage>());
   const homeStoreItemsRef = useRef(new Map<string, Set<string>>());
   const [eatNote, setEatNote] = useState<string | null>(null);
+  const [torchNote, setTorchNote] = useState<string | null>(null);
   const [dropNote, setDropNote] = useState<string | null>(null);
   const [storageNote, setStorageNote] = useState<string | null>(null);
 
@@ -2668,6 +2701,35 @@ export default function App() {
     } catch (error) {
       setEatNote(
         error instanceof Error ? error.message : 'Could not eat that.',
+      );
+    }
+    refreshInventory();
+    saveNow();
+  };
+
+  /**
+   * Inventory Light press (unlit torch rows only): the FLINT
+   * route of Systems' batch lighting — flint + river-stone
+   * carried, both kept, every carried unlit torch lit in
+   * one press. litFirePresent is false here on purpose:
+   * the fire route arrives with UI's lit-fire 'light
+   * torches' pill (selected fire = present by definition),
+   * and inventing a "nearby fire" range for this button
+   * would be a new mechanic. Same refresh + save shape
+   * as eating (panel action, not world action).
+   */
+  const handleLightTorchItem = (_itemId: string) => {
+    const outcome = lightTorches(inventory, { litFirePresent: false });
+    // Equality check, not truthiness: this repo runs tsc
+    // without strict mode, and truthiness narrowing on
+    // this union's boolean discriminant does not narrow
+    // (verified: `if (outcome.lit)` else-branch keeps the
+    // lit member, TS2339 on .reason; `=== false` narrows).
+    if (outcome.lit === false) {
+      setTorchNote(outcome.reason);
+    } else {
+      setTorchNote(
+        `Lit ${outcome.count} torch${outcome.count === 1 ? '' : 'es'} with flint and stone.`,
       );
     }
     refreshInventory();
@@ -3937,6 +3999,8 @@ export default function App() {
             onPlaceItem={handlePlaceItem}
             foodIds={FOOD_IDS}
             onEatItem={handleEatItem}
+            lightableIds={TORCH_IDS}
+            onLightItem={handleLightTorchItem}
             storage={storageSection}
             onDepositItem={handleDepositItem}
             onDropItem={handleDropItem}
@@ -3965,6 +4029,11 @@ export default function App() {
         {eatNote ? (
           <p className="rounded bg-black/50 px-2 py-1 text-xs text-stone-200">
             {eatNote}
+          </p>
+        ) : null}
+        {torchNote ? (
+          <p className="rounded bg-black/50 px-2 py-1 text-xs text-stone-200">
+            {torchNote}
           </p>
         ) : null}
         {dropNote ? (

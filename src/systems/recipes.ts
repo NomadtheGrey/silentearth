@@ -94,6 +94,10 @@ export const ITEMS = {
   // Umbrella (2026-10-26 queued work — carried rain protection,
   // see umbrella.ts for the mechanic and coordination shape).
   umbrella: 'umbrella',
+  // Torch (2026-10-27 — carried light, brighter than the candle;
+  // see torch.ts for the batch lighting action).
+  torch: 'torch',
+  litTorch: 'lit-torch',
   // Traps (brainstorm only — nothing picked; see their notes).
   snare: 'snare',
   fishWeirTrap: 'fish-weir-trap',
@@ -325,6 +329,36 @@ const DRAFT_RECIPES: Recipe[] = [
       '(not unstated) so the UI shows "by hand" plainly. This is ' +
       'the friction-lighting fuel: slow lighting consumes 1 ' +
       'dry-kindling (fire.ts), not raw snap-wood.',
+  },
+
+  // --- Torch: stick + binding + tinder, made by hand (Adam, 2026-10-27).
+  {
+    id: 'torch',
+    name: 'Torch',
+    status: 'draft',
+    output: { item: ITEMS.torch, quantity: 1 },
+    ingredients: [
+      i(ITEMS.snapWood, 1),
+      i(ITEMS.twinedCordage, 1),
+      i(ITEMS.dryKindling, 1),
+    ],
+    station: 'hand',
+    notes:
+      'DRAFT. Snap-Wood 1 + Twined Cordage 1 + Dry Kindling 1 -> ' +
+      '1 torch, made by hand anywhere — no station needed ' +
+      "(Adam's doubt, 2026-10-27: she needs no station for " +
+      'these). Lighting is a SEPARATE batch action (torch.ts ' +
+      'lightTorches): one press lights EVERY carried unlit ' +
+      'torch — at a lit fire, or with carried flint + ' +
+      'river-stone (both kept, fire-lighting precedent). Lit ' +
+      'torches are carried light, brighter than the candle ' +
+      '(Adam: well-lit to 6 m, dim to at least 12 m; exact ' +
+      'values Background\'s); no burnout, no duration, ' +
+      'no chain-lighting (Adam: both rejected as ' +
+      'annoying/tedious). Quantities + the cordage binding ' +
+      'are lane-decided for the pin pass; no tallow/resin ' +
+      '(not in the game). Placeable candles are NOT in this ' +
+      'order (later, after torches).',
   },
 
   // --- Tool ladder: ONE tool, evolving. Upgrade costs, not rebuilds.
