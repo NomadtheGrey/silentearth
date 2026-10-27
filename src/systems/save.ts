@@ -22,14 +22,18 @@
  * - placed fires (id + type + position + lit flag + lighting),
  *   placed houses
  *   (type + position + stored contents), placed looms (position)
- * - ground piles (item + quantity + position, see ./piles.ts):
- *   the harvest-overflow remainder. Piles are OPTIONAL on read
- *   (an old save without them loads with piles: []) and always
- *   written by serializeSave — so the version STAYS 1 on
- *   purpose: bumping to 2 would make Adam's existing v1 save
- *   unreadable (fresh start, progress lost) for an additive
- *   field, and old code already ignores unknown fields. A v2
- *   is a migration decision for later, not this landing.
+ * - ground piles (multi-kind stacks + position, see
+ *   ./piles.ts): the harvest-overflow remainder. Piles are
+ *   OPTIONAL on read (an old save without them loads with
+ *   piles: []) and always written by serializeSave — so the
+ *   version STAYS 1 on purpose: bumping to 2 would make
+ *   Adam's existing v1 save unreadable (fresh start,
+ *   progress lost) for an additive field, and old code
+ *   already ignores unknown fields. A v2 is a migration
+ *   decision for later, not this landing. Old single-kind
+ *   pile documents migrate on read (grouped by rounded
+ *   coords into one stacks pile per spot, kinds in saved
+ *   order, nothing dropped — see deserializeSave).
  * - placed traps (id + type + position, structural shape of
  *   the game layer's PlacedTrap — no game import): same
  *   additive-field rule as piles (old saves load traps: []),
@@ -49,12 +53,11 @@
  *   look), never break. Invalid entries pass through —
  *   the engine restores validate and drop (replace, not
  *   merge; null snapshots ignored there).
- *   APP WIRING FOLLOWS THE PILE ENTITY (Background): saveNow
- *   passes the pile singleton's snapshot as draft.piles, and
- *   boot restore re-places each saved pile through the
- *   entity spawner, the same shape as fires/houses/looms.
- *   Until that wiring lands, piles are session-only — stated,
- *   not silent.
+ *   APP WIRING (live): saveNow passes the pile
+ *   singleton's snapshot stacks as draft.piles, and boot
+ *   restore re-places each saved kind through
+ *   pileState.drop() (merge-safe by coords), the same
+ *   shape as fires/houses/looms.
  *
  * WHAT IS RECORDED BUT NOT RESTORED (stated, not silent):
  * - A fire's LIT state is saved (lit: true/false) but restore
@@ -92,7 +95,6 @@
 // ---------------------------------------------------------------------------
 
 import { normalizeItemId } from './inventory';
-import type { GroundPile } from './piles';
 
 /** Storage key. The version rides inside the document too. */
 export const SAVE_KEY = 'silentearth-save-v1';
@@ -156,6 +158,27 @@ export interface SavedHouse {
 }
 
 export interface SavedLoom {
+  x: number;
+  z: number;
+}
+
+/**
+ * One kind inside a saved pile (structural mirror of
+ * piles.ts PileStack). Item ids are NORMALIZED.
+ */
+export interface SavedPileStack {
+  item: string;
+  quantity: number;
+}
+
+/**
+ * A saved multi-kind pile: stacks + position. No id is
+ * stored — the runtime pile id is derived from the coords
+ * (pile:<x.toFixed(2)>,<z.toFixed(2)>) when boot restore
+ * re-places each kind through pileState.drop().
+ */
+export interface SavedPile {
+  stacks: SavedPileStack[];
   x: number;
   z: number;
 }
@@ -278,8 +301,8 @@ export interface SaveData {
   fires: SavedFire[];
   houses: SavedHouse[];
   looms: SavedLoom[];
-  /** Ground piles (harvest overflow); [] for old saves. */
-  piles: GroundPile[];
+  /** Ground piles (multi-kind stacks); [] for old saves. */
+  piles: SavedPile[];
   /** Placed traps (craft-placed); [] for old saves. */
   traps: SavedTrap[];
   /** World harvest state; empty snapshot for old saves. */
@@ -325,13 +348,13 @@ export interface SaveDraft {
   sky?: SavedSky;
   facing?: SavedFacing;
   /**
-   * Ground piles from the pile source (Background's singleton,
-   * once it lands). OPTIONAL so existing saveNow call sites
-   * keep compiling unchanged until that wiring exists.
+   * Ground piles from the pile source (Background's
+   * singleton snapshot): stacks + position per pile.
+   * OPTIONAL so existing saveNow call sites keep
+   * compiling unchanged until that wiring exists.
    */
   piles?: ReadonlyArray<{
-    item: string;
-    quantity: number;
+    stacks: ReadonlyArray<{ item: string; quantity: number }>;
     x: number;
     z: number;
   }>;
@@ -461,25 +484,39 @@ export function serializeSave(draft: SaveDraft): SaveData {
       x: trap.x,
       z: trap.z,
     })),
-    // Piles: normalized ids, invalid entries dropped (same
-    // filtering rule as normalizeStacks). Order preserved —
-    // positions matter, so piles are never merged here.
+    // Piles: multi-kind stacks, normalized ids, invalid
+    // entries dropped (same filtering rule as
+    // normalizeStacks — a stack with a bad item or
+    // quantity is dropped, and a pile left with no valid
+    // stacks is dropped with it). Order preserved —
+    // positions matter, so piles are never merged here
+    // (one snapshot pile per spot already; parse groups
+    // on read for old documents).
     piles: (draft.piles ?? [])
-      .filter(
-        (pile) =>
-          typeof pile.item === 'string' &&
-          pile.item.length > 0 &&
-          Number.isInteger(pile.quantity) &&
-          pile.quantity > 0 &&
-          Number.isFinite(pile.x) &&
-          Number.isFinite(pile.z),
-      )
-      .map((pile) => ({
-        item: normalizeItemId(pile.item),
-        quantity: pile.quantity,
-        x: pile.x,
-        z: pile.z,
-      })),
+      .map((pile) => {
+        if (
+          !Array.isArray(pile.stacks) ||
+          !Number.isFinite(pile.x) ||
+          !Number.isFinite(pile.z)
+        ) {
+          return null;
+        }
+        const stacks = pile.stacks
+          .filter(
+            (stack) =>
+              typeof stack.item === 'string' &&
+              stack.item.length > 0 &&
+              Number.isInteger(stack.quantity) &&
+              stack.quantity > 0,
+          )
+          .map((stack) => ({
+            item: normalizeItemId(stack.item),
+            quantity: stack.quantity,
+          }));
+        if (stacks.length === 0) return null;
+        return { stacks, x: pile.x, z: pile.z };
+      })
+      .filter((pile): pile is SavedPile => pile !== null),
   };
 }
 
@@ -602,32 +639,86 @@ export function deserializeSave(value: unknown): SaveData | null {
     // loads with piles: []. When present, a malformed entry
     // makes the whole document corrupt (same strictness as
     // fires/houses — a half-valid pile list must not restore
-    // piles onto wrong positions).
-    const piles: GroundPile[] = [];
+    // piles onto wrong positions). MIGRATION (multi-kind,
+    // 2026-10-27): entries may be the OLD single-kind shape
+    // { item, quantity, x, z } or the NEW stacks shape
+    // { stacks: [{ item, quantity }], x, z } (extra id /
+    // legacy fields ignored — ids are never trusted, the
+    // runtime id derives from coords). Entries are GROUPED
+    // by rounded coords into one stacks pile per spot,
+    // kinds in saved order (a duplicate kind at one spot
+    // sums, first-seen order kept) — the same rule as
+    // pileState.restore() for old-shape inputs — so no
+    // pile is ever dropped in migration. The grouped
+    // pile's position is its first entry's coords (the
+    // runtime pile keeps its first drop's coords too).
+    const pilesBySpot = new Map<string, SavedPile>();
     if (value.piles !== undefined) {
       if (!Array.isArray(value.piles)) return null;
       for (const entry of value.piles) {
         if (!isRecord(entry)) return null;
-        if (typeof entry.item !== 'string' || entry.item.length === 0) {
-          return null;
-        }
-        if (
-          !Number.isInteger(entry.quantity) ||
-          (entry.quantity as number) <= 0
-        ) {
-          return null;
-        }
         if (!isFiniteNumber(entry.x) || !isFiniteNumber(entry.z)) {
           return null;
         }
-        piles.push({
-          item: normalizeItemId(entry.item),
-          quantity: entry.quantity as number,
-          x: entry.x,
-          z: entry.z,
-        });
+        // Kinds for this entry: stacks shape wins when
+        // present; otherwise the old single-kind shape.
+        // A stacks value that is present but malformed
+        // (not an array, empty, or holding a bad stack)
+        // is corrupt — no fallback to the legacy fields.
+        let kinds: { item: string; quantity: number }[];
+        if (entry.stacks !== undefined) {
+          if (!Array.isArray(entry.stacks) || entry.stacks.length === 0) {
+            return null;
+          }
+          kinds = [];
+          for (const stack of entry.stacks) {
+            if (!isRecord(stack)) return null;
+            if (typeof stack.item !== 'string' || stack.item.length === 0) {
+              return null;
+            }
+            if (
+              !Number.isInteger(stack.quantity) ||
+              (stack.quantity as number) <= 0
+            ) {
+              return null;
+            }
+            kinds.push({
+              item: stack.item,
+              quantity: stack.quantity as number,
+            });
+          }
+        } else {
+          if (typeof entry.item !== 'string' || entry.item.length === 0) {
+            return null;
+          }
+          if (
+            !Number.isInteger(entry.quantity) ||
+            (entry.quantity as number) <= 0
+          ) {
+            return null;
+          }
+          kinds = [
+            { item: entry.item, quantity: entry.quantity as number },
+          ];
+        }
+        const key = `${entry.x.toFixed(2)},${entry.z.toFixed(2)}`;
+        let pile = pilesBySpot.get(key);
+        if (!pile) {
+          pile = { stacks: [], x: entry.x, z: entry.z };
+          pilesBySpot.set(key, pile);
+        }
+        for (const kind of kinds) {
+          const id = normalizeItemId(kind.item);
+          const existing = pile.stacks.find((s) => s.item === id);
+          if (existing) {
+            existing.quantity += kind.quantity;
+          } else {
+            pile.stacks.push({ item: id, quantity: kind.quantity });
+          }
+        }
       }
     }
+    const piles: SavedPile[] = [...pilesBySpot.values()];
     // World state: optional on read, same additive-field rule
     // as piles/traps — an old v1 save without these fields
     // loads defaults, never breaks. Invalid entries pass

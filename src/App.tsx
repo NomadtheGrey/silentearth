@@ -568,21 +568,23 @@
  *   pause"). NO auto-resume anywhere — focus/visible return
  *   deliberately clears nothing; only the button resumes.
  * - PILE SAVE WIRING, LIVE (Adam, 2026-10-26 — DEV brief,
- *   merge #5 on hold until everything is built): piles are no
- *   longer session-only. saveNow passes pileState.snapshot()
- *   (mapped to item/quantity/x/z, the id dropped) as
- *   draft.piles, so serializeSave writes them normalized,
- *   order preserved, never merged; boot restore, inside the
- *   saveRestoredRef guard after the renderer exists, drops
- *   each saved pile back through pileState.drop() (merge-safe,
- *   emits pile:dropped for tracker + renderer visuals; the
- *   100 ms moved tick then surfaces in-range piles). The
- *   guard also protects against a double restore doubling
- *   quantities (drop merges by id). Regenerate clears piles
- *   via setWorldGen and the next save snapshots the empty
- *   set — a new world is a new pile set, by design. Old
- *   saves load piles: []. App.tsx only; no format change
- *   (SaveData.piles already existed).
+ *   merge #5 on hold until everything is built; multi-kind
+ *   2026-10-27): piles are no longer session-only. saveNow
+ *   passes pileState.snapshot() (stacks + position, no id
+ *   in the document) as draft.piles, so serializeSave
+ *   writes them normalized, order preserved, never merged;
+ *   boot restore, inside the saveRestoredRef guard after
+ *   the renderer exists, drops each saved KIND back
+ *   through pileState.drop() (merge-safe by coords, emits
+ *   pile:dropped/pile:changed for tracker + renderer
+ *   visuals; the 100 ms moved tick then surfaces in-range
+ *   piles). The guard also protects against a double
+ *   restore doubling quantities (drop merges by coords).
+ *   Regenerate clears piles via setWorldGen and the next
+ *   save snapshots the empty set — a new world is a new
+ *   pile set, by design. Old single-kind saves migrate on
+ *   read (grouped by rounded coords, kinds in saved order,
+ *   nothing dropped); saves without piles load piles: [].
  * - DESKTOP PILE PICKUP, LIVE (Adam, 2026-10-26 — DEV brief,
  *   second of two; SUPERSEDES the desktop limit in PILE
  *   PICKUP BY USE above): desktop gets a visible button —
@@ -769,19 +771,24 @@
  *   no computed total lives in the display.
  *   InventoryPanel + App + types only.
  * - PILE CHIP + MENU, LIVE (Adam, 2026-10-27 — DEV brief,
- *   on Systems' take-N + deposit 0e16c91): every in-range
- *   pile gets a world-anchored chip (item + ×count,
- *   fire-chip pattern, 44 px touch target); tap opens
- *   Take one / Take all / Deposit one / Deposit all,
- *   scoped to the pile's item (deposit disabled when
- *   she carries none of it). Take calls
- *   handlePileTakeRequest directly (1 / pile quantity);
- *   deposit calls depositIntoPile + one pileState.drop
- *   with the pile's EXACT x/z verbatim — a deposit to a
- *   gone pile still lands at those coords, and the chip
- *   refreshes straight from pileState after every menu
- *   action. USE (touch) + desktop button keep take-all
- *   as the fast path; exact-number picker not built.
+ *   on Systems' take-N + deposit 0e16c91; kind-scoped
+ *   grant 2026-10-27, menu redesign still UI's turn):
+ *   every in-range pile gets a world-anchored chip (item
+ *   + ×count, fire-chip pattern, 44 px touch target); tap
+ *   opens Take one / Take all / Deposit one / Deposit
+ *   all, scoped to one kind (deposit disabled when she
+ *   carries none of it). INTERIM: the menu still
+ *   represents the pile's first kind (pile.item) until
+ *   UI's multi-kind menu lists every kind. Take calls
+ *   handlePileTakeRequest directly (kind + 1 / kind
+ *   quantity); deposit calls depositIntoPile + one
+ *   pileState.drop with the pile's EXACT x/z verbatim — a
+ *   deposit to a gone pile still lands at those coords,
+ *   and the chip refreshes straight from pileState after
+ *   every menu action. USE (touch) + desktop button keep
+ *   take-all as the fast path (first kind only, interim —
+ *   whole-pile take-all needs a brief, see systems/
+ *   piles.ts); exact-number picker not built.
  *   PileChip + App only.
  * - TRAP SAVE WIRING, LIVE (Adam, 2026-10-27 — DEV brief,
  *   Systems format half 4f3fa69): placed traps survive a
@@ -1566,13 +1573,18 @@ export default function App() {
             x: loom.x,
             z: loom.z,
           })),
-          // PILE SAVE WIRING: the live pile set rides every
-          // save (id dropped — serializeSave rebuilds nothing
-          // from it; it writes item/quantity/x/z normalized,
-          // order preserved, never merged).
+          // PILE SAVE WIRING (multi-kind, 2026-10-27): the
+          // live pile set rides every save as stacks +
+          // position (no id in the document — boot restore
+          // derives it from coords; serializeSave writes
+          // stacks normalized, order preserved, never
+          // merged). The legacy first-kind-only map is
+          // gone: it lost non-first kinds across a save.
           piles: pileState.snapshot().map((pile) => ({
-            item: pile.item,
-            quantity: pile.quantity,
+            stacks: pile.stacks.map((stack) => ({
+              item: stack.item,
+              quantity: stack.quantity,
+            })),
             x: pile.x,
             z: pile.z,
           })),
@@ -1868,22 +1880,28 @@ export default function App() {
             // Same skip rule as fires.
           }
         }
-        // PILE SAVE WIRING: re-place each saved pile through
-        // pileState.drop() — merge-safe by id, and it emits
-        // pile:dropped, so the tracker and the renderer pile
-        // group pick the restored piles up (the tracker's
-        // 100 ms moved tick surfaces the in-range set once
-        // the loop runs at the restored position). Saved
-        // piles are deserialize-validated (normalized ids,
-        // positive quantities, finite coords); drop() returns
-        // null for anything invalid instead of throwing, so
-        // no skip rule is needed here. Inside the
-        // saveRestoredRef guard, so a second boot-effect run
-        // cannot double-drop (drop merges, which would double
-        // quantities). Runs after the renderer exists, so
-        // setWorldGen's pile clear cannot wipe the restore.
+        // PILE SAVE WIRING (multi-kind, 2026-10-27):
+        // re-place each saved KIND through pileState.drop()
+        // — merge-safe by coords, and it emits
+        // pile:dropped/pile:changed, so the tracker and the
+        // renderer pile group pick the restored piles up
+        // (the tracker's 100 ms moved tick surfaces the
+        // in-range set once the loop runs at the restored
+        // position). Kinds drop in saved order, so a
+        // restored pile's stacks match the saved order.
+        // Saved piles are deserialize-validated (normalized
+        // ids, positive quantities, finite coords); drop()
+        // returns null for anything invalid instead of
+        // throwing, so no skip rule is needed here. Inside
+        // the saveRestoredRef guard, so a second boot-effect
+        // run cannot double-drop (drop merges, which would
+        // double quantities). Runs after the renderer
+        // exists, so setWorldGen's pile clear cannot wipe
+        // the restore.
         for (const pile of saved.piles) {
-          pileState.drop(pile.item, pile.quantity, pile.x, pile.z);
+          for (const stack of pile.stacks) {
+            pileState.drop(stack.item, stack.quantity, pile.x, pile.z);
+          }
         }
         player.x = saved.position.x;
         player.z = saved.position.z;
@@ -2934,10 +2952,13 @@ export default function App() {
   // handling (missing pile: silent; full pack: Pack-full
   // note, no refresh/save; grant: refresh + save +
   // feedback). Take calls Systems' menu handler directly
-  // (no bus listener for it — 1 for Take one, the pile's
-  // quantity for Take all; the handler caps at the live
-  // pile quantity). Deposit calls depositIntoPile + one
-  // pileState.drop with the pile's EXACT x/z verbatim —
+  // (no bus listener for it — kind + 1 for Take one, the
+  // kind's quantity for Take all; the handler caps at the
+  // live kind quantity). INTERIM: the menu still
+  // represents the pile's first kind (pile.item) until
+  // UI's multi-kind menu lists every kind. Deposit calls
+  // depositIntoPile + one pileState.drop with the pile's
+  // EXACT x/z verbatim —
   // never rounded, never recomputed from her position —
   // so a deposit to a gone pile still lands at those
   // coords (drop creates when nothing matches). Both
@@ -2956,9 +2977,15 @@ export default function App() {
       if (anchor) showFeedback(text, tone, anchor.x, anchor.y);
     };
     if (actionId === 'take-one' || actionId === 'take-all') {
+      // INTERIM (pre-redesign menu): the chip represents
+      // the pile's first kind (pile.item), so Take one /
+      // Take all operate on that kind with its quantity.
+      // The multi-kind menu redesign (UI's turn) lists
+      // every kind and passes the tapped kind instead.
       const quantity = actionId === 'take-one' ? 1 : pile.quantity;
       const outcome = handlePileTakeRequest(
         pile.id,
+        pile.item,
         quantity,
         pileState,
         inventory,
@@ -2991,13 +3018,12 @@ export default function App() {
       const quantity = actionId === 'deposit-one' ? 1 : carried;
       if (quantity <= 0) return;
       try {
+        // INTERIM (pre-redesign menu): deposits the chip's
+        // kind (pile.item, the first kind) — the pile
+        // target itself carries the stacks the grant reads.
         const record = depositIntoPile(
-          {
-            item: pile.item as ItemId,
-            quantity: pile.quantity,
-            x: pile.x,
-            z: pile.z,
-          },
+          pile,
+          pile.item,
           quantity,
           inventory,
         );
