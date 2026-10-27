@@ -46,6 +46,7 @@ import { trapState } from './trapState';
 import type { TrapType } from './traps';
 import { pauseState } from './pause';
 import { SkyRig } from './sky';
+import type { SkySnapshot } from './sky';
 import { SEASON_START_MONTH, seasonalWeatherAt } from './weather';
 import { createBiomeTexture, TEXTURE_REPEAT } from './terrain';
 import {
@@ -384,6 +385,34 @@ export class WorldRenderer {
    */
   setCarriesUmbrella(carried: boolean): void {
     if (this.umbrella) this.umbrella.visible = carried;
+  }
+
+  /**
+   * Sky save seam (Adam 2026-10-27, follow-up to the persistence
+   * round). SkyRig is renderer-owned and `sky` stays private — the
+   * shell must NOT reach through to the rig (no public accessor, by
+   * choice: an accessor would let the shell call setSeed/dispose/
+   * update on the rig and break the constructor/setWorldGen/
+   * dispose ownership). These two methods are the whole seam:
+   * saveNow calls snapshotSky() and stores the result as the save's
+   * sky field; boot calls restoreSky(saved) AFTER constructing the
+   * renderer (the rig does not exist before construction, and
+   * setWorldGen resets it to dawn — so a restore must come after
+   * BOTH, never before). Next update() continues the cycle from
+   * the restored position; month stays an input, not state.
+   * snapshotSky() returns null only when the rig is gone
+   * (disposed renderer) — the shell stores nothing in that case.
+   * restoreSky() is a no-op on null/undefined (old saves carry no
+   * sky field) and on a disposed renderer; SkyRig.restore itself
+   * ignores a non-finite cycleT.
+   */
+  snapshotSky(): SkySnapshot | null {
+    return this.sky?.snapshot() ?? null;
+  }
+
+  restoreSky(snap: SkySnapshot | null | undefined): void {
+    if (!snap) return;
+    this.sky?.restore(snap);
   }
 
   /** Ground detail texture for a chunk: the dominant biome's procedural
