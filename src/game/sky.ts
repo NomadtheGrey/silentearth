@@ -25,10 +25,30 @@
  *   δ = −23.44°·cos(2π·(midDay + 10)/365). Noon altitude =
  *   90° − latitude + δ: September ~50°, November ~29° — the sun
  *   sinks WITH the cold, which is the point.
- * - MOON PHASE is computed per world (moonPhase(seed)) but NOT
- *   rendered as a crescent yet: with no calendar, a phase cannot
- *   honestly advance, so the disc renders full and the phase
- *   number waits for the calendar. Flagged, not faked.
+ * - MOON PHASE is computed per world (moonPhase(seed)) and
+ *   ADVANCES PER DAWN (see below) — the crescent IS rendered
+ *   now, via a phase shader on the moon disc (no canvas, no
+ *   document — headless-safe like the rest of the rig).
+ * - MOONLIGHT is phase-varying (see MOONLIGHT_FULL below):
+ *   full moon at culmination = just about see by it; new moon
+ *   = essentially none. Moon-phase POWER (sky magic) is NOT
+ *   wired here — visible side only, never a magic effect.
+ *
+ * PHASE CYCLE (lane-decided, flagged for Adam's pin pass —
+ * NO full calendar is built): one game-day per dawn. The rig
+ * counts its own dawns (daysElapsed): each natural cycle
+ * wrap + each sleep-to-dawn restore (a backward cycleT jump)
+ * advances it by one, and the phase is
+ * (moonPhase(seed) + daysElapsed / SYNODIC_DAYS) mod 1 with
+ * SYNODIC_DAYS = 29.5 (the real synodic month, in game-days
+ * — a full cycle takes ~5 real hours of play at the 10-min
+ * day, so phases visibly change night to night without
+ * rushing). A new world starts at day 0. PERSISTENCE GAP
+ * (flagged, Systems follow-up): save.ts picks cycleT ONLY
+ * from the sky snapshot, so daysElapsed resets to 0 on load
+ * until save.ts carries it too (one field, same pattern) —
+ * until then a refresh rewinds the phase toward the seed
+ * base. The counter itself is session-true (wraps + sleeps).
  *
  * MINIMAL TIME DRIVER (the brief's flag, decided here — Adam's
  * pin pass applies; no full calendar is invented):
@@ -75,6 +95,20 @@ import { deriveSeed, mulberry32 } from './seed';
 export const SKY_LATITUDE_DEG = 42;
 /** Moon's maximum altitude, degrees (lane-decided, flagged). */
 export const MOON_MAX_ALT_DEG = 40;
+/** Game-days per full phase cycle (real synodic month, lane-decided, flagged). */
+export const SYNODIC_DAYS = 29.5;
+/**
+ * Full-moon moonlight at culmination, clear sky (lane-decided,
+ * flagged): 0.25 — dim but usable, "just about see by it",
+ * and BELOW torch light in practice (a directional 0.25
+ * against a torch's 80/decay-2 point light, ~2.2 at 6 m —
+ * the torch still dominates everywhere near her).
+ */
+export const MOONLIGHT_FULL = 0.25;
+/** Dark-side earthshine as a fraction of moon color (faintly visible new moon). */
+export const MOON_EARTHSHINE = 0.08;
+/** Terminator softness in disc units (penumbra band, lane-decided). */
+export const MOON_TERMINATOR_SOFT = 0.03;
 /** Sky dome radius (camera far is 1000; dome + bodies sit inside). */
 export const SKY_DOME_RADIUS = 480;
 /** Sun/moon disc distance (inside the dome so the dome backs them). */
@@ -168,9 +202,70 @@ export function cloudCoverFromRain(rain: number): number {
   return Math.min(1, Math.max(0, (rain - CLOUD_RAIN_MIN) / (CLOUD_RAIN_MAX - CLOUD_RAIN_MIN)));
 }
 
-/** Moon phase for a world seed, 0..1 (computed, not yet rendered — see header). */
+/** Moon phase for a world seed, 0..1 (the cycle's base; 0 = new, 0.5 = full). */
 export function moonPhase(seed: string): number {
   return ((deriveSeed(String(seed), 'moon') % 1000) / 1000 + 1) % 1;
+}
+
+/** Illuminated fraction for a phase: 0 at new, 0.5 at quarters, 1 at full. */
+export function moonIllumination(phase: number): number {
+  return (1 - Math.cos(2 * Math.PI * phase)) / 2;
+}
+
+/** Current phase for a world seed + dawns elapsed (per-dawn cycle, no calendar). */
+export function currentMoonPhase(seed: string, daysElapsed: number): number {
+  return (((moonPhase(seed) + daysElapsed / SYNODIC_DAYS) % 1) + 1) % 1;
+}
+
+/**
+ * Terminator terms for a phase (the shader's inputs + the
+ * probe's oracle — the GLSL mirrors moonLitAt, keep in sync).
+ * Waxing (phase < 0.5): lit limb on the right; waning: left.
+ */
+export function moonPhaseTerms(phase: number): { waxing: boolean; cosTheta: number; illumination: number } {
+  const p = ((phase % 1) + 1) % 1;
+  const theta = 2 * Math.PI * p;
+  return { waxing: p < 0.5, cosTheta: Math.cos(theta), illumination: (1 - Math.cos(theta)) / 2 };
+}
+
+const smoothstep = (e0: number, e1: number, x: number): number => {
+  const t = Math.min(1, Math.max(0, (x - e0) / (e1 - e0)));
+  return t * t * (3 - 2 * t);
+};
+
+/**
+ * Lit factor at disc coords (u, v) ∈ [-1,1]² for a phase (0
+ * outside the disc, 0..1 inside with a soft terminator). The
+ * terminator is a half-ellipse: at the horizontal chord it
+ * crosses at ±cos θ, tapering to the poles — the 8 octants
+ * (new / crescents / quarters / gibbous / full) all fall out
+ * of the one rule. The moon shader mirrors this exactly.
+ */
+export function moonLitAt(phase: number, u: number, v: number): number {
+  if (u * u + v * v > 1) return 0;
+  const { waxing, cosTheta } = moonPhaseTerms(phase);
+  const s = Math.sqrt(Math.max(0, 1 - v * v));
+  const termU = (waxing ? cosTheta : -cosTheta) * s;
+  const eps = MOON_TERMINATOR_SOFT;
+  return waxing
+    ? smoothstep(termU - eps, termU + eps, u)
+    : 1 - smoothstep(termU - eps, termU + eps, u);
+}
+
+/** Phase name by octant (for reports + future UI; not wired anywhere yet). */
+export function moonPhaseName(phase: number): string {
+  const names = [
+    'new moon',
+    'waxing crescent',
+    'first quarter',
+    'waxing gibbous',
+    'full moon',
+    'waning gibbous',
+    'last quarter',
+    'waning crescent',
+  ];
+  const p = ((phase % 1) + 1) % 1;
+  return names[Math.floor(((p + 1 / 16) % 1) * 8)];
 }
 
 const clamp01 = (v: number): number => Math.min(1, Math.max(0, v));
@@ -200,14 +295,18 @@ export interface SkyUpdateInput {
  * use) — probes construct it with bare three objects.
  */
 
-/** Saved sky state: cycle position t ∈ [0,1) ONLY (month is an input, not state). */
+/** Saved sky state: cycle position t ∈ [0,1) + dawns elapsed (month is an input, not state). */
 export interface SkySnapshot {
   cycleT: number;
+  /** Dawn count for the phase cycle; absent on old saves (loads as current, i.e. 0 on a fresh rig). */
+  daysElapsed?: number;
 }
 
 export class SkyRig {
   /** Cycle position t ∈ [0,1); 0 = dawn. */
   cycleT = 0;
+  /** Dawns elapsed in this world (natural wraps + sleep-to-dawn restores). */
+  daysElapsed = 0;
   private group = new THREE.Group();
   private domeUniforms: {
     topColor: { value: THREE.Color };
@@ -283,9 +382,50 @@ export class SkyRig {
       new THREE.MeshBasicMaterial({ color: SUN_COLOR, fog: false }),
     );
     this.group.add(this.sunMesh);
+    // Moon disc with a PHASE SHADER (no canvas, no document):
+    // the fragment shader shades the disc by the terminator
+    // rule in moonLitAt (mirrored in GLSL below — the TS
+    // function is the probed oracle). Uniforms uWaxing/uCos
+    // come from moonPhaseTerms each frame; uOpacity follows
+    // the old clarity rule (0.35 haze floor, 1.0 clear).
     this.moonMesh = new THREE.Mesh(
       new THREE.CircleGeometry(13, 32),
-      new THREE.MeshBasicMaterial({ color: MOON_COLOR, fog: false, transparent: true }),
+      new THREE.ShaderMaterial({
+        uniforms: {
+          uWaxing: { value: 1 },
+          uCos: { value: 1 },
+          uColor: { value: MOON_COLOR.clone() },
+          uOpacity: { value: 1 },
+        },
+        transparent: true,
+        vertexShader: /* glsl */ `
+          varying vec2 vUv;
+          void main() {
+            vUv = uv;
+            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+          }
+        `,
+        fragmentShader: /* glsl */ `
+          uniform float uWaxing;
+          uniform float uCos;
+          uniform vec3 uColor;
+          uniform float uOpacity;
+          varying vec2 vUv;
+          void main() {
+            vec2 p = vUv * 2.0 - 1.0;
+            float r2 = dot(p, p);
+            if (r2 > 1.0) discard;
+            float s = sqrt(max(0.0, 1.0 - p.y * p.y));
+            float termU = (uWaxing > 0.5 ? uCos : -uCos) * s;
+            float eps = ${MOON_TERMINATOR_SOFT.toFixed(2)};
+            float lit = uWaxing > 0.5
+              ? smoothstep(termU - eps, termU + eps, p.x)
+              : 1.0 - smoothstep(termU - eps, termU + eps, p.x);
+            vec3 col = uColor * mix(${MOON_EARTHSHINE.toFixed(2)}, 1.0, lit);
+            gl_FragColor = vec4(col, uOpacity);
+          }
+        `,
+      }),
     );
     this.group.add(this.moonMesh);
 
@@ -345,7 +485,7 @@ export class SkyRig {
     return geo;
   }
 
-  /** New world: fresh stars for the seed + cycle restarts at dawn. */
+  /** New world: fresh stars for the seed + cycle restarts at dawn, day 0. */
   setSeed(seed: string): void {
     this.seed = String(seed);
     const old = this.group.children.find(
@@ -357,19 +497,26 @@ export class SkyRig {
     }
     this.group.add(new THREE.Points(this.buildStarGeometry(), this.starMaterial));
     this.cycleT = 0;
+    this.daysElapsed = 0;
   }
 
-  /** Save seam: cycle position (month stays an input — see header). */
+  /** Save seam: cycle position + dawn count (month stays an input — see header). */
   snapshot(): SkySnapshot {
-    return { cycleT: this.cycleT };
+    return { cycleT: this.cycleT, daysElapsed: this.daysElapsed };
   }
 
   /**
-   * Save-boot restore: cycle position. Wraps into [0,1); call
-   * AFTER setSeed (setSeed resets to dawn). The next update()
-   * recomputes sun/moon/lights from the restored t — no other
-   * state to restore (stars/clouds are seeded, not time).
-   * Non-finite input is ignored (cycle keeps its current t).
+   * Save-boot restore: cycle position + dawn count. Wraps
+   * into [0,1); call AFTER setSeed (setSeed resets to dawn).
+   * The next update() recomputes sun/moon/lights from the
+   * restored t — no other state to restore (stars/clouds are
+   * seeded, not time). Non-finite input is ignored (cycle
+   * keeps its current t). DAWN RULE: when daysElapsed is
+   * ABSENT (old saves + the sleep path's { cycleT: 0 }),
+   * a BACKWARD jump counts as a dawn (sleep-to-dawn) —
+   * boot restores from a fresh rig (t = 0) never jump
+   * backward, so they never trigger it. When daysElapsed IS
+   * present it wins absolutely (no increment).
    */
   restore(snap: SkySnapshot): void {
     if (!snap || !Number.isFinite(snap.cycleT)) return;
@@ -378,12 +525,21 @@ export class SkyRig {
     // via 1.42's inexact double — a save/load round trip must be exact.
     let t = snap.cycleT % 1;
     if (t < 0) t += 1;
+    if (Number.isFinite(snap.daysElapsed)) {
+      this.daysElapsed = Math.max(0, Math.floor(snap.daysElapsed as number));
+    } else if (t < this.cycleT) {
+      this.daysElapsed += 1;
+    }
     this.cycleT = t;
   }
 
   update(dt: number, input: SkyUpdateInput): void {
     const month = input.month ?? SEASON_START_MONTH;
+    const prevT = this.cycleT;
     this.cycleT = (this.cycleT + dt / (DAY_NIGHT_CYCLE_MINUTES * 60)) % 1;
+    // A wrap is a dawn: the phase cycle advances one game-day.
+    // (Sleep-to-dawn jumps count via restore()'s dawn rule.)
+    if (this.cycleT < prevT) this.daysElapsed += 1;
     const split = cycleSplit(this.cycleT, month);
     const sunElev = sunElevationAtCycle(this.cycleT, month);
     const dayFactor = clamp01((sunElev + 0.05) / 0.3);
@@ -421,13 +577,28 @@ export class SkyRig {
       this.moonMesh.lookAt(this.camera.position);
       this.moonMesh.visible = true;
       this.sunMesh.visible = false;
-      (this.moonMesh.material as THREE.MeshBasicMaterial).opacity = 0.35 + 0.65 * clarity;
+      // Phase: the disc shader + the light share one phase —
+      // per-dawn cycle from the seed base + dawns elapsed.
+      const phase = currentMoonPhase(this.seed, this.daysElapsed);
+      const terms = moonPhaseTerms(phase);
+      const moonUniforms = (this.moonMesh.material as THREE.ShaderMaterial).uniforms;
+      moonUniforms.uWaxing.value = terms.waxing ? 1 : 0;
+      moonUniforms.uCos.value = terms.cosTheta;
+      moonUniforms.uOpacity.value = 0.35 + 0.65 * clarity;
       this.domeUniforms.moonDirection.value.copy(dir);
-      this.domeUniforms.moonGlow.value = 0.5 * clarity;
+      // Halo follows the phase too (new moon barely glows).
+      this.domeUniforms.moonGlow.value = 0.5 * clarity * (0.2 + 0.8 * terms.illumination);
       this.domeUniforms.sunGlow.value = 0;
       this.sunLight.position.copy(dir).multiplyScalar(100);
       this.sunLight.color.set(0x8a9ac0);
-      this.sunLight.intensity = 0.15;
+      // MOONLIGHT: full moon at culmination, clear sky, is
+      // MOONLIGHT_FULL ("just about see by it"); it scales
+      // down with phase, with moon altitude (rise/set give
+      // nothing), and through haze (0.35 floor, like the disc).
+      // New moon = 0: essentially no moonlight, dark as now.
+      const altFactor = clamp01(dir.y / Math.sin((MOON_MAX_ALT_DEG * Math.PI) / 180));
+      this.sunLight.intensity =
+        MOONLIGHT_FULL * terms.illumination * altFactor * (0.35 + 0.65 * clarity);
     }
     this.hemiLight.intensity = 0.45 + 0.45 * dayFactor;
 
