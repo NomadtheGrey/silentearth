@@ -68,6 +68,12 @@ export interface UsePress {
 /** Shell-wired query: the nearest in-range harvest press, or null. */
 export type UseTargetQuery = () => UsePress | null;
 
+/** Saved looking direction: yaw + pitch (position saves separately). */
+export interface FacingSnapshot {
+  yaw: number;
+  pitch: number;
+}
+
 export class PlayerController {
   x = 0;
   z = 0;
@@ -287,6 +293,34 @@ export class PlayerController {
   resetLook(): void {
     this.pitch = 0;
     bus.emit('player:looked', { pitch: 0, mode: this.mode });
+  }
+
+  /** Save seam: looking direction (position is saved separately). */
+  snapshotFacing(): FacingSnapshot {
+    return { yaw: this.yaw, pitch: this.pitch };
+  }
+
+  /**
+   * Save-boot restore: yaw + pitch. Pitch clamps to ±1.45
+   * (applyLook's clamp); behind mode re-syncs facing = yaw + PI
+   * (applyLook's rule — third/first facing re-derives on first
+   * move, as on any fresh boot); emits 'player:looked' directly
+   * like resetLook (discrete change, so the tracker's look-down
+   * gate drops stale pitch at once). Call AFTER mode is set from
+   * save — the behind sync reads current mode. Returns false (no
+   * change) for non-finite input.
+   */
+  restoreFacing(snap: FacingSnapshot): boolean {
+    if (!snap || !Number.isFinite(snap.yaw) || !Number.isFinite(snap.pitch)) {
+      return false;
+    }
+    this.yaw = snap.yaw;
+    this.pitch = Math.max(-1.45, Math.min(1.45, snap.pitch));
+    if (this.mode === 'behind') {
+      this.facing = this.yaw + Math.PI;
+    }
+    bus.emit('player:looked', { pitch: this.pitch, mode: this.mode });
+    return true;
   }
 
   toggleCamera(): void {

@@ -47,6 +47,7 @@
 
 import { bus } from './events';
 import {
+  FIRE_DEFS,
   FLINT_CLICKS,
   FRICTION_WAIT_MS,
   type FireType,
@@ -100,6 +101,63 @@ class FireState {
 
   snapshot(): PlacedFire[] {
     return [...this.fires.values()];
+  }
+
+  /**
+   * Save-boot API (Adam 2026-10-27): mark a restored fire lit (or
+   * unlit). Restored fires used to boot unlit because placeFire
+   * always creates lit:false and no API marked them lit — the save
+   * already carries the lit flag (Systems' SavedFire), only this
+   * marking was missing. Silent (no emit — the caller rebuilds
+   * once, trap restore precedent). Lighting a fire clears any
+   * lighting process (a lit fire never has one — the lighting
+   * machine's invariant). Returns false for an unknown id.
+   */
+  setLit(id: string, lit: boolean): boolean {
+    const fire = this.fires.get(id);
+    if (!fire) return false;
+    fire.lit = lit;
+    if (lit) fire.lighting = null;
+    return true;
+  }
+
+  /**
+   * Silent bulk restore (save boot path): replaces state, drops
+   * invalid records. Identity fields (id, type, coords, lit) must
+   * validate or the fire is dropped; an invalid lighting process
+   * is nulled instead (the fire itself survives — a corrupt
+   * lighting subfield must not nuke a placed entity). Entries are
+   * copied, never aliased. Counter continues past the max id
+   * suffix (trap restore shape). Any pause snapshot is dropped,
+   * like clear() — pause does not survive a refresh, and boot is
+   * unpaused. A restored friction wait keeps its absolute
+   * waitUntil: a wait restored after a long absence reads 'ready'
+   * (absolute-deadline consequence, flagged — refresh itself,
+   * seconds later, is unaffected).
+   */
+  restore(fires: ReadonlyArray<PlacedFire>): void {
+    this.fires.clear();
+    this.pauseStart = null;
+    this.pausedWaitingIds = null;
+    let maxSuffix = 0;
+    for (const fire of fires) {
+      if (!fire || typeof fire !== 'object') continue;
+      if (typeof fire.id !== 'string' || fire.id === '') continue;
+      if (typeof fire.type !== 'string' || !(fire.type in FIRE_DEFS)) continue;
+      if (!Number.isFinite(fire.x) || !Number.isFinite(fire.z)) continue;
+      if (typeof fire.lit !== 'boolean') continue;
+      this.fires.set(fire.id, {
+        id: fire.id,
+        type: fire.type,
+        x: fire.x,
+        z: fire.z,
+        lit: fire.lit,
+        lighting: validLighting(fire.lighting),
+      });
+      const suffix = Number(fire.id.split(':').pop());
+      if (Number.isFinite(suffix) && suffix > maxSuffix) maxSuffix = suffix;
+    }
+    this.counter = maxSuffix;
   }
 
   clear(): void {
@@ -231,3 +289,30 @@ class FireState {
 }
 
 export const fireState = new FireState();
+
+/** Validate + copy a lighting process for restore (null in, null out). */
+function validLighting(
+  lighting: LightingProcess | null | undefined,
+): LightingProcess | null {
+  if (!lighting) return null;
+  if (lighting.method === 'flint') {
+    if (
+      !Number.isInteger(lighting.clicks) ||
+      lighting.clicks < 0 ||
+      lighting.clicks >= FLINT_CLICKS
+    ) {
+      return null;
+    }
+    return { method: 'flint', clicks: lighting.clicks };
+  }
+  if (lighting.method === 'friction') {
+    if (
+      (lighting.phase !== 'waiting' && lighting.phase !== 'ready') ||
+      !Number.isFinite(lighting.waitUntil)
+    ) {
+      return null;
+    }
+    return { method: 'friction', phase: lighting.phase, waitUntil: lighting.waitUntil };
+  }
+  return null;
+}
