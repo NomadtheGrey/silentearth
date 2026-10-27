@@ -424,15 +424,14 @@
  *   with no pile in range USE behaves exactly as before.
  *   Systems' listener owns the grant now (systems/piles.ts
  *   handlePilePickupRequest, landed on DEV's bridge-out
- *   signal): the WHOLE pile, kinds in stacks order,
- *   partial by weight (remainder stays), then refresh +
- *   save + feedback; missing pile grants nothing, full
- *   pack takes nothing + note. Touch USE and the desktop
- *   button emit the same event to that one listener, so
- *   the grant matches on both (desktop/phone parity,
- *   Adam 2026-10-27); if piles should outrank ground
- *   outright, that is a one-line priority change for
- *   Adam's call.
+ *   signal): grant what fits, take exactly that much
+ *   (partial, remainder stays), then refresh + save +
+ *   feedback; missing pile grants nothing, full pack takes
+ *   nothing + note. LIMITS: touch USE only
+ *   (desktop has no USE affordance — desktop pile pickup
+ *   needs a button or a key, follow-up); if piles should
+ *   outrank ground outright, that is a one-line priority
+ *   change for Adam's call.
  * - PILE BRIDGE OUT (DEV sequencing plan, 2026-10-26): the
  *   shell's 'pile:pickup-requested' grant bridge is removed
  *   (App.tsx only). The touch USE handler STILL emits
@@ -778,18 +777,40 @@
  *   + ×count, fire-chip pattern, 44 px touch target); tap
  *   opens Take one / Take all / Deposit one / Deposit
  *   all, scoped to one kind (deposit disabled when she
- *   carries none of it). INTERIM: the menu still
- *   represents the pile's first kind (pile.item) until
- *   UI's multi-kind menu lists every kind. Take calls
+ *   carries none of it). SUPERSEDED by the multi-kind
+ *   menu below: the menu now lists every kind. Take calls
  *   handlePileTakeRequest directly (kind + 1 / kind
  *   quantity); deposit calls depositIntoPile + one
  *   pileState.drop with the pile's EXACT x/z verbatim — a
  *   deposit to a gone pile still lands at those coords,
  *   and the chip refreshes straight from pileState after
  *   every menu action. USE (touch) + desktop button keep
- *   take-all as the fast path (the WHOLE pile, via
- *   Systems' listener); exact-number picker not built.
+ *   take-all as the fast path (first kind only, interim —
+ *   whole-pile take-all needs a brief, see systems/
+ *   piles.ts); exact-number picker not built.
  *   PileChip + App only.
+ * - MULTI-KIND PILE MENU, LIVE (Adam, 2026-10-27 — DEV brief,
+ *   on Systems' kind-scoped grant 509ee84; SUPERSEDES the
+ *   interim first-kind menu above): one chip per PILE (the
+ *   pile itself multi-kind — no spot grouping); a
+ *   single-kind pile keeps "{name} × {qty}", a multi-kind
+ *   pile reads "Pile × {total} ({n} kinds)". Tap opens a
+ *   menu listing the pile's kinds LIVE in stacks order
+ *   (first-dropped first), each with per-kind Take one /
+ *   Take all, plus deposit of any carried kind (one / all;
+ *   pile kinds with none carried show deposit disabled,
+ *   "Needs carried {kind}"). The menu STAYS OPEN after a
+ *   press (repeated one-by-one without reopening) and
+ *   re-renders live — a kind at zero leaves the menu, an
+ *   emptied pile closes it. Take passes the tapped kind
+ *   (verbatim stack item — pileState matches verbatim);
+ *   deposit passes the tapped kind + the pile's EXACT x/z
+ *   verbatim. USE (touch) + desktop button UNCHANGED here:
+ *   they still emit pile:pickup-requested, and Systems'
+ *   listener still takes the FIRST kind only — whole-pile
+ *   take-all is Systems' separately-briefed seam, and the
+ *   menu's per-kind Take all is not blocked on it.
+ *   Exact-number picker not built. PileChip + App only.
  * - TRAP SAVE WIRING, LIVE (Adam, 2026-10-27 — DEV brief,
  *   Systems format half 4f3fa69): placed traps survive a
  *   refresh — saveNow passes trapState.snapshot() as
@@ -909,6 +930,7 @@ import {
   PersonalInventory,
   displayNameFor,
   isCarryingGear,
+  normalizeItemId,
   weightOf,
 } from './systems/inventory';
 import {
@@ -1453,13 +1475,20 @@ export default function App() {
   >([]);
   const [selectedFireId, setSelectedFireId] = useState<string | null>(null);
   // Pile chips (projected anchors, fire-chip pattern) and the
-  // pile whose menu is open. The selected pile is the chip's
-  // target snapshot at tap time — its x/z are the pile's true
+  // pile whose menu is open. The menu is LIVE, not a tap-time
+  // snapshot: selectedPileId names the pile, and the menu
+  // renders from the live pile in piles state — a kind taken
+  // to zero leaves the menu, a deposit's new kind joins it,
+  // and an emptied pile closes it (auto-close in
+  // refreshPilesFromState / piles:inRange). Ref mirrors the
+  // key so the first-render piles:inRange closure can
+  // auto-close a vanished pile. The pile's x/z are its true
   // coords verbatim, which the deposit path reuses exactly.
   const [pileAnchors, setPileAnchors] = useState<
     { pile: PileTarget; x: number; y: number }[]
   >([]);
-  const [selectedPile, setSelectedPile] = useState<PileTarget | null>(null);
+  const [selectedPileId, setSelectedPileId] = useState<string | null>(null);
+  const selectedPileIdRef = useRef<string | null>(null);
   const [placement, setPlacement] = useState<PlacementMode | null>(null);
   const [placementAnchor, setPlacementAnchor] = useState<{
     x: number;
@@ -1711,7 +1740,9 @@ export default function App() {
   // acting, so the chip reflects the new pile state even when
   // the acted pile is gone: a deposit to a gone pile creates
   // a pile at those coords, and the chip must appear — never
-  // assume the pile survived.
+  // assume the pile survived. It also auto-closes the live
+  // menu when its pile is gone (the menu then has nothing
+  // to render).
   const refreshPilesFromState = () => {
     const player = playerRef.current;
     if (!player) return;
@@ -1719,6 +1750,11 @@ export default function App() {
     pilesRef.current = inRange;
     setPiles(inRange);
     recomputeAnchors();
+    const key = selectedPileIdRef.current;
+    if (key && !inRange.some((pile) => pile.id === key)) {
+      selectedPileIdRef.current = null;
+      setSelectedPileId(null);
+    }
   };
 
   // Show a feedback chip for 4 seconds, then remove it. Caller-timed,
@@ -1959,17 +1995,18 @@ export default function App() {
       pilesRef.current = inRange;
       setPiles(inRange);
       recomputeAnchors();
+      const key = selectedPileIdRef.current;
+      if (key && !inRange.some((pile) => pile.id === key)) {
+        selectedPileIdRef.current = null;
+        setSelectedPileId(null);
+      }
     });
     // Systems' 'pile:pickup-requested' listener (see the header
     // + systems/piles.ts): the SOLE granter on the event since
-    // the shell bridge came out (b23a042) — touch USE and the
-    // desktop button emit the same event, so one listener
-    // grants both (desktop/phone parity by construction).
-    // Behavior: missing pile: silent nothing; full pack:
-    // Pack-full note, no take, no refresh/save; grant: the
-    // WHOLE pile (kinds in stacks order, partial by weight,
-    // remainder stays), then refresh + save + Picked-up
-    // feedback listing every kind taken, anchored at the pile.
+    // the shell bridge came out (b23a042). Behavior mirrors
+    // the bridge exactly — missing pile: silent nothing; full
+    // pack: Pack-full note, no take, no refresh/save; grant:
+    // refresh + save + Picked-up feedback, anchored at the pile.
     const offSystemsPilePickup = bus.on(
       'pile:pickup-requested',
       ({ pileId }) => {
@@ -1983,7 +2020,7 @@ export default function App() {
         if (outcome.granted <= 0) {
           if (anchor) {
             showFeedback(
-              `Pack full — no room.`,
+              `Pack full — no room for ${displayNameFor(outcome.item)}.`,
               'blocked',
               anchor.x,
               anchor.y,
@@ -1995,9 +2032,7 @@ export default function App() {
         saveNow();
         if (anchor) {
           showFeedback(
-            `Picked up ${outcome.taken
-              .map((t) => `${t.granted} ${displayNameFor(t.item)}`)
-              .join(', ')}.`,
+            `Picked up ${outcome.granted} ${displayNameFor(outcome.item)}.`,
             'gain',
             anchor.x,
             anchor.y,
@@ -2929,49 +2964,88 @@ export default function App() {
   // menu reads the live count at render, and the press
   // re-reads it — a stale enabled button can never
   // deposit what is not there).
+  // Multi-kind pile menu actions. The menu lists the pile's
+  // kinds LIVE in stacks order (first-dropped first), each
+  // with per-kind Take one / Take all; then deposit rows
+  // for every carried kind (one / all of a kind) — a
+  // carried kind not yet in the pile deposits as a new
+  // stack entry on drop merge. A kind in the pile she
+  // carries none of shows its deposit rows disabled with a
+  // "Needs carried" note, so deposit stays discoverable.
+  // Labels carry the kind (ContextMenu has no section
+  // headers) so a long menu stays scannable. Action ids
+  // encode verb + kind (ids never contain ':').
   const pileMenuActions = (pile: PileTarget): ContextAction[] => {
-    const carried = inventory.count(pile.item as ItemId);
-    const noCarried = carried <= 0;
-    const needNote = `Needs carried ${displayNameFor(pile.item)}`;
-    return [
-      { id: 'take-one', label: 'Take one' },
-      { id: 'take-all', label: 'Take all', hint: `× ${pile.quantity}` },
-      {
-        id: 'deposit-one',
-        label: 'Deposit one',
-        disabled: noCarried,
-        disabledNote: noCarried ? needNote : undefined,
-      },
-      {
-        id: 'deposit-all',
-        label: 'Deposit all',
-        hint: noCarried ? undefined : `× ${carried}`,
-        disabled: noCarried,
-        disabledNote: noCarried ? needNote : undefined,
-      },
-      { id: 'close', label: 'Close' },
-    ];
+    const actions: ContextAction[] = [];
+    const pileKinds = new Set(
+      pile.stacks.map((stack) => normalizeItemId(stack.item as ItemId)),
+    );
+    for (const stack of pile.stacks) {
+      const name = displayNameFor(stack.item);
+      actions.push(
+        { id: `take-one:${stack.item}`, label: `${name} — Take one` },
+        {
+          id: `take-all:${stack.item}`,
+          label: `${name} — Take all`,
+          hint: `× ${stack.quantity}`,
+        },
+      );
+      const carried = inventory.count(stack.item as ItemId);
+      const noCarried = carried <= 0;
+      const needNote = `Needs carried ${name}`;
+      actions.push(
+        {
+          id: `deposit-one:${stack.item}`,
+          label: `${name} — Deposit one`,
+          disabled: noCarried,
+          disabledNote: noCarried ? needNote : undefined,
+        },
+        {
+          id: `deposit-all:${stack.item}`,
+          label: `${name} — Deposit all`,
+          hint: noCarried ? undefined : `× ${carried}`,
+          disabled: noCarried,
+          disabledNote: noCarried ? needNote : undefined,
+        },
+      );
+    }
+    for (const stack of inventory.stacksSnapshot()) {
+      if (pileKinds.has(stack.item)) continue;
+      const name = displayNameFor(stack.item);
+      actions.push(
+        { id: `deposit-one:${stack.item}`, label: `${name} — Deposit one` },
+        {
+          id: `deposit-all:${stack.item}`,
+          label: `${name} — Deposit all`,
+          hint: `× ${stack.quantity}`,
+        },
+      );
+    }
+    actions.push({ id: 'close', label: 'Close' });
+    return actions;
   };
 
-  // Pile menu press. The menu closes on every press; the
-  // action itself mirrors the take-all listener's outcome
-  // handling (missing pile: silent; full pack: Pack-full
-  // note, no refresh/save; grant: refresh + save +
-  // feedback). Take calls Systems' menu handler directly
-  // (no bus listener for it — kind + 1 for Take one, the
-  // kind's quantity for Take all; the handler caps at the
-  // live kind quantity). INTERIM: the menu still
-  // represents the pile's first kind (pile.item) until
-  // UI's multi-kind menu lists every kind. Deposit calls
+  // Multi-kind pile menu press. The menu STAYS OPEN after a
+  // press — "one by one" means repeated presses without
+  // reopening — and re-renders from live piles: a kind
+  // taken to zero leaves the menu, a deposit's new kind
+  // joins it, an emptied pile closes it (auto-close in
+  // refreshPilesFromState / piles:inRange). Only Close
+  // closes it explicitly. Outcome handling mirrors the
+  // take-all listener (missing pile/kind: silent; full
+  // pack: Pack-full note, no refresh/save; grant: refresh
+  // + save + feedback). Take calls Systems' menu handler
+  // directly (no bus listener for it — the TAPPED kind,
+  // verbatim stack item since pileState matches verbatim;
+  // 1 for Take one, the kind's quantity for Take all; the
+  // handler caps at the live kind quantity). Deposit calls
   // depositIntoPile + one pileState.drop with the pile's
-  // EXACT x/z verbatim —
-  // never rounded, never recomputed from her position —
-  // so a deposit to a gone pile still lands at those
-  // coords (drop creates when nothing matches). Both
-  // paths refresh the chip straight from pileState after
-  // acting (see refreshPilesFromState).
+  // EXACT x/z verbatim — never rounded, never recomputed
+  // from her position — so a deposit to a gone pile still
+  // lands at those coords (drop creates when nothing
+  // matches). Both paths refresh the chip straight from
+  // pileState after acting (see refreshPilesFromState).
   const handlePileAction = (pile: PileTarget, actionId: string) => {
-    setSelectedPile(null);
     // Menu feedback: the pile's anchor when visible, else
     // her feet (ground rule, always visible) — a menu
     // action's result must never vanish silently.
@@ -2982,16 +3056,22 @@ export default function App() {
         (player ? projectAnchor(player.x, player.z, 'ground') : null);
       if (anchor) showFeedback(text, tone, anchor.x, anchor.y);
     };
-    if (actionId === 'take-one' || actionId === 'take-all') {
-      // INTERIM (pre-redesign menu): the chip represents
-      // the pile's first kind (pile.item), so Take one /
-      // Take all operate on that kind with its quantity.
-      // The multi-kind menu redesign (UI's turn) lists
-      // every kind and passes the tapped kind instead.
-      const quantity = actionId === 'take-one' ? 1 : pile.quantity;
+    if (actionId === 'close') {
+      selectedPileIdRef.current = null;
+      setSelectedPileId(null);
+      return;
+    }
+    const sep = actionId.indexOf(':');
+    if (sep < 0) return;
+    const verb = actionId.slice(0, sep);
+    const kind = actionId.slice(sep + 1);
+    if (verb === 'take-one' || verb === 'take-all') {
+      const stack = pile.stacks.find((entry) => entry.item === kind);
+      const quantity = verb === 'take-one' ? 1 : (stack?.quantity ?? 0);
+      if (quantity <= 0) return;
       const outcome = handlePileTakeRequest(
         pile.id,
-        pile.item,
+        kind as ItemId,
         quantity,
         pileState,
         inventory,
@@ -3019,17 +3099,14 @@ export default function App() {
       );
       return;
     }
-    if (actionId === 'deposit-one' || actionId === 'deposit-all') {
-      const carried = inventory.count(pile.item as ItemId);
-      const quantity = actionId === 'deposit-one' ? 1 : carried;
+    if (verb === 'deposit-one' || verb === 'deposit-all') {
+      const carried = inventory.count(kind as ItemId);
+      const quantity = verb === 'deposit-one' ? 1 : carried;
       if (quantity <= 0) return;
       try {
-        // INTERIM (pre-redesign menu): deposits the chip's
-        // kind (pile.item, the first kind) — the pile
-        // target itself carries the stacks the grant reads.
         const record = depositIntoPile(
           pile,
-          pile.item,
+          kind as ItemId,
           quantity,
           inventory,
         );
@@ -3137,6 +3214,12 @@ export default function App() {
       : (fireAnchors.find((a) => a.fire.id === selectedFire.id) ?? null);
 
   // The pile whose menu is open, with its anchor.
+  // Live menu pile: the menu renders from piles state, not a
+  // tap-time snapshot (see the state comment above).
+  const selectedPile =
+    selectedPileId === null
+      ? null
+      : (piles.find((pile) => pile.id === selectedPileId) ?? null);
   const selectedPileAnchor =
     selectedPile === null
       ? null
@@ -3395,9 +3478,6 @@ export default function App() {
   // the pile button appears. Pressing emits
   // pile:pickup-requested; Systems' listener grants, the
   // existing subscriber refreshes, saves, and feeds back.
-  // Label names the whole pile (total count) when it holds
-  // many kinds — the grant takes everything, so naming
-  // only the first kind would understate the action.
   const desktopPilePickup =
     !isTouch &&
     pileWouldWin(
@@ -3471,17 +3551,30 @@ export default function App() {
             </Fragment>
           );
         })}
-        {pileAnchors.map(({ pile, x, y }) => (
-          <Fragment key={pile.id}>
-            <WorldAnchor x={x} y={y} interactive>
-              <PileChip
-                name={displayNameFor(pile.item)}
-                quantity={pile.quantity}
-                onSelect={() => setSelectedPile(pile)}
-              />
-            </WorldAnchor>
-          </Fragment>
-        ))}
+        {pileAnchors.map(({ pile, x, y }) => {
+          const total = pile.stacks.reduce(
+            (sum, stack) => sum + stack.quantity,
+            0,
+          );
+          const single = pile.stacks.length === 1;
+          return (
+            <Fragment key={pile.id}>
+              <WorldAnchor x={x} y={y} interactive>
+                <PileChip
+                  name={
+                    single ? displayNameFor(pile.stacks[0].item) : 'Pile'
+                  }
+                  quantity={single ? pile.stacks[0].quantity : total}
+                  kinds={pile.stacks.length}
+                  onSelect={() => {
+                    selectedPileIdRef.current = pile.id;
+                    setSelectedPileId(pile.id);
+                  }}
+                />
+              </WorldAnchor>
+            </Fragment>
+          );
+        })}
         {selectedFire && selectedFireAnchor ? (
           <WorldAnchor
             x={selectedFireAnchor.x}
@@ -3503,10 +3596,17 @@ export default function App() {
             interactive
           >
             <ContextMenu
-              objectName={`${displayNameFor(selectedPile.item)} × ${selectedPile.quantity}`}
+              objectName={
+                selectedPile.stacks.length === 1
+                  ? `${displayNameFor(selectedPile.stacks[0].item)} × ${selectedPile.stacks[0].quantity}`
+                  : `Pile × ${selectedPile.stacks.reduce((sum, stack) => sum + stack.quantity, 0)} (${selectedPile.stacks.length} kinds)`
+              }
               actions={pileMenuActions(selectedPile)}
               onSelect={(id) => handlePileAction(selectedPile, id)}
-              onClose={() => setSelectedPile(null)}
+              onClose={() => {
+                selectedPileIdRef.current = null;
+                setSelectedPileId(null);
+              }}
             />
           </WorldAnchor>
         ) : null}
@@ -3559,12 +3659,8 @@ export default function App() {
             }
             className="pointer-events-auto absolute left-1/2 top-[54%] min-h-[44px] -translate-x-1/2 rounded-full bg-black/60 px-4 py-2 text-sm font-medium text-[#f0ead6]"
           >
-            {desktopPilePickup.stacks.length > 1
-              ? `Pick up pile × ${desktopPilePickup.stacks.reduce(
-                  (n, s) => n + s.quantity,
-                  0,
-                )}`
-              : `Pick up ${displayNameFor(desktopPilePickup.item)} × ${desktopPilePickup.quantity}`}
+            Pick up {displayNameFor(desktopPilePickup.item)} ×{' '}
+            {desktopPilePickup.quantity}
           </button>
         ) : null}
       </div>
