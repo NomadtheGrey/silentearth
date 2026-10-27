@@ -44,6 +44,20 @@
  *   writes traps as-is (ids saved verbatim — restore()
  *   recomputes its id counter from the max id suffix, so
  *   later placeTrap ids cannot collide).
+ * - placed torches (position, id optional — no game import):
+ *   same additive-field rule (old saves load torches: [])
+ *   and the same leniency as traps on read (entries pass
+ *   through, the placed-torch restore validates + drops
+ *   bad records, so a bad torch record can never corrupt
+ *   the whole document). Placed torches are ALWAYS lit
+ *   (she places light, not sticks; no-burnout pin
+ *   extended), so no lit flag is stored. `id` is optional
+ *   because Background's placed-torch entity owns the id
+ *   scheme (spot-keyed vs sequential is their call) — the
+ *   save carries position always and the id when the
+ *   entity provides one. Order preserved; duplicate
+ *   positions allowed (two torches at one spot are two
+ *   entries).
  * - world state (Background's persistence seams, a39f47f):
  *   fires[].lighting (LightingProcess shape; lit needs no
  *   field — fires[].lit already exists), harvestState
@@ -199,6 +213,23 @@ export interface SavedTrap {
 }
 
 /**
+ * A placed torch, as saved. Placed torches are ALWAYS lit
+ * (she places light, not sticks; no-burnout pin extended),
+ * so no lit flag is stored — a saved torch is a lit torch.
+ * `id` is optional: Background's placed-torch entity owns
+ * the id scheme (spot-keyed vs sequential is their call);
+ * the save carries position always and the id when the
+ * entity provides one. Order preserved; duplicate
+ * positions allowed (two torches at one spot are two
+ * entries, not one merged record).
+ */
+export interface SavedTorch {
+  x: number;
+  z: number;
+  id?: string;
+}
+
+/**
  * World harvest state, as saved. Structural mirror of the game
  * layer's HarvestStateSnapshot (harvestState.ts) by literal —
  * systems does not import game modules. The engine's restore()
@@ -305,6 +336,8 @@ export interface SaveData {
   piles: SavedPile[];
   /** Placed traps (craft-placed); [] for old saves. */
   traps: SavedTrap[];
+  /** Placed torches (always lit); [] for old saves. */
+  torches: SavedTorch[];
   /** World harvest state; empty snapshot for old saves. */
   harvestState: SavedHarvestState;
   /** Sky cycle position; dawn ({ cycleT: 0 }) for old saves. */
@@ -368,6 +401,18 @@ export interface SaveDraft {
     type: string;
     x: number;
     z: number;
+  }>;
+  /**
+   * Placed torches from the placed-torch source
+   * (Background's entity snapshot, once it lands).
+   * OPTIONAL so existing saveNow call sites keep
+   * compiling unchanged until the App wiring lands
+   * (trap-save pattern: format now, wiring later).
+   */
+  torches?: ReadonlyArray<{
+    x: number;
+    z: number;
+    id?: string;
   }>;
 }
 
@@ -483,6 +528,17 @@ export function serializeSave(draft: SaveDraft): SaveData {
       type: trap.type,
       x: trap.x,
       z: trap.z,
+    })),
+    // Torches: written AS-IS (positions verbatim, id when
+    // the entity provides one — no filtering, no
+    // normalization). Invalid entries are restore()'s
+    // problem, not serialize's: the placed-torch restore
+    // validates (finite coords) and drops them. Placed
+    // torches are always lit, so no lit flag is written.
+    torches: (draft.torches ?? []).map((torch) => ({
+      x: torch.x,
+      z: torch.z,
+      ...(torch.id !== undefined ? { id: torch.id } : {}),
     })),
     // Piles: multi-kind stacks, normalized ids, invalid
     // entries dropped (same filtering rule as
@@ -761,6 +817,29 @@ export function deserializeSave(value: unknown): SaveData | null {
         });
       }
     }
+    // Torches are optional on read, same leniency as
+    // traps: an old v1 save without them loads with
+    // torches: []. Entries pass through UNVALIDATED —
+    // the placed-torch restore validates (finite coords)
+    // and drops bad records, so a bad torch entry can
+    // never corrupt the whole document. A non-array
+    // torches field loads as [] — the section drops,
+    // the document survives. `id` passes through only
+    // when present as a string (the field is optional:
+    // Background's entity owns the id scheme).
+    const torches: SavedTorch[] = [];
+    if (value.torches !== undefined && Array.isArray(value.torches)) {
+      for (const entry of value.torches) {
+        if (!isRecord(entry)) continue;
+        torches.push({
+          x: entry.x as number,
+          z: entry.z as number,
+          ...(typeof entry.id === 'string'
+            ? { id: entry.id as string }
+            : {}),
+        });
+      }
+    }
     return {
       version: SAVE_VERSION,
       savedAt: value.savedAt,
@@ -775,6 +854,7 @@ export function deserializeSave(value: unknown): SaveData | null {
       looms,
       piles,
       traps,
+      torches,
       harvestState,
       sky,
       facing,

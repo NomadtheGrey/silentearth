@@ -157,3 +157,104 @@ export function lightTorches(
   inventory.addPartial(ITEMS.litTorch, count);
   return { lit: true, method, count };
 }
+
+// ---------------------------------------------------------------------------
+// Placed torches (Adam, DEV chat 2026-10-27: "She should also
+// be able to place torches, to light an area or path" + "Or
+// pick them back up"). This EXTENDS the carried-torch piece;
+// placeable CANDLES are still later and distinct — placed
+// torches are not candles.
+//
+// RULES (Adam's, via DEV):
+// - PLACE: a carried LIT torch ('lit-torch') leaves the
+//   inventory and becomes a placed torch at her position.
+//   Placed torches are LIT — she places light, not sticks.
+//   An unlit torch can never be placed (placeTorch counts
+//   litTorch only).
+// - PICK UP: a placed torch returns to inventory as
+//   'lit-torch' — lit, not unlit. Picking it back up does
+//   not unlight it.
+// - NO BURNOUT EXTENDED (flagged): placed torches stay lit
+//   like carried ones (Adam pinned no burnout for torches;
+//   if placed torches should burn out, that is a new
+//   ruling, not assumed — no duration code lives here).
+// - SAVE: placed torches persist across saves (save.ts
+//   SavedTorch, trap-save pattern: format now, App wiring
+//   once Background's entity lands).
+//
+// LANE BOUNDARY: Systems owns ONLY the inventory grants
+// below + the save shape. Background owns the placed-torch
+// entity + its light (id scheme, renderer marker, chip
+// projection source — DEV coordinates; see the report).
+// The shell hands placeTorch's record to Background's
+// place call and removes the placed entity only when
+// pickupTorch grants (mirror of the pile pickup rule:
+// take granted only, so a full pack leaves the placed
+// torch where it is).
+//
+// NO HUNGER GATE (lane call, flagged): place/pickup are
+// inventory <-> world moves, like drop/pickup — not
+// builds. Placing a torch is not crafting it (crafting
+// stays hunger-gated through executeCraft).
+//
+// QUANTITIES (lane call, flagged for pin pass): one torch
+// per press, both directions (V1 drop precedent: one per
+// press). Position arrives as params — systems never knows
+// where she is (piles precedent).
+//
+
+/**
+ * A placed torch, as handed to Background's place call.
+ * Singular by definition: one press places one torch.
+ * `item` is always 'lit-torch' (see rules above).
+ */
+export interface PlacedTorch {
+  item: string;
+  x: number;
+  z: number;
+}
+
+/**
+ * Place outcome. `torch` is the record the shell hands to
+ * Background's place call; `reason` is player-facing on
+ * failure only. Failure touches nothing.
+ */
+export type PlaceTorchOutcome =
+  | { placed: true; torch: PlacedTorch }
+  | { placed: false; reason: string };
+
+/**
+ * Move one carried LIT torch out of the inventory into a
+ * placed-torch record at (x, z). Validates before
+ * mutating (finite position, lit torch carried), so a
+ * failed place consumes nothing.
+ */
+export function placeTorch(
+  inventory: PersonalInventory,
+  x: number,
+  z: number,
+): PlaceTorchOutcome {
+  if (!Number.isFinite(x) || !Number.isFinite(z)) {
+    return { placed: false, reason: 'Invalid position.' };
+  }
+  if (inventory.count(ITEMS.litTorch) <= 0) {
+    return { placed: false, reason: 'No lit torch carried.' };
+  }
+  inventory.remove(ITEMS.litTorch, 1);
+  return { placed: true, torch: { item: ITEMS.litTorch, x, z } };
+}
+
+/**
+ * Grant for picking a placed torch back up: 1 = the torch
+ * is back in the pack as 'lit-torch' (shell removes the
+ * placed entity); 0 = pack full, the placed torch stays
+ * where it is (pile-pickup rule: take granted only).
+ * The grant is always the LIT form — picking up never
+ * unlights a torch.
+ */
+export function pickupTorch(inventory: PersonalInventory): {
+  granted: number;
+} {
+  const grant = inventory.addPartial(ITEMS.litTorch, 1);
+  return { granted: grant.granted };
+}
