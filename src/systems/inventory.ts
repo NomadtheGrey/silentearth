@@ -180,6 +180,8 @@ export const ITEM_ID_ALIASES: Readonly<Record<string, ItemId>> = {
   COOKED_ACORNS: 'cooked-acorns',
   MUSHROOMS: 'mushrooms',
   POISON_MUSHROOMS: 'poison-mushrooms',
+  EDIBLE_MUSHROOM: 'edible-mushroom',
+  POISON_MUSHROOM: 'poison-mushroom',
 };
 
 /**
@@ -268,6 +270,8 @@ export const ITEM_DISPLAY_NAMES: Readonly<Record<string, string>> = {
   'cooked-acorns': 'Cooked Acorns',
   mushrooms: 'Mushrooms',
   'poison-mushrooms': 'Poison Mushrooms',
+  'edible-mushroom': 'Edible Mushroom',
+  'poison-mushroom': 'Poison Mushroom',
 };
 
 /**

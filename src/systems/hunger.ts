@@ -87,10 +87,17 @@
  *   button, eat() refuses with a plain poison warning — no
  *   sickness effect is modelled because no health system
  *   exists; the effect is Adam's pin-pass proposal, not a
- *   silent fake). (Food-candidates notes about elderberries
- *   needing cooking / sickening are NOT modelled: eat()
- *   restores plainly for eatable foods. A cook/sicken
- *   distinction is later work, if Adam wants it.)
+ *   silent fake). Amendment the same day (DEV): Background's
+ *   sources (8315d21) yield 'EDIBLE_MUSHROOM' /
+ *   'POISON_MUSHROOM' — both recognized here as food-table
+ *   entries (same nutrition / same refusal), with their own
+ *   display names. Gathering-exemption for edible mushrooms
+ *   while too-hungry is a PROPOSAL for Adam's pin pass, not
+ *   settled here (Background defaulted NOT exempt; pinned
+ *   exemption set today is nuts/berries only). (Food-candidates
+ *   notes about elderberries needing cooking / sickening are
+ *   NOT modelled: eat() restores plainly for eatable foods.
+ *   A cook/sicken distinction is later work, if Adam wants it.)
  *
  * ------------------------------------------------------------------
  * LOCKOUT (Systems' half — crafting/building):
@@ -157,19 +164,28 @@ export const FOOD_ELDERBERRIES: ItemId = 'ELDERBERRIES';
 export const FOOD_COOKED_ACORNS: ItemId = 'COOKED_ACORNS';
 /**
  * Mushrooms — eaten as gathered, like berries (Adam, 2026-10-26,
- * brief 2 of 2). No mushroom SOURCE grants them yet (no harvest
- * yields mushrooms today — Background's follow-up); this is the
- * food half only: the item, its nutrition, its Eat button.
+ * brief 2 of 2). Background's sources (8315d21, starting now)
+ * yield EDIBLE_MUSHROOM, a second spelling of the same food:
+ * it is recognized here as its own food-table entry (same
+ * nutrition), NOT silently renamed — the source item keeps its
+ * own display name ("Edible Mushroom"). MUSHROOMS stays valid
+ * alongside it (earlier spelling, same food).
  */
 export const FOOD_MUSHROOMS: ItemId = 'MUSHROOMS';
+/** Background's source spelling of the edible mushroom. */
+export const FOOD_EDIBLE_MUSHROOM: ItemId = 'EDIBLE_MUSHROOM';
 /**
  * Poison mushrooms — NOT food. No nutrition, no Eat button (not
  * in FOOD_ITEMS), and eat() refuses them with the warning below.
  * No health system exists, so NO sickness effect is modelled:
  * the refusal is the honest interim (see the proposal in the
- * report), not a faked effect. No source grants these yet either.
+ * report), not a faked effect. Background's sources yield
+ * POISON_MUSHROOM alongside the earlier POISON_MUSHROOMS
+ * spelling; both are refused.
  */
 export const FOOD_POISON_MUSHROOMS: ItemId = 'POISON_MUSHROOMS';
+/** Background's source spelling of the poison mushroom. */
+export const FOOD_POISON_MUSHROOM: ItemId = 'POISON_MUSHROOM';
 
 /**
  * Plain warning carried by the poison mushroom (Adam, 2026-10-26,
@@ -197,6 +213,7 @@ export const FOOD_ITEMS: ReadonlyArray<ItemId> = [
   FOOD_ELDERBERRIES,
   FOOD_COOKED_ACORNS,
   FOOD_MUSHROOMS,
+  FOOD_EDIBLE_MUSHROOM,
 ].map(normalizeItemId);
 
 /**
@@ -220,6 +237,7 @@ export const FOOD_NUTRITION: Readonly<Record<string, number>> = {
   [FOOD_ELDERBERRIES]: 15,
   [FOOD_COOKED_ACORNS]: 20,
   [FOOD_MUSHROOMS]: 10,
+  [FOOD_EDIBLE_MUSHROOM]: 10,
 };
 
 /**
@@ -249,13 +267,15 @@ export function needsCooking(item: ItemId): boolean {
 }
 
 /**
- * True for poison mushrooms, either spelling. Poison is not food
- * (isFood stays false) and not cook-required: it is refused
- * outright by eat() with POISON_MUSHROOM_WARNING.
+ * True for poison mushrooms, either item and either spelling.
+ * Poison is not food (isFood stays false) and not cook-required:
+ * it is refused outright by eat() with POISON_MUSHROOM_WARNING.
  */
 export function isPoison(item: ItemId): boolean {
+  const normalized = normalizeItemId(item);
   return (
-    normalizeItemId(item) === normalizeItemId(FOOD_POISON_MUSHROOMS)
+    normalized === normalizeItemId(FOOD_POISON_MUSHROOMS) ||
+    normalized === normalizeItemId(FOOD_POISON_MUSHROOM)
   );
 }
 
