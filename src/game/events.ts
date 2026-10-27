@@ -183,6 +183,17 @@ export interface EventMap {
   };
   'pile:pickup-requested': { pileId: string };
   /**
+   * A trap craft placed a trap (Systems' trap-craft→placement,
+   * Adam 2026-10-26): crafting a trap places it right there —
+   * no inventory trap item. `type` is the trap recipe id (==
+   * its output item for all five traps); x/z is the player
+   * position at craft time. The set/check mechanics that
+   * consume this event are future work; the shell's "Place trap
+   * here?" confirm gates BEFORE executeCraft runs, so this
+   * event only ever fires on a confirmed craft.
+   */
+  'trap:placed': { type: string; x: number; z: number };
+  /**
    * Pause state changed (Adam 2026-10-26: pause when not in
    * focus — core flag + shell gate, see pause.ts). The shell
    * gates its timers (hunger interval, turn-stick rAF, FPS

@@ -174,6 +174,18 @@ export interface Recipe {
    */
   requiresToolStage?: number;
   /**
+   * Craft-places (Adam, 2026-10-26): crafting this recipe PLACES
+   * its output right there instead of granting an inventory item
+   * — executeCraft consumes the ingredients and emits
+   * 'trap:placed' {type, x, z} (player position at craft time).
+   * The shell's "Place trap here?" confirm gates BEFORE
+   * execution (No = abort, nothing consumed). First use: all
+   * five traps. Trap items already sitting in an inventory from
+   * earlier saves stay items for now (flagged edge, not solved
+   * here) — only fresh crafts place.
+   */
+  placesTrap?: boolean;
+  /**
    * Carrying-capacity bonus, containers only. The BONUS numbers are
    * Adam's pinned numbers; the COSTS beside them are draft. Where the
    * doc leaves a bonus open, this field is left off and the open
@@ -745,6 +757,7 @@ const DRAFT_RECIPES: Recipe[] = [
     output: { item: ITEMS.snare, quantity: 1 },
     ingredients: [i(ITEMS.tenderVines, 2), i(ITEMS.snapWood, 2)],
     station: 'hand',
+    placesTrap: true,
     notes:
       'DRAFT — BRAINSTORM, NOTHING PICKED. Stakes. Craftable by ' +
       'hand anywhere — no workstation needed (Adam\'s ruling, ' +
@@ -757,6 +770,7 @@ const DRAFT_RECIPES: Recipe[] = [
     output: { item: ITEMS.fishWeirTrap, quantity: 1 },
     ingredients: [i(ITEMS.tenderVines, 6), i(ITEMS.snapWood, 4)],
     station: 'hand',
+    placesTrap: true,
     notes:
       'DRAFT — BRAINSTORM, NOTHING PICKED. Woven funnel. ' +
       'Craftable by hand anywhere — no workstation needed ' +
@@ -769,6 +783,7 @@ const DRAFT_RECIPES: Recipe[] = [
     output: { item: ITEMS.potTrap, quantity: 1 },
     ingredients: [i(ITEMS.clayPot, 1)],
     station: 'hand',
+    placesTrap: true,
     notes:
       'DRAFT — BRAINSTORM, NOTHING PICKED. 1 clay pot, sunk in ' +
       'the creek. Craftable by hand anywhere — no workstation ' +
@@ -781,6 +796,7 @@ const DRAFT_RECIPES: Recipe[] = [
     output: { item: ITEMS.pitfall, quantity: 1 },
     ingredients: [i(ITEMS.peatMoss, 2)],
     station: 'hand',
+    placesTrap: true,
     requiresToolStage: 1,
     notes:
       'DRAFT — BRAINSTORM, NOTHING PICKED. Dug with the spade, ' +
@@ -803,6 +819,7 @@ const DRAFT_RECIPES: Recipe[] = [
       i(ITEMS.riverStone, 2),
     ],
     station: 'hand',
+    placesTrap: true,
     notes:
       'DRAFT — BRAINSTORM, NOTHING PICKED. River stone is the ' +
       'weight. Craftable by hand anywhere — no workstation ' +

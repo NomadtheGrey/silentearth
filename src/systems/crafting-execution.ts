@@ -70,6 +70,26 @@
  *    requirement — it reads the owned stage, so upgrading past
  *    the required tool never locks the recipe out.
  *
+ * 5. TRAP CRAFTS PLACE, THEY DON'T GRANT (Adam, 2026-10-26).
+ *    A recipe with placesTrap set (all five traps) never enters
+ *    inventory: on a confirmed craft this helper consumes the
+ *    ingredients and calls the shell-provided emitTrapPlaced
+ *    with {type, x, z} — the trap recipe id and the player
+ *    position at craft time, from the TrapPlacementContext the
+ *    shell passes. The bus itself lives in the shell/game
+ *    layer, never here: this module takes only the callback.
+ *    A trap craft WITHOUT placement context throws BEFORE
+ *    anything is consumed (a wiring bug, failed loudly — never
+ *    a silent inventory grant, which would break Adam's rule).
+ *    The shell's "Place trap here?" confirm gates BEFORE this
+ *    helper runs (No = abort, nothing consumed). Placing takes
+ *    no capacity check: nothing enters the pack, so a full pack
+ *    never blocks a placement. Hunger/station/tool-stage gates
+ *    still apply in their usual order — trap CRAFTING is still
+ *    building, so too-hungry still blocks it; the too-hungry
+ *    trap exemption covers trap USE, once the set/check system
+ *    exists, not trap crafting.
+ *
  * ------------------------------------------------------------------
  * RULED CONSTRUCTION (Adam, 2026-10-26): LARGE BASKET REPLACES
  * SMALL BASKET — PINNED. Total with pockets + apron + large = 70;
@@ -85,6 +105,7 @@
  *   new PersonalInventory({ largeBasketMode: 'replace', initial })
  */
 
+import { canCraft } from './crafting';
 import { craftIntoInventory, PersonalInventory } from './inventory';
 import type { HungerState } from './hunger';
 import {
@@ -105,8 +126,37 @@ import type { CraftingStation, ItemId, Recipe } from './recipes';
  */
 export type StationInput = CraftingStation | CraftingStation[] | null;
 
+/**
+ * Where a placed trap goes + how its event leaves this module.
+ * The shell passes the player position at craft time and its bus
+ * emit as a callback — the bus lives in the shell/game layer, so
+ * this module never imports it. `type` in the payload is the trap
+ * recipe id (== its output item for all five traps).
+ */
+export interface TrapPlacementContext {
+  /** Player position at craft time — the placed trap's spot. */
+  x: number;
+  z: number;
+  /** Shell-provided emitter for the 'trap:placed' event. */
+  emitTrapPlaced: (payload: {
+    type: string;
+    x: number;
+    z: number;
+  }) => void;
+}
+
 export interface CraftExecutionResult {
+  /**
+   * What was crafted. When `placedTrap` is present, this output
+   * was PLACED, not added to inventory — the shell must not treat
+   * it as a grant (it is carried here for feedback naming only).
+   */
   output: { item: ItemId; quantity: number };
+  /**
+   * Present only for placesTrap crafts: the placed trap's type
+   * (recipe id) and spot. Absent for every ordinary grant craft.
+   */
+  placedTrap?: { type: string; x: number; z: number };
   /** Owned tool after the craft, read from inventory ('none' if none). */
   owned: OwnedToolItem;
   /** Background-compatible tier of the owned tool, null for none. */
@@ -156,6 +206,7 @@ export function executeCraft(
   inventory: PersonalInventory,
   station: StationInput = null,
   hunger: HungerState | null = null,
+  trapPlacement: TrapPlacementContext | null = null,
 ): CraftExecutionResult {
   // Hunger gate, before anything is consumed.
   if (hunger !== null && hunger.isTooHungry()) {
@@ -210,6 +261,89 @@ export function executeCraft(
       : Array.isArray(station)
         ? null
         : station;
+
+  // TRAP PLACE PATH: a placesTrap craft never enters inventory.
+  // A missing placement context is a wiring bug — fail loudly
+  // BEFORE anything is consumed, never a silent inventory grant.
+  if (recipe.placesTrap) {
+    if (trapPlacement === null) {
+      throw new Error(
+        `Cannot craft ${recipe.name}: trap crafts place at your ` +
+          `position, but no placement context was passed.`,
+      );
+    }
+    // Ingredient / requirement / predecessor check, via the same
+    // engine check the grant path uses — but the grant itself is
+    // NOT run: placing takes no capacity check (nothing enters
+    // the pack) and adds no item. Consumption below cannot fail
+    // after this check passes (synchronous, no interleave).
+    const check = canCraft(recipe, inventory, engineStation);
+    if (!check.ok) {
+      if (check.stationMismatch) {
+        throw new Error(
+          `Cannot craft ${recipe.name}: requires station ` +
+            `${check.requiredStation}.`,
+        );
+      }
+      const firstMissing = check.missingIngredients[0];
+      if (firstMissing) {
+        throw new Error(
+          `Cannot craft ${recipe.name}: need ${firstMissing.quantity} ` +
+            `${firstMissing.item}, have ${firstMissing.held}.`,
+        );
+      }
+      if (check.missingUpgradeFrom.length > 0) {
+        throw new Error(
+          `Cannot craft ${recipe.name}: need one of ` +
+            `${check.missingUpgradeFrom.join(' or ')} to upgrade from.`,
+        );
+      }
+      const firstRequirement = check.missingRequirements[0];
+      if (firstRequirement) {
+        throw new Error(
+          `Cannot craft ${recipe.name}: requires ${firstRequirement.quantity} ` +
+            `${firstRequirement.item} present (not consumed), have ` +
+            `${firstRequirement.held}.`,
+        );
+      }
+      if (check.toolStageShortfall) {
+        throw new Error(
+          `Cannot craft ${recipe.name}: requires owned tool stage ` +
+            `${check.toolStageShortfall.required} or better, have stage ` +
+            `${check.toolStageShortfall.held}.`,
+        );
+      }
+      throw new Error(`Cannot craft ${recipe.name}: check failed.`);
+    }
+    for (const ingredient of recipe.ingredients) {
+      inventory.remove(ingredient.item, ingredient.quantity);
+    }
+    if (recipe.upgradeFrom !== undefined) {
+      const predecessors = Array.isArray(recipe.upgradeFrom)
+        ? recipe.upgradeFrom
+        : [recipe.upgradeFrom];
+      const held = predecessors.find(
+        (item) => inventory.count(item) >= 1,
+      );
+      if (held !== undefined) {
+        inventory.remove(held, 1);
+      }
+    }
+    const placedTrap = {
+      type: recipe.id,
+      x: trapPlacement.x,
+      z: trapPlacement.z,
+    };
+    trapPlacement.emitTrapPlaced(placedTrap);
+    return {
+      output: { ...recipe.output },
+      placedTrap,
+      owned: ownedToolItem(inventory),
+      toolTier: ownedTier(inventory),
+      harvestStage: ownedStage(inventory),
+      stageName: ownedStageName(inventory),
+    };
+  }
 
   const output = craftIntoInventory(recipe, inventory, engineStation);
 

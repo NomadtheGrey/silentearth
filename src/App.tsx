@@ -1966,18 +1966,31 @@ export default function App() {
     if (!recipe) return;
     const ownedBefore = ownedToolItem(inventory);
     try {
+      // Trap crafts place at her feet (Systems' place path):
+      // the shell passes position + its bus emit on every craft
+      // (harmless for ordinary grants — executeCraft ignores it
+      // unless the recipe places a trap). For traps this runs
+      // only on the confirm's Yes — the Popup above gates first,
+      // No/Close never reaches execution.
       const result = executeCraft(
         recipe,
         inventory,
         availableStations.length > 0 ? availableStations : null,
         hunger,
+        {
+          x: position.x,
+          z: position.z,
+          emitTrapPlaced: (payload) => bus.emit('trap:placed', payload),
+        },
       );
       setOwnedItem(result.owned);
       setCraftNote(
-        `Crafted ${result.output.item} × ${result.output.quantity}.` +
-          (result.owned !== ownedBefore
-            ? ` Owned tool is now ${result.owned}.`
-            : ''),
+        result.placedTrap
+          ? `Placed ${displayNameFor(result.output.item)} here.`
+          : `Crafted ${result.output.item} × ${result.output.quantity}.` +
+              (result.owned !== ownedBefore
+                ? ` Owned tool is now ${result.owned}.`
+                : ''),
       );
     } catch (error) {
       setCraftNote(
