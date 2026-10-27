@@ -45,15 +45,16 @@
  *   depletion-wrapped generator.
  * - Inventory capacity (Adam, 2026-10-27): weights pinned —
  *   pockets base 10, apron +10, small basket +25, large
- *   basket 50, Trundle-Tool +50, additive. The shell
- *   constructs PersonalInventory with largeBasketMode
- *   'replace' (the current code choice, not a ruling);
- *   large replace-vs-stack stays OPEN awaiting Adam's
- *   pick (70 if replaces, 95 if stacks) — no full-kit
- *   total is asserted anywhere. The modes coincide right
- *   after the upgrade in normal play (the upgrade consumes
- *   the small basket); they diverge only if she later holds
- *   both baskets at once.
+ *   basket 50, Trundle-Tool +50, additive. Large basket
+ *   REPLACES the small basket's +25 — question CLOSED
+ *   on Adam's 2026-10-27 "for simplicity" ruling (final
+ *   state; provenance: 10-26 replace pin → 10-27 open
+ *   note → 10-27 replace ruling): pockets 10 + apron 10
+ *   + large 50 = 70 with the large basket (not 95);
+ *   Trundle-Tool's +50 still adds on top (full kit 130
+ *   lb with worn clothes). The shell constructs
+ *   PersonalInventory with largeBasketMode 'replace' —
+ *   the settled mode, matching Systems.
  * - Remove option (Adam, 2026-10-26): alongside normal harvest,
  *   she may TOTALLY REMOVE a plant — more resources at once, but
  *   the plant is gone permanently (no regrow), for clearing
@@ -760,10 +761,13 @@
  *   total. Worn carrying-bonus note reads "+N lb".
  *   Home-storage rows stay count-based (out of scope);
  *   pack-full notes carry no numbers, so nothing to
- *   convert there. No full-kit total is asserted
- *   anywhere: large replace-vs-stack stays OPEN (70 if
- *   replaces, 95 if stacks) — the header reads
- *   capacityLb only. InventoryPanel + App + types only.
+ *   convert there. Large replace-vs-stack is CLOSED
+ *   (Adam, 2026-10-27, "for simplicity": large replaces
+ *   small — 70 with the large basket, full kit 130 lb
+ *   with worn clothes; final state after the 10-27 open
+ *   note); the header still reads capacityLb only, so
+ *   no computed total lives in the display.
+ *   InventoryPanel + App + types only.
  * - PILE CHIP + MENU, LIVE (Adam, 2026-10-27 — DEV brief,
  *   on Systems' take-N + deposit 0e16c91): every in-range
  *   pile gets a world-anchored chip (item + ×count,
