@@ -40,46 +40,26 @@
  * SEASON_START_MONTH, the month the renderer feeds the rig);
  * the shell may pass another month if it ever tracks one.
  *
- * REQUEST CONTRACT (reconciled 2026-10-27): UI's button landed
- * with a { houseId } request shape (WIP cf5f813) after this
- * listener's { x, z } shape (WIP 69f5393), and its events.ts
- * edit clobbered the completed/failed entries, breaking tsc at
- * tip. The LANDED button shape wins: the listener takes
- * { houseId } and verifies the house still exists in live
- * shelterState at press time — the button renders only when
- * sheltered + night, so the houseId is its proof, and the
- * live-record check catches a stale press (house gone, e.g.
- * across a regenerate). No position re-check: the listener
- * never learns her position now. 'sleep:completed' carries
- * the house's live position + cycleT 0; 'sleep:failed'
- * carries one reason + the houseId.
- *
  * CHECK ORDER (documented, UI feedback depends on it): night
  * first, then shelter. A daytime press fails 'not-night' even
- * with a null houseId — "until sunrise" presupposes night. A
- * null or non-finite cycleT (no live rig, e.g. disposed
- * renderer) fails 'no-sky' rather than mislabeling as
- * 'not-night'. A null or unknown houseId fails
- * 'not-sheltered'.
+ * unsheltered — "until sunrise" presupposes night. A null or
+ * non-finite cycleT (no live rig, e.g. disposed renderer) fails
+ * 'no-sky' rather than mislabeling as 'not-night'.
  *
  * SHELL WIRING (UI's App half, not this file):
  *   createSleepListener({
  *     getCycleT: () => renderer.snapshotSky()?.cycleT ?? null,
  *     restoreDawn: () => renderer.restoreSky({ cycleT: 0 }),
  *   })
- * UI emits 'sleep:requested' { houseId } from the button (the
- * sheltering house id at press time, null if somehow
- * unsheltered); this listener emits 'sleep:completed' or
+ * UI emits 'sleep:requested' { x, z } (her position) from the
+ * sleep button; this listener emits 'sleep:completed' or
  * 'sleep:failed' back. One listener per shell — a second
  * createSleepListener would double-jump (harmless here: dawn
  * twice is still dawn, but the completed event would double).
- * NOTE: App does not yet create this listener (UI's button
- * comment says so itself) — until it does, the press is a
- * no-op by construction. Wiring the listener is UI's follow-up.
  */
 
 import { bus } from './events';
-import { shelterState } from './shelter';
+import { shelterAt, shelterState } from './shelter';
 import { cycleSplit } from './sky';
 import { SEASON_START_MONTH } from './weather';
 
@@ -104,30 +84,29 @@ export interface SleepListenerDeps {
 /**
  * Subscribe the sleep outcome listener. Returns unsubscribe.
  * Emits 'sleep:completed' { x, z, cycleT: 0, houseId } on success
- * (x/z from the live house record) or 'sleep:failed'
- * { reason, houseId } on any gate failure. The listener itself
- * moves nothing else: no position change, no meter change, no
- * state other than the rig's cycleT (via the injected
- * restoreDawn).
+ * or 'sleep:failed' { x, z, reason } on any gate failure. The
+ * listener itself moves nothing else: no position change, no
+ * meter change, no state other than the rig's cycleT (via the
+ * injected restoreDawn).
  */
 export function createSleepListener(deps: SleepListenerDeps): () => void {
   const month = deps.month ?? SEASON_START_MONTH;
-  return bus.on('sleep:requested', ({ houseId }) => {
+  return bus.on('sleep:requested', ({ x, z }) => {
     const cycleT = deps.getCycleT();
     if (cycleT === null || !Number.isFinite(cycleT)) {
-      bus.emit('sleep:failed', { reason: 'no-sky', houseId });
+      bus.emit('sleep:failed', { x, z, reason: 'no-sky' });
       return;
     }
     if (cycleSplit(cycleT, month).isDay) {
-      bus.emit('sleep:failed', { reason: 'not-night', houseId });
+      bus.emit('sleep:failed', { x, z, reason: 'not-night' });
       return;
     }
-    const house = houseId !== null ? shelterState.get(houseId) : undefined;
-    if (!house) {
-      bus.emit('sleep:failed', { reason: 'not-sheltered', houseId });
+    const shelter = shelterAt(x, z, shelterState.snapshot());
+    if (shelter.houseId === null) {
+      bus.emit('sleep:failed', { x, z, reason: 'not-sheltered' });
       return;
     }
     deps.restoreDawn();
-    bus.emit('sleep:completed', { x: house.x, z: house.z, cycleT: 0, houseId: house.id });
+    bus.emit('sleep:completed', { x, z, cycleT: 0, houseId: shelter.houseId });
   });
 }

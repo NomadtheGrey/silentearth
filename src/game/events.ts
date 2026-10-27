@@ -263,23 +263,17 @@ export interface EventMap {
   'shelter:changed': { multiplier: number; houseId: string | null };
   /**
    * Sleep until sunrise (Adam 2026-10-27 — see sleep.ts).
-   * CONTRACT RECONCILED 2026-10-27 (tip-red repair): the engine
-   * half landed first with a { x, z } request shape (WIP
-   * 69f5393); UI's button landed later with a { houseId }
-   * shape (WIP cf5f813), and its events.ts edit clobbered this
-   * block's completed/failed entries, breaking tsc at tip.
-   * The LANDED button shape wins — the listener takes
-   * { houseId } and verifies the house still exists in live
-   * shelterState at press time (no position re-check; the
-   * button renders only when sheltered + night, and the
-   * houseId is its proof). 'sleep:completed' carries the
-   * house's live position + cycleT 0; 'sleep:failed' carries
-   * one reason + the houseId for feedback context. Check
-   * order is night, then shelter.
+   * 'sleep:requested' is UI's sleep button → the sleep outcome
+   * listener: her position at press time. 'sleep:completed'
+   * means the live sky jumped to dawn (cycleT 0) — time-only,
+   * no hunger/health restore, no player move. 'sleep:failed'
+   * carries one reason: 'not-night' (daytime press),
+   * 'not-sheltered' (no placed house within SHELTER_RADIUS),
+   * 'no-sky' (no live rig). Check order is night, then shelter.
    */
-  'sleep:requested': { houseId: string | null };
+  'sleep:requested': { x: number; z: number };
   'sleep:completed': { x: number; z: number; cycleT: 0; houseId: string };
-  'sleep:failed': { reason: SleepFailedReason; houseId: string | null };
+  'sleep:failed': { x: number; z: number; reason: SleepFailedReason };
 }
 
 type Handler<E> = (payload: E) => void;
