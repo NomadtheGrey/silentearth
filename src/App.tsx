@@ -804,6 +804,35 @@
  *   route is NOT rebuilt here — the inventory torch
  *   rows' Light button already covers it (flint route
  *   only). App.tsx only.
+ * - PLACED TORCHES, LIVE (Adam, 2026-10-27 — DEV brief,
+ *   hold lifted on Background 57028f1 + Systems e80f848):
+ *   a carried lit torch places and picks back up. PLACE:
+ *   the lit-torch inventory row gains Place (same
+ *   row-button pattern as house/fire Place + Eat + Light)
+ *   and places INSTANTLY AT HER FEET — the settled lean,
+ *   decided at build (the preview ghost is the house/fire
+ *   pattern, heavy for a torch); the panel stays open,
+ *   the count drops, the note carries the result. Grant
+ *   FIRST (Systems placeTorch consumes one lit-torch;
+ *   failure touches nothing), then the entity place
+ *   (Background primitive, emits torch:placed). CHIP:
+ *   each placed torch gets a world-anchored TorchChip
+ *   ("Lit Torch", fire-chip pattern, 44 px + touch
+ *   stopPropagation), tap opens a ContextMenu with Pick
+ *   up + Close. PICKUP: grant FIRST (Systems pickupTorch
+ *   returns lit-torch; 0 = pack full, the torch stays
+ *   placed and the menu stays open), then the entity
+ *   removal (emits torch:removed); the menu closes
+ *   explicitly on a grant. Placed torches stay lit
+ *   (no-burnout pin extended) and PERSIST: saveNow rides
+ *   torchState.snapshot() as-is, boot restores via
+ *   torchState.restore() BEFORE renderer construction
+ *   (fire pattern; id-less entries dropped — real saved
+ *   torches always carry an id). No hunger gate on
+ *   place/pickup (moves, like drop/pickup). Placeable
+ *   candles still later, distinct. New TorchChip.tsx +
+ *   App wiring (state, anchors, subscriptions, menu,
+ *   save wiring).
  * - INTRO MODAL, LIVE (Adam, 2026-10-27 — DEV brief):
  *   a first-run modal that explains the game briefly, says
  *   who you're playing, then gives bullet points. Opens
@@ -1011,6 +1040,7 @@ import { FireState, type FireChipStatus } from './ui/FireState';
 import { PlacementPreview } from './ui/PlacementPreview';
 import { ContextMenu } from './ui/ContextMenu';
 import { PileChip } from './ui/PileChip';
+import { TorchChip } from './ui/TorchChip';
 import type { ContextAction } from './ui/types';
 import { TouchControls } from './ui/TouchControls';
 import { LocationChip } from './ui/LocationChip';
@@ -1084,7 +1114,8 @@ import {
   type CraftingStation,
   type ItemId,
 } from './systems/recipes';
-import { lightTorches } from './systems/torch';
+import { torchState, type PlacedTorch as PlacedTorchEntity } from './game/torchState';
+import { lightTorches, placeTorch as grantPlaceTorch, pickupTorch as grantPickupTorch } from './systems/torch';
 
 type BusHarvestTarget = EventMap['harvest:inRange']['targets'][number];
 
@@ -1171,11 +1202,15 @@ const HOUSE_ITEM_TO_TYPE: Record<string, HouseType> = {
   [ITEMS.smallWoodenHut]: 'smallWoodenHut',
 };
 
-/** Item ids the inventory panel offers a Place button for. */
+/** Item ids the inventory panel offers a Place button for.
+ * Lit torches ride this set for the BUTTON only — their
+ * handler branches to instant-at-feet (see handlePlaceItem),
+ * never the preview-ghost flow the other ids use. */
 const PLACEABLE_IDS: ReadonlySet<string> = new Set([
   ...Object.keys(FIRE_ITEM_TO_TYPE),
   ...Object.keys(HOUSE_ITEM_TO_TYPE),
   ITEMS.loom,
+  ITEMS.litTorch,
 ]);
 
 const FIRE_NAME: Record<FireType, string> = {
@@ -1601,6 +1636,20 @@ export default function App() {
     { fire: PlacedFire; x: number; y: number }[]
   >([]);
   const [selectedFireId, setSelectedFireId] = useState<string | null>(null);
+  // Placed torches (Background singleton, read fresh on every
+  // event), their projected anchors, and the torch whose menu
+  // is open — the fire-chip pattern, one torch per chip. The
+  // menu is LIVE like the fire menu: selectedTorchId names
+  // the torch, and the menu renders from the live torch in
+  // placedTorches; a picked-up torch closes it (the find
+  // returns undefined, and the handler closes explicitly).
+  const [placedTorches, setPlacedTorches] = useState<PlacedTorchEntity[]>(
+    () => torchState.snapshot(),
+  );
+  const [torchAnchors, setTorchAnchors] = useState<
+    { torch: PlacedTorchEntity; x: number; y: number }[]
+  >([]);
+  const [selectedTorchId, setSelectedTorchId] = useState<string | null>(null);
   // Pile chips (projected anchors, fire-chip pattern) and the
   // pile whose menu is open. The menu is LIVE, not a tap-time
   // snapshot: selectedPileId names the pile, and the menu
@@ -1757,6 +1806,12 @@ export default function App() {
           // filtering; serializeSave writes them verbatim and
           // trapState.restore() validates on load).
           traps: trapState.snapshot(),
+          // PLACED-TORCH SAVE WIRING: the live placed-torch
+          // set rides every save as-is (ids + positions
+          // verbatim; serialize writes ids when present,
+          // restore validates on load and drops id-less
+          // entries). A path of torches survives refresh.
+          torches: torchState.snapshot(),
           // WORLD-STATE SAVE WIRING: harvest state, sky
           // cycle, and facing ride every save (all three
           // draft fields optional — serialize defaults
@@ -1851,6 +1906,13 @@ export default function App() {
       fires.push({ fire, x: anchor.x, y: anchor.y });
     }
     setFireAnchors(fires);
+    const torches: { torch: PlacedTorchEntity; x: number; y: number }[] = [];
+    for (const torch of torchState.snapshot()) {
+      const anchor = projectAnchor(torch.x, torch.z, 'scatter');
+      if (!anchor) continue;
+      torches.push({ torch, x: anchor.x, y: anchor.y });
+    }
+    setTorchAnchors(torches);
     const pileAnchorsNext: { pile: PileTarget; x: number; y: number }[] = [];
     for (const pile of pilesRef.current) {
       const anchor = projectAnchor(pile.x, pile.z, 'scatter');
@@ -2005,6 +2067,26 @@ export default function App() {
             type: fire.type as FireType,
           })),
         );
+        // PLACED-TORCH SAVE WIRING (same restore-before-
+        // first-build pattern): torchState.restore() is
+        // silent and the constructor's initial placed-group
+        // build picks restored torches up. SavedTorch.id is
+        // optional (Systems' shape) while PlacedTorch.id is
+        // required — real saved torches always carry an id
+        // (snapshot always has one); an id-less entry is
+        // dropped here (restore drops it too), so nothing
+        // real is lost.
+        torchState.restore(
+          bootSaved.torches
+            .filter(
+              (torch) => typeof torch.id === 'string' && torch.id !== '',
+            )
+            .map((torch) => ({
+              id: torch.id as string,
+              x: torch.x,
+              z: torch.z,
+            })),
+        );
         harvestState.restore(bootSaved.harvestState);
       }
     }
@@ -2103,6 +2185,7 @@ export default function App() {
     // HUD re-read after a restore (the placedFires initial state
     // was snapshotted before this effect re-placed anything).
     setPlacedFires(fireState.snapshot());
+    setPlacedTorches(torchState.snapshot());
     applyShelterHouse(
       shelterAt(player.x, player.z, shelterState.snapshot()).houseId,
     );
@@ -2239,6 +2322,12 @@ export default function App() {
       setPlacedFires(fireState.snapshot());
       recomputeAnchors();
     };
+    // Placed-torch subscriptions: torches re-read from the
+    // Background singleton on every torch event, fire pattern.
+    const refreshTorches = () => {
+      setPlacedTorches(torchState.snapshot());
+      recomputeAnchors();
+    };
     // PAUSE SUBSCRIPTION (core 54e525c): the shell's half of the
     // flag. The ref gates the timers (below + the turn-stick and
     // FPS loops); the state drives the Paused indicator. Fires
@@ -2250,6 +2339,8 @@ export default function App() {
     const offFirePlaced = bus.on('fire:placed', refreshFires);
     const offFireLighting = bus.on('fire:lighting', refreshFires);
     const offFireLit = bus.on('fire:lit', refreshFires);
+    const offTorchPlaced = bus.on('torch:placed', refreshTorches);
+    const offTorchRemoved = bus.on('torch:removed', refreshTorches);
     const offShelterPlaced = bus.on('shelter:placed', () => {
       const p = playerRef.current;
       if (!p) return;
@@ -2372,6 +2463,8 @@ export default function App() {
       offFirePlaced();
       offFireLighting();
       offFireLit();
+      offTorchPlaced();
+      offTorchRemoved();
       offShelterPlaced();
       offShelterChanged();
       offSleep();
@@ -2693,7 +2786,42 @@ export default function App() {
     saveNow();
   };
 
+  /**
+   * Inventory Place press on a lit-torch row: INSTANT AT
+   * HER FEET (settled design — the preview ghost is the
+   * house/fire pattern, heavy for a torch). Grant FIRST
+   * (Systems placeTorch consumes one carried lit-torch;
+   * failure touches nothing), then the entity place
+   * (Background primitive, emits torch:placed →
+   * refreshTorches). Panel action, not a world action:
+   * the panel stays open, the count drops, the note
+   * carries the result — the Light button's shape, not
+   * the preview flow's.
+   */
+  const handlePlaceLitTorch = () => {
+    const player = playerRef.current;
+    if (!player) return;
+    const outcome = grantPlaceTorch(inventory, player.x, player.z);
+    // Equality check, not truthiness: non-strict tsc does
+    // not narrow this union's boolean discriminant on
+    // truthiness (see the torch Light button handler).
+    if (outcome.placed === false) {
+      setTorchNote(outcome.reason);
+      return;
+    }
+    torchState.placeTorch(outcome.torch.x, outcome.torch.z);
+    refreshInventory();
+    saveNow();
+    setTorchNote('Placed a lit torch.');
+  };
+
   const handlePlaceItem = (itemId: string) => {
+    // Placed torches never enter the preview flow — the
+    // branch above places instantly at her feet.
+    if (itemId === ITEMS.litTorch) {
+      handlePlaceLitTorch();
+      return;
+    }
     const fireType = FIRE_ITEM_TO_TYPE[itemId];
     const houseType = HOUSE_ITEM_TO_TYPE[itemId];
     const loom = itemId === ITEMS.loom;
@@ -3163,6 +3291,50 @@ export default function App() {
     recomputeAnchors();
   };
 
+  // Placed-torch menu actions (chip menu, Adam's placed-
+  // torch order): one torch, one action — Pick up returns
+  // it lit. Close only closes; the menu stays open after
+  // a failed pickup (the torch is still there).
+  const torchMenuActions = (): ContextAction[] => [
+    { id: 'pick-up', label: 'Pick up' },
+    { id: 'close', label: 'Close' },
+  ];
+
+  const handleTorchAction = (torchId: string, actionId: string) => {
+    const torch = torchState.get(torchId);
+    if (!torch) return;
+    const anchor = torchAnchors.find((a) => a.torch.id === torchId) ?? null;
+    const say = (text: string, tone: FeedbackTone) => {
+      if (anchor) showFeedback(text, tone, anchor.x, anchor.y);
+    };
+    if (actionId === 'close') {
+      setSelectedTorchId(null);
+      return;
+    }
+    if (actionId === 'pick-up') {
+      // Grant FIRST, then the entity removal — the
+      // pile-pickup rule (take granted only): a full pack
+      // grants 0, the torch stays placed, the menu stays
+      // open; a grant of 1 removes the entity (emits
+      // torch:removed → refreshTorches) and the menu
+      // closes explicitly. Pickup returns 'lit-torch',
+      // lit not unlit; no hunger gate (a move, like
+      // drop/pickup, not a build).
+      const grant = grantPickupTorch(inventory);
+      if (grant.granted === 0) {
+        say('Pack full — no room.', 'blocked');
+        return;
+      }
+      torchState.removeTorch(torchId);
+      setSelectedTorchId(null);
+      say('Picked up a lit torch.', 'gain');
+      refreshInventory();
+      saveNow();
+    }
+    setPlacedTorches(torchState.snapshot());
+    recomputeAnchors();
+  };
+
   // Pile menu actions (chip menu, Adam's full pile ruling):
   // selective take + deposit, scoped to the pile's item.
   // Deposit is disabled when she carries none of it (the
@@ -3417,6 +3589,18 @@ export default function App() {
     selectedFire === undefined
       ? null
       : (fireAnchors.find((a) => a.fire.id === selectedFire.id) ?? null);
+
+  // The torch whose menu is open, with its anchor — the
+  // fire pattern, live: the menu renders from placedTorches,
+  // so a picked-up torch leaves the menu with nothing.
+  const selectedTorch =
+    selectedTorchId === null
+      ? undefined
+      : placedTorches.find((t) => t.id === selectedTorchId);
+  const selectedTorchAnchor =
+    selectedTorch === undefined
+      ? null
+      : (torchAnchors.find((a) => a.torch.id === selectedTorch.id) ?? null);
 
   // The pile whose menu is open, with its anchor.
   // Live menu pile: the menu renders from piles state, not a
@@ -3760,6 +3944,13 @@ export default function App() {
             </Fragment>
           );
         })}
+        {torchAnchors.map(({ torch, x, y }) => (
+          <Fragment key={torch.id}>
+            <WorldAnchor x={x} y={y} interactive>
+              <TorchChip onSelect={() => setSelectedTorchId(torch.id)} />
+            </WorldAnchor>
+          </Fragment>
+        ))}
         {pileAnchors.map(({ pile, x, y }) => {
           const total = pile.stacks.reduce(
             (sum, stack) => sum + stack.quantity,
@@ -3795,6 +3986,20 @@ export default function App() {
               actions={fireMenuActions(selectedFire)}
               onSelect={(id) => handleFireAction(selectedFire.id, id)}
               onClose={() => setSelectedFireId(null)}
+            />
+          </WorldAnchor>
+        ) : null}
+        {selectedTorch && selectedTorchAnchor ? (
+          <WorldAnchor
+            x={selectedTorchAnchor.x}
+            y={selectedTorchAnchor.y}
+            interactive
+          >
+            <ContextMenu
+              objectName="Lit Torch"
+              actions={torchMenuActions()}
+              onSelect={(id) => handleTorchAction(selectedTorch.id, id)}
+              onClose={() => setSelectedTorchId(null)}
             />
           </WorldAnchor>
         ) : null}
