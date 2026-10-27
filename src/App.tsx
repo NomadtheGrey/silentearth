@@ -632,6 +632,14 @@
  *   fallback + new-world meta default). Saved games keep
  *   their saved cameraMode; V/C cycling + Options
  *   perspective control untouched. App.tsx only.
+ * - HUNGER BAR + NUMBER, LIVE (Adam, 2026-10-26 — DEV brief):
+ *   the HUD hunger indicator now shows the meter itself — a
+ *   bar filled to hunger.value() plus the rounded integer
+ *   beside it, stage text as-is — via an optional value prop
+ *   on the same indicator, refreshed on the existing 1 s tick
+ *   and on eat. No second hunger value anywhere; the number
+ *   is Math.round, never the raw drain float. App.tsx +
+ *   HungerIndicator; no game/systems change.
  * POINTER DISCIPLINE: overlays are pointer-events-none except the
  * small interactive pieces (HUD buttons, panels, harvest buttons),
  * so world clicks — including the first-person mouse-capture click
@@ -1066,6 +1074,11 @@ export default function App() {
   const [hungerStage, setHungerStage] = useState<HungerStage>(
     hunger.stage(),
   );
+  // Render mirror of the same one meter (hunger.value(), 0–100)
+  // — not a second value. Refreshed on the 1 s tick and on eat,
+  // alongside the stage, so the indicator's bar + number move
+  // with the meter.
+  const [hungerValue, setHungerValue] = useState<number>(hunger.value());
 
   // The shell owns the one wardrobe, like the one inventory and
   // the one hunger meter. Wear/remove go through it; capacity
@@ -1604,10 +1617,11 @@ export default function App() {
       getHungerStage: () => hunger.stage(),
     });
     // Game clock: drain hunger in real seconds and refresh the
-    // HUD stage, and advance friction lighting waits (display:
-    // 'waiting' → 'ready' once the wait passes). setHungerStage
-    // with an unchanged stage bails out in React, so
-    // steady-state ticks cost no re-render.
+    // HUD stage + meter value, and advance friction lighting
+    // waits (display: 'waiting' → 'ready' once the wait
+    // passes). The value mirror changes every draining tick,
+    // so the indicator's bar re-renders on the tick; the stage
+    // setter alone bails out when the stage is unchanged.
     const hungerTimer = window.setInterval(() => {
       // PAUSE GATE: while the engine flag is set, the shell
       // clock freezes too — no hunger drain, no lighting
@@ -1618,6 +1632,7 @@ export default function App() {
       if (pausedRef.current) return;
       hunger.tick(1);
       setHungerStage(hunger.stage());
+      setHungerValue(hunger.value());
       fireState.advanceLighting(Date.now());
       // Drive every tracked Systems fire's lighting clock
       // alongside the engine's (the bridge's tick half).
@@ -2157,6 +2172,7 @@ export default function App() {
     try {
       const result = eat(hunger, inventory, itemId);
       setHungerStage(result.stage);
+      setHungerValue(hunger.value());
       setEatNote(`Ate ${result.item} (+${result.nutrition} hunger).`);
     } catch (error) {
       setEatNote(
@@ -3030,7 +3046,7 @@ export default function App() {
             <WitchHealth />
           </div>
           <div className="mt-2">
-            <HungerIndicator stage={hungerStage} />
+            <HungerIndicator stage={hungerStage} value={hungerValue} />
           </div>
           <ForageHint stage={hungerStage} />
           <div className="mt-2">
