@@ -893,9 +893,11 @@ export const SOURCES: HarvestSourceDef[] = [
     description:
       'Tan-capped mushroom, smooth with no spots — the safe one. ' +
       'Its toxic lookalike wears a rust-red cap with pale spots; ' +
-      'when in doubt, leave it.',
+      'when in doubt, leave it. Gather-exempt food (Adam 2026-10-27) — ' +
+      'she can still pick it when too-hungry.',
     harvestable: true,
     permitTier: 'hand',
+    hungerExempt: true,
     primaryYield: 'EDIBLE_MUSHROOM',
     secondaryYields: [],
     provenance: 'draft',
