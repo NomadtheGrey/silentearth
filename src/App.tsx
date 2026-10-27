@@ -648,6 +648,16 @@
  *   and 16 px gaps, no overlap. Labels, pulse-until-first-use,
  *   touch ids, and gesture ownership unchanged. App.tsx
  *   bullet + TouchControls positions only.
+ * - TRAP SAVE WIRING, LIVE (Adam, 2026-10-27 — DEV brief,
+ *   Systems format half 4f3fa69): placed traps survive a
+ *   refresh — saveNow passes trapState.snapshot() as
+ *   draft.traps, and boot restores via trapState.restore()
+ *   BEFORE the renderer is constructed (restore is silent,
+ *   and the constructor's initial trap build renders the
+ *   restored markers; no new renderer API, no per-trap
+ *   emits). Regenerate clears traps via setWorldGen, so a
+ *   new world saves empty; old saves load traps: [].
+ *   App.tsx only; no game/systems change.
  * POINTER DISCIPLINE: overlays are pointer-events-none except the
  * small interactive pieces (HUD buttons, panels, harvest buttons),
  * so world clicks — including the first-person mouse-capture click
@@ -1318,6 +1328,11 @@ export default function App() {
             x: pile.x,
             z: pile.z,
           })),
+          // TRAP SAVE WIRING: the live trap set rides every
+          // save (snapshot as-is — ids + types verbatim, no
+          // filtering; serializeSave writes them verbatim and
+          // trapState.restore() validates on load).
+          traps: trapState.snapshot(),
         }),
       );
     } catch {
@@ -1468,6 +1483,30 @@ export default function App() {
     if (!container) return;
     const gen = genRef.current;
     const player = new PlayerController(gen.findSpawn());
+    // TRAP SAVE WIRING (restore-before-first-build): trapState.
+    // restore() is silent — no 'trap:placed' emit — and the
+    // renderer builds trap markers once at construction from
+    // live trapState (plus on 'trap:placed' thereafter), so
+    // restored traps must be in state BEFORE construction, or
+    // they render nothing until the next placement. No new
+    // renderer API, no per-trap emits. Guarded by the
+    // saveRestoredRef check (checked, not set, here — the
+    // block below sets it and restores the rest), so a second
+    // boot-effect run cannot re-restore stale traps over
+    // gameplay traps. SavedTrap.type is string where
+    // PlacedTrap.type is TrapType, so the type rides a cast;
+    // restore() drops anything that is not a real trap type.
+    if (!saveRestoredRef.current) {
+      const bootSaved = bootSaveRef.current;
+      if (bootSaved) {
+        trapState.restore(
+          (bootSaved.traps ?? []).map((trap) => ({
+            ...trap,
+            type: trap.type as TrapType,
+          })),
+        );
+      }
+    }
     const renderer = new WorldRenderer(container, gen, player);
     player.attach(renderer.domElement);
     rendererRef.current = renderer;
