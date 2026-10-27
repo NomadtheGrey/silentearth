@@ -194,14 +194,18 @@ interface LoadedChunk {
 /**
  * Carried-candle light tunables (Adam 2026-10-26 — lane-decided
  * starting values for his pin pass; three 0.186 uses physical
- * point-light units, so intensity reads in candela with decay 2:
- * ~2.5 at 2 m, ~0.6 at 4 m, ~0.16 at 8 m — a warm pool around
- * her, not a floodlight. Err toward useful: night foraging is
- * near-impossible without this. Always lit, both views.
+ * point-light units, so intensity reads in candela with decay 2.
+ * RAISED 2026-10-27 (Adam: "fairly useless now" — the starting
+ * light goes up until genuinely useful): ~7.5 at 2 m, ~1.9 at
+ * 4 m, ~0.8 at 6 m — a real working pool around her, not a hint.
+ * Headroom reserved for the torch (Adam 2026-10-27: torch stays
+ * brighter — well-lit at 6 m, dim to ≥12 m — so the candle stops
+ * here; the torch profile is tuned above these numbers when its
+ * item lands). Always lit, both views.
  */
 export const CANDLE_LIGHT_COLOR = 0xffb45e;
-export const CANDLE_LIGHT_INTENSITY = 10;
-export const CANDLE_LIGHT_DISTANCE = 16;
+export const CANDLE_LIGHT_INTENSITY = 30;
+export const CANDLE_LIGHT_DISTANCE = 22;
 export const CANDLE_LIGHT_DECAY = 2;
 export const CANDLE_FLICKER_AMPLITUDE = 0.12;
 /**
