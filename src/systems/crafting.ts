@@ -104,6 +104,12 @@ export interface CanCraftResult {
   toolStageShortfall?: { required: number; held: number };
   /** True when the recipe states a station and the context mismatches. */
   stationMismatch: boolean;
+  /**
+   * True when the recipe states requiresCreek and the context
+   * says not near a creek. A null nearCreek leaves this
+   * false (gate off — see Recipe.requiresCreek).
+   */
+  creekMismatch: boolean;
   /** The station the recipe requires, when it states one. */
   requiredStation?: CraftingStation;
 }
@@ -128,12 +134,16 @@ function missingFor(
 
 /**
  * Pure check: can this recipe be crafted from this inventory, at this
- * station context? Never mutates the inventory.
+ * station context? Never mutates the inventory. A recipe stating
+ * requiresCreek mismatches unless nearCreek is true; a null
+ * nearCreek leaves the creek gate off (transitional — see
+ * Recipe.requiresCreek).
  */
 export function canCraft(
   recipe: Recipe,
   inventory: CraftingInventory,
   station: StationContext = null,
+  nearCreek: boolean | null = null,
 ): CanCraftResult {
   const missingIngredients = missingFor(recipe.ingredients, inventory);
   const missingRequirements = recipe.requires
@@ -171,12 +181,19 @@ export function canCraft(
     recipe.station !== 'hand' &&
     station !== recipe.station;
 
+  // Creek rule: a stated requiresCreek mismatches only when the
+  // shell positively says not near a creek. Null input leaves
+  // the gate off (transitional — see Recipe.requiresCreek).
+  const creekMismatch =
+    recipe.requiresCreek === true && nearCreek === false;
+
   const ok =
     missingIngredients.length === 0 &&
     missingRequirements.length === 0 &&
     missingUpgradeFrom.length === 0 &&
     toolStageShortfall === undefined &&
-    !stationMismatch;
+    !stationMismatch &&
+    !creekMismatch;
 
   return {
     ok,
@@ -185,6 +202,7 @@ export function canCraft(
     missingUpgradeFrom,
     toolStageShortfall,
     stationMismatch,
+    creekMismatch,
     requiredStation: recipe.station,
   };
 }

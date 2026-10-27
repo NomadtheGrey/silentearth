@@ -41,6 +41,7 @@ export const ITEMS = {
   // Harvest / raw ingredients (prototype names in the design doc).
   snapWood: 'snap-wood',
   tenderVines: 'tender-vines',
+  grass: 'grass',
   peatMoss: 'peat-moss',
   downedOak: 'downed-oak',
   riverSilt: 'river-silt',
@@ -98,6 +99,12 @@ export const ITEMS = {
   // see torch.ts for the batch lighting action).
   torch: 'torch',
   litTorch: 'lit-torch',
+  // Paper chain (2026-10-27 — grimoire materials; see the
+  // paper-chain recipes below for the chain).
+  plantPulp: 'plant-pulp',
+  pressedSheets: 'pressed-sheets',
+  paper: 'paper',
+  grimoire: 'grimoire',
   // Traps (brainstorm only — nothing picked; see their notes).
   snare: 'snare',
   fishWeirTrap: 'fish-weir-trap',
@@ -177,6 +184,20 @@ export interface Recipe {
    * First use: pitfall, stage 1 (Adam, 2026-10-26).
    */
   requiresToolStage?: number;
+  /**
+   * Creek-water requirement (paper chain, Adam 2026-10-27):
+   * the recipe must be crafted near a creek. PROXIMITY, not
+   * carried water — water-carrying is NOT invented — and
+   * NOT a station: a creek is a place, not a structure.
+   * Checked by canCraft + executeCraft ONLY when the shell
+   * supplies creek proximity (nearCreek input); a null /
+   * omitted input leaves the gate OFF (transitional, like
+   * hunger omitted — until Background's water adapter
+   * lands, the shell cannot compute creek proximity, so
+   * the recipe crafts by hand anywhere meanwhile).
+   * First use: plant-pulp.
+   */
+  requiresCreek?: boolean;
   /**
    * Craft-places (Adam, 2026-10-26; DEV correction: Systems
    * does NOT emit): crafting this recipe places right there
@@ -359,6 +380,76 @@ const DRAFT_RECIPES: Recipe[] = [
       'are lane-decided for the pin pass; no tallow/resin ' +
       '(not in the game). Placeable candles are NOT in this ' +
       'order (later, after torches).',
+  },
+
+  // --- Paper chain (Adam, DEV chat 2026-10-27, solid-points
+  // round): plant fiber + creek water -> pulp -> pressed
+  // sheets -> dried paper -> grimoire. ALL quantities below
+  // are lane-decided DRAFT for Adam's pin pass. Pressing +
+  // drying are instant recipe steps (like all crafts) — no
+  // timed press/dry mechanic is invented here.
+  {
+    id: 'plant-pulp',
+    name: 'Plant Pulp',
+    status: 'draft',
+    output: { item: ITEMS.plantPulp, quantity: 2 },
+    ingredients: [i(ITEMS.tenderVines, 2), i(ITEMS.grass, 2)],
+    station: 'hand',
+    requiresCreek: true,
+    notes:
+      'DRAFT. Fiber + creek water -> pulp. Fiber sources, ' +
+      'both on hand: tender-vines (reed harvests yield ' +
+      'tender-vines — reedBed primaryYield is TENDER_VINES, ' +
+      'so reeds are covered without a reeds item) + grass. ' +
+      'Water shape decided (lane call, flagged): PROXIMITY ' +
+      'to a creek (requiresCreek), NOT carried water (never ' +
+      'invented) and NOT a station (a creek is a place, not ' +
+      'a structure). Gate is transitional: until ' +
+      "Background's water adapter lands, the shell cannot " +
+      'compute creek proximity, so pulp crafts by hand ' +
+      'anywhere meanwhile — the gate arms the moment the ' +
+      'shell supplies nearCreek. Quantities draft.',
+  },
+  {
+    id: 'pressed-sheets',
+    name: 'Pressed Sheets',
+    status: 'draft',
+    output: { item: ITEMS.pressedSheets, quantity: 2 },
+    ingredients: [i(ITEMS.plantPulp, 2)],
+    station: 'hand',
+    notes:
+      'DRAFT. Pulp -> pressed sheets, by hand. Pressing is ' +
+      'an instant recipe step (no timed press invented). ' +
+      'Quantities draft.',
+  },
+  {
+    id: 'paper',
+    name: 'Paper',
+    status: 'draft',
+    output: { item: ITEMS.paper, quantity: 2 },
+    ingredients: [i(ITEMS.pressedSheets, 2)],
+    station: 'hand',
+    notes:
+      'DRAFT. Pressed sheets -> dried paper, by hand. ' +
+      'Drying is an instant recipe step (no timed drying ' +
+      'invented); dry paper weighs less than damp sheets ' +
+      '(0.25 lb vs 0.5 lb). Quantities draft.',
+  },
+  {
+    id: 'grimoire',
+    name: 'Grimoire',
+    status: 'draft',
+    output: { item: ITEMS.grimoire, quantity: 1 },
+    ingredients: [i(ITEMS.paper, 4), i(ITEMS.twinedCordage, 2)],
+    station: 'hand',
+    notes:
+      'DRAFT. Grimoire assembly = paper + cordage binding, ' +
+      'by hand. Cover TBD (flagged — NOT in this recipe; ' +
+      'a cover item comes later, not invented here). PAGES ' +
+      'NOT BUILT: the book is an object now; page-unlock ' +
+      '(record) behavior ties to the discovery mechanic ' +
+      '(still proposal, not pinned) and is a follow-up ' +
+      'when discovery pins. Quantities draft.',
   },
 
   // --- Tool ladder: ONE tool, evolving. Upgrade costs, not rebuilds.

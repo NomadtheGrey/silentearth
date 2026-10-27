@@ -85,11 +85,11 @@
  * 1, 2, 4, 5, or 10):
  * - 0.1 lb: acorns, bog-berries, elderberries, luminous-spores.
  * - 0.25 lb: dry-kindling, twined-cordage, grass, salt-crystal,
- *   edible-mushroom, poison-mushroom, apple.
+ *   edible-mushroom, poison-mushroom, apple, paper.
  * - 0.5 lb: tender-vines, peat-moss, bone, flint, pointy-hat,
- *   mossy-mittens.
+ *   mossy-mittens, plant-pulp, pressed-sheets.
  * - 1 lb: snap-wood, river-silt, clay, dirt, mud, garden-trowel,
- *   sharp-trowel, shawl, umbrella, clay-pot.
+ *   sharp-trowel, shawl, umbrella, clay-pot, grimoire.
  * - 2 lb: river-stone, downed-oak, spade, axe-trowel,
  *   hooded-cloak, bog-boots.
  * - 4 lb: spade-axe, clay-brick, and homes / fires / stations
@@ -220,6 +220,8 @@ export const ITEM_WEIGHT_LB: Readonly<Record<string, number>> = {
   mushrooms: 0.25, // lane judgment: plural food family
   'poison-mushrooms': 0.25, // lane judgment: plural food family
   apple: 0.25,
+  // Paper chain: dry paper lighter than damp sheets.
+  [ITEMS.paper]: 0.25,
   // 0.5 lb
   [ITEMS.tenderVines]: 0.5,
   [ITEMS.peatMoss]: 0.5,
@@ -230,6 +232,9 @@ export const ITEM_WEIGHT_LB: Readonly<Record<string, number>> = {
   [ITEMS.litTorch]: 0.5,
   [ITEMS.pointyHat]: 0.5,
   [ITEMS.mossyMittens]: 0.5,
+  // Paper chain: wet mass / damp sheets.
+  [ITEMS.plantPulp]: 0.5,
+  [ITEMS.pressedSheets]: 0.5,
   // 1 lb
   [ITEMS.snapWood]: 1,
   [ITEMS.riverSilt]: 1,
@@ -241,6 +246,7 @@ export const ITEM_WEIGHT_LB: Readonly<Record<string, number>> = {
   [ITEMS.shawl]: 1,
   [ITEMS.umbrella]: 1,
   [ITEMS.clayPot]: 1,
+  [ITEMS.grimoire]: 1,
   // 2 lb
   [ITEMS.riverStone]: 2,
   [ITEMS.downedOak]: 2,
@@ -419,6 +425,10 @@ export const ITEM_DISPLAY_NAMES: Readonly<Record<string, string>> = {
   umbrella: 'Umbrella',
   torch: 'Torch',
   'lit-torch': 'Lit Torch',
+  'plant-pulp': 'Plant Pulp',
+  'pressed-sheets': 'Pressed Sheets',
+  paper: 'Paper',
+  grimoire: 'Grimoire',
   snare: 'Snare',
   'fish-weir-trap': 'Fish / Weir Trap',
   'pot-trap': 'Pot Trap',

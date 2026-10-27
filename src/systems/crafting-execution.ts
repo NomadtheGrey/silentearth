@@ -193,6 +193,7 @@ export function executeCraft(
   inventory: PersonalInventory,
   station: StationInput = null,
   hunger: HungerState | null = null,
+  nearCreek: boolean | null = null,
 ): CraftExecutionResult {
   // Hunger gate, before anything is consumed.
   if (hunger !== null && hunger.isTooHungry()) {
@@ -234,6 +235,21 @@ export function executeCraft(
           `${recipe.requiresToolStage} or better, have stage ${heldStage}.`,
       );
     }
+  }
+
+  // Creek gate, before anything is consumed. A stated
+  // requiresCreek reads creek proximity from INPUT only
+  // (same input-only shape as the station gate — Systems
+  // never computes proximity). Null / omitted input leaves
+  // the gate OFF (transitional, like hunger omitted):
+  // until Background's water adapter lands, the shell
+  // cannot compute creek proximity, so the recipe crafts
+  // by hand anywhere meanwhile. When the input is supplied
+  // and false, the craft refuses before consuming anything.
+  if (recipe.requiresCreek === true && nearCreek === false) {
+    throw new Error(
+      `Cannot craft ${recipe.name}: requires creek water — craft near a creek.`,
+    );
   }
 
   // Engine station for craftIntoInventory: the required station when
