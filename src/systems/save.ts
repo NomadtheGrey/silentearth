@@ -68,12 +68,14 @@
  * - world state (Background's persistence seams, a39f47f):
  *   fires[].lighting (LightingProcess shape; lit needs no
  *   field — fires[].lit already exists), harvestState
- *   (HarvestStateSnapshot shape), sky { cycleT }, facing
- *   { yaw, pitch }. Same additive-field rule: old saves load
- *   defaults (empty harvest snapshot, dawn sky, default
- *   look), never break. Invalid entries pass through —
- *   the engine restores validate and drop (replace, not
- *   merge; null snapshots ignored there).
+ *   (HarvestStateSnapshot shape), sky { cycleT,
+ *   daysElapsed? } (dawn count for the moon-phase cycle —
+ *   absent on old saves, which load as current, i.e. 0),
+ *   facing { yaw, pitch }. Same additive-field rule: old
+ *   saves load defaults (empty harvest snapshot, dawn sky,
+ *   default look), never break. Invalid entries pass
+ *   through — the engine restores validate and drop
+ *   (replace, not merge; null snapshots ignored there).
  *   APP WIRING (live): saveNow passes the pile
  *   singleton's snapshot stacks as draft.piles, and boot
  *   restore re-places each saved kind through
@@ -309,10 +311,18 @@ export function emptySavedHarvestState(): SavedHarvestState {
 /**
  * Sky state, as saved. Structural mirror of the game layer's
  * SkySnapshot (sky.ts) by literal: cycle position t in [0,1)
- * ONLY (month is an input, not state). 0 = dawn (sky.ts).
+ * + dawn count daysElapsed (month is an input, not state).
+ * 0 = dawn (sky.ts). daysElapsed is OPTIONAL, mirroring
+ * SkySnapshot: absent on old saves (Background's restore
+ * treats absence via its dawn rule — boot from a fresh rig
+ * never jumps backward, so old saves still load at 0, as
+ * before). Present + finite on new saves, it wins
+ * absolutely in restore — a refresh no longer rewinds the
+ * moon phase toward the seed base.
  */
 export interface SavedSky {
   cycleT: number;
+  daysElapsed?: number;
 }
 
 /** Dawn default: the sky default for saves predating it. */
@@ -528,7 +538,21 @@ export function serializeSave(draft: SaveDraft): SaveData {
             })),
           }
         : emptySavedHarvestState(),
-    sky: draft.sky !== undefined ? { ...draft.sky } : { ...DAWN_SAVED_SKY },
+    // Sky: built EXPLICITLY, not spread — the old spread
+    // hid the daysElapsed field (it rode along invisibly
+    // while deserialize stripped it, so the moon phase
+    // rewound on every refresh). daysElapsed rides only
+    // when the draft carries it; old drafts (cycleT only)
+    // serialize cycleT only, as before.
+    sky:
+      draft.sky !== undefined
+        ? {
+            cycleT: draft.sky.cycleT,
+            ...(draft.sky.daysElapsed !== undefined
+              ? { daysElapsed: draft.sky.daysElapsed }
+              : {}),
+          }
+        : { ...DAWN_SAVED_SKY },
     facing:
       draft.facing !== undefined
         ? { ...draft.facing }
@@ -820,8 +844,18 @@ export function deserializeSave(value: unknown): SaveData | null {
     const harvestState: SavedHarvestState = isRecord(value.harvestState)
       ? (value.harvestState as unknown as SavedHarvestState)
       : emptySavedHarvestState();
+    // Sky: daysElapsed passes through ONLY when a finite
+    // number — absent or non-finite loads as absent (the
+    // old-save shape), and Background's restore handles
+    // absence via its dawn rule. Restore normalizes
+    // (floor, max 0); parse does not duplicate that.
     const sky: SavedSky = isRecord(value.sky)
-      ? { cycleT: value.sky.cycleT as number }
+      ? {
+          cycleT: value.sky.cycleT as number,
+          ...(isFiniteNumber(value.sky.daysElapsed)
+            ? { daysElapsed: value.sky.daysElapsed }
+            : {}),
+        }
       : { ...DAWN_SAVED_SKY };
     const facing: SavedFacing = isRecord(value.facing)
       ? {
