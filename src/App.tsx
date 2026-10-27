@@ -1977,21 +1977,21 @@ export default function App() {
     const ownedBefore = ownedToolItem(inventory);
     try {
       // Trap crafts place at her feet (Systems' place path):
-      // the shell passes position + its placement callback on
-      // every craft (harmless for ordinary grants —
-      // executeCraft ignores it unless the recipe places a
-      // trap). For traps this runs only on the confirm's Yes
-      // — the Popup above gates first, No/Close never reaches
-      // execution.
-      //
-      // Placement goes through trapState.placeTrap (store +
-      // emit), NOT a raw bus.emit: the renderer rebuilds its
-      // trap markers from trapState on 'trap:placed', so an
-      // event without a stored trap would render nothing.
-      // placesTrap is set only on the five trap recipes, whose
-      // ids are exactly TrapType — the cast is safe by
-      // construction. One placement per craft: executeCraft
-      // calls this once, placeTrap stores + emits once.
+      // the shell passes position + a placer on every craft
+      // (harmless for ordinary grants — executeCraft ignores it
+      // unless the recipe places a trap). For traps this runs
+      // only on the confirm's Yes — the Popup above gates first,
+      // No/Close never reaches execution. SEAM (Background's
+      // placed-trap landing 8e5da78): the placer is trapState.
+      // placeTrap — it STORES the trap and emits 'trap:placed',
+      // and the renderer reads trapState. NEVER a raw bus.emit
+      // here: an event without the trapState record would leave
+      // renderer and state diverged. Exactly one placer per
+      // craft: this callback, via executeCraft — never both.
+      // RESTORED 2026-10-26: UI's forage-hints push (d500416)
+      // clobbered this wiring (whole-file push from a
+      // pre-placement App) — without it trap crafts throw for
+      // missing placement context and nothing places.
       const result = executeCraft(
         recipe,
         inventory,
@@ -2000,11 +2000,11 @@ export default function App() {
         {
           x: position.x,
           z: position.z,
-          emitTrapPlaced: (placed) =>
+          emitTrapPlaced: (payload) =>
             trapState.placeTrap(
-              placed.type as TrapType,
-              placed.x,
-              placed.z,
+              payload.type as TrapType,
+              payload.x,
+              payload.z,
             ),
         },
       );

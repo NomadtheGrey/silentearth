@@ -127,17 +127,24 @@ import type { CraftingStation, ItemId, Recipe } from './recipes';
 export type StationInput = CraftingStation | CraftingStation[] | null;
 
 /**
- * Where a placed trap goes + how its event leaves this module.
- * The shell passes the player position at craft time and its bus
- * emit as a callback — the bus lives in the shell/game layer, so
- * this module never imports it. `type` in the payload is the trap
- * recipe id (== its output item for all five traps).
+ * Where a placed trap goes + how its placing happens.
+ * The shell passes the player position at craft time and a
+ * placer callback — the placing + event live in the shell/game
+ * layer, so this module never imports them. `type` in the
+ * payload is the trap recipe id (== its output item for all
+ * five traps). SEAM (Background's placed-trap landing
+ * 8e5da78): the callback MUST be trapState.placeTrap — it
+ * stores the trap AND emits 'trap:placed', and the renderer
+ * reads trapState. A raw bus.emit here would fire an event
+ * with no trapState record behind it (renderer/state
+ * divergence), and calling both would place twice. Exactly
+ * one placer per craft: this callback, via executeCraft.
  */
 export interface TrapPlacementContext {
   /** Player position at craft time — the placed trap's spot. */
   x: number;
   z: number;
-  /** Shell-provided emitter for the 'trap:placed' event. */
+  /** Shell-provided placer (trapState.placeTrap). */
   emitTrapPlaced: (payload: {
     type: string;
     x: number;
