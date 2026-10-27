@@ -42,6 +42,8 @@ import { FIRE_DEFS } from './fire';
 import { shelterState, HOUSE_DEFS } from './shelter';
 import { loomState } from './loomState';
 import { pileState } from './pileState';
+import { trapState } from './trapState';
+import type { TrapType } from './traps';
 import { pauseState } from './pause';
 import { SkyRig } from './sky';
 import { SEASON_START_MONTH, seasonalWeatherAt } from './weather';
@@ -187,6 +189,8 @@ export class WorldRenderer {
    * the placed-group unsubscribe list (same dispose path).
    */
   private pileGroup: THREE.Group | null = null;
+  /** Placed-trap markers, rebuilt on 'trap:placed' (below). */
+  private trapGroup: THREE.Group | null = null;
   /**
    * Sky rig (Adam 2026-10-26): dome + sun + moon + stars + clouds
    * + the lights they drive. Owns the day/night time driver (see
@@ -261,6 +265,10 @@ export class WorldRenderer {
       bus.on('pile:removed', rebuildPiles),
     );
     this.rebuildPileGroup();
+    // Placed traps rebuild on their own event, like piles.
+    const rebuildTraps = (): void => this.rebuildTrapGroup();
+    this.unsubPlaced.push(bus.on('trap:placed', rebuildTraps));
+    this.rebuildTrapGroup();
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.setSize(container.clientWidth, container.clientHeight);
@@ -390,6 +398,9 @@ export class WorldRenderer {
     // Dropped piles belong to the old world's map too.
     pileState.clear();
     this.rebuildPileGroup();
+    // Placed traps belong to the old world's map too.
+    trapState.clear();
+    this.rebuildTrapGroup();
     this.gen = wrapGenWithState(gen);
     // A new world gets a new sky: fresh stars for the seed + the
     // cycle restarts at dawn. Skipped on the dispose path
@@ -843,6 +854,81 @@ export class WorldRenderer {
     }
     this.scene.add(group);
     this.pileGroup = group;
+  }
+
+  /**
+   * One trap's ground marker (lane-decided, flagged for Adam's
+   * pin pass — simple, readable at a glance, no behavior):
+   * snare = flat loop + 2 stakes; weir = woven basket + rim;
+   * pot = terracotta pot; pitfall = dark disc + moss ring;
+   * deadfall = log + stone weight.
+   */
+  private trapMarker(type: TrapType): THREE.Group {
+    const g = new THREE.Group();
+    const add = (mesh: THREE.Mesh, x = 0, y = 0, z = 0): void => {
+      mesh.position.set(x, y, z);
+      g.add(mesh);
+    };
+    if (type === 'snare') {
+      const loop = new THREE.Mesh(new THREE.TorusGeometry(0.18, 0.02, 6, 12), lambert(0x6a6a3a));
+      loop.rotation.x = -Math.PI / 2;
+      add(loop, 0, 0.05, 0);
+      const stakeGeo = new THREE.CylinderGeometry(0.02, 0.02, 0.4, 5);
+      const s1 = new THREE.Mesh(stakeGeo, lambert(0x6b4a2f));
+      s1.rotation.z = 0.15;
+      add(s1, -0.2, 0.2, 0);
+      const s2 = new THREE.Mesh(stakeGeo, lambert(0x6b4a2f));
+      s2.rotation.z = -0.15;
+      add(s2, 0.2, 0.2, 0);
+    } else if (type === 'fish-weir-trap') {
+      add(new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.18, 0.35, 10), lambert(0x8a7a4a)), 0, 0.18, 0);
+      const rim = new THREE.Mesh(new THREE.TorusGeometry(0.28, 0.03, 6, 12), lambert(0x8a7a4a));
+      rim.rotation.x = -Math.PI / 2;
+      add(rim, 0, 0.35, 0);
+    } else if (type === 'pot-trap') {
+      add(new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.16, 0.3, 10), lambert(0xb06a3a)), 0, 0.15, 0);
+      const rim = new THREE.Mesh(new THREE.TorusGeometry(0.22, 0.03, 6, 12), lambert(0xb06a3a));
+      rim.rotation.x = -Math.PI / 2;
+      add(rim, 0, 0.3, 0);
+    } else if (type === 'pitfall') {
+      const disc = new THREE.Mesh(new THREE.CircleGeometry(0.45, 14), lambert(0x140e06));
+      disc.rotation.x = -Math.PI / 2;
+      add(disc, 0, 0.02, 0);
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(0.45, 0.05, 6, 14), lambert(0x4a5a2a));
+      ring.rotation.x = -Math.PI / 2;
+      add(ring, 0, 0.03, 0);
+    } else {
+      // deadfall
+      const log = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.9, 8), lambert(0x6b4a2f));
+      log.rotation.z = Math.PI / 2;
+      add(log, 0, 0.12, 0);
+      add(new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.3, 0.3), lambert(0x78716c)), 0, 0.39, 0);
+    }
+    return g;
+  }
+
+  /** Rebuild the placed-trap markers from live trapState (pile-group pattern). */
+  private rebuildTrapGroup(): void {
+    if (this.trapGroup) {
+      this.scene.remove(this.trapGroup);
+      this.trapGroup.traverse((obj) => {
+        if (obj instanceof THREE.Mesh) {
+          obj.geometry.dispose();
+          const mat = obj.material;
+          if (Array.isArray(mat)) mat.forEach((m) => m.dispose());
+          else mat.dispose();
+        }
+      });
+      this.trapGroup = null;
+    }
+    const group = new THREE.Group();
+    for (const trap of trapState.snapshot()) {
+      const marker = this.trapMarker(trap.type);
+      marker.position.set(trap.x, 0, trap.z);
+      group.add(marker);
+    }
+    this.scene.add(group);
+    this.trapGroup = group;
   }
 
   /** Rebuild the spawned-object meshes for currently loaded chunks:
