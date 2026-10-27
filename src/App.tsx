@@ -1025,6 +1025,41 @@
  *   cameraMode, fixing the boot that left the engine in
  *   'third' for a saved first/behind game). Regenerate
  *   clears all four via the existing paths. App.tsx only.
+ * - SCRY BUTTON, LIVE (Adam, 2026-10-27 — DEV brief,
+ *   supersedes the no-button amendment: "We can have a
+ *   scry button when she approaches water. This let's
+ *   the player know there is magic."): approach still
+ *   water and a Scry button appears; press reveals the
+ *   camp arrows. SPLIT, NOT REWRITE (DEV): visibility =
+ *   isNearStillWater on player:moved (Systems 9927ddab
+ *   stands as the query, no rebuild); reveal = press
+ *   calls evaluateCampReveal directly (no wrapper).
+ *   The button shows only when near water AND at least
+ *   one camp exists AND nothing is revealed (UI's call,
+ *   flagged — no dead presses, no invented copy); it
+ *   hides while revealed and reappears on arrival
+ *   (dismiss) if she is still at water; re-press
+ *   re-reveals. WATERS (shell-side derivation, flagged
+ *   TEMPORARY + replaceable — deleted when Background's
+ *   adapter lands): river centerline samples at
+ *   RIVER_STEP, radius RIVER_WIDTH/2 (Systems'
+ *   prescribed shape), sampled ±64 m around her
+ *   along-course projection; ponds scanned from
+ *   generateChunk scatter in the 3x3 chunks around her,
+ *   radius 4.5 × scale (mirrors the renderer's pond
+ *   disc). Placement: bottom-centre above the
+ *   LocationChip, the PausedIndicator's seat — the two
+ *   never show together (Scry hides while paused);
+ *   hidden with any panel/modal open, like the
+ *   LocationChip. 44 px, same family as the pile
+ *   button; touch + desktop identical (parity). The
+ *   button IS the magic signal — no tutorial popup.
+ *   ARROWS GATE (plain): press sets the CampDivination
+ *   reveal state, but NO renderer arrow API exists yet,
+ *   so nothing visible happens on press until
+ *   Background's API lands. New ScryButton.tsx + App
+ *   wiring (state, moved evaluation, press, regenerate
+ *   dismiss).
  * POINTER DISCIPLINE: overlays are pointer-events-none except the
  * small interactive pieces (HUD buttons, panels, harvest buttons),
  * so world clicks — including the first-person mouse-capture click
@@ -1033,7 +1068,7 @@
  */
 
 import React, { Fragment, useEffect, useMemo, useRef, useState } from 'react';
-import { createWorldGen } from './game/worldgen';
+import { createWorldGen, type WorldGen } from './game/worldgen';
 import { WorldRenderer } from './game/renderer';
 import { PlayerController } from './game/player';
 import { bus, type EventMap } from './game/events';
@@ -1062,6 +1097,20 @@ import {
   HOUSE_DEFS,
   type HouseType,
 } from './game/shelter';
+import {
+  evaluateCampReveal,
+  isNearStillWater,
+  findCamps,
+  CampDivination,
+  type StillWaterBody,
+} from './systems/divination';
+import {
+  riverParamsFor,
+  riverCenterAt,
+  RIVER_STEP,
+  RIVER_WIDTH,
+  type RiverParams,
+} from './game/river';
 import { cycleSplit } from './game/sky';
 import { createSleepListener } from './game/sleep';
 import {
@@ -1072,6 +1121,7 @@ import {
   BEHIND_CAMERA_HEIGHT,
   BEHIND_LOOK_AHEAD,
   BEHIND_LOOK_HEIGHT,
+  CHUNK_SIZE,
 } from './constants';
 import type { CameraMode, BiomeWeights } from './types';
 import { Wardrobe, GARMENTS } from './systems/clothes';
@@ -1095,6 +1145,7 @@ import { TorchChip } from './ui/TorchChip';
 import type { ContextAction } from './ui/types';
 import { TouchControls } from './ui/TouchControls';
 import { LocationChip } from './ui/LocationChip';
+import { ScryButton } from './ui/ScryButton';
 import { PausedIndicator } from './ui/PausedIndicator';
 import { Popup } from './ui/Popup';
 import {
@@ -1490,6 +1541,54 @@ function toInventoryItem(
   };
 }
 
+// SHELL-SIDE STILL WATERS (scry button, Adam 2026-10-27 —
+// TEMPORARY + REPLACEABLE, flagged: no Background water
+// adapter has landed, so the shell derives the water list
+// Systems' divination.ts takes as input, from public game
+// queries only. DELETE this helper the day Background's
+// adapter lands and wire the button to that list instead.
+// Shape is exactly Systems' prescription (divination.ts):
+// ponds as their circle, the river as centerline samples
+// at RIVER_STEP with radius RIVER_WIDTH / 2. River: the
+// course is analytic, so samples are taken in a ±64 m
+// window around her along-course projection (the meander
+// amplitude caps at 40 m, so the closest centreline point
+// always falls inside; adjacent sample circles overlap —
+// diameter 5 m over a 4 m step — so the union covers the
+// ribbon continuously). Ponds: scatter in the 3x3 chunks
+// around her; radius mirrors the renderer's pond disc
+// (models.ts DISC_RADIUS pond 4.5 × the scatter scale —
+// ponds are not harvest targets, so no shrink applies).
+// Edge distances then follow Systems' rule exactly
+// (centre distance minus radius, clamped at 0).
+function stillWatersNear(
+  gen: WorldGen,
+  riverParams: RiverParams,
+  x: number,
+  z: number,
+): StillWaterBody[] {
+  const waters: StillWaterBody[] = [];
+  const along =
+    (x - riverParams.ox) * riverParams.dx +
+    (z - riverParams.oz) * riverParams.dz;
+  for (let t = along - 64; t <= along + 64; t += RIVER_STEP) {
+    const c = riverCenterAt(riverParams, t);
+    waters.push({ x: c.x, z: c.z, radius: RIVER_WIDTH / 2 });
+  }
+  const cx = Math.floor(x / CHUNK_SIZE);
+  const cz = Math.floor(z / CHUNK_SIZE);
+  for (let dcx = -1; dcx <= 1; dcx++) {
+    for (let dcz = -1; dcz <= 1; dcz++) {
+      for (const obj of gen.generateChunk(cx + dcx, cz + dcz).objects) {
+        if (obj.kind === 'pond') {
+          waters.push({ x: obj.x, z: obj.z, radius: 4.5 * obj.scale });
+        }
+      }
+    }
+  }
+  return waters;
+}
+
 export default function App() {
   const containerRef = useRef<HTMLDivElement>(null);
   const rendererRef = useRef<WorldRenderer | null>(null);
@@ -1701,6 +1800,32 @@ export default function App() {
     { torch: PlacedTorchEntity; x: number; y: number }[]
   >([]);
   const [selectedTorchId, setSelectedTorchId] = useState<string | null>(null);
+  // Scry button (Adam 2026-10-27 — DEV split, not a rewrite):
+  // visibility = near still water on movement, reveal = press
+  // only (Systems 9927ddab stands as the query). The shell
+  // owns one CampDivination: press reveals, arrival dismisses
+  // (persist-until-arrival, Systems' rule). The button shows
+  // only when near water AND at least one camp exists AND
+  // nothing is revealed (UI's call, flagged — no dead presses,
+  // no invented copy); it hides while revealed and reappears
+  // on arrival-dismiss if she is still at water. River params
+  // memoize per seed (findSpawn scans 200 m, so once per seed,
+  // refreshed on regenerate). ARROWS GATE: press sets reveal
+  // state only — no renderer arrow API exists yet.
+  const divinationRef = useRef(new CampDivination());
+  const riverParamsRef = useRef<{ seed: string; params: RiverParams } | null>(
+    null,
+  );
+  const [scryVisible, setScryVisible] = useState(false);
+  const getRiverParams = (gen: WorldGen): RiverParams => {
+    if (riverParamsRef.current?.seed !== gen.seed) {
+      riverParamsRef.current = {
+        seed: gen.seed,
+        params: riverParamsFor(gen.seed, gen.findSpawn()),
+      };
+    }
+    return riverParamsRef.current.params;
+  };
   // Pile chips (projected anchors, fire-chip pattern) and the
   // pile whose menu is open. The menu is LIVE, not a tap-time
   // snapshot: selectedPileId names the pile, and the menu
@@ -2256,6 +2381,27 @@ export default function App() {
       setPosition({ x, z });
       setBiomeText(formatWeights(genRef.current.weightsAt(x, z)));
       recomputeAnchors();
+      // SCRY VISIBILITY (DEV split): near still water, on
+      // movement — the button, not the reveal. While revealed,
+      // arrival dismisses (the buttonless off-switch) and the
+      // set refreshes (new houses count); otherwise the button
+      // shows exactly when a press could reveal something.
+      const gen = genRef.current;
+      const waters = stillWatersNear(gen, getRiverParams(gen), x, z);
+      const div = divinationRef.current;
+      const houses = shelterState.snapshot();
+      if (div.isRevealed) {
+        if (div.arrivedAt(x, z)) {
+          div.dismiss();
+        } else {
+          div.reveal(findCamps(houses));
+        }
+      }
+      setScryVisible(
+        !div.isRevealed &&
+          houses.length > 0 &&
+          isNearStillWater(x, z, waters),
+      );
     });
     const offLooked = bus.on('player:looked', () => {
       recomputeAnchors();
@@ -2573,6 +2719,9 @@ export default function App() {
     renderer.setWorldGen(gen);
     setSeed(nextSeed);
     setPosition({ x: spawn.x, z: spawn.z });
+    // A new world clears the scry reveal (new camps, new water).
+    divinationRef.current.dismiss();
+    setScryVisible(false);
     setBiomeText(formatWeights(gen.weightsAt(spawn.x, spawn.z)));
     bus.emit('world:seedSet', { seed: nextSeed });
     recomputeAnchors();
@@ -3384,6 +3533,32 @@ export default function App() {
     }
     setPlacedTorches(torchState.snapshot());
     recomputeAnchors();
+  };
+
+  // Scry press (DEV split): the press IS the reveal — call
+  // Systems' evaluation directly (no wrapper, DEV declined
+  // the trivial alias per no-rebuild). Shown + camps: reveal
+  // the set and hide the button (it reappears on arrival-
+  // dismiss if she is still at water). Not shown (raced a
+  // move away from the water): just hide the button —
+  // Systems' evaluation is silent by design, no reasons, no
+  // popups. ARROWS GATE: no renderer arrow API exists yet,
+  // so this sets reveal state only; the arrows appear when
+  // Background's API lands and the shell calls it here.
+  const handleScry = () => {
+    const player = playerRef.current;
+    if (!player) return;
+    const gen = genRef.current;
+    const waters = stillWatersNear(gen, getRiverParams(gen), player.x, player.z);
+    const result = evaluateCampReveal(
+      { x: player.x, z: player.z },
+      waters,
+      shelterState.snapshot(),
+    );
+    if (result.shown) {
+      divinationRef.current.reveal(result.camps);
+    }
+    setScryVisible(false);
   };
 
   // Pile menu actions (chip menu, Adam's full pile ruling):
@@ -4568,6 +4743,30 @@ export default function App() {
           biomePercent={dominantBiome.percent}
           fps={fps}
         />
+      ) : null}
+
+      {/* Scry button: appears at still water (DEV split —
+        visibility on movement, reveal on press). Bottom-
+        centre above the LocationChip, the PausedIndicator's
+        seat — the two never show together (Scry hides while
+        paused), so the seat is shared, not stacked. Hidden
+        with any panel/modal open, like the LocationChip,
+        so it never sits on a bottom sheet. Label "Scry"
+        (Adam's verb); the button IS the magic signal — no
+        tutorial popup. ARROWS GATE: press sets the reveal
+        state; no renderer arrow API exists yet, so nothing
+        visible happens on press until Background's API
+        lands. */}
+      {scryVisible &&
+      !inventoryOpen &&
+      !craftingOpen &&
+      !optionsOpen &&
+      !introOpen &&
+      !pendingTrapRecipe &&
+      !paused ? (
+        <div className="pointer-events-none absolute bottom-12 left-1/2 z-40 -translate-x-1/2">
+          <ScryButton onPress={handleScry} />
+        </div>
       ) : null}
 
       {/* Esc hint: desktop only, and only while no modal is
