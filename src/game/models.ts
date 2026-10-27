@@ -523,3 +523,46 @@ export function buildUmbrella(): THREE.Group {
   g.add(tip);
   return g;
 }
+
+/** Flame-center height inside a buildCandle() group (holder bottom = 0). */
+export const CANDLE_FLAME_Y = 0.31;
+
+/**
+ * The witch's carried candle (Adam 2026-10-26 — light settled,
+ * starter still open; see fire.ts). Primitive, held upright in
+ * her left hand (the umbrella holds the right): brass holder
+ * dish, cream stick, dark wick, and a two-part flame in
+ * MeshBasicMaterial — unlit on purpose, so the flame reads as
+ * lit even in darkness, where a Lambert flame would go black
+ * without the point light reaching it. Group origin at the
+ * holder bottom; the renderer places the group at the hand and
+ * positions the scene-level point light at the flame height.
+ * Visual + light-anchor only — no mechanic, no starter path.
+ */
+export function buildCandle(): THREE.Group {
+  const g = new THREE.Group();
+  const holder = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.05, 0.02, 10), meshMat(0x8a6a30));
+  holder.position.set(0, 0.01, 0);
+  g.add(holder);
+  const stick = new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.032, 0.22, 8), meshMat(0xe8dcc0));
+  stick.position.set(0, 0.13, 0);
+  g.add(stick);
+  const wick = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.006, 0.03, 4), meshMat(0x1a1208));
+  wick.position.set(0, 0.255, 0);
+  g.add(wick);
+  const flameOuter = new THREE.Mesh(
+    new THREE.SphereGeometry(0.035, 8, 8),
+    new THREE.MeshBasicMaterial({ color: 0xffa030 }),
+  );
+  flameOuter.scale.set(1, 1.8, 1);
+  flameOuter.position.set(0, CANDLE_FLAME_Y, 0);
+  g.add(flameOuter);
+  const flameInner = new THREE.Mesh(
+    new THREE.SphereGeometry(0.02, 8, 8),
+    new THREE.MeshBasicMaterial({ color: 0xffe080 }),
+  );
+  flameInner.scale.set(1, 1.6, 1);
+  flameInner.position.set(0, 0.3, 0);
+  g.add(flameInner);
+  return g;
+}

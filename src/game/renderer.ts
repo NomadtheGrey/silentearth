@@ -27,7 +27,7 @@ import type { WorldGen } from './worldgen';
 import { PlayerController } from './player';
 import { marshWeight } from './biomes';
 import { SOURCE_FOR_KIND } from './objects';
-import { buildKindGeometry, buildUmbrella, buildWitch, vertexLambert } from './models';
+import { buildCandle, buildKindGeometry, buildUmbrella, buildWitch, CANDLE_FLAME_Y, vertexLambert } from './models';
 import { ProximityTracker } from './proximity';
 import {
   harvestState,
@@ -114,6 +114,38 @@ interface LoadedChunk {
   ground: THREE.Mesh;
 }
 
+/**
+ * Carried-candle light tunables (Adam 2026-10-26 — lane-decided
+ * starting values for his pin pass; three 0.186 uses physical
+ * point-light units, so intensity reads in candela with decay 2:
+ * ~2.5 at 2 m, ~0.6 at 4 m, ~0.16 at 8 m — a warm pool around
+ * her, not a floodlight. Err toward useful: night foraging is
+ * near-impossible without this. Always lit, both views.
+ */
+export const CANDLE_LIGHT_COLOR = 0xffb45e;
+export const CANDLE_LIGHT_INTENSITY = 10;
+export const CANDLE_LIGHT_DISTANCE = 16;
+export const CANDLE_LIGHT_DECAY = 2;
+export const CANDLE_FLICKER_AMPLITUDE = 0.12;
+/** Witch-local hand position of the candle group (left hand). */
+export const CANDLE_HAND: Readonly<{ x: number; y: number; z: number }> = {
+  x: -0.55,
+  y: 1.02,
+  z: 0.05,
+};
+
+/**
+ * Rotate a witch-local (x, z) offset by a Y-rotation (facing)
+ * into world space: the same transform the witch group's
+ * rotation.y applies (local +z maps to (sin facing, cos facing)
+ * — see the behind-camera comment in the loop). Pure, probed.
+ */
+export function rotateOffsetY(lx: number, lz: number, facing: number): [number, number] {
+  const c = Math.cos(facing);
+  const s = Math.sin(facing);
+  return [lx * c + lz * s, -lx * s + lz * c];
+}
+
 export class WorldRenderer {
   private renderer: THREE.WebGLRenderer;
   private scene = new THREE.Scene();
@@ -124,6 +156,8 @@ export class WorldRenderer {
   private witch: THREE.Group;
   /** Carried umbrella graphic (models.ts), attached to the witch. */
   private umbrella: THREE.Group;
+  /** Carried-candle point light (scene-level — see below). */
+  private candleLight: THREE.PointLight;
   private gen: WorldGen;
   private player: PlayerController;
   /** Proximity tracker: engine-owned, subscribes to 'player:moved' and
@@ -270,6 +304,25 @@ export class WorldRenderer {
     this.umbrella.position.set(0.58, 1.08, 0.05);
     this.umbrella.rotation.z = -0.12;
     this.witch.add(this.umbrella);
+    // Carried candle (Adam 2026-10-26 — light settled, starter
+    // still open): model in her left hand (umbrella holds the
+    // right), witch-group child, so third-person-only visibility
+    // is free — hidden in first-person, where you are the witch.
+    // The LIGHT is scene-level, not a witch child: a child of an
+    // invisible group renders nothing, and first-person needs
+    // the light even though the model is hidden. Always lit —
+    // no day/night gate invented, no setter (unconditional: no
+    // item, toggle, or inventory state drives it).
+    const candle = buildCandle();
+    candle.position.set(CANDLE_HAND.x, CANDLE_HAND.y, CANDLE_HAND.z);
+    this.witch.add(candle);
+    this.candleLight = new THREE.PointLight(
+      CANDLE_LIGHT_COLOR,
+      CANDLE_LIGHT_INTENSITY,
+      CANDLE_LIGHT_DISTANCE,
+      CANDLE_LIGHT_DECAY,
+    );
+    this.scene.add(this.candleLight);
 
     window.addEventListener('resize', this.onResize);
     this.loop();
@@ -883,6 +936,22 @@ export class WorldRenderer {
     this.witch.position.set(this.player.x, 0, this.player.z);
     this.witch.rotation.y = this.player.facing;
     this.witch.visible = this.player.mode !== 'first';
+
+    // Carried-candle light follows the flame's world position:
+    // the hand offset rotated by facing (same Y-rotation the
+    // witch group itself uses), at flame height. Flicker is a
+    // small mixed-sine wobble on flameTime — deterministic,
+    // never random — in the same spirit as the fire flames.
+    {
+      const [ox, oz] = rotateOffsetY(CANDLE_HAND.x, CANDLE_HAND.z, this.player.facing);
+      this.candleLight.position.set(
+        this.player.x + ox,
+        CANDLE_HAND.y + CANDLE_FLAME_Y,
+        this.player.z + oz,
+      );
+      const flick = (Math.sin(this.flameTime * 10) + Math.sin(this.flameTime * 23 + 1.7)) / 2;
+      this.candleLight.intensity = CANDLE_LIGHT_INTENSITY * (1 + CANDLE_FLICKER_AMPLITUDE * flick);
+    }
 
     if (this.player.mode === 'first') {
       this.camera.position.set(
