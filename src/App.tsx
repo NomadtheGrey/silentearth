@@ -43,15 +43,17 @@
  *   raw generator is used because stumps are never depleted,
  *   so it gives the same stump set as the renderer's
  *   depletion-wrapped generator.
- * - Inventory capacity mode: PINNED by Adam 2026-10-26 — a large
- *   basket REPLACES a small basket (full kit: pockets 10 + apron
- *   10 + large 50 = 70). The shell constructs PersonalInventory
- *   directly with largeBasketMode 'replace' — the ruled mode, not
- *   Systems' temporary wiring placeholder, which this shell no
- *   longer references (Systems deletes the placeholder function
- *   separately). The modes coincide right after the upgrade in
- *   normal play (the upgrade consumes the small basket); they
- *   diverge only if she later holds both baskets at once.
+ * - Inventory capacity (Adam, 2026-10-27): weights pinned —
+ *   pockets base 10, apron +10, small basket +25, large
+ *   basket 50, Trundle-Tool +50, additive. The shell
+ *   constructs PersonalInventory with largeBasketMode
+ *   'replace' (the current code choice, not a ruling);
+ *   large replace-vs-stack stays OPEN awaiting Adam's
+ *   pick (70 if replaces, 95 if stacks) — no full-kit
+ *   total is asserted anywhere. The modes coincide right
+ *   after the upgrade in normal play (the upgrade consumes
+ *   the small basket); they diverge only if she later holds
+ *   both baskets at once.
  * - Remove option (Adam, 2026-10-26): alongside normal harvest,
  *   she may TOTALLY REMOVE a plant — more resources at once, but
  *   the plant is gone permanently (no regrow), for clearing
@@ -742,6 +744,26 @@
  *   what every world tap near a fire does, so it waits
  *   on DEV/Adam approval rather than shipping silently.
  *   FireState.tsx + this bullet only.
+ * - WEIGHT DISPLAY, LIVE (Adam, 2026-10-27 — DEV brief,
+ *   unheld on Systems' tool-exclusion fix 8d0aff2):
+ *   personal capacity is pounds now. Panel header reads
+ *   "X lb / Y lb" from Systems' usedLb()/capacityLb(),
+ *   trimmed to at most 2 decimals with trailing zeros
+ *   dropped (never a raw float). Rows show per-item
+ *   weight, plus the stack total above one ("0.5 lb each
+ *   · 1.5 lb"). Rows whose weight is NOT in the header
+ *   total never show a counting number: the owned tool's
+ *   row reads "carried free" (one unit free; a duplicate
+ *   unit counts, shown as "N lb · 1 carried free"), and
+ *   carrying gear + worn garments read "carried free"
+ *   too — same rule, or the row would contradict the
+ *   total. Worn carrying-bonus note reads "+N lb".
+ *   Home-storage rows stay count-based (out of scope);
+ *   pack-full notes carry no numbers, so nothing to
+ *   convert there. No full-kit total is asserted
+ *   anywhere: large replace-vs-stack stays OPEN (70 if
+ *   replaces, 95 if stacks) — the header reads
+ *   capacityLb only. InventoryPanel + App + types only.
  * - TRAP SAVE WIRING, LIVE (Adam, 2026-10-27 — DEV brief,
  *   Systems format half 4f3fa69): placed traps survive a
  *   refresh — saveNow passes trapState.snapshot() as
@@ -858,6 +880,8 @@ import type {
 import {
   PersonalInventory,
   displayNameFor,
+  isCarryingGear,
+  weightOf,
 } from './systems/inventory';
 import {
   dropFromInventory,
@@ -888,7 +912,12 @@ import {
   type OwnedToolItem,
 } from './systems/owned-tool';
 import { canCraft } from './systems/crafting';
-import { ITEMS, RECIPES, type CraftingStation } from './systems/recipes';
+import {
+  ITEMS,
+  RECIPES,
+  type CraftingStation,
+  type ItemId,
+} from './systems/recipes';
 
 type BusHarvestTarget = EventMap['harvest:inRange']['targets'][number];
 
@@ -1136,11 +1165,55 @@ const HOUSE_TYPE_TO_ITEM: Record<HouseType, string> = {
   smallWoodenHut: ITEMS.smallWoodenHut,
 };
 
+/**
+ * Pounds, trimmed: at most 2 decimals, trailing zeros dropped
+ * ("12.5 lb", never "12.50 lb" or a raw float). Weights step
+ * in 0.05 lb, so 2 decimals are exact; toFixed absorbs binary
+ * noise (3 × 0.1 prints "0.30" before the strip, never
+ * "0.30000000000000004").
+ */
+function formatLb(pounds: number): string {
+  return pounds.toFixed(2).replace(/\.?0+$/, '') || '0';
+}
+
+/**
+ * One inventory row's weight line (weight display, Adam
+ * 2026-10-27). Excluded rows never show a counting number, or
+ * the row would contradict the header total (which already
+ * excludes them): carrying gear and worn garments exclude the
+ * whole stack, and the owned tool excludes exactly one unit —
+ * Systems' usedLb rule, mirrored here for display only
+ * (Systems owns the math; this never recomputes the total).
+ * Normal rows show per-item weight, plus the stack total when
+ * the count is above one ("0.5 lb each · 1.5 lb").
+ */
+function weightTextFor(
+  item: string,
+  quantity: number,
+  inventory: PersonalInventory,
+): string {
+  const id = item as ItemId;
+  if (isCarryingGear(id) || inventory.wornItems().includes(id)) {
+    return 'carried free';
+  }
+  const owned = ownedToolItem(inventory);
+  if (id === owned) {
+    if (quantity <= 1) return 'carried free';
+    return `${formatLb((quantity - 1) * weightOf(id))} lb · 1 carried free`;
+  }
+  const each = weightOf(id);
+  if (quantity <= 1) return `${formatLb(each)} lb`;
+  return `${formatLb(each)} lb each · ${formatLb(quantity * each)} lb`;
+}
+
 /** One inventory stack as a panel row, with the umbrella icon attached. */
-function toInventoryItem(stack: {
-  item: string;
-  quantity: number;
-}): InventoryItem {
+function toInventoryItem(
+  stack: {
+    item: string;
+    quantity: number;
+  },
+  inventory: PersonalInventory,
+): InventoryItem {
   return {
     id: stack.item,
     // Display spelling, never the raw code id (Adam, 2026-10-26:
@@ -1148,6 +1221,7 @@ function toInventoryItem(stack: {
     // the systems table). The id stays the key for actions.
     name: displayNameFor(stack.item),
     quantityText: String(stack.quantity),
+    weightText: weightTextFor(stack.item, stack.quantity, inventory),
     icon: stack.item === UMBRELLA_ITEM_ID ? <UmbrellaIcon /> : undefined,
   };
 }
@@ -1354,10 +1428,11 @@ export default function App() {
   const placementRef = useRef<PlacementMode | null>(null);
 
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>(() =>
-    inventory.stacksSnapshot().map(toInventoryItem),
+    inventory.stacksSnapshot().map((stack) => toInventoryItem(stack, inventory)),
   );
   const [capacityText, setCapacityText] = useState(
-    () => `Carrying ${inventory.used()} / ${inventory.capacity()}`,
+    () =>
+      `Carrying ${formatLb(inventory.usedLb())} lb / ${formatLb(inventory.capacityLb())} lb`,
   );
 
   const busTargetsRef = useRef<BusHarvestTarget[]>([]);
@@ -1376,9 +1451,11 @@ export default function App() {
   const [paused, setPaused] = useState(false);
 
   const refreshInventory = () => {
-    setInventoryItems(inventory.stacksSnapshot().map(toInventoryItem));
+    setInventoryItems(
+      inventory.stacksSnapshot().map((stack) => toInventoryItem(stack, inventory)),
+    );
     setCapacityText(
-      `Carrying ${inventory.used()} / ${inventory.capacity()}`,
+      `Carrying ${formatLb(inventory.usedLb())} lb / ${formatLb(inventory.capacityLb())} lb`,
     );
     // UMBRELLA DRIVING: every inventory change flows through
     // here (harvest, craft, eat, cook, place, wear, deposit,
@@ -2786,7 +2863,7 @@ export default function App() {
       : `Protection: rain ${Math.round((1 - wornRemaining.rain) * 100)}% · wind ${Math.round((1 - wornRemaining.wind) * 100)}% · cold ${Math.round((1 - wornRemaining.cold) * 100)}% · wet ${Math.round((1 - wornRemaining.wet) * 100)}%`;
   const capacityBonus = wardrobe.wornCapacityBonus();
   const capacityNote =
-    capacityBonus > 0 ? `Carrying bonus +${capacityBonus}` : undefined;
+    capacityBonus > 0 ? `Carrying bonus +${capacityBonus} lb` : undefined;
   // Umbrella precipitation note (see the coordination above):
   // shown only while an umbrella is carried, and its number
   // comes from Systems' single constant — never a UI-side

@@ -39,6 +39,8 @@ export interface InventoryItem {
   name: string;
   /** Caller-supplied, e.g. "3". Never computed here. */
   quantityText?: string;
+  /** Caller-supplied weight line, e.g. "1.5 lb" or "carried free". Never computed here. */
+  weightText?: string;
   /** Caller-supplied short note, e.g. a category or origin. Optional. */
   note?: string;
   /** Caller-supplied glyph, rendered before the name. Optional. */
