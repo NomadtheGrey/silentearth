@@ -41,26 +41,26 @@
  *   FLAGGED for Adam's pin pass (the trundle is wheeled, but
  *   130 is his call to keep or trim).
  *
- * OPEN (DEV, 2026-10-27): LARGE BASKET REPLACE-vs-STACK.
- *     The NUMBERS are pinned (see above); whether the large
- *     basket's 50 lb REPLACES the small basket's +25 lb (total
- *     with pockets + apron + large = 70 lb) or STACKS with it
- *     (95 lb) still awaits Adam's pick — NEITHER behavior is
- *     settled, and no comment or report here may present one
- *     as ruled. CORRECTION: an earlier version of this header
- *     called replace pinned (2026-10-26 record); DEV confirmed
- *     2026-10-27 that the question is still open, and this
- *     header now says so. The mode stays a required
- *     constructor option with NO default: shell construction
- *     passes a value explicitly — currently 'replace' (the
- *     current wiring choice, NOT a ruling) — and no silent
- *     default was added to the model. Practical note (recipe
- *     mechanics, not the open question): crafting a large
- *     basket CONSUMES the small basket (upgrade), so right
- *     after the upgrade the player holds only the large
- *     basket; the modes diverge only if the player later
- *     holds both baskets at once (e.g. by crafting a second
- *     small basket while owning a large one).
+ * PINNED (Adam, main chat 2026-10-27, "for simplicity"):
+ *     LARGE BASKET REPLACES SMALL BASKET. Total with pockets
+ *     + apron + large = 70 lb; the small basket's +25 lb does
+ *     NOT stack with the large basket's 50 lb (the 'stack'
+ *     total, 95 lb, is closed — it survives only as the
+ *     unruled branch of the `largeBasketMode` option, which
+ *     wiring does not pass). The question went open → pinned
+ *     within the day (DEV confirmed it open, then Adam pinned
+ *     replace); this header now states the pin. The mode
+ *     stays a required constructor option with NO default:
+ *     shell construction passes the pinned value explicitly
+ *     — new PersonalInventory({ largeBasketMode: 'replace' })
+ *     — and no silent default was added to the model.
+ *     Practical note: crafting a large basket CONSUMES the
+ *     small basket (upgrade), so right after the upgrade the
+ *     player holds only the large basket; the modes diverge
+ *     only if the player later holds both baskets at once
+ *     (e.g. by crafting a second small basket while owning a
+ *     large one) — under the pin, that second small basket
+ *     adds nothing while the large basket is held.
  *
  * PINNED (Adam, 2026-10-26): Trundle-Tool carrying bonus is +50 lb.
  *     It was previously "hefty, size TBD"; that TBD is now closed.
@@ -443,7 +443,7 @@ export function displayNameFor(item: ItemId): string {
 export type LargeBasketMode = 'replace' | 'stack';
 
 export interface PersonalInventoryOptions {
-  /** REQUIRED — pass 'replace' for now (current wiring choice; total 70 lb). 'stack' (95 lb) is the open alternative: replace-vs-stack awaits Adam's pick (DEV 2026-10-27) and NEITHER behavior is settled. No default. */
+  /** REQUIRED — pass the PINNED mode 'replace' (total 70 lb). 'stack' (95 lb) is the closed alternative; wiring does not pass it. No default. */
   largeBasketMode: LargeBasketMode;
   /** Starting stacks (restoration path; not capacity-checked). */
   initial?: Record<string, number>;

@@ -94,16 +94,15 @@
  *    USE, once the set/check system exists, not trap crafting.
  *
  * ------------------------------------------------------------------
- * CONSTRUCTION (corrected 2026-10-27): the former temporary
- * wiring inventory is DELETED — shell construction is direct,
- * with the mode passed explicitly (no silent default was added
- * to the model — the constructor still requires
- * largeBasketMode, and wiring currently passes 'replace').
- * Replace-vs-stack is OPEN (DEV 2026-10-27): 'replace' is the
- * current wiring value, NOT a ruling, and neither total (70
- * vs 95 with pockets + apron + baskets) is settled until Adam
- * picks. An earlier version of this note called replace
- * pinned (2026-10-26 record); that is corrected here.
+ * PINNED CONSTRUCTION (Adam, main chat 2026-10-27, "for
+ * simplicity"): LARGE BASKET REPLACES SMALL BASKET. Total
+ * with pockets + apron + large = 70; the small basket's +25
+ * does NOT stack with the large basket's 50. The former
+ * temporary wiring inventory is DELETED — shell construction
+ * is direct, with the pinned mode passed explicitly (no
+ * silent default was added to the model — the constructor
+ * still requires largeBasketMode, and wiring passes
+ * 'replace').
  *
  *   new PersonalInventory({ largeBasketMode: 'replace', initial })
  */
