@@ -804,6 +804,31 @@
  *   route is NOT rebuilt here — the inventory torch
  *   rows' Light button already covers it (flint route
  *   only). App.tsx only.
+ * - ESC OPENS OPTIONS + INDICATOR, LIVE (Adam, 2026-10-27
+ *   — DEV brief, joining the Esc + [X] brief): one rule —
+ *   topmost-close, else open-Options. With NO modal open,
+ *   Esc opens the Options modal (one App-level listener);
+ *   with a modal open, that modal's own Esc listener
+ *   closes it and this handler stands aside (it returns
+ *   early on optionsOpen/introOpen/pendingTrapRecipe) —
+ *   so Esc on open Options closes Options, and a second
+ *   Esc with nothing open re-opens it. The handler yields
+ *   when focus sits in a text input, textarea, or select
+ *   (the seed field): typing Esc there must not yank the
+ *   player into Options — flagged. It acts on Escape
+ *   alone and swallows nothing, so V/C and WASD are
+ *   untouched. Panels (inventory/crafting) are not modals,
+ *   so they do not block the toggle — flagged, not carved
+ *   out (Esc-to-close-panels-first is a follow-up if Adam
+ *   wants it). INDICATOR: "Esc — Options" (wording draft
+ *   for Adam's pin pass), bottom-right — seed controls
+ *   own bottom-left, the LocationChip owns bottom-centre,
+ *   bottom-right is free. Desktop only (hidden on touch:
+ *   no Esc key there, the visible Options control is
+ *   already the touch path); hidden while any modal is
+ *   open (then Esc closes, and the hint would read
+ *   wrong); pointer-events-none, a label only, not a
+ *   button. App.tsx only.
  * - ESC + [X] OUT OF ANY MODAL, LIVE (Adam, 2026-10-27 —
  *   DEV brief): AUDITED every dialog surface (role="dialog"
  *   grep — exactly three true modals, no others): Options
@@ -3665,6 +3690,33 @@ export default function App() {
   // as briefed, not a bug. Re-open any time from the
   // Introduction section in Options (Settings tab).
   const [introOpen, setIntroOpen] = useState(() => bootSave === null);
+
+  // ESC TOGGLE (Adam, 2026-10-27 — Esc opens Options): with
+  // NO modal open, Esc opens the Options modal; with a modal
+  // open, that modal's own Esc listener closes it (previous
+  // brief stands) and this handler stands aside — one rule,
+  // topmost-close else open-Options. Esc on open Options
+  // closes Options; a second Esc with nothing open re-opens
+  // it. The handler yields when focus sits in a text input,
+  // textarea, or select (the seed field): typing Esc there
+  // must not yank the player into Options. It acts on
+  // Escape alone and swallows nothing, so V/C and WASD are
+  // untouched. Panels (inventory/crafting) are not modals,
+  // so they do not block the toggle — flagged, not carved
+  // out: if Adam wants Esc to close panels first, that is
+  // a follow-up.
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent): void => {
+      if (e.key !== 'Escape') return;
+      const target = e.target as HTMLElement | null;
+      const tag = target?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+      if (optionsOpen || introOpen || pendingTrapRecipe) return;
+      setOptionsOpen(true);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [optionsOpen, introOpen, pendingTrapRecipe]);
   const handleFontChange = (next: FontId): void => {
     setFont(next);
     saveFontChoice(next);
@@ -4516,6 +4568,19 @@ export default function App() {
           biomePercent={dominantBiome.percent}
           fps={fps}
         />
+      ) : null}
+
+      {/* Esc hint: desktop only, and only while no modal is
+        open (while a modal is open, Esc closes it instead —
+        the hint would read wrong). Bottom-right: seed
+        controls own bottom-left, the LocationChip owns
+        bottom-centre, bottom-right is free. A label only,
+        not a button — the Options control + Esc are the
+        doors. Wording draft for Adam's pin pass. */}
+      {!isTouch && !optionsOpen && !introOpen && !pendingTrapRecipe ? (
+        <p className="pointer-events-none absolute bottom-2 right-2 z-30 rounded bg-black/50 px-2 py-1 text-xs text-stone-300">
+          Esc — Options
+        </p>
       ) : null}
 
       {/* Paused control: only while the engine flag is set. It
