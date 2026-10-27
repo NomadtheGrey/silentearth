@@ -19,10 +19,10 @@
  * the batch summaries, and the lane worded the why-lines from
  * them. Correct them in this file when Adam corrects them.
  *
- * The docs-only merge 4062a94 (PR #3, ReadMeDocs copy) is
- * DELIBERATELY EXCLUDED: the tab lists game builds, and a
- * docs copy changed no game code. Adding it back is one
- * entry here if Adam wants the complete merge sequence.
+ * Per Adam's 2026-10-27 rule (document each one), EVERY
+ * merge is recorded — including the docs-only merge
+ * (PR #3, listed as 'Docs merge') and record-only merges
+ * (Merge #6, which carried only the #5 entry live).
  */
 
 /** One merged batch, as the Build history tab shows it. */
@@ -49,6 +49,14 @@ const ALL_RECORDS: BuildRecord[] = [
     date: '2026-10-27',
     what: 'Carried candle light, trap craft confirm + placement + save, forage hints, mushroom sources + foods, oak axe gates + ground acorns, kindling, fire light + flame animation, apple trees + apple food, hunger bar + number, touch row level, first-person default, world-state save (fires lit + lighting, harvest, sky, facing).',
     why: 'The world now remembers itself across a refresh — harvested ground, lit fires, sky time, and facing — traps stay placed, and the first fruit tree arrives with the forage guidance for its food.',
+  },
+  {
+    merge: 'Merge #6',
+    pr: 13,
+    sha: '70ebae7',
+    date: '2026-10-26',
+    what: 'Build-history #5 entry — the merge #5 record itself, put on the live build.',
+    why: 'The record-keeping merge: the history tab could not show merge #5 until this merge carried its entry live.',
   },
   {
     merge: 'Merge #5',
@@ -81,6 +89,14 @@ const ALL_RECORDS: BuildRecord[] = [
     date: '2026-10-26',
     what: 'Phone build: touch controls (move/look/USE), phone HUD, scrollbars.',
     why: "Adam's Android playtest found the game unplayable on portrait phone — touch controls and a squished HUD were the answer.",
+  },
+  {
+    merge: 'Docs merge',
+    pr: 3,
+    sha: '4062a94',
+    date: '2026-10-26',
+    what: 'ReadMeDocs copy — documentation only, no game code changed.',
+    why: 'Completeness: every merge on record, including the docs-only copy.',
   },
   {
     merge: 'Merge #1',
