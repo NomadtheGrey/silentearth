@@ -19,7 +19,8 @@
  *   merges duplicates, so an UPPER id can never be persisted,
  *   even if a caller hands serialize raw stacks.
  * - hunger meter value, wardrobe worn list
- * - placed fires (type + position + lit flag), placed houses
+ * - placed fires (id + type + position + lit flag + lighting),
+ *   placed houses
  *   (type + position + stored contents), placed looms (position)
  * - ground piles (item + quantity + position, see ./piles.ts):
  *   the harvest-overflow remainder. Piles are OPTIONAL on read
@@ -115,6 +116,15 @@ export type SavedLightingProcess =
   | { method: 'friction'; phase: 'waiting' | 'ready'; waitUntil: number };
 
 export interface SavedFire {
+  /**
+   * Engine fire id (`fire:<type>:<n>`, fireState.placeFire's
+   * shape). REQUIRED: fireState.restore() drops id-less
+   * entries, so a lighting record without an id would strand
+   * with nothing to attach to. Entries that arrive without one
+   * (old saves, id-less drafts) get a deterministic id in
+   * order — see deterministicFireId below — never a drop.
+   */
+  id: string;
   type: string;
   x: number;
   z: number;
@@ -122,6 +132,20 @@ export interface SavedFire {
   lit: boolean;
   /** Lighting in progress; null when the fire is not lighting. */
   lighting: SavedLightingProcess | null;
+}
+
+/**
+ * Deterministic id for an id-less fire entry: the engine's own
+ * `fire:<type>:<n>` shape, n = position in the fires list + 1.
+ * Shared by serializeSave (id-less drafts) and deserializeSave
+ * (old saves) so both paths assign the same ids. Unique within
+ * a document by construction (n counts all fires, not per
+ * type), and restore()'s suffix recompute continues the
+ * counter past the restored set, so later placeFire ids cannot
+ * collide with assigned ones.
+ */
+function deterministicFireId(type: string, index: number): string {
+  return `fire:${type}:${index + 1}`;
 }
 
 export interface SavedHouse {
@@ -275,6 +299,8 @@ export interface SaveDraft {
   hunger: number;
   worn: readonly string[];
   fires: ReadonlyArray<{
+    /** Engine fire id when the caller has one; id-less entries get a deterministic id. */
+    id?: string;
     type: string;
     x: number;
     z: number;
@@ -370,7 +396,14 @@ export function serializeSave(draft: SaveDraft): SaveData {
     inventory: normalizeStacks(draft.inventory),
     hunger: draft.hunger,
     worn: draft.worn.map(normalizeItemId),
-    fires: draft.fires.map((fire) => ({
+    fires: draft.fires.map((fire, index) => ({
+      // Id-less drafts get a deterministic id (same rule as
+      // deserializeSave for old saves) — a serialized document
+      // never carries an id-less fire.
+      id:
+        typeof fire.id === 'string' && fire.id !== ''
+          ? fire.id
+          : deterministicFireId(fire.type, index),
       type: fire.type,
       x: fire.x,
       z: fire.z,
@@ -520,7 +553,16 @@ export function deserializeSave(value: unknown): SaveData | null {
       // engine's validLighting() validates shape on restore and
       // turns bad shapes into null); anything else becomes null.
       // A bad lighting value never corrupts the fire entry.
+      // Id: carried when present and non-empty; otherwise a
+      // deterministic id in order (same rule as serializeSave
+      // for id-less drafts). Id-less entries are NEVER passed
+      // through: fireState.restore() drops them, which would
+      // strand the lighting and lose the fire on old saves.
       fires.push({
+        id:
+          typeof entry.id === 'string' && entry.id !== ''
+            ? entry.id
+            : deterministicFireId(entry.type, fires.length),
         type: entry.type,
         x: entry.x,
         z: entry.z,
