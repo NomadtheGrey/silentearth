@@ -640,6 +640,14 @@
  *   and on eat. No second hunger value anywhere; the number
  *   is Math.round, never the raw drain float. App.tsx +
  *   HungerIndicator; no game/systems change.
+ * - TOUCH ROW LEVEL, LIVE (Adam, 2026-10-26 — DEV brief,
+ *   option A pick): TURN down to the bottom row, even with
+ *   MOVE (TURN bottom-24 right-4), USE beside it at right-40
+ *   (16 px gap to TURN). Geometry on Adam's 390 px phone:
+ *   MOVE [16, 144], USE [166, 230], TURN [246, 374] — 22 px
+ *   and 16 px gaps, no overlap. Labels, pulse-until-first-use,
+ *   touch ids, and gesture ownership unchanged. App.tsx
+ *   bullet + TouchControls positions only.
  * POINTER DISCIPLINE: overlays are pointer-events-none except the
  * small interactive pieces (HUD buttons, panels, harvest buttons),
  * so world clicks — including the first-person mouse-capture click

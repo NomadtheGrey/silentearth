@@ -17,8 +17,9 @@
  *   (lookEnabled); the shell leaves it enabled in both modes
  *   because the engine applies look deltas gateless and keeps
  *   pitch consistent across mode switches.
- * - Right thumbstick: a solid TURN ring + knob above the USE
- *   button, same size and pulse-until-first-use pattern as MOVE.
+ * - Right thumbstick: a solid TURN ring + knob even with MOVE
+ *   on the bottom row (USE to its left), same size and
+ *   pulse-until-first-use pattern as MOVE.
  *   It reports a deflection, not a drag: the shell holds the
  *   deflection and turns continuously while it is held, so a
  *   big turn needs no re-sliding. Added 2026-10-26 after
@@ -316,10 +317,12 @@ export function TouchControls({
 
       {/* Turn stick: rendered after the look field so its
         touches land on the stick, not the field beneath it
-        (same DOM-order rule as the USE button). Sits above
-        USE with a gap, clear of the DRAG TO LOOK cue. */}
+        (same DOM-order rule as the USE button). Level with
+        MOVE on the bottom row (Adam 2026-10-26: the stacked
+        look was weird) — USE sits to its left with a 16 px
+        gap, clear of the DRAG TO LOOK cue. */}
       <div
-        className="pointer-events-auto absolute bottom-44 right-4 touch-none"
+        className="pointer-events-auto absolute bottom-24 right-4 touch-none"
         onTouchStart={handleTurnStart}
         onTouchMove={handleTurnMove}
         onTouchEnd={handleTurnEnd}
@@ -350,7 +353,7 @@ export function TouchControls({
       <button
         type="button"
         aria-label="Use: interact with the nearest in-range target"
-        className="pointer-events-auto absolute bottom-24 right-4 flex h-16 w-16 touch-none items-center justify-center rounded-full border-2 border-[#f0ead6]/80 bg-[#3a4436]/90 text-sm font-bold text-[#f0ead6]"
+        className="pointer-events-auto absolute bottom-24 right-40 flex h-16 w-16 touch-none items-center justify-center rounded-full border-2 border-[#f0ead6]/80 bg-[#3a4436]/90 text-sm font-bold text-[#f0ead6]"
         onTouchStart={(e) => {
           e.preventDefault();
           onInteract?.();
