@@ -1040,8 +1040,9 @@
  *   hides while revealed and reappears on arrival
  *   (dismiss) if she is still at water; re-press
  *   re-reveals. WATERS (shell-side derivation, flagged
- *   TEMPORARY + replaceable — deleted when Background's
- *   adapter lands): river centerline samples at
+ *   TEMPORARY + replaceable — deleted in CAMP ARROWS
+ *   WIRING below, Background's adapter having landed
+ *   08bd0d5): river centerline samples at
  *   RIVER_STEP, radius RIVER_WIDTH/2 (Systems'
  *   prescribed shape), sampled ±64 m around her
  *   along-course projection; ponds scanned from
@@ -1054,12 +1055,33 @@
  *   LocationChip. 44 px, same family as the pile
  *   button; touch + desktop identical (parity). The
  *   button IS the magic signal — no tutorial popup.
- *   ARROWS GATE (plain): press sets the CampDivination
- *   reveal state, but NO renderer arrow API exists yet,
- *   so nothing visible happens on press until
- *   Background's API lands. New ScryButton.tsx + App
- *   wiring (state, moved evaluation, press, regenerate
- *   dismiss).
+ *   ARROWS GATE (plain at landing): press set the
+ *   CampDivination reveal state only — NO renderer arrow
+ *   API existed yet; wired in CAMP ARROWS WIRING below.
+ *   New ScryButton.tsx + App wiring (state, moved
+ *   evaluation, press, regenerate dismiss).
+ * - CAMP ARROWS WIRING, LIVE (Adam, 2026-10-27 — DEV
+ *   signal, Background's arrows + adapter 08bd0d5):
+ *   the Scry button's press now SHOWS the arrows, and
+ *   arrival-dismiss + regenerate HIDE them again.
+ *   handleScry calls renderer.setCampArrowsVisible(true)
+ *   on a shown reveal; the moved handler calls it with
+ *   false on arrival-dismiss; regenerate calls it with
+ *   false alongside the reveal dismiss. The renderer
+ *   rebuilds the arrows itself from placed houses
+ *   (shelter:placed + setWorldGen) — the shell only
+ *   toggles visibility, default hidden. The TEMPORARY
+ *   shell-side waters derivation is DELETED on this pass
+ *   (Background's game/waterProximity adapter is the
+ *   keeper: ponds-as-circles + river samples, 2.5-edge
+ *   aligned); visibility still evaluates on player:moved
+ *   via isNearStillWater over the adapter's list.
+ *   Off-screen camps get edge arrows from the renderer
+ *   (no shell work). Feature testable now: approach
+ *   water with a camp placed, press Scry, follow the
+ *   arrows home; arriving hides them. App.tsx only.
+ *   nearCreek wiring from the adapter is a follow-up,
+ *   not this pass.
  * POINTER DISCIPLINE: overlays are pointer-events-none except the
  * small interactive pieces (HUD buttons, panels, harvest buttons),
  * so world clicks — including the first-person mouse-capture click
@@ -1068,7 +1090,7 @@
  */
 
 import React, { Fragment, useEffect, useMemo, useRef, useState } from 'react';
-import { createWorldGen, type WorldGen } from './game/worldgen';
+import { createWorldGen } from './game/worldgen';
 import { WorldRenderer } from './game/renderer';
 import { PlayerController } from './game/player';
 import { bus, type EventMap } from './game/events';
@@ -1102,15 +1124,8 @@ import {
   isNearStillWater,
   findCamps,
   CampDivination,
-  type StillWaterBody,
 } from './systems/divination';
-import {
-  riverParamsFor,
-  riverCenterAt,
-  RIVER_STEP,
-  RIVER_WIDTH,
-  type RiverParams,
-} from './game/river';
+import { stillWatersNear } from './game/waterProximity';
 import { cycleSplit } from './game/sky';
 import { createSleepListener } from './game/sleep';
 import {
@@ -1121,7 +1136,6 @@ import {
   BEHIND_CAMERA_HEIGHT,
   BEHIND_LOOK_AHEAD,
   BEHIND_LOOK_HEIGHT,
-  CHUNK_SIZE,
 } from './constants';
 import type { CameraMode, BiomeWeights } from './types';
 import { Wardrobe, GARMENTS } from './systems/clothes';
@@ -1541,53 +1555,7 @@ function toInventoryItem(
   };
 }
 
-// SHELL-SIDE STILL WATERS (scry button, Adam 2026-10-27 —
-// TEMPORARY + REPLACEABLE, flagged: no Background water
-// adapter has landed, so the shell derives the water list
-// Systems' divination.ts takes as input, from public game
-// queries only. DELETE this helper the day Background's
-// adapter lands and wire the button to that list instead.
-// Shape is exactly Systems' prescription (divination.ts):
-// ponds as their circle, the river as centerline samples
-// at RIVER_STEP with radius RIVER_WIDTH / 2. River: the
-// course is analytic, so samples are taken in a ±64 m
-// window around her along-course projection (the meander
-// amplitude caps at 40 m, so the closest centreline point
-// always falls inside; adjacent sample circles overlap —
-// diameter 5 m over a 4 m step — so the union covers the
-// ribbon continuously). Ponds: scatter in the 3x3 chunks
-// around her; radius mirrors the renderer's pond disc
-// (models.ts DISC_RADIUS pond 4.5 × the scatter scale —
-// ponds are not harvest targets, so no shrink applies).
-// Edge distances then follow Systems' rule exactly
-// (centre distance minus radius, clamped at 0).
-function stillWatersNear(
-  gen: WorldGen,
-  riverParams: RiverParams,
-  x: number,
-  z: number,
-): StillWaterBody[] {
-  const waters: StillWaterBody[] = [];
-  const along =
-    (x - riverParams.ox) * riverParams.dx +
-    (z - riverParams.oz) * riverParams.dz;
-  for (let t = along - 64; t <= along + 64; t += RIVER_STEP) {
-    const c = riverCenterAt(riverParams, t);
-    waters.push({ x: c.x, z: c.z, radius: RIVER_WIDTH / 2 });
-  }
-  const cx = Math.floor(x / CHUNK_SIZE);
-  const cz = Math.floor(z / CHUNK_SIZE);
-  for (let dcx = -1; dcx <= 1; dcx++) {
-    for (let dcz = -1; dcz <= 1; dcz++) {
-      for (const obj of gen.generateChunk(cx + dcx, cz + dcz).objects) {
-        if (obj.kind === 'pond') {
-          waters.push({ x: obj.x, z: obj.z, radius: 4.5 * obj.scale });
-        }
-      }
-    }
-  }
-  return waters;
-}
+
 
 export default function App() {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -1808,24 +1776,11 @@ export default function App() {
   // only when near water AND at least one camp exists AND
   // nothing is revealed (UI's call, flagged — no dead presses,
   // no invented copy); it hides while revealed and reappears
-  // on arrival-dismiss if she is still at water. River params
-  // memoize per seed (findSpawn scans 200 m, so once per seed,
-  // refreshed on regenerate). ARROWS GATE: press sets reveal
-  // state only — no renderer arrow API exists yet.
+  // on arrival-dismiss if she is still at water. Waters come
+  // from Background's adapter (game/waterProximity); arrows
+  // show/hide through renderer.setCampArrowsVisible.
   const divinationRef = useRef(new CampDivination());
-  const riverParamsRef = useRef<{ seed: string; params: RiverParams } | null>(
-    null,
-  );
   const [scryVisible, setScryVisible] = useState(false);
-  const getRiverParams = (gen: WorldGen): RiverParams => {
-    if (riverParamsRef.current?.seed !== gen.seed) {
-      riverParamsRef.current = {
-        seed: gen.seed,
-        params: riverParamsFor(gen.seed, gen.findSpawn()),
-      };
-    }
-    return riverParamsRef.current.params;
-  };
   // Pile chips (projected anchors, fire-chip pattern) and the
   // pile whose menu is open. The menu is LIVE, not a tap-time
   // snapshot: selectedPileId names the pile, and the menu
@@ -2387,12 +2342,13 @@ export default function App() {
       // set refreshes (new houses count); otherwise the button
       // shows exactly when a press could reveal something.
       const gen = genRef.current;
-      const waters = stillWatersNear(gen, getRiverParams(gen), x, z);
+      const waters = stillWatersNear(gen, x, z);
       const div = divinationRef.current;
       const houses = shelterState.snapshot();
       if (div.isRevealed) {
         if (div.arrivedAt(x, z)) {
           div.dismiss();
+          rendererRef.current?.setCampArrowsVisible(false);
         } else {
           div.reveal(findCamps(houses));
         }
@@ -2721,6 +2677,7 @@ export default function App() {
     setPosition({ x: spawn.x, z: spawn.z });
     // A new world clears the scry reveal (new camps, new water).
     divinationRef.current.dismiss();
+    renderer.setCampArrowsVisible(false);
     setScryVisible(false);
     setBiomeText(formatWeights(gen.weightsAt(spawn.x, spawn.z)));
     bus.emit('world:seedSet', { seed: nextSeed });
@@ -3538,18 +3495,18 @@ export default function App() {
   // Scry press (DEV split): the press IS the reveal — call
   // Systems' evaluation directly (no wrapper, DEV declined
   // the trivial alias per no-rebuild). Shown + camps: reveal
-  // the set and hide the button (it reappears on arrival-
-  // dismiss if she is still at water). Not shown (raced a
-  // move away from the water): just hide the button —
-  // Systems' evaluation is silent by design, no reasons, no
-  // popups. ARROWS GATE: no renderer arrow API exists yet,
-  // so this sets reveal state only; the arrows appear when
-  // Background's API lands and the shell calls it here.
+  // the set, show the renderer arrows, and hide the button
+  // (it reappears on arrival-dismiss if she is still at
+  // water). Not shown (raced a move away from the water):
+  // just hide the button — Systems' evaluation is silent by
+  // design, no reasons, no popups. Arrows: the renderer
+  // rebuilds them from placed houses itself (shelter:placed
+  // + setWorldGen); the shell only toggles visibility.
   const handleScry = () => {
     const player = playerRef.current;
     if (!player) return;
     const gen = genRef.current;
-    const waters = stillWatersNear(gen, getRiverParams(gen), player.x, player.z);
+    const waters = stillWatersNear(gen, player.x, player.z);
     const result = evaluateCampReveal(
       { x: player.x, z: player.z },
       waters,
@@ -3557,6 +3514,7 @@ export default function App() {
     );
     if (result.shown) {
       divinationRef.current.reveal(result.camps);
+      rendererRef.current?.setCampArrowsVisible(true);
     }
     setScryVisible(false);
   };
@@ -4753,10 +4711,9 @@ export default function App() {
         with any panel/modal open, like the LocationChip,
         so it never sits on a bottom sheet. Label "Scry"
         (Adam's verb); the button IS the magic signal — no
-        tutorial popup. ARROWS GATE: press sets the reveal
-        state; no renderer arrow API exists yet, so nothing
-        visible happens on press until Background's API
-        lands. */}
+        tutorial popup. Press shows the renderer arrows
+        (Background's API, wired in CAMP ARROWS WIRING);
+        arrival-dismiss and regenerate hide them again. */}
       {scryVisible &&
       !inventoryOpen &&
       !craftingOpen &&
