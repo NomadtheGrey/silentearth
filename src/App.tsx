@@ -102,9 +102,9 @@
  *   EAT BUTTON, LIVE (gap-closing round): inventory rows for
  *   foods gain an Eat button (same row-button pattern as
  *   Place). Berries and cooked acorns eat through Systems'
- *   eat() — one item, nutrition from its table (berries 10 /
- *   15, cooked acorns 20, lane-decided), stage refreshes at
- *   once. Raw acorns never reach eat(): their press shows
+ *   eat() — one item, nutrition from its table (berries 15 /
+ *   20, cooked acorns 25, Adam's 2026-10-27 +5 bump), stage
+ *   refreshes at once. Raw acorns never reach eat(): their press shows
  *   the cook-first note and consumes nothing (eat() itself
  *   would refuse with a stale "future fire system" message —
  *   the fire system exists now, so the shell says so in its
@@ -141,9 +141,9 @@
  *   and completes it when the engine reports lit or Cook
  *   is pressed, so cook() never runs against a vessel the
  *   engine hasn't lit. COST ASYMMETRY, FLAGGED: Systems'
- *   slow method consumes 1 snap-wood kindling, but engine
+ *   slow method consumes 1 dry-kindling, but engine
  *   friction charges nothing — the mirror charges kindling
- *   only when snap-wood is carried (named in the friction
+ *   only when dry-kindling is carried (named in the friction
  *   menu hint), engine lighting proceeds regardless, and a
  *   kindling-less friction fire cooks once kindling is
  *   carried and Cook is pressed (the press retries and
@@ -2448,9 +2448,9 @@ export default function App() {
    * the player presses Cook — so cook() never runs against
    * a vessel the engine hasn't lit, and never against a
    * stale one. COST ASYMMETRY, FLAGGED: Systems' slow method
-   * ('sticks') consumes 1 snap-wood as kindling, but the
+   * ('sticks') consumes 1 dry-kindling, but the
    * engine friction path charges nothing — so the mirror
-   * charges kindling only when snap-wood is carried, and
+   * charges kindling only when dry-kindling is carried, and
    * engine lighting proceeds regardless. A friction-lit fire
    * with no kindling cooks once kindling is carried and Cook
    * is pressed (the press retries the completion and says
@@ -2500,7 +2500,7 @@ export default function App() {
       );
     } catch {
       // Engine lighting is the authority and proceeds: a
-      // friction start without snap-wood kindling simply
+      // friction start without dry-kindling simply
       // leaves the vessel unlit until Cook retries it.
     }
   };
@@ -2559,7 +2559,7 @@ export default function App() {
       {
         id: 'light-friction',
         label: 'Light with friction (slow)',
-        hint: 'Rub, wait, rub · 1 snap-wood kindling readies it for cooking',
+        hint: 'Rub, wait, rub · 1 dry-kindling readies it for cooking',
       },
       { id: 'close', label: 'Close' },
     ];
