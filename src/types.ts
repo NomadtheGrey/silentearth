@@ -66,7 +66,11 @@ export type ScatterKind =
   | 'marshGrass'
   | 'bogGrowth'
   | 'flower'
-  | 'tallTree';
+  | 'tallTree'
+  | 'edibleMushroom'
+  | 'poisonMushroom'
+  | 'groundAcorns'
+  | 'appleTree';
 
 /** One placed scatter object in a chunk. y is its base height above ground. */
 export interface ScatterObject {

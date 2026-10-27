@@ -30,6 +30,8 @@ export { WitchHealth } from './WitchHealth';
 export type { WitchHealthProps } from './WitchHealth';
 export { HungerIndicator } from './HungerIndicator';
 export type { HungerIndicatorProps, HungerStage } from './HungerIndicator';
+export { ForageHint } from './ForageHint';
+export type { ForageHintProps } from './ForageHint';
 export { FireState } from './FireState';
 export type { FireStateProps, FireKind, FireChipStatus } from './FireState';
 export { PlacementPreview } from './PlacementPreview';

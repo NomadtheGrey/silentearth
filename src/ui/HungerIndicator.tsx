@@ -6,13 +6,20 @@
  *
  * A light hunger element for the HUD, in the established light
  * style (same pill shape as WitchHealth, one line, no panel). It
- * shows ONLY the hunger stage it is passed — fed, hungry, or
- * too-hungry — as a plain word with a coloured dot. It carries no
- * numbers: no meter value, no bar, no drain rate, because the
- * stage is the whole contract this element was given. It computes
- * nothing about hunger itself and imports no game or systems
- * code; the wiring caller passes the stage from Systems' meter
- * when that shape lands (see below).
+ * shows the hunger stage it is passed — fed, hungry, or
+ * too-hungry — as a plain word with a coloured dot, and, when
+ * the caller also passes the meter value, a bar filled to that
+ * value plus the number beside it. It computes nothing about
+ * hunger itself and imports no game or systems code; stage and
+ * value both come from the one Systems meter, never a second
+ * value kept anywhere.
+ *
+ * BAR + NUMBER (Adam, 2026-10-26): the bar fill is the value
+ * clamped to 0–100; the number is Math.round of that value —
+ * a rounded integer, never the raw float (a drain float like
+ * 0.6666666666666945 is exactly what a player should never
+ * see). With no value passed, the bar and number are omitted
+ * and the element renders exactly as before.
  *
  * With no stage it says plainly that it awaits the hunger system,
  * instead of inventing a stage — the same honesty as WitchHealth's
@@ -26,15 +33,10 @@
  * rendered as words only: this element does not check whether
  * any of them is available, and it opens no panel.
  *
- * STAGE SOURCE — READ THIS: at the time this file was written,
- * no hunger meter or stage shape exists in the repo (grep for
- * hunger across src/ returns nothing at the tip this landing
- * was built on). Systems owns the meter and will document its
- * stage query/event; until that shape lands, App mounts this
- * element with no stage, and the awaiting note is what the
- * player sees. The moment the documented shape exists, App
- * passes the stage through — no second channel is invented
- * here, and no stage is guessed in the meantime.
+ * STAGE SOURCE — READ THIS: Systems owns the meter; App passes
+ * its stage() and value() through, and no stage or value is
+ * guessed in the meantime. With no stage passed, the awaiting
+ * note is what the player sees, as before.
  */
 
 /** Hunger stages, exactly as the task names them. */
@@ -46,6 +48,13 @@ export interface HungerIndicatorProps {
    * Undefined = awaiting hunger system (renders the awaiting note).
    */
   stage?: HungerStage;
+  /**
+   * Current meter value, 0–100, caller-supplied from the SAME
+   * meter as stage (hunger.value()). Undefined = no bar and no
+   * number (renders as before). The bar fills to the clamped
+   * value; the number beside it is the rounded integer.
+   */
+  value?: number;
   /** Label for the element. Default "Hunger". */
   label?: string;
   className?: string;
@@ -66,9 +75,18 @@ const STAGE_DOT: Record<HungerStage, string> = {
 
 export function HungerIndicator({
   stage,
+  value,
   label = 'Hunger',
   className,
 }: HungerIndicatorProps) {
+  // Bar fill uses the clamped raw value; the number beside it
+  // is the rounded integer — never the raw float. A non-finite
+  // value renders as no value at all, not NaN on screen.
+  const barPct =
+    value !== undefined && Number.isFinite(value)
+      ? Math.min(100, Math.max(0, value))
+      : undefined;
+  const shownValue = barPct !== undefined ? Math.round(barPct) : undefined;
   return (
     <div
       aria-label={label}
@@ -96,6 +114,21 @@ export function HungerIndicator({
           </span>
         )}
       </div>
+      {shownValue !== undefined ? (
+        <div className="flex items-center gap-2">
+          <div className="h-2 flex-1 rounded bg-stone-700">
+            <div
+              className="h-2 rounded"
+              style={{
+                width: `${barPct}%`,
+                backgroundColor:
+                  stage === undefined ? '#78716c' : STAGE_DOT[stage],
+              }}
+            />
+          </div>
+          <span>{shownValue}</span>
+        </div>
+      ) : null}
       {stage === 'too-hungry' ? (
         <span className="text-xs text-stone-400">
           Traps, campfire cooking, or nuts and berries can bring her back.

@@ -122,6 +122,33 @@ interface ClearedSpot {
   z: number;
 }
 
+/**
+ * Serializable harvest-state snapshot (save seam, Adam 2026-10-27).
+ * Covers depletion/regrow (shrunk + removed), cleared-ground marks,
+ * sapling/log renewal (saplings + spawnedLogs + pendingSpawns +
+ * felled + counters), and multi-step progress. All times are
+ * wall-clock instants (Date.now()): harvestedAt + REGROW_MS,
+ * pending dueAt, sapling plantedAt + SAPLING_GROWTH_MS. A save
+ * loaded after a long absence therefore finds elapsed regrows,
+ * spawns, and growths complete — refresh itself (seconds later)
+ * is unaffected, which is the brief's case. If Adam wants
+ * away-time frozen, that is a second rule (shift-on-load), not
+ * built here. Counters preserve the deterministic spawn/plant
+ * sequences exactly (same history = same picks).
+ */
+export interface HarvestStateSnapshot {
+  shrunk: Array<{ id: string; harvestedAt: number; cx: number; cz: number }>;
+  removed: string[];
+  progress: Array<{ id: string; progress: number }>;
+  spawnedLogs: SpawnedLog[];
+  pendingSpawns: Array<{ dueAt: number; nearX: number; nearZ: number; seed: number }>;
+  spawnCounter: number;
+  felled: Array<{ id: string; x: number; z: number; cx: number; cz: number }>;
+  saplings: Sapling[];
+  saplingCounter: number;
+  clearedSpots: Array<{ x: number; z: number }>;
+}
+
 /** World harvest state: shrink/regrow + removed + spawned logs +
  *  felled trees (stumps) + saplings + cleared spots. */
 export class HarvestState {
@@ -463,6 +490,166 @@ export class HarvestState {
    */
   markCleared(x: number, z: number): void {
     this.clearedSpots.push({ x, z });
+  }
+
+  /** Save seam: serializable COPY of all harvest state (never live refs). */
+  snapshot(): HarvestStateSnapshot {
+    return {
+      shrunk: [...this.shrunk.entries()].map(([id, e]) => ({
+        id,
+        harvestedAt: e.harvestedAt,
+        cx: e.cx,
+        cz: e.cz,
+      })),
+      removed: [...this.removed],
+      progress: [...this.progress.entries()].map(([id, progress]) => ({ id, progress })),
+      spawnedLogs: [...this.spawnedLogs.values()].map((l) => ({ ...l })),
+      pendingSpawns: this.pendingSpawns.map((s) => ({ ...s })),
+      spawnCounter: this.spawnCounter,
+      felled: [...this.felled.entries()].map(([id, e]) => ({
+        id,
+        x: e.x,
+        z: e.z,
+        cx: e.cx,
+        cz: e.cz,
+      })),
+      saplings: [...this.saplings.values()].map((s) => ({ ...s })),
+      saplingCounter: this.saplingCounter,
+      clearedSpots: this.clearedSpots.map((s) => ({ ...s })),
+    };
+  }
+
+  /**
+   * Silent bulk restore (save boot path): REPLACES state, drops
+   * invalid entries, bumps version via clear() so the renderer
+   * redraws. A null/non-object snapshot is ignored entirely (state
+   * untouched — a corrupt save must not wipe a live world); a
+   * partial snapshot clears the missing sections (replace, not
+   * merge — merging would double-count). Progress restores at
+   * 0..1 (a 1.0 progress would already have granted and cleared).
+   * Cleared spots restore verbatim (markCleared already exists —
+   * this seam only persists the marks, it does not invent them).
+   */
+  restore(snap: HarvestStateSnapshot): void {
+    if (!snap || typeof snap !== 'object') return;
+    this.clear();
+    if (Array.isArray(snap.shrunk)) {
+      for (const e of snap.shrunk) {
+        if (
+          !e ||
+          typeof e.id !== 'string' ||
+          e.id === '' ||
+          !Number.isFinite(e.harvestedAt) ||
+          !Number.isInteger(e.cx) ||
+          !Number.isInteger(e.cz)
+        ) {
+          continue;
+        }
+        this.shrunk.set(e.id, { harvestedAt: e.harvestedAt, cx: e.cx, cz: e.cz });
+      }
+    }
+    if (Array.isArray(snap.removed)) {
+      for (const id of snap.removed) {
+        if (typeof id === 'string' && id !== '') this.removed.add(id);
+      }
+    }
+    if (Array.isArray(snap.progress)) {
+      for (const e of snap.progress) {
+        if (
+          !e ||
+          typeof e.id !== 'string' ||
+          e.id === '' ||
+          !Number.isFinite(e.progress) ||
+          e.progress < 0 ||
+          e.progress > 1
+        ) {
+          continue;
+        }
+        this.progress.set(e.id, e.progress);
+      }
+    }
+    if (Array.isArray(snap.spawnedLogs)) {
+      for (const l of snap.spawnedLogs) {
+        if (
+          !l ||
+          typeof l.id !== 'string' ||
+          l.id === '' ||
+          !Number.isFinite(l.x) ||
+          !Number.isFinite(l.z) ||
+          !Number.isInteger(l.cx) ||
+          !Number.isInteger(l.cz)
+        ) {
+          continue;
+        }
+        this.spawnedLogs.set(l.id, { id: l.id, x: l.x, z: l.z, cx: l.cx, cz: l.cz });
+      }
+    }
+    if (Array.isArray(snap.pendingSpawns)) {
+      for (const s of snap.pendingSpawns) {
+        if (
+          !s ||
+          !Number.isFinite(s.dueAt) ||
+          !Number.isFinite(s.nearX) ||
+          !Number.isFinite(s.nearZ) ||
+          !Number.isFinite(s.seed)
+        ) {
+          continue;
+        }
+        this.pendingSpawns.push({ dueAt: s.dueAt, nearX: s.nearX, nearZ: s.nearZ, seed: s.seed });
+      }
+    }
+    this.spawnCounter =
+      Number.isInteger(snap.spawnCounter) && snap.spawnCounter >= 0 ? snap.spawnCounter : 0;
+    if (Array.isArray(snap.felled)) {
+      for (const e of snap.felled) {
+        if (
+          !e ||
+          typeof e.id !== 'string' ||
+          e.id === '' ||
+          !Number.isFinite(e.x) ||
+          !Number.isFinite(e.z) ||
+          !Number.isInteger(e.cx) ||
+          !Number.isInteger(e.cz)
+        ) {
+          continue;
+        }
+        this.felled.set(e.id, { x: e.x, z: e.z, cx: e.cx, cz: e.cz });
+      }
+    }
+    if (Array.isArray(snap.saplings)) {
+      for (const s of snap.saplings) {
+        if (
+          !s ||
+          typeof s.id !== 'string' ||
+          s.id === '' ||
+          !Number.isFinite(s.x) ||
+          !Number.isFinite(s.z) ||
+          !Number.isInteger(s.cx) ||
+          !Number.isInteger(s.cz) ||
+          !Number.isFinite(s.plantedAt)
+        ) {
+          continue;
+        }
+        this.saplings.set(s.id, {
+          id: s.id,
+          x: s.x,
+          z: s.z,
+          cx: s.cx,
+          cz: s.cz,
+          plantedAt: s.plantedAt,
+        });
+      }
+    }
+    this.saplingCounter =
+      Number.isInteger(snap.saplingCounter) && snap.saplingCounter >= 0
+        ? snap.saplingCounter
+        : 0;
+    if (Array.isArray(snap.clearedSpots)) {
+      for (const s of snap.clearedSpots) {
+        if (!s || !Number.isFinite(s.x) || !Number.isFinite(s.z)) continue;
+        this.clearedSpots.push({ x: s.x, z: s.z });
+      }
+    }
   }
 
   /** Seed change / world reset: shrink, removed, progress, spawned

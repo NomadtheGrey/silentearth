@@ -22,6 +22,7 @@
 import type { BiomeId, CameraMode } from '../types';
 import type { FireType, LightingMethod } from './fire';
 import type { HouseType } from './shelter';
+import type { TrapType } from './traps';
 import type { PermitTier } from './objects';
 
 export interface EventMap {
@@ -240,6 +241,17 @@ export interface EventMap {
    * state, so no re-wiring is needed.
    */
   'loom:placed': { id: string; x: number; z: number };
+  /**
+   * A trap entity was placed (trapState.placeTrap, Adam's
+   * rule: crafting a trap places it right there). Cost-free
+   * engine primitive — recipe/cost gating lives with Systems
+   * + UI. Renderer rebuilds the trap group from this. NOTE:
+   * no Systems emit exists today — placeTrap owns this emit,
+   * and the craft-success call site (shell/Systems) is the
+   * follow-up; exactly one caller must place per craft, or
+   * one craft places two traps.
+   */
+  'trap:placed': { id: string; type: TrapType; x: number; z: number };
   /**
    * Shelter state at her position changed (tracker, change-only,
    * like weather:changed): multiplier from real placed houses

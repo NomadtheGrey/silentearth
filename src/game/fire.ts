@@ -25,13 +25,14 @@
  * is SLOW (rub, wait 20–30 s, rub). Counts/timing below are
  * lane-decided tunables (flagged), inside Adam's shapes.
  *
- * CANDLE FLAG — DO NOT ASSUME (Adam's brief, 2026-10-26): she
- * walks around with a candle (avatar flame), but how the candle
- * relates to fire-starting is UNDECIDED — light only, or a
- * starter? Until Adam calls it, the candle lights NOTHING and
- * cooks NOTHING: lighting methods here are flint and friction
- * only, and no code path reads the candle. This flag stays until
- * his call lands; do not wire the candle in quietly.
+ * CANDLE — LIGHT SETTLED, STARTER STILL OPEN (Adam, 2026-10-26):
+ * the carried candle PROVIDES LIGHT (visible model + real point
+ * light, renderer/models — see buildCandle + candleLight). That
+ * settles the light half of this flag. The starter half is STILL
+ * UNDECIDED: the candle lights NO fires and cooks NOTHING —
+ * lighting methods here stay flint and friction only, and no code
+ * path reads the candle as a starter. Do not wire it as one
+ * quietly; that call is still Adam's.
  *
  * LIGHT DIRECTION (Adam, 2026-10-26 — NOTED, NOT A BUILD ORDER:
  * do not pull this into the fire/shelters round): when light
@@ -49,10 +50,11 @@
  * - AFTER torches, candles can be made for PLACING on the map
  *   where she needs them (placeable lights).
  * - Sequence: carried candle → torch → placeable candles.
- * Nothing here builds any of it: no cycle, no darkness
- * mechanic, no torch item, no placeable candle entity. And
- * carried light does NOT settle the candle-as-starter flag
- * above — that call is still open.
+ * The rest is still unbuilt here: no cycle, no darkness
+ * mechanic, no torch item, no placeable candle entity
+ * (carried light itself landed in renderer/models, Adam
+ * 2026-10-26). And carried light does NOT settle the
+ * candle-as-starter flag above — that call is still open.
  *
  * SCOPE BOUNDARIES: placement here is a cost-free engine
  * primitive — recipe/cost gating lives with Systems + UI, not in

@@ -199,6 +199,12 @@ export interface SkyUpdateInput {
  * writes only. Headless-safe (no renderer, window, or document
  * use) — probes construct it with bare three objects.
  */
+
+/** Saved sky state: cycle position t ∈ [0,1) ONLY (month is an input, not state). */
+export interface SkySnapshot {
+  cycleT: number;
+}
+
 export class SkyRig {
   /** Cycle position t ∈ [0,1); 0 = dawn. */
   cycleT = 0;
@@ -351,6 +357,28 @@ export class SkyRig {
     }
     this.group.add(new THREE.Points(this.buildStarGeometry(), this.starMaterial));
     this.cycleT = 0;
+  }
+
+  /** Save seam: cycle position (month stays an input — see header). */
+  snapshot(): SkySnapshot {
+    return { cycleT: this.cycleT };
+  }
+
+  /**
+   * Save-boot restore: cycle position. Wraps into [0,1); call
+   * AFTER setSeed (setSeed resets to dawn). The next update()
+   * recomputes sun/moon/lights from the restored t — no other
+   * state to restore (stars/clouds are seeded, not time).
+   * Non-finite input is ignored (cycle keeps its current t).
+   */
+  restore(snap: SkySnapshot): void {
+    if (!snap || !Number.isFinite(snap.cycleT)) return;
+    // Wrap without a +1 round trip: ((t % 1) + 1) % 1 would turn an
+    // already-exact in-range t (e.g. 0.42) into 0.41999999999999993
+    // via 1.42's inexact double — a save/load round trip must be exact.
+    let t = snap.cycleT % 1;
+    if (t < 0) t += 1;
+    this.cycleT = t;
   }
 
   update(dt: number, input: SkyUpdateInput): void {

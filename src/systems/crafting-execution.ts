@@ -58,11 +58,40 @@
  *    the owned tier exactly where it was. A failed craft leaves the
  *    inventory — and therefore the owned tier — untouched.
  *
- * 4. NO OWNED-TOOL GATE ON CRAFTING. Upgrade predecessors are
- *    inventory-based (crafting.ts), not owned-tier-based: crafting
- *    an upgrade does not require owning any particular tier, only
- *    holding the predecessor in inventory. This helper adds no
- *    such gate.
+ * 4. NO OWNED-TOOL GATE ON CRAFTING — except a recipe's own
+ *    requiresToolStage. Upgrade predecessors are inventory-based
+ *    (crafting.ts), not owned-tier-based: crafting an upgrade does
+ *    not require owning any particular tier, only holding the
+ *    predecessor in inventory. The ONE exception (Adam,
+ *    2026-10-26): a recipe may state requiresToolStage, a
+ *    minimum owned stage enforced here before anything is
+ *    consumed (pitfall: stage 1, spade tier or better). This is
+ *    NOT an upgrade-predecessor gate and NOT a literal item
+ *    requirement — it reads the owned stage, so upgrading past
+ *    the required tool never locks the recipe out.
+ *
+ * 5. TRAP CRAFTS REPORT, THEY DON'T GRANT — AND THEY DON'T
+ *    PLACE OR EMIT EITHER (Adam, 2026-10-26; DEV correction,
+ *    superseding the emit half of the original brief).
+ *    A recipe with placesTrap set (all five traps) never enters
+ *    inventory: on a confirmed craft this helper consumes the
+ *    ingredients and reports success via placedTrap {type} —
+ *    and NOTHING else. It does not place, and it does not emit
+ *    'trap:placed' (the earlier callback-emit shape from
+ *    e37234e/762af40 is REMOVED by this landing). SINGLE-CALLER
+ *    RULE: the SHELL calls trapState.placeTrap(type, player.x,
+ *    player.z) on a placedTrap result — that call is the one
+ *    and only placer (it stores the trap and emits the event;
+ *    the renderer reads trapState). Systems in the emit path
+ *    would risk a second place per craft, so Systems stays out
+ *    of it entirely. The shell's "Place trap here?" confirm
+ *    gates BEFORE this helper runs (No = abort, nothing
+ *    consumed). Placing takes no capacity check: nothing enters
+ *    the pack, so a full pack never blocks a placement.
+ *    Hunger/station/tool-stage gates still apply in their usual
+ *    order — trap CRAFTING is still building, so too-hungry
+ *    still blocks it; the too-hungry trap exemption covers trap
+ *    USE, once the set/check system exists, not trap crafting.
  *
  * ------------------------------------------------------------------
  * RULED CONSTRUCTION (Adam, 2026-10-26): LARGE BASKET REPLACES
@@ -79,6 +108,7 @@
  *   new PersonalInventory({ largeBasketMode: 'replace', initial })
  */
 
+import { canCraft } from './crafting';
 import { craftIntoInventory, PersonalInventory } from './inventory';
 import type { HungerState } from './hunger';
 import {
@@ -100,7 +130,21 @@ import type { CraftingStation, ItemId, Recipe } from './recipes';
 export type StationInput = CraftingStation | CraftingStation[] | null;
 
 export interface CraftExecutionResult {
+  /**
+   * What was crafted. When `placedTrap` is present, this output
+   * was NOT added to inventory — the shell must not treat it as
+   * a grant (it is carried here for feedback naming only), and
+   * must place it via trapState.placeTrap (see header point 5).
+   */
   output: { item: ItemId; quantity: number };
+  /**
+   * Present only for placesTrap crafts: the trap's type (recipe
+   * id — == its output item for all five traps). The shell
+   * places it: trapState.placeTrap(type, player.x, player.z).
+   * Systems never places and never emits. Absent for every
+   * ordinary grant craft.
+   */
+  placedTrap?: { type: string };
   /** Owned tool after the craft, read from inventory ('none' if none). */
   owned: OwnedToolItem;
   /** Background-compatible tier of the owned tool, null for none. */
@@ -177,6 +221,22 @@ export function executeCraft(
     );
   }
 
+  // Owned-tool-stage gate, before anything is consumed. A stated
+  // requiresToolStage reads the owned stage (owned-tool.ts) —
+  // never a literal item — so a spade-axe or trundle-tool holder
+  // with no 'spade' item in inventory still passes a stage-1
+  // requirement. Mirrors canCraft's gate; the engine's own check
+  // then agrees by construction.
+  if (recipe.requiresToolStage !== undefined) {
+    const heldStage = ownedStage(inventory);
+    if (heldStage < recipe.requiresToolStage) {
+      throw new Error(
+        `Cannot craft ${recipe.name}: requires owned tool stage ` +
+          `${recipe.requiresToolStage} or better, have stage ${heldStage}.`,
+      );
+    }
+  }
+
   // Engine station for craftIntoInventory: the required station when
   // one is stated (it is present, per the gate above), otherwise the
   // single input station when there is one, otherwise null. The
@@ -188,6 +248,78 @@ export function executeCraft(
       : Array.isArray(station)
         ? null
         : station;
+
+  // TRAP REPORT PATH: a placesTrap craft never enters inventory
+  // and never places or emits — it consumes and reports success
+  // (placedTrap {type}), and the SHELL places via placeTrap on
+  // that result (header point 5, single-caller rule).
+  if (recipe.placesTrap) {
+    // Ingredient / requirement / predecessor check, via the same
+    // engine check the grant path uses — but the grant itself is
+    // NOT run: placing takes no capacity check (nothing enters
+    // the pack) and adds no item. Consumption below cannot fail
+    // after this check passes (synchronous, no interleave).
+    const check = canCraft(recipe, inventory, engineStation);
+    if (!check.ok) {
+      if (check.stationMismatch) {
+        throw new Error(
+          `Cannot craft ${recipe.name}: requires station ` +
+            `${check.requiredStation}.`,
+        );
+      }
+      const firstMissing = check.missingIngredients[0];
+      if (firstMissing) {
+        throw new Error(
+          `Cannot craft ${recipe.name}: need ${firstMissing.quantity} ` +
+            `${firstMissing.item}, have ${firstMissing.held}.`,
+        );
+      }
+      if (check.missingUpgradeFrom.length > 0) {
+        throw new Error(
+          `Cannot craft ${recipe.name}: need one of ` +
+            `${check.missingUpgradeFrom.join(' or ')} to upgrade from.`,
+        );
+      }
+      const firstRequirement = check.missingRequirements[0];
+      if (firstRequirement) {
+        throw new Error(
+          `Cannot craft ${recipe.name}: requires ${firstRequirement.quantity} ` +
+            `${firstRequirement.item} present (not consumed), have ` +
+            `${firstRequirement.held}.`,
+        );
+      }
+      if (check.toolStageShortfall) {
+        throw new Error(
+          `Cannot craft ${recipe.name}: requires owned tool stage ` +
+            `${check.toolStageShortfall.required} or better, have stage ` +
+            `${check.toolStageShortfall.held}.`,
+        );
+      }
+      throw new Error(`Cannot craft ${recipe.name}: check failed.`);
+    }
+    for (const ingredient of recipe.ingredients) {
+      inventory.remove(ingredient.item, ingredient.quantity);
+    }
+    if (recipe.upgradeFrom !== undefined) {
+      const predecessors = Array.isArray(recipe.upgradeFrom)
+        ? recipe.upgradeFrom
+        : [recipe.upgradeFrom];
+      const held = predecessors.find(
+        (item) => inventory.count(item) >= 1,
+      );
+      if (held !== undefined) {
+        inventory.remove(held, 1);
+      }
+    }
+    return {
+      output: { ...recipe.output },
+      placedTrap: { type: recipe.id },
+      owned: ownedToolItem(inventory),
+      toolTier: ownedTier(inventory),
+      harvestStage: ownedStage(inventory),
+      stageName: ownedStageName(inventory),
+    };
+  }
 
   const output = craftIntoInventory(recipe, inventory, engineStation);
 

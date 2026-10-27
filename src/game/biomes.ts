@@ -85,7 +85,7 @@ export const BIOMES: BiomeDef[] = [
       vine: 0.16, bush: 0.14, log: 0.08, bogPatch: 0.08, standingWater: 0.08,
       tree: 0.05, snapWood: 0.10, tenderVines: 0.12, peatMoss: 0.10,
       riverSilt: 0.04, riverStone: 0.03, bone: 0.01, downedOak: 0.01,
-      stump: 0.01, bogGrowth: 0.03,
+      stump: 0.01, bogGrowth: 0.03, edibleMushroom: 0.04, poisonMushroom: 0.04,
     },
     // The start: sloppy-wet hybrid woodland, halfway between dry and swamp.
     // A small affinity floor (applied in weightsAt) keeps Mirewood present
@@ -105,7 +105,7 @@ export const BIOMES: BiomeDef[] = [
     mix: {
       bogPatch: 0.25, standingWater: 0.25, peatMoss: 0.15, snapWood: 0.05,
       tenderVines: 0.05, bush: 0.05, log: 0.05, riverSilt: 0.08, bone: 0.04,
-      riverStone: 0.03, bogGrowth: 0.10, stump: 0.005,
+      riverStone: 0.03, bogGrowth: 0.10, stump: 0.005, edibleMushroom: 0.06, poisonMushroom: 0.06,
     },
     // Outright swamp: the place Mirewood deepens into. Navigation difficulty
     // here is UNDECIDED — no slow/stuck mechanic is implemented.
@@ -124,7 +124,7 @@ export const BIOMES: BiomeDef[] = [
       bush: 0.20, tree: 0.18, snapWood: 0.15, tenderVines: 0.05, log: 0.05,
       riverStone: 0.10, bone: 0.05, peatMoss: 0.05, vine: 0.05, downedOak: 0.05,
       riverSilt: 0.02, saltCrystal: 0.02, bogPatch: 0.01, standingWater: 0.01,
-      stump: 0.02,
+      stump: 0.02, appleTree: 0.06,
     },
     // The pleasant neighbor: higher, drier, firm footing.
     anchor: {
@@ -141,7 +141,7 @@ export const BIOMES: BiomeDef[] = [
     mix: {
       riverSilt: 0.25, standingWater: 0.20, riverStone: 0.15, peatMoss: 0.10,
       snapWood: 0.05, tenderVines: 0.05, bush: 0.05, log: 0.05, bone: 0.03,
-      bogPatch: 0.05, vine: 0.02, bogGrowth: 0.02,
+      bogPatch: 0.05, vine: 0.02, bogGrowth: 0.02, edibleMushroom: 0.04, poisonMushroom: 0.04,
     },
     // Silt beds and shallow water along ridged creek lines.
     anchor: {
@@ -158,7 +158,7 @@ export const BIOMES: BiomeDef[] = [
     mix: {
       vine: 0.25, tenderVines: 0.20, bush: 0.20, log: 0.08, snapWood: 0.08,
       downedOak: 0.05, peatMoss: 0.05, tree: 0.05, riverStone: 0.02, bone: 0.02,
-      stump: 0.01, bogGrowth: 0.02,
+      stump: 0.01, bogGrowth: 0.02, edibleMushroom: 0.08, poisonMushroom: 0.08,
     },
     // Vine- and bush-choked dense growth: cordage country.
     anchor: {
@@ -191,14 +191,15 @@ export const BIOMES: BiomeDef[] = [
     mix: {
       flower: 0.28, bush: 0.16, snapWood: 0.08, tree: 0.04, log: 0.04,
       tenderVines: 0.05, riverStone: 0.05, peatMoss: 0.03, vine: 0.03,
-      bone: 0.01, stump: 0.01,
+      bone: 0.01, stump: 0.01, appleTree: 0.05,
     },
     // Pretty and open: light grass, flowers, scattered brush — the
     // pleasant far-out clearing. Drier and lower than Oldfield Rise
     // (which stays the near-spawn pleasant neighbor), and gated by
     // distance so it is never a start neighbor (see distance axis).
     // 'flower' is scenery only; everything yield-bearing here is an
-    // existing item shared with other biomes.
+    // existing item shared with other biomes — except appleTree, the
+    // first fruit tree (old orchard remnants, also in oldfieldRise).
     anchor: {
       wetness: { at: 0.35, sigma: 0.25 },
       elevation: { at: 0.55, sigma: 0.30 },
@@ -214,7 +215,7 @@ export const BIOMES: BiomeDef[] = [
     mix: {
       tallTree: 0.28, tree: 0.14, bush: 0.12, vine: 0.10, tenderVines: 0.08,
       log: 0.06, snapWood: 0.05, downedOak: 0.04, peatMoss: 0.04,
-      flower: 0.03, riverStone: 0.02, bone: 0.01, stump: 0.01, bogGrowth: 0.01,
+      flower: 0.03, riverStone: 0.02, bone: 0.01, stump: 0.01, bogGrowth: 0.01, edibleMushroom: 0.08, poisonMushroom: 0.08,
     },
     // Pretty and deep: tall trees, dappled light, a sparse flower floor.
     // Dense like Tanglewood, but mid-elevation and distance-gated, so

@@ -39,6 +39,16 @@ const SCATTER_KINDS: ScatterKind[] = [
   'stump', 'reed', 'marshGrass', 'bogGrowth',
   // Meadow/forest landing (2026-10-26): flower, tallTree (scenery only).
   'flower', 'tallTree',
+  // Mushroom landing (2026-10-26): edible + poison lookalikes.
+  'edibleMushroom', 'poisonMushroom',
+  // Acorn landing (2026-10-26): ground acorns spawn by adjacency
+  // to downed oaks, not by mix — registered here like reed and
+  // marshGrass (overlay/adjacency kinds), so a future mix weight
+  // would just work.
+  'groundAcorns',
+  // Apple landing (2026-10-27): first fruit tree, old orchard
+  // remnants in oldfieldRise + meadow (mix-driven, unlike acorns).
+  'appleTree',
 ];
 
 export function createWorldGen(seed: string): WorldGen {
@@ -119,6 +129,55 @@ export function createWorldGen(seed: string): WorldGen {
           : 0,
         scale: 0.7 + rand() * 0.7,
         rotY: rand() * Math.PI * 2,
+      });
+    }
+
+    // Ground acorns (Adam, 2026-10-26): one cluster beside each
+    // downed oak in this chunk — acorns are hand-picked from the
+    // ground around the log, not from the log itself. A SEPARATE
+    // derived rand stream (never the chunk's main stream) so this
+    // landing leaves every pre-existing scatter object untouched;
+    // offsets clamp inside the chunk so chunk-gen objects never
+    // cross chunk borders (proximity regenerates per chunk).
+    const acornRand = mulberry32(deriveSeed(seed, `acorns:${cx},${cz}`));
+    const oaks = objects.filter((obj) => obj.kind === 'downedOak');
+    for (const oak of oaks) {
+      const angle = acornRand() * Math.PI * 2;
+      const dist = 0.8 + acornRand() * 1.2;
+      const ax = Math.min(Math.max(oak.x + Math.cos(angle) * dist, originX + 0.5), originX + CHUNK_SIZE - 0.5);
+      const az = Math.min(Math.max(oak.z + Math.sin(angle) * dist, originZ + 0.5), originZ + CHUNK_SIZE - 0.5);
+      objects.push({
+        kind: 'groundAcorns',
+        x: ax,
+        z: az,
+        y: 0,
+        scale: 0.7 + acornRand() * 0.7,
+        rotY: acornRand() * Math.PI * 2,
+      });
+    }
+
+    // Standing oaks (Adam, 2026-10-26 — same fix as downed oak):
+    // one cluster beside each standing tree in this chunk, on its
+    // OWN derived stream so the downed-oak clusters above stay
+    // byte-identical. Scenery tall trees (kind 'tallTree') are not
+    // standing trees and get no clusters (flagged). State-appended
+    // trees (regrown saplings) never reach this block — same as
+    // spawned logs beside downed oaks — so clusters sit beside
+    // worldgen-placed trees only.
+    const standingAcornRand = mulberry32(deriveSeed(seed, `acorns-standing:${cx},${cz}`));
+    const standingTrees = objects.filter((obj) => obj.kind === 'tree');
+    for (const tree of standingTrees) {
+      const angle = standingAcornRand() * Math.PI * 2;
+      const dist = 0.8 + standingAcornRand() * 1.2;
+      const ax = Math.min(Math.max(tree.x + Math.cos(angle) * dist, originX + 0.5), originX + CHUNK_SIZE - 0.5);
+      const az = Math.min(Math.max(tree.z + Math.sin(angle) * dist, originZ + 0.5), originZ + CHUNK_SIZE - 0.5);
+      objects.push({
+        kind: 'groundAcorns',
+        x: ax,
+        z: az,
+        y: 0,
+        scale: 0.7 + standingAcornRand() * 0.7,
+        rotY: standingAcornRand() * Math.PI * 2,
       });
     }
 

@@ -612,6 +612,63 @@
  *   group child) stays renderer-owned and hidden by
  *   default until this call. App.tsx only; no game/systems
  *   change.
+ * - TRAP CRAFT CONFIRM, LIVE (Adam, 2026-10-26 — DEV brief,
+ *   first of two briefs): trap recipe Craft buttons ask first —
+ *   "PLACE TRAP HERE?" in the staged Popup dialog shell, Yes
+ *   runs the existing Systems trap-craft execution (consumes +
+ *   places), No or Close aborts with nothing consumed and no
+ *   trap. Trap rows only (Traps group); no other recipe
+ *   changes. App.tsx only; no game/systems change.
+ * - FORAGE HINTS, LIVE (Adam, 2026-10-26 — DEV brief,
+ *   second of two briefs): when she is hungry or too-hungry,
+ *   the HUD shows one short forage line — brush →
+ *   elderberries, bog growth → bog berries, downed oak →
+ *   acorns (cook first). Wording lane-decided, flagged;
+ *   mushroom lines join when mushroom sources land.
+ *   App.tsx + new ForageHint; no game/systems change.
+ * - DEFAULT PERSPECTIVE FIRST-PERSON, LIVE (Adam, 2026-10-26
+ *   — DEV brief, first of two briefs): both fresh-start
+ *   defaults move from 'third' to 'first' (boot camera
+ *   fallback + new-world meta default). Saved games keep
+ *   their saved cameraMode; V/C cycling + Options
+ *   perspective control untouched. App.tsx only.
+ * - HUNGER BAR + NUMBER, LIVE (Adam, 2026-10-26 — DEV brief):
+ *   the HUD hunger indicator now shows the meter itself — a
+ *   bar filled to hunger.value() plus the rounded integer
+ *   beside it, stage text as-is — via an optional value prop
+ *   on the same indicator, refreshed on the existing 1 s tick
+ *   and on eat. No second hunger value anywhere; the number
+ *   is Math.round, never the raw drain float. App.tsx +
+ *   HungerIndicator; no game/systems change.
+ * - TOUCH ROW LEVEL, LIVE (Adam, 2026-10-26 — DEV brief,
+ *   option A pick): TURN down to the bottom row, even with
+ *   MOVE (TURN bottom-24 right-4), USE beside it at right-40
+ *   (16 px gap to TURN). Geometry on Adam's 390 px phone:
+ *   MOVE [16, 144], USE [166, 230], TURN [246, 374] — 22 px
+ *   and 16 px gaps, no overlap. Labels, pulse-until-first-use,
+ *   touch ids, and gesture ownership unchanged. App.tsx
+ *   bullet + TouchControls positions only.
+ * - TRAP SAVE WIRING, LIVE (Adam, 2026-10-27 — DEV brief,
+ *   Systems format half 4f3fa69): placed traps survive a
+ *   refresh — saveNow passes trapState.snapshot() as
+ *   draft.traps, and boot restores via trapState.restore()
+ *   BEFORE the renderer is constructed (restore is silent,
+ *   and the constructor's initial trap build renders the
+ *   restored markers; no new renderer API, no per-trap
+ *   emits). Regenerate clears traps via setWorldGen, so a
+ *   new world saves empty; old saves load traps: [].
+ *   App.tsx only; no game/systems change.
+ * - WORLD-STATE SAVE WIRING, LIVE (Adam, 2026-10-27 — DEV
+ *   brief, Systems format dc803c7 + sky seam 466b7b7 + fire
+ *   ids amendment 943f362): harvested scatter, lit fires,
+ *   sky time, and facing survive a refresh — saveNow
+ *   writes fires with id + lighting, harvestState, sky,
+ *   and facing; boot restores fires + harvest + traps
+ *   BEFORE construction, sky AFTER construction, facing
+ *   after the mode-set (player.mode from the saved
+ *   cameraMode, fixing the boot that left the engine in
+ *   'third' for a saved first/behind game). Regenerate
+ *   clears all four via the existing paths. App.tsx only.
  * POINTER DISCIPLINE: overlays are pointer-events-none except the
  * small interactive pieces (HUD buttons, panels, harvest buttons),
  * so world clicks — including the first-person mouse-capture click
@@ -637,6 +694,9 @@ import {
 } from './game/fireState';
 import { loomState } from './game/loomState';
 import { pileState, type PileTarget } from './game/pileState';
+import { trapState } from './game/trapState';
+import type { TrapType } from './game/traps';
+import { harvestState } from './game/harvestState';
 import { SOURCE_BY_ID, type ToolTier } from './game/objects';
 import type { FireType } from './game/fire';
 import {
@@ -663,6 +723,7 @@ import {
 import { HudShell } from './ui/HudShell';
 import { WitchHealth } from './ui/WitchHealth';
 import { HungerIndicator } from './ui/HungerIndicator';
+import { ForageHint } from './ui/ForageHint';
 import { ShelteredIndicator } from './ui/ShelteredIndicator';
 import { StationPanel } from './ui/StationPanel';
 import { WornList, type WornGarment } from './ui/WornList';
@@ -674,6 +735,7 @@ import type { ContextAction } from './ui/types';
 import { TouchControls } from './ui/TouchControls';
 import { LocationChip } from './ui/LocationChip';
 import { PausedIndicator } from './ui/PausedIndicator';
+import { Popup } from './ui/Popup';
 import {
   OptionsModal,
   fontClassFor,
@@ -1042,6 +1104,11 @@ export default function App() {
   const [hungerStage, setHungerStage] = useState<HungerStage>(
     hunger.stage(),
   );
+  // Render mirror of the same one meter (hunger.value(), 0–100)
+  // — not a second value. Refreshed on the 1 s tick and on eat,
+  // alongside the stage, so the indicator's bar + number move
+  // with the meter.
+  const [hungerValue, setHungerValue] = useState<number>(hunger.value());
 
   // The shell owns the one wardrobe, like the one inventory and
   // the one hunger meter. Wear/remove go through it; capacity
@@ -1111,7 +1178,7 @@ export default function App() {
   const [seedInput, setSeedInput] = useState(bootSave?.seed ?? DEFAULT_SEED);
   const [seed, setSeed] = useState(bootSave?.seed ?? DEFAULT_SEED);
   const [cameraMode, setCameraMode] = useState<CameraMode>(
-    bootSave?.cameraMode ?? 'third',
+    bootSave?.cameraMode ?? 'first',
   );
   // Restored position is applied to the player in the boot effect
   // (which overwrites this state from the player); until then it
@@ -1210,7 +1277,7 @@ export default function App() {
   // singletons are read directly, never mirrored.
   const saveMetaRef = useRef({
     seed: DEFAULT_SEED,
-    cameraMode: 'third' as CameraMode,
+    cameraMode: 'first' as CameraMode,
     position: { x: 0, z: 0 },
   });
   useEffect(() => {
@@ -1237,11 +1304,16 @@ export default function App() {
           inventory: inventory.stacksSnapshot(),
           hunger: hunger.value(),
           worn: wardrobe.wornItemIds(),
+          // WORLD-STATE SAVE WIRING: ids + lighting ride
+          // every save (serialize fills a deterministic id
+          // for any id-less entry; restore validates on load).
           fires: fireState.snapshot().map((fire) => ({
+            id: fire.id,
             type: fire.type,
             x: fire.x,
             z: fire.z,
             lit: fire.lit,
+            lighting: fire.lighting,
           })),
           houses: shelterState.snapshot().map((house) => {
             const store = homeStoresRef.current.get(house.id);
@@ -1273,6 +1345,19 @@ export default function App() {
             x: pile.x,
             z: pile.z,
           })),
+          // TRAP SAVE WIRING: the live trap set rides every
+          // save (snapshot as-is — ids + types verbatim, no
+          // filtering; serializeSave writes them verbatim and
+          // trapState.restore() validates on load).
+          traps: trapState.snapshot(),
+          // WORLD-STATE SAVE WIRING: harvest state, sky
+          // cycle, and facing ride every save (all three
+          // draft fields optional — serialize defaults
+          // missing ones; the sky reads the live renderer,
+          // null when the rig is gone).
+          harvestState: harvestState.snapshot(),
+          sky: rendererRef.current?.snapshotSky() ?? undefined,
+          facing: player ? player.snapshotFacing() : undefined,
         }),
       );
     } catch {
@@ -1410,19 +1495,82 @@ export default function App() {
   //
   // Save restore lives here (guarded once per page load, so a dev
   // StrictMode double-effect cannot place everything twice):
-  // singleton placements (fires / houses / looms) are re-placed
-  // from the save, the player is moved to the saved point, and
-  // the HUD re-reads from the restored singletons below. House
-  // contents ride by order (placeHouse regenerates ids — see
-  // save.ts). Restored fires come back UNLIT (no game-layer API
-  // marks a fire lit; she re-lights them) and their Systems
-  // vessels are created lazily, unlit, on first use — consistent.
+  // singleton placements (houses / looms) are re-placed
+  // from the save, fires + harvest + traps are restored
+  // silently BEFORE construction (see below), the player is
+  // moved to the saved point, and the HUD re-reads from the
+  // restored singletons below. House contents ride by order
+  // (placeHouse regenerates ids — see save.ts). Restored
+  // fires come back lit + with lighting waits (fireState.
+  // restore); their Systems vessels are still created
+  // lazily, and ensureSystemsLit brings a vessel to lit at
+  // Cook time for an engine-lit fire — consistent.
   const saveRestoredRef = useRef(false);
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
     const gen = genRef.current;
     const player = new PlayerController(gen.findSpawn());
+    // WORLD-STATE SAVE WIRING (mode-set, approved): the engine
+    // defaults to 'third' and no boot code set player.mode
+    // from the save before — a saved first/behind game booted
+    // engine-third until the first cycle. Set it directly
+    // from the saved cameraMode here, before the facing
+    // restore below (restoreFacing's behind sync reads mode).
+    // Guarded check-not-set like the trap restore, so a
+    // second boot-effect run cannot yank a cycled mode back
+    // to the saved one.
+    if (!saveRestoredRef.current) {
+      const bootMode = bootSaveRef.current?.cameraMode;
+      if (bootMode) {
+        player.mode = bootMode;
+      }
+    }
+    // TRAP SAVE WIRING (restore-before-first-build): trapState.
+    // restore() is silent — no 'trap:placed' emit — and the
+    // renderer builds trap markers once at construction from
+    // live trapState (plus on 'trap:placed' thereafter), so
+    // restored traps must be in state BEFORE construction, or
+    // they render nothing until the next placement. No new
+    // renderer API, no per-trap emits. Guarded by the
+    // saveRestoredRef check (checked, not set, here — the
+    // block below sets it and restores the rest), so a second
+    // boot-effect run cannot re-restore stale traps over
+    // gameplay traps. SavedTrap.type is string where
+    // PlacedTrap.type is TrapType, so the type rides a cast;
+    // restore() drops anything that is not a real trap type.
+    if (!saveRestoredRef.current) {
+      const bootSaved = bootSaveRef.current;
+      if (bootSaved) {
+        trapState.restore(
+          (bootSaved.traps ?? []).map((trap) => ({
+            ...trap,
+            type: trap.type as TrapType,
+          })),
+        );
+        // WORLD-STATE SAVE WIRING (fires + harvest, same
+        // restore-before-first-build pattern): fireState.
+        // restore() is silent and REPLACES the old placeFire
+        // re-place loop below (which booted everything
+        // unlit) — restored fires come back lit + with
+        // lighting waits, rendered by the constructor's
+        // initial placed-group build. SavedFire.type is
+        // string where PlacedFire.type is FireType, so the
+        // type rides a cast; restore() drops anything that
+        // is not a real fire type, and nulls bad lighting
+        // instead of dropping the fire. harvestState.
+        // restore() replaces + bumps version so the
+        // renderer redraws; deserialize always hands a
+        // snapshot shape (empty for old saves).
+        fireState.restore(
+          bootSaved.fires.map((fire) => ({
+            ...fire,
+            type: fire.type as FireType,
+          })),
+        );
+        harvestState.restore(bootSaved.harvestState);
+      }
+    }
     const renderer = new WorldRenderer(container, gen, player);
     player.attach(renderer.domElement);
     rendererRef.current = renderer;
@@ -1431,14 +1579,14 @@ export default function App() {
       saveRestoredRef.current = true;
       const saved = bootSaveRef.current;
       if (saved) {
-        for (const fire of saved.fires) {
-          try {
-            // Cast: deserializeSave already allowlisted the type.
-            fireState.placeFire(fire.type as FireType, fire.x, fire.z);
-          } catch {
-            // A placement that cannot restore is skipped, not fatal.
-          }
-        }
+        // WORLD-STATE SAVE WIRING (sky, after construction):
+        // the sky rig is renderer-owned, so its restore runs
+        // here, not in the pre-construction block — restoreSky
+        // is a no-op on null/undefined, and old saves carry
+        // dawn ({ cycleT: 0 }) from deserialize. SetWorldGen
+        // is not called on this path, so after-construction
+        // is after every sky reset that could wipe it.
+        renderer.restoreSky(saved.sky);
         for (const house of saved.houses) {
           try {
             const placed = shelterState.placeHouse(
@@ -1485,6 +1633,13 @@ export default function App() {
         }
         player.x = saved.position.x;
         player.z = saved.position.z;
+        // WORLD-STATE SAVE WIRING (facing, after mode-set):
+        // yaw + pitch from the save; restoreFacing clamps
+        // pitch to ±1.45 and re-syncs facing = yaw + PI in
+        // behind mode (mode was set from the save before
+        // construction, above). Old saves carry the default
+        // look ({ yaw: 0, pitch: 0 }) from deserialize.
+        player.restoreFacing(saved.facing);
       }
     }
     // UMBRELLA DRIVING: initial visibility from the boot
@@ -1580,10 +1735,11 @@ export default function App() {
       getHungerStage: () => hunger.stage(),
     });
     // Game clock: drain hunger in real seconds and refresh the
-    // HUD stage, and advance friction lighting waits (display:
-    // 'waiting' → 'ready' once the wait passes). setHungerStage
-    // with an unchanged stage bails out in React, so
-    // steady-state ticks cost no re-render.
+    // HUD stage + meter value, and advance friction lighting
+    // waits (display: 'waiting' → 'ready' once the wait
+    // passes). The value mirror changes every draining tick,
+    // so the indicator's bar re-renders on the tick; the stage
+    // setter alone bails out when the stage is unchanged.
     const hungerTimer = window.setInterval(() => {
       // PAUSE GATE: while the engine flag is set, the shell
       // clock freezes too — no hunger drain, no lighting
@@ -1594,6 +1750,7 @@ export default function App() {
       if (pausedRef.current) return;
       hunger.tick(1);
       setHungerStage(hunger.stage());
+      setHungerValue(hunger.value());
       fireState.advanceLighting(Date.now());
       // Drive every tracked Systems fire's lighting clock
       // alongside the engine's (the bridge's tick half).
@@ -1941,7 +2098,19 @@ export default function App() {
       : []),
   ];
 
-  const handleCraft = (recipeId: string) => {
+  // Trap-craft confirm (Adam, 2026-10-26): a trap recipe's Craft
+  // button asks FIRST, in the staged Popup dialog shell — the
+  // existing execution below runs only on Yes. No aborts with
+  // nothing consumed and no trap, because execution never
+  // starts. Trap rows are the Traps group, nothing else.
+  const [pendingTrapRecipeId, setPendingTrapRecipeId] = useState<
+    string | null
+  >(null);
+  const pendingTrapRecipe = pendingTrapRecipeId
+    ? RECIPES.find((candidate) => candidate.id === pendingTrapRecipeId)
+    : undefined;
+
+  const executeCraftNow = (recipeId: string) => {
     const recipe = RECIPES.find((candidate) => candidate.id === recipeId);
     if (!recipe) return;
     const ownedBefore = ownedToolItem(inventory);
@@ -1952,12 +2121,29 @@ export default function App() {
         availableStations.length > 0 ? availableStations : null,
         hunger,
       );
+      // SINGLE-CALLER RULE (DEV correction, superseding the
+      // emit half of the original brief): Systems never places
+      // and never emits — on a placedTrap result the SHELL
+      // places, here, via trapState.placeTrap (stores the trap
+      // and emits 'trap:placed'; the renderer reads trapState).
+      // This call is the one and only placer per craft. For
+      // traps this runs only on the confirm's Yes — the Popup
+      // above gates first, No/Close never reaches execution.
+      if (result.placedTrap) {
+        trapState.placeTrap(
+          result.placedTrap.type as TrapType,
+          position.x,
+          position.z,
+        );
+      }
       setOwnedItem(result.owned);
       setCraftNote(
-        `Crafted ${result.output.item} × ${result.output.quantity}.` +
-          (result.owned !== ownedBefore
-            ? ` Owned tool is now ${result.owned}.`
-            : ''),
+        result.placedTrap
+          ? `Placed ${displayNameFor(result.output.item)} here.`
+          : `Crafted ${result.output.item} × ${result.output.quantity}.` +
+              (result.owned !== ownedBefore
+                ? ` Owned tool is now ${result.owned}.`
+                : ''),
       );
     } catch (error) {
       setCraftNote(
@@ -1966,6 +2152,24 @@ export default function App() {
     }
     refreshInventory();
     saveNow();
+  };
+
+  const handleCraft = (recipeId: string) => {
+    if (CRAFTING_GROUP_BY_RECIPE_ID[recipeId] === 'Traps') {
+      setPendingTrapRecipeId(recipeId);
+      return;
+    }
+    executeCraftNow(recipeId);
+  };
+
+  const handleTrapConfirmYes = () => {
+    const recipeId = pendingTrapRecipeId;
+    setPendingTrapRecipeId(null);
+    if (recipeId) executeCraftNow(recipeId);
+  };
+
+  const handleTrapConfirmNo = () => {
+    setPendingTrapRecipeId(null);
   };
 
   const handleHarvest = (request: HarvestRequest) => {
@@ -2086,6 +2290,7 @@ export default function App() {
     try {
       const result = eat(hunger, inventory, itemId);
       setHungerStage(result.stage);
+      setHungerValue(hunger.value());
       setEatNote(`Ate ${result.item} (+${result.nutrition} hunger).`);
     } catch (error) {
       setEatNote(
@@ -2959,8 +3164,9 @@ export default function App() {
             <WitchHealth />
           </div>
           <div className="mt-2">
-            <HungerIndicator stage={hungerStage} />
+            <HungerIndicator stage={hungerStage} value={hungerValue} />
           </div>
+          <ForageHint stage={hungerStage} />
           <div className="mt-2">
             <WornList
               worn={wornGarments}
@@ -3201,6 +3407,47 @@ export default function App() {
           onClose={() => setOptionsOpen(false)}
           comfortable={isTouch}
         />
+      ) : null}
+
+      {/* Trap-craft confirm: Adam's words, verbatim, asked FIRST
+        on trap Craft — Yes runs the existing execution, No or
+        Close aborts with nothing consumed and no trap. The
+        Popup shell is the staged dialog (z-50 modal); the
+        buttons match the placement banner's touch sizing. */}
+      {pendingTrapRecipe ? (
+        <Popup
+          open={true}
+          title="PLACE TRAP HERE?"
+          onClose={handleTrapConfirmNo}
+        >
+          <p className="text-sm text-stone-200">
+            Place {pendingTrapRecipe.name} here?
+          </p>
+          <div className="mt-3 flex gap-2">
+            <button
+              type="button"
+              onClick={handleTrapConfirmYes}
+              className={
+                isTouch
+                  ? 'min-h-[44px] rounded bg-[#3a4436] px-3 py-2 text-sm hover:bg-[#4a5546]'
+                  : 'rounded bg-[#3a4436] px-2 py-0.5 text-xs hover:bg-[#4a5546]'
+              }
+            >
+              Yes
+            </button>
+            <button
+              type="button"
+              onClick={handleTrapConfirmNo}
+              className={
+                isTouch
+                  ? 'min-h-[44px] rounded bg-[#44403c] px-3 py-2 text-sm hover:bg-[#57534e]'
+                  : 'rounded bg-[#44403c] px-2 py-0.5 text-xs hover:bg-[#57534e]'
+              }
+            >
+              No
+            </button>
+          </div>
+        </Popup>
       ) : null}
 
       {/* Location chip: always visible, including with the HUD

@@ -55,9 +55,10 @@ const DISC_RADIUS: Partial<Record<ScatterKind, number>> = {
   riverSilt: 1.0,
 };
 
-/** Fixed food accents (not source colors): bog berries, flower center. */
+/** Fixed food accents (not source colors): bog berries, flower center, apples. */
 const BERRY_COLOR = 0x7a2a3a;
 const FLOWER_CENTER_COLOR = 0xf0d060;
+const APPLE_COLOR = 0xc82828;
 
 /** Lighten (>1) or darken (<1) a packed color, clamped to white. */
 function shade(hex: number, factor: number): number {
@@ -212,6 +213,68 @@ export function buildKindGeometry(spec: MeshSpec, kind: ScatterKind): THREE.Buff
         part(blob(1.4), e, { p: [0, extraDy, 0] }),
         part(blob(1.0), shade(e, 0.9), { p: [0.6, extraDy + 0.8, 0.3] }),
         part(blob(0.7), shade(e, 1.1), { p: [-0.55, extraDy - 0.7, -0.3] }),
+      ]);
+    }
+    case 'acornCluster': {
+      // Ground acorns: a small cluster of nuts on the ground —
+      // hand-picked, not a bush or a disc. Static positions.
+      const nuts: THREE.BufferGeometry[] = [];
+      const spots: [Vec3, number][] = [
+        [[0, 0.05, 0], 0.07],
+        [[0.12, 0.04, 0.06], 0.06],
+        [[-0.1, 0.04, 0.08], 0.06],
+        [[0.05, 0.04, -0.11], 0.055],
+        [[-0.06, 0.03, -0.05], 0.05],
+      ];
+      spots.forEach(([p, r], i) => {
+        nuts.push(part(sphere(r, 6, 5), i % 2 === 0 ? c : e, { p, s: [1, 0.7, 1] }));
+      });
+      return merge(nuts);
+    }
+    case 'mushroom': {
+      // Toadstool: cream stem + dome cap in the spec color.
+      // The poison kind wears pale cap spots — the close-look
+      // tell against the plain edible cap (same silhouette).
+      const parts: THREE.BufferGeometry[] = [
+        part(cyl(0.045, 0.06, 0.3, 6), e, { p: [0, 0.15, 0] }),
+        part(sphere(0.22, 8, 6), c, { p: [0, 0.26, 0], s: [1, 0.6, 1] }),
+      ];
+      if (kind === 'poisonMushroom') {
+        const spots: [Vec3, number][] = [
+          [[0.12, 0.36, 0.08], 0.035],
+          [[-0.1, 0.38, -0.05], 0.03],
+          [[0.02, 0.4, -0.12], 0.04],
+          [[-0.14, 0.35, 0.1], 0.03],
+        ];
+        for (const [p, r] of spots) {
+          parts.push(part(sphere(r, 6, 5), 0xe8e0c8, { p, s: [1, 0.4, 1] }));
+        }
+      }
+      return merge(parts);
+    }
+    case 'appleTree': {
+      // Orchard apple tree: trunk + canopy blobs + red apple dots.
+      // Static dot positions, each centered ~on the main canopy
+      // sphere's surface (r 1.0 @ y 2.0) so the red reads half-proud
+      // against green at a glance — the mushroom-cap clarity rule.
+      // baseY 0, so parts sit at absolute heights (trunk 0–1.4,
+      // canopy to ~3.0); shrink scales the whole tree toward the
+      // ground, like any other kind.
+      const apples: THREE.BufferGeometry[] = [];
+      const dots: Vec3[] = [
+        [1.0, 2.0, 0], [-1.0, 2.0, 0], [0, 2.0, 1.0], [0, 2.0, -1.0],
+        [0.8, 2.6, 0], [-0.8, 2.6, 0], [0, 2.6, 0.8], [0, 2.6, -0.8],
+        [0.85, 1.5, 0], [-0.85, 1.5, 0],
+      ];
+      for (const p of dots) {
+        apples.push(part(sphere(0.1, 6, 5), APPLE_COLOR, { p }));
+      }
+      return merge([
+        part(cyl(0.14, 0.2, 1.4, 6), c, { p: [0, 0.7, 0] }),
+        part(blob(1.0), e, { p: [0, 2.0, 0] }),
+        part(blob(0.65), shade(e, 0.9), { p: [0.6, 1.7, 0.2] }),
+        part(blob(0.6), shade(e, 1.1), { p: [-0.55, 1.75, -0.2] }),
+        ...apples,
       ]);
     }
     case 'bush':
@@ -521,5 +584,48 @@ export function buildUmbrella(): THREE.Group {
   const tip = new THREE.Mesh(new THREE.SphereGeometry(0.03, 6, 6), meshMat(0x78716c));
   tip.position.set(0, APEX_Y + 0.03, 0);
   g.add(tip);
+  return g;
+}
+
+/** Flame-center height inside a buildCandle() group (holder bottom = 0). */
+export const CANDLE_FLAME_Y = 0.31;
+
+/**
+ * The witch's carried candle (Adam 2026-10-26 — light settled,
+ * starter still open; see fire.ts). Primitive, held upright in
+ * her left hand (the umbrella holds the right): brass holder
+ * dish, cream stick, dark wick, and a two-part flame in
+ * MeshBasicMaterial — unlit on purpose, so the flame reads as
+ * lit even in darkness, where a Lambert flame would go black
+ * without the point light reaching it. Group origin at the
+ * holder bottom; the renderer places the group at the hand and
+ * positions the scene-level point light at the flame height.
+ * Visual + light-anchor only — no mechanic, no starter path.
+ */
+export function buildCandle(): THREE.Group {
+  const g = new THREE.Group();
+  const holder = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.05, 0.02, 10), meshMat(0x8a6a30));
+  holder.position.set(0, 0.01, 0);
+  g.add(holder);
+  const stick = new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.032, 0.22, 8), meshMat(0xe8dcc0));
+  stick.position.set(0, 0.13, 0);
+  g.add(stick);
+  const wick = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.006, 0.03, 4), meshMat(0x1a1208));
+  wick.position.set(0, 0.255, 0);
+  g.add(wick);
+  const flameOuter = new THREE.Mesh(
+    new THREE.SphereGeometry(0.035, 8, 8),
+    new THREE.MeshBasicMaterial({ color: 0xffa030 }),
+  );
+  flameOuter.scale.set(1, 1.8, 1);
+  flameOuter.position.set(0, CANDLE_FLAME_Y, 0);
+  g.add(flameOuter);
+  const flameInner = new THREE.Mesh(
+    new THREE.SphereGeometry(0.02, 8, 8),
+    new THREE.MeshBasicMaterial({ color: 0xffe080 }),
+  );
+  flameInner.scale.set(1, 1.6, 1);
+  flameInner.position.set(0, 0.3, 0);
+  g.add(flameInner);
   return g;
 }

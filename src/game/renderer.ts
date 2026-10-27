@@ -27,7 +27,7 @@ import type { WorldGen } from './worldgen';
 import { PlayerController } from './player';
 import { marshWeight } from './biomes';
 import { SOURCE_FOR_KIND } from './objects';
-import { buildKindGeometry, buildUmbrella, buildWitch, vertexLambert } from './models';
+import { buildCandle, buildKindGeometry, buildUmbrella, buildWitch, CANDLE_FLAME_Y, vertexLambert } from './models';
 import { ProximityTracker } from './proximity';
 import {
   harvestState,
@@ -42,8 +42,11 @@ import { FIRE_DEFS } from './fire';
 import { shelterState, HOUSE_DEFS } from './shelter';
 import { loomState } from './loomState';
 import { pileState } from './pileState';
+import { trapState } from './trapState';
+import type { TrapType } from './traps';
 import { pauseState } from './pause';
 import { SkyRig } from './sky';
+import type { SkySnapshot } from './sky';
 import { SEASON_START_MONTH, seasonalWeatherAt } from './weather';
 import { createBiomeTexture, TEXTURE_REPEAT } from './terrain';
 import {
@@ -114,6 +117,73 @@ interface LoadedChunk {
   ground: THREE.Mesh;
 }
 
+/**
+ * Carried-candle light tunables (Adam 2026-10-26 — lane-decided
+ * starting values for his pin pass; three 0.186 uses physical
+ * point-light units, so intensity reads in candela with decay 2:
+ * ~2.5 at 2 m, ~0.6 at 4 m, ~0.16 at 8 m — a warm pool around
+ * her, not a floodlight. Err toward useful: night foraging is
+ * near-impossible without this. Always lit, both views.
+ */
+export const CANDLE_LIGHT_COLOR = 0xffb45e;
+export const CANDLE_LIGHT_INTENSITY = 10;
+export const CANDLE_LIGHT_DISTANCE = 16;
+export const CANDLE_LIGHT_DECAY = 2;
+export const CANDLE_FLICKER_AMPLITUDE = 0.12;
+/**
+ * Placed-fire light tunables (Adam 2026-10-26 — lane-decided
+ * starting values for his pin pass; same physical units as the
+ * candle: a lit fire is a camp light, stronger and wider than
+ * the candle's hand pool. One PointLight per lit fire with
+ * flameWhenLit; unlit fires cast nothing. Flicker is stronger
+ * than the candle's (±22% vs ±12%) — fires dance more.
+ */
+export const FIRE_LIGHT_COLOR = 0xff9a40;
+export const FIRE_LIGHT_INTENSITY = 40;
+export const FIRE_LIGHT_DISTANCE = 24;
+export const FIRE_LIGHT_DECAY = 2;
+export const FIRE_LIGHT_FLICKER_AMPLITUDE = 0.22;
+/** Flame color-breathing endpoints (outer cone deep-orange ↔ bright gold). */
+const FLAME_OUTER_A = new THREE.Color(0xff6a00);
+const FLAME_OUTER_B = new THREE.Color(0xffb020);
+/** Flame color-breathing endpoints (inner core yellow ↔ pale gold). */
+const FLAME_INNER_A = new THREE.Color(0xffd23f);
+const FLAME_INNER_B = new THREE.Color(0xfff0a0);
+/**
+ * Position-hash phase for a flame or fire light at (x, z) — the
+ * same hash flame meshes use, so a fire's light flickers in
+ * phase with its flame. Pure and deterministic.
+ */
+export function flamePhase(x: number, z: number): number {
+  return Math.abs(Math.sin(x * 12.9898 + z * 78.233)) * Math.PI * 2;
+}
+/**
+ * Mixed-sine flicker factor in [-1, 1] for a fire light (the
+ * candle's mixed sines, phase-shifted per fire so fires don't
+ * sync). Pure and deterministic.
+ */
+export function fireLightFlicker(flameTime: number, phase: number): number {
+  return (Math.sin(flameTime * 10 + phase) + Math.sin(flameTime * 23 + phase + 1.7)) / 2;
+}
+/** Witch-local hand position of the candle group (left hand). */
+export const CANDLE_HAND: Readonly<{ x: number; y: number; z: number }> = {
+  x: -0.55,
+  y: 1.02,
+  z: 0.05,
+};
+
+/**
+ * Rotate a witch-local (x, z) offset by a Y-rotation (facing)
+ * into world space: the same transform the witch group's
+ * rotation.y applies (local +z maps to (sin facing, cos facing)
+ * — see the behind-camera comment in the loop). Pure, probed.
+ */
+export function rotateOffsetY(lx: number, lz: number, facing: number): [number, number] {
+  const c = Math.cos(facing);
+  const s = Math.sin(facing);
+  return [lx * c + lz * s, -lx * s + lz * c];
+}
+
 export class WorldRenderer {
   private renderer: THREE.WebGLRenderer;
   private scene = new THREE.Scene();
@@ -124,6 +194,10 @@ export class WorldRenderer {
   private witch: THREE.Group;
   /** Carried umbrella graphic (models.ts), attached to the witch. */
   private umbrella: THREE.Group;
+  /** Carried-candle point light (scene-level — see below). */
+  private candleLight: THREE.PointLight;
+  /** Placed-fire point lights (scene-level, rebuilt with the placed group). */
+  private fireLights: THREE.PointLight[] = [];
   private gen: WorldGen;
   private player: PlayerController;
   /** Proximity tracker: engine-owned, subscribes to 'player:moved' and
@@ -153,6 +227,8 @@ export class WorldRenderer {
    * the placed-group unsubscribe list (same dispose path).
    */
   private pileGroup: THREE.Group | null = null;
+  /** Placed-trap markers, rebuilt on 'trap:placed' (below). */
+  private trapGroup: THREE.Group | null = null;
   /**
    * Sky rig (Adam 2026-10-26): dome + sun + moon + stars + clouds
    * + the lights they drive. Owns the day/night time driver (see
@@ -227,6 +303,10 @@ export class WorldRenderer {
       bus.on('pile:removed', rebuildPiles),
     );
     this.rebuildPileGroup();
+    // Placed traps rebuild on their own event, like piles.
+    const rebuildTraps = (): void => this.rebuildTrapGroup();
+    this.unsubPlaced.push(bus.on('trap:placed', rebuildTraps));
+    this.rebuildTrapGroup();
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.setSize(container.clientWidth, container.clientHeight);
@@ -270,6 +350,25 @@ export class WorldRenderer {
     this.umbrella.position.set(0.58, 1.08, 0.05);
     this.umbrella.rotation.z = -0.12;
     this.witch.add(this.umbrella);
+    // Carried candle (Adam 2026-10-26 — light settled, starter
+    // still open): model in her left hand (umbrella holds the
+    // right), witch-group child, so third-person-only visibility
+    // is free — hidden in first-person, where you are the witch.
+    // The LIGHT is scene-level, not a witch child: a child of an
+    // invisible group renders nothing, and first-person needs
+    // the light even though the model is hidden. Always lit —
+    // no day/night gate invented, no setter (unconditional: no
+    // item, toggle, or inventory state drives it).
+    const candle = buildCandle();
+    candle.position.set(CANDLE_HAND.x, CANDLE_HAND.y, CANDLE_HAND.z);
+    this.witch.add(candle);
+    this.candleLight = new THREE.PointLight(
+      CANDLE_LIGHT_COLOR,
+      CANDLE_LIGHT_INTENSITY,
+      CANDLE_LIGHT_DISTANCE,
+      CANDLE_LIGHT_DECAY,
+    );
+    this.scene.add(this.candleLight);
 
     window.addEventListener('resize', this.onResize);
     this.loop();
@@ -286,6 +385,34 @@ export class WorldRenderer {
    */
   setCarriesUmbrella(carried: boolean): void {
     if (this.umbrella) this.umbrella.visible = carried;
+  }
+
+  /**
+   * Sky save seam (Adam 2026-10-27, follow-up to the persistence
+   * round). SkyRig is renderer-owned and `sky` stays private — the
+   * shell must NOT reach through to the rig (no public accessor, by
+   * choice: an accessor would let the shell call setSeed/dispose/
+   * update on the rig and break the constructor/setWorldGen/
+   * dispose ownership). These two methods are the whole seam:
+   * saveNow calls snapshotSky() and stores the result as the save's
+   * sky field; boot calls restoreSky(saved) AFTER constructing the
+   * renderer (the rig does not exist before construction, and
+   * setWorldGen resets it to dawn — so a restore must come after
+   * BOTH, never before). Next update() continues the cycle from
+   * the restored position; month stays an input, not state.
+   * snapshotSky() returns null only when the rig is gone
+   * (disposed renderer) — the shell stores nothing in that case.
+   * restoreSky() is a no-op on null/undefined (old saves carry no
+   * sky field) and on a disposed renderer; SkyRig.restore itself
+   * ignores a non-finite cycleT.
+   */
+  snapshotSky(): SkySnapshot | null {
+    return this.sky?.snapshot() ?? null;
+  }
+
+  restoreSky(snap: SkySnapshot | null | undefined): void {
+    if (!snap) return;
+    this.sky?.restore(snap);
   }
 
   /** Ground detail texture for a chunk: the dominant biome's procedural
@@ -337,6 +464,9 @@ export class WorldRenderer {
     // Dropped piles belong to the old world's map too.
     pileState.clear();
     this.rebuildPileGroup();
+    // Placed traps belong to the old world's map too.
+    trapState.clear();
+    this.rebuildTrapGroup();
     this.gen = wrapGenWithState(gen);
     // A new world gets a new sky: fresh stars for the seed + the
     // cycle restarts at dawn. Skipped on the dispose path
@@ -561,8 +691,22 @@ export class WorldRenderer {
     flame.add(outer, inner);
     flame.position.y = baseY;
     flame.userData.flame = true;
-    flame.userData.phase = Math.abs(Math.sin(x * 12.9898 + z * 78.233)) * Math.PI * 2;
+    flame.userData.phase = flamePhase(x, z);
     return flame;
+  }
+
+  /** One scene-level point light for a lit fire, at its flame's heart. */
+  private addFireLight(x: number, z: number, baseY: number, scale: number): void {
+    const light = new THREE.PointLight(
+      FIRE_LIGHT_COLOR,
+      FIRE_LIGHT_INTENSITY,
+      FIRE_LIGHT_DISTANCE,
+      FIRE_LIGHT_DECAY,
+    );
+    light.position.set(x, baseY + 0.5 * scale, z);
+    light.userData.phase = flamePhase(x, z);
+    this.scene.add(light);
+    this.fireLights.push(light);
   }
 
   /** Rebuild all player-placed meshes (fires + houses + looms). */
@@ -579,6 +723,12 @@ export class WorldRenderer {
       });
       this.placedGroup = null;
     }
+    // Fire lights rebuild with the placed group: a lit fire's light
+    // lives and dies with its flame mesh (unlit = no light).
+    // Dispose is safe through this path too — dispose() routes
+    // through setWorldGen, which rebuilds from cleared state.
+    for (const light of this.fireLights) this.scene.remove(light);
+    this.fireLights = [];
     const group = new THREE.Group();
     const box = (
       w: number,
@@ -632,7 +782,7 @@ export class WorldRenderer {
         log3.rotation.z = Math.PI / 2;
         log3.rotation.y = 1.1;
         fg.add(log1, log2, log3);
-        if (lit) fg.add(this.flameMesh(fire.x, fire.z, 0.25, 1));
+        if (lit) { fg.add(this.flameMesh(fire.x, fire.z, 0.25, 1)); this.addFireLight(fire.x, fire.z, 0.25, 1); }
       } else if (fire.type === 'hearth') {
         // Stone base, side pillars, mantel, dark firebox opening,
         // inner logs — a hearth, not a slab.
@@ -644,7 +794,7 @@ export class WorldRenderer {
         const hlog = cyl(0.06, 0.06, 0.8, 0x6b4a2f, 0, 0.6, 0.3);
         hlog.rotation.z = Math.PI / 2;
         fg.add(hlog);
-        if (lit) fg.add(this.flameMesh(fire.x, fire.z, 0.6, 1.1));
+        if (lit) { fg.add(this.flameMesh(fire.x, fire.z, 0.6, 1.1)); this.addFireLight(fire.x, fire.z, 0.6, 1.1); }
       } else if (fire.type === 'kiln') {
         // Firing chamber: base slab, body, dome, stoke-hole opening,
         // brick band around the middle.
@@ -655,7 +805,7 @@ export class WorldRenderer {
         fg.add(dome);
         fg.add(cyl(0.78, 0.78, 0.12, 0x9a7a5a, 0, 0.6, 0));
         fg.add(box(0.4, 0.5, 0.1, 0x1a1a1a, 0, 0.35, 0.78));
-        if (lit) fg.add(this.flameMesh(fire.x, fire.z, 1.9, 0.7));
+        if (lit) { fg.add(this.flameMesh(fire.x, fire.z, 1.9, 0.7)); this.addFireLight(fire.x, fire.z, 1.9, 0.7); }
       } else {
         // Bloomery: stone base, tapering shaft, top rim, stoke-hole,
         // slag pile at the foot.
@@ -666,7 +816,7 @@ export class WorldRenderer {
         const slag = new THREE.Mesh(new THREE.ConeGeometry(0.3, 0.25, 7), lambert(0x3a3a38));
         slag.position.set(0.7, 0.12, 0.4);
         fg.add(slag);
-        if (lit) fg.add(this.flameMesh(fire.x, fire.z, 2.6, 0.8));
+        if (lit) { fg.add(this.flameMesh(fire.x, fire.z, 2.6, 0.8)); this.addFireLight(fire.x, fire.z, 2.6, 0.8); }
       }
       group.add(fg);
     }
@@ -792,6 +942,81 @@ export class WorldRenderer {
     this.pileGroup = group;
   }
 
+  /**
+   * One trap's ground marker (lane-decided, flagged for Adam's
+   * pin pass — simple, readable at a glance, no behavior):
+   * snare = flat loop + 2 stakes; weir = woven basket + rim;
+   * pot = terracotta pot; pitfall = dark disc + moss ring;
+   * deadfall = log + stone weight.
+   */
+  private trapMarker(type: TrapType): THREE.Group {
+    const g = new THREE.Group();
+    const add = (mesh: THREE.Mesh, x = 0, y = 0, z = 0): void => {
+      mesh.position.set(x, y, z);
+      g.add(mesh);
+    };
+    if (type === 'snare') {
+      const loop = new THREE.Mesh(new THREE.TorusGeometry(0.18, 0.02, 6, 12), lambert(0x6a6a3a));
+      loop.rotation.x = -Math.PI / 2;
+      add(loop, 0, 0.05, 0);
+      const stakeGeo = new THREE.CylinderGeometry(0.02, 0.02, 0.4, 5);
+      const s1 = new THREE.Mesh(stakeGeo, lambert(0x6b4a2f));
+      s1.rotation.z = 0.15;
+      add(s1, -0.2, 0.2, 0);
+      const s2 = new THREE.Mesh(stakeGeo, lambert(0x6b4a2f));
+      s2.rotation.z = -0.15;
+      add(s2, 0.2, 0.2, 0);
+    } else if (type === 'fish-weir-trap') {
+      add(new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.18, 0.35, 10), lambert(0x8a7a4a)), 0, 0.18, 0);
+      const rim = new THREE.Mesh(new THREE.TorusGeometry(0.28, 0.03, 6, 12), lambert(0x8a7a4a));
+      rim.rotation.x = -Math.PI / 2;
+      add(rim, 0, 0.35, 0);
+    } else if (type === 'pot-trap') {
+      add(new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.16, 0.3, 10), lambert(0xb06a3a)), 0, 0.15, 0);
+      const rim = new THREE.Mesh(new THREE.TorusGeometry(0.22, 0.03, 6, 12), lambert(0xb06a3a));
+      rim.rotation.x = -Math.PI / 2;
+      add(rim, 0, 0.3, 0);
+    } else if (type === 'pitfall') {
+      const disc = new THREE.Mesh(new THREE.CircleGeometry(0.45, 14), lambert(0x140e06));
+      disc.rotation.x = -Math.PI / 2;
+      add(disc, 0, 0.02, 0);
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(0.45, 0.05, 6, 14), lambert(0x4a5a2a));
+      ring.rotation.x = -Math.PI / 2;
+      add(ring, 0, 0.03, 0);
+    } else {
+      // deadfall
+      const log = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.9, 8), lambert(0x6b4a2f));
+      log.rotation.z = Math.PI / 2;
+      add(log, 0, 0.12, 0);
+      add(new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.3, 0.3), lambert(0x78716c)), 0, 0.39, 0);
+    }
+    return g;
+  }
+
+  /** Rebuild the placed-trap markers from live trapState (pile-group pattern). */
+  private rebuildTrapGroup(): void {
+    if (this.trapGroup) {
+      this.scene.remove(this.trapGroup);
+      this.trapGroup.traverse((obj) => {
+        if (obj instanceof THREE.Mesh) {
+          obj.geometry.dispose();
+          const mat = obj.material;
+          if (Array.isArray(mat)) mat.forEach((m) => m.dispose());
+          else mat.dispose();
+        }
+      });
+      this.trapGroup = null;
+    }
+    const group = new THREE.Group();
+    for (const trap of trapState.snapshot()) {
+      const marker = this.trapMarker(trap.type);
+      marker.position.set(trap.x, 0, trap.z);
+      group.add(marker);
+    }
+    this.scene.add(group);
+    this.trapGroup = group;
+  }
+
   /** Rebuild the spawned-object meshes for currently loaded chunks:
    *  spawned logs (full-size) and saplings (tree mesh + canopy,
    *  scaled 0.3 → 1.0 by growth over SAPLING_GROWTH_MS). */
@@ -868,21 +1093,70 @@ export class WorldRenderer {
     }
 
     // Flame flicker: every flame mesh pulses around its base
-    // scale, out of phase by position so fires don't sync.
+    // scale, leans from its base, and breathes color — each cycle
+    // on its own frequency and phase so fires never read as a
+    // metronome. Fire lights flicker with their flames (same
+    // flameTime, so pause freezes both together).
     this.flameTime += dt;
     if (this.placedGroup) {
       this.placedGroup.traverse((obj) => {
         if (obj.userData.flame) {
-          const s = 1 + 0.18 * Math.sin(this.flameTime * 13 + (obj.userData.phase as number));
-          obj.scale.set(s, 1 + 0.25 * Math.sin(this.flameTime * 17 + (obj.userData.phase as number)), s);
+          const phase = obj.userData.phase as number;
+          const s = 1 + 0.18 * Math.sin(this.flameTime * 13 + phase);
+          obj.scale.set(s, 1 + 0.25 * Math.sin(this.flameTime * 17 + phase), s);
+          // Lean: the flame sways from its base, out of phase
+          // with its size pulse.
+          obj.rotation.z = 0.05 * Math.sin(this.flameTime * 9 + phase);
+          // Color breathes between deep orange and bright gold;
+          // the inner core runs a faster, offset cycle so the two
+          // cones never shift in lockstep. Materials are per-flame
+          // (flameMesh builds fresh ones), so this touches only
+          // this flame.
+          const outer = obj.children[0];
+          const inner = obj.children[1];
+          if (outer instanceof THREE.Mesh && outer.material instanceof THREE.MeshBasicMaterial) {
+            outer.material.color.lerpColors(FLAME_OUTER_A, FLAME_OUTER_B, 0.5 + 0.5 * Math.sin(this.flameTime * 11 + phase * 1.3 + 0.9));
+          }
+          if (inner instanceof THREE.Mesh && inner.material instanceof THREE.MeshBasicMaterial) {
+            inner.material.color.lerpColors(FLAME_INNER_A, FLAME_INNER_B, 0.5 + 0.5 * Math.sin(this.flameTime * 14 + phase + 2.1));
+          }
+          // Inner core counter-pulses against the group scale.
+          if (inner) {
+            inner.scale.set(
+              1 + 0.15 * Math.sin(this.flameTime * 19 + phase + 1.3),
+              1 + 0.2 * Math.sin(this.flameTime * 15 + phase + 0.7),
+              1 + 0.15 * Math.sin(this.flameTime * 19 + phase + 1.3),
+            );
+          }
         }
       });
+    }
+    for (const light of this.fireLights) {
+      light.intensity =
+        FIRE_LIGHT_INTENSITY *
+        (1 + FIRE_LIGHT_FLICKER_AMPLITUDE * fireLightFlicker(this.flameTime, light.userData.phase as number));
     }
 
     // Witch mesh follows the player; hidden in first-person.
     this.witch.position.set(this.player.x, 0, this.player.z);
     this.witch.rotation.y = this.player.facing;
     this.witch.visible = this.player.mode !== 'first';
+
+    // Carried-candle light follows the flame's world position:
+    // the hand offset rotated by facing (same Y-rotation the
+    // witch group itself uses), at flame height. Flicker is a
+    // small mixed-sine wobble on flameTime — deterministic,
+    // never random — in the same spirit as the fire flames.
+    {
+      const [ox, oz] = rotateOffsetY(CANDLE_HAND.x, CANDLE_HAND.z, this.player.facing);
+      this.candleLight.position.set(
+        this.player.x + ox,
+        CANDLE_HAND.y + CANDLE_FLAME_Y,
+        this.player.z + oz,
+      );
+      const flick = (Math.sin(this.flameTime * 10) + Math.sin(this.flameTime * 23 + 1.7)) / 2;
+      this.candleLight.intensity = CANDLE_LIGHT_INTENSITY * (1 + CANDLE_FLICKER_AMPLITUDE * flick);
+    }
 
     if (this.player.mode === 'first') {
       this.camera.position.set(
