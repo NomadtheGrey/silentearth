@@ -658,6 +658,17 @@
  *   emits). Regenerate clears traps via setWorldGen, so a
  *   new world saves empty; old saves load traps: [].
  *   App.tsx only; no game/systems change.
+ * - WORLD-STATE SAVE WIRING, LIVE (Adam, 2026-10-27 — DEV
+ *   brief, Systems format dc803c7 + sky seam 466b7b7 + fire
+ *   ids amendment 943f362): harvested scatter, lit fires,
+ *   sky time, and facing survive a refresh — saveNow
+ *   writes fires with id + lighting, harvestState, sky,
+ *   and facing; boot restores fires + harvest + traps
+ *   BEFORE construction, sky AFTER construction, facing
+ *   after the mode-set (player.mode from the saved
+ *   cameraMode, fixing the boot that left the engine in
+ *   'third' for a saved first/behind game). Regenerate
+ *   clears all four via the existing paths. App.tsx only.
  * POINTER DISCIPLINE: overlays are pointer-events-none except the
  * small interactive pieces (HUD buttons, panels, harvest buttons),
  * so world clicks — including the first-person mouse-capture click
@@ -685,6 +696,7 @@ import { loomState } from './game/loomState';
 import { pileState, type PileTarget } from './game/pileState';
 import { trapState } from './game/trapState';
 import type { TrapType } from './game/traps';
+import { harvestState } from './game/harvestState';
 import { SOURCE_BY_ID, type ToolTier } from './game/objects';
 import type { FireType } from './game/fire';
 import {
@@ -1292,11 +1304,16 @@ export default function App() {
           inventory: inventory.stacksSnapshot(),
           hunger: hunger.value(),
           worn: wardrobe.wornItemIds(),
+          // WORLD-STATE SAVE WIRING: ids + lighting ride
+          // every save (serialize fills a deterministic id
+          // for any id-less entry; restore validates on load).
           fires: fireState.snapshot().map((fire) => ({
+            id: fire.id,
             type: fire.type,
             x: fire.x,
             z: fire.z,
             lit: fire.lit,
+            lighting: fire.lighting,
           })),
           houses: shelterState.snapshot().map((house) => {
             const store = homeStoresRef.current.get(house.id);
@@ -1333,6 +1350,14 @@ export default function App() {
           // filtering; serializeSave writes them verbatim and
           // trapState.restore() validates on load).
           traps: trapState.snapshot(),
+          // WORLD-STATE SAVE WIRING: harvest state, sky
+          // cycle, and facing ride every save (all three
+          // draft fields optional — serialize defaults
+          // missing ones; the sky reads the live renderer,
+          // null when the rig is gone).
+          harvestState: harvestState.snapshot(),
+          sky: rendererRef.current?.snapshotSky() ?? undefined,
+          facing: player ? player.snapshotFacing() : undefined,
         }),
       );
     } catch {
@@ -1470,19 +1495,37 @@ export default function App() {
   //
   // Save restore lives here (guarded once per page load, so a dev
   // StrictMode double-effect cannot place everything twice):
-  // singleton placements (fires / houses / looms) are re-placed
-  // from the save, the player is moved to the saved point, and
-  // the HUD re-reads from the restored singletons below. House
-  // contents ride by order (placeHouse regenerates ids — see
-  // save.ts). Restored fires come back UNLIT (no game-layer API
-  // marks a fire lit; she re-lights them) and their Systems
-  // vessels are created lazily, unlit, on first use — consistent.
+  // singleton placements (houses / looms) are re-placed
+  // from the save, fires + harvest + traps are restored
+  // silently BEFORE construction (see below), the player is
+  // moved to the saved point, and the HUD re-reads from the
+  // restored singletons below. House contents ride by order
+  // (placeHouse regenerates ids — see save.ts). Restored
+  // fires come back lit + with lighting waits (fireState.
+  // restore); their Systems vessels are still created
+  // lazily, and ensureSystemsLit brings a vessel to lit at
+  // Cook time for an engine-lit fire — consistent.
   const saveRestoredRef = useRef(false);
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
     const gen = genRef.current;
     const player = new PlayerController(gen.findSpawn());
+    // WORLD-STATE SAVE WIRING (mode-set, approved): the engine
+    // defaults to 'third' and no boot code set player.mode
+    // from the save before — a saved first/behind game booted
+    // engine-third until the first cycle. Set it directly
+    // from the saved cameraMode here, before the facing
+    // restore below (restoreFacing's behind sync reads mode).
+    // Guarded check-not-set like the trap restore, so a
+    // second boot-effect run cannot yank a cycled mode back
+    // to the saved one.
+    if (!saveRestoredRef.current) {
+      const bootMode = bootSaveRef.current?.cameraMode;
+      if (bootMode) {
+        player.mode = bootMode;
+      }
+    }
     // TRAP SAVE WIRING (restore-before-first-build): trapState.
     // restore() is silent — no 'trap:placed' emit — and the
     // renderer builds trap markers once at construction from
@@ -1505,6 +1548,27 @@ export default function App() {
             type: trap.type as TrapType,
           })),
         );
+        // WORLD-STATE SAVE WIRING (fires + harvest, same
+        // restore-before-first-build pattern): fireState.
+        // restore() is silent and REPLACES the old placeFire
+        // re-place loop below (which booted everything
+        // unlit) — restored fires come back lit + with
+        // lighting waits, rendered by the constructor's
+        // initial placed-group build. SavedFire.type is
+        // string where PlacedFire.type is FireType, so the
+        // type rides a cast; restore() drops anything that
+        // is not a real fire type, and nulls bad lighting
+        // instead of dropping the fire. harvestState.
+        // restore() replaces + bumps version so the
+        // renderer redraws; deserialize always hands a
+        // snapshot shape (empty for old saves).
+        fireState.restore(
+          bootSaved.fires.map((fire) => ({
+            ...fire,
+            type: fire.type as FireType,
+          })),
+        );
+        harvestState.restore(bootSaved.harvestState);
       }
     }
     const renderer = new WorldRenderer(container, gen, player);
@@ -1515,14 +1579,14 @@ export default function App() {
       saveRestoredRef.current = true;
       const saved = bootSaveRef.current;
       if (saved) {
-        for (const fire of saved.fires) {
-          try {
-            // Cast: deserializeSave already allowlisted the type.
-            fireState.placeFire(fire.type as FireType, fire.x, fire.z);
-          } catch {
-            // A placement that cannot restore is skipped, not fatal.
-          }
-        }
+        // WORLD-STATE SAVE WIRING (sky, after construction):
+        // the sky rig is renderer-owned, so its restore runs
+        // here, not in the pre-construction block — restoreSky
+        // is a no-op on null/undefined, and old saves carry
+        // dawn ({ cycleT: 0 }) from deserialize. SetWorldGen
+        // is not called on this path, so after-construction
+        // is after every sky reset that could wipe it.
+        renderer.restoreSky(saved.sky);
         for (const house of saved.houses) {
           try {
             const placed = shelterState.placeHouse(
@@ -1569,6 +1633,13 @@ export default function App() {
         }
         player.x = saved.position.x;
         player.z = saved.position.z;
+        // WORLD-STATE SAVE WIRING (facing, after mode-set):
+        // yaw + pitch from the save; restoreFacing clamps
+        // pitch to ±1.45 and re-syncs facing = yaw + PI in
+        // behind mode (mode was set from the save before
+        // construction, above). Old saves carry the default
+        // look ({ yaw: 0, pitch: 0 }) from deserialize.
+        player.restoreFacing(saved.facing);
       }
     }
     // UMBRELLA DRIVING: initial visibility from the boot
