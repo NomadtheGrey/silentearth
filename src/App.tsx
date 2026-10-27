@@ -804,6 +804,32 @@
  *   route is NOT rebuilt here — the inventory torch
  *   rows' Light button already covers it (flint route
  *   only). App.tsx only.
+ * - ESC + [X] OUT OF ANY MODAL, LIVE (Adam, 2026-10-27 —
+ *   DEV brief): AUDITED every dialog surface (role="dialog"
+ *   grep — exactly three true modals, no others): Options
+ *   modal (already X + backdrop + Escape — untouched),
+ *   intro modal (already X + backdrop + Escape — untouched),
+ *   Popup (the trap-craft confirm, the ONLY Popup use) —
+ *   which had only a "Close" text button: it gains a
+ *   visible [X] beside Close (kept, not replaced) plus
+ *   Escape while open. Popup's Escape listener mounts
+ *   only while open (effect no-ops when closed), acts on
+ *   Escape alone, and swallows nothing — V/C cycling and
+ *   WASD untouched, and Esc never fires with no modal up.
+ *   Topmost-only by construction: each modal's backdrop
+ *   covers the screen, so a second modal cannot be
+ *   user-opened beneath an open one, and Intro/Options
+ *   are mutually exclusive by wiring — one Esc closes
+ *   the one open modal. [X] is thumb-sized on touch
+ *   (new comfortable prop, passed isTouch by the trap
+ *   confirm), so phone is never left without a close
+ *   path. AUDITED BUT NOT MODALS, unchanged: ContextMenu
+ *   (world-anchored menus — Close action on every menu,
+ *   no backdrop, no aria-modal; Esc-on-menus is a
+ *   separate question if Adam wants it), InventoryPanel
+ *   + CraftingMenu (panels/sheets with onClose buttons),
+ *   placement banner (Cancel), PausedIndicator (a
+ *   button). Popup.tsx + App wiring (comfortable pass).
  * - PLACED TORCHES, LIVE (Adam, 2026-10-27 — DEV brief,
  *   hold lifted on Background 57028f1 + Systems e80f848):
  *   a carried lit torch places and picks back up. PLACE:
@@ -4446,6 +4472,7 @@ export default function App() {
           open={true}
           title="PLACE TRAP HERE?"
           onClose={handleTrapConfirmNo}
+          comfortable={isTouch}
         >
           <p className="text-sm text-stone-200">
             Place {pendingTrapRecipe.name} here?
