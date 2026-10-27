@@ -129,6 +129,41 @@ export const CANDLE_LIGHT_INTENSITY = 10;
 export const CANDLE_LIGHT_DISTANCE = 16;
 export const CANDLE_LIGHT_DECAY = 2;
 export const CANDLE_FLICKER_AMPLITUDE = 0.12;
+/**
+ * Placed-fire light tunables (Adam 2026-10-26 — lane-decided
+ * starting values for his pin pass; same physical units as the
+ * candle: a lit fire is a camp light, stronger and wider than
+ * the candle's hand pool. One PointLight per lit fire with
+ * flameWhenLit; unlit fires cast nothing. Flicker is stronger
+ * than the candle's (±22% vs ±12%) — fires dance more.
+ */
+export const FIRE_LIGHT_COLOR = 0xff9a40;
+export const FIRE_LIGHT_INTENSITY = 40;
+export const FIRE_LIGHT_DISTANCE = 24;
+export const FIRE_LIGHT_DECAY = 2;
+export const FIRE_LIGHT_FLICKER_AMPLITUDE = 0.22;
+/** Flame color-breathing endpoints (outer cone deep-orange ↔ bright gold). */
+const FLAME_OUTER_A = new THREE.Color(0xff6a00);
+const FLAME_OUTER_B = new THREE.Color(0xffb020);
+/** Flame color-breathing endpoints (inner core yellow ↔ pale gold). */
+const FLAME_INNER_A = new THREE.Color(0xffd23f);
+const FLAME_INNER_B = new THREE.Color(0xfff0a0);
+/**
+ * Position-hash phase for a flame or fire light at (x, z) — the
+ * same hash flame meshes use, so a fire's light flickers in
+ * phase with its flame. Pure and deterministic.
+ */
+export function flamePhase(x: number, z: number): number {
+  return Math.abs(Math.sin(x * 12.9898 + z * 78.233)) * Math.PI * 2;
+}
+/**
+ * Mixed-sine flicker factor in [-1, 1] for a fire light (the
+ * candle's mixed sines, phase-shifted per fire so fires don't
+ * sync). Pure and deterministic.
+ */
+export function fireLightFlicker(flameTime: number, phase: number): number {
+  return (Math.sin(flameTime * 10 + phase) + Math.sin(flameTime * 23 + phase + 1.7)) / 2;
+}
 /** Witch-local hand position of the candle group (left hand). */
 export const CANDLE_HAND: Readonly<{ x: number; y: number; z: number }> = {
   x: -0.55,
@@ -160,6 +195,8 @@ export class WorldRenderer {
   private umbrella: THREE.Group;
   /** Carried-candle point light (scene-level — see below). */
   private candleLight: THREE.PointLight;
+  /** Placed-fire point lights (scene-level, rebuilt with the placed group). */
+  private fireLights: THREE.PointLight[] = [];
   private gen: WorldGen;
   private player: PlayerController;
   /** Proximity tracker: engine-owned, subscribes to 'player:moved' and
@@ -625,8 +662,22 @@ export class WorldRenderer {
     flame.add(outer, inner);
     flame.position.y = baseY;
     flame.userData.flame = true;
-    flame.userData.phase = Math.abs(Math.sin(x * 12.9898 + z * 78.233)) * Math.PI * 2;
+    flame.userData.phase = flamePhase(x, z);
     return flame;
+  }
+
+  /** One scene-level point light for a lit fire, at its flame's heart. */
+  private addFireLight(x: number, z: number, baseY: number, scale: number): void {
+    const light = new THREE.PointLight(
+      FIRE_LIGHT_COLOR,
+      FIRE_LIGHT_INTENSITY,
+      FIRE_LIGHT_DISTANCE,
+      FIRE_LIGHT_DECAY,
+    );
+    light.position.set(x, baseY + 0.5 * scale, z);
+    light.userData.phase = flamePhase(x, z);
+    this.scene.add(light);
+    this.fireLights.push(light);
   }
 
   /** Rebuild all player-placed meshes (fires + houses + looms). */
@@ -643,6 +694,12 @@ export class WorldRenderer {
       });
       this.placedGroup = null;
     }
+    // Fire lights rebuild with the placed group: a lit fire's light
+    // lives and dies with its flame mesh (unlit = no light).
+    // Dispose is safe through this path too — dispose() routes
+    // through setWorldGen, which rebuilds from cleared state.
+    for (const light of this.fireLights) this.scene.remove(light);
+    this.fireLights = [];
     const group = new THREE.Group();
     const box = (
       w: number,
@@ -696,7 +753,7 @@ export class WorldRenderer {
         log3.rotation.z = Math.PI / 2;
         log3.rotation.y = 1.1;
         fg.add(log1, log2, log3);
-        if (lit) fg.add(this.flameMesh(fire.x, fire.z, 0.25, 1));
+        if (lit) { fg.add(this.flameMesh(fire.x, fire.z, 0.25, 1)); this.addFireLight(fire.x, fire.z, 0.25, 1); }
       } else if (fire.type === 'hearth') {
         // Stone base, side pillars, mantel, dark firebox opening,
         // inner logs — a hearth, not a slab.
@@ -708,7 +765,7 @@ export class WorldRenderer {
         const hlog = cyl(0.06, 0.06, 0.8, 0x6b4a2f, 0, 0.6, 0.3);
         hlog.rotation.z = Math.PI / 2;
         fg.add(hlog);
-        if (lit) fg.add(this.flameMesh(fire.x, fire.z, 0.6, 1.1));
+        if (lit) { fg.add(this.flameMesh(fire.x, fire.z, 0.6, 1.1)); this.addFireLight(fire.x, fire.z, 0.6, 1.1); }
       } else if (fire.type === 'kiln') {
         // Firing chamber: base slab, body, dome, stoke-hole opening,
         // brick band around the middle.
@@ -719,7 +776,7 @@ export class WorldRenderer {
         fg.add(dome);
         fg.add(cyl(0.78, 0.78, 0.12, 0x9a7a5a, 0, 0.6, 0));
         fg.add(box(0.4, 0.5, 0.1, 0x1a1a1a, 0, 0.35, 0.78));
-        if (lit) fg.add(this.flameMesh(fire.x, fire.z, 1.9, 0.7));
+        if (lit) { fg.add(this.flameMesh(fire.x, fire.z, 1.9, 0.7)); this.addFireLight(fire.x, fire.z, 1.9, 0.7); }
       } else {
         // Bloomery: stone base, tapering shaft, top rim, stoke-hole,
         // slag pile at the foot.
@@ -730,7 +787,7 @@ export class WorldRenderer {
         const slag = new THREE.Mesh(new THREE.ConeGeometry(0.3, 0.25, 7), lambert(0x3a3a38));
         slag.position.set(0.7, 0.12, 0.4);
         fg.add(slag);
-        if (lit) fg.add(this.flameMesh(fire.x, fire.z, 2.6, 0.8));
+        if (lit) { fg.add(this.flameMesh(fire.x, fire.z, 2.6, 0.8)); this.addFireLight(fire.x, fire.z, 2.6, 0.8); }
       }
       group.add(fg);
     }
@@ -1007,15 +1064,48 @@ export class WorldRenderer {
     }
 
     // Flame flicker: every flame mesh pulses around its base
-    // scale, out of phase by position so fires don't sync.
+    // scale, leans from its base, and breathes color — each cycle
+    // on its own frequency and phase so fires never read as a
+    // metronome. Fire lights flicker with their flames (same
+    // flameTime, so pause freezes both together).
     this.flameTime += dt;
     if (this.placedGroup) {
       this.placedGroup.traverse((obj) => {
         if (obj.userData.flame) {
-          const s = 1 + 0.18 * Math.sin(this.flameTime * 13 + (obj.userData.phase as number));
-          obj.scale.set(s, 1 + 0.25 * Math.sin(this.flameTime * 17 + (obj.userData.phase as number)), s);
+          const phase = obj.userData.phase as number;
+          const s = 1 + 0.18 * Math.sin(this.flameTime * 13 + phase);
+          obj.scale.set(s, 1 + 0.25 * Math.sin(this.flameTime * 17 + phase), s);
+          // Lean: the flame sways from its base, out of phase
+          // with its size pulse.
+          obj.rotation.z = 0.05 * Math.sin(this.flameTime * 9 + phase);
+          // Color breathes between deep orange and bright gold;
+          // the inner core runs a faster, offset cycle so the two
+          // cones never shift in lockstep. Materials are per-flame
+          // (flameMesh builds fresh ones), so this touches only
+          // this flame.
+          const outer = obj.children[0];
+          const inner = obj.children[1];
+          if (outer instanceof THREE.Mesh && outer.material instanceof THREE.MeshBasicMaterial) {
+            outer.material.color.lerpColors(FLAME_OUTER_A, FLAME_OUTER_B, 0.5 + 0.5 * Math.sin(this.flameTime * 11 + phase * 1.3 + 0.9));
+          }
+          if (inner instanceof THREE.Mesh && inner.material instanceof THREE.MeshBasicMaterial) {
+            inner.material.color.lerpColors(FLAME_INNER_A, FLAME_INNER_B, 0.5 + 0.5 * Math.sin(this.flameTime * 14 + phase + 2.1));
+          }
+          // Inner core counter-pulses against the group scale.
+          if (inner) {
+            inner.scale.set(
+              1 + 0.15 * Math.sin(this.flameTime * 19 + phase + 1.3),
+              1 + 0.2 * Math.sin(this.flameTime * 15 + phase + 0.7),
+              1 + 0.15 * Math.sin(this.flameTime * 19 + phase + 1.3),
+            );
+          }
         }
       });
+    }
+    for (const light of this.fireLights) {
+      light.intensity =
+        FIRE_LIGHT_INTENSITY *
+        (1 + FIRE_LIGHT_FLICKER_AMPLITUDE * fireLightFlicker(this.flameTime, light.userData.phase as number));
     }
 
     // Witch mesh follows the player; hidden in first-person.
