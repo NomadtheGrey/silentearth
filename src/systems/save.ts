@@ -39,6 +39,15 @@
  *   writes traps as-is (ids saved verbatim — restore()
  *   recomputes its id counter from the max id suffix, so
  *   later placeTrap ids cannot collide).
+ * - world state (Background's persistence seams, a39f47f):
+ *   fires[].lighting (LightingProcess shape; lit needs no
+ *   field — fires[].lit already exists), harvestState
+ *   (HarvestStateSnapshot shape), sky { cycleT }, facing
+ *   { yaw, pitch }. Same additive-field rule: old saves load
+ *   defaults (empty harvest snapshot, dawn sky, default
+ *   look), never break. Invalid entries pass through —
+ *   the engine restores validate and drop (replace, not
+ *   merge; null snapshots ignored there).
  *   APP WIRING FOLLOWS THE PILE ENTITY (Background): saveNow
  *   passes the pile singleton's snapshot as draft.piles, and
  *   boot restore re-places each saved pile through the
@@ -93,12 +102,26 @@ export const SAVE_VERSION = 1;
 /** 'behind' added 2026-10-26 (UI's third perspective): before this, a save made in behind view reloaded as fresh, because deserialize rejected the mode. */
 export type SaveCameraMode = 'first' | 'third' | 'behind';
 
+/**
+ * A fire's lighting in progress, as saved. Structural mirror of
+ * the game layer's LightingProcess (fireState.ts) by literal —
+ * systems does not import game modules. Null = no lighting in
+ * progress. The engine's validLighting() validates on restore
+ * (null in, null out; bad shapes become null). Lit itself needs
+ * NO field: SavedFire.lit already exists.
+ */
+export type SavedLightingProcess =
+  | { method: 'flint'; clicks: number }
+  | { method: 'friction'; phase: 'waiting' | 'ready'; waitUntil: number };
+
 export interface SavedFire {
   type: string;
   x: number;
   z: number;
   /** Recorded; restore brings fires back unlit (see header). */
   lit: boolean;
+  /** Lighting in progress; null when the fire is not lighting. */
+  lighting: SavedLightingProcess | null;
 }
 
 export interface SavedHouse {
@@ -128,6 +151,97 @@ export interface SavedTrap {
   z: number;
 }
 
+/**
+ * World harvest state, as saved. Structural mirror of the game
+ * layer's HarvestStateSnapshot (harvestState.ts) by literal —
+ * systems does not import game modules. The engine's restore()
+ * validates per field (Array.isArray guards, bad entries
+ * dropped) and replaces rather than merges; a null snapshot is
+ * ignored there, so deserializeSave always returns a snapshot
+ * shape here (empty when the save predates it), never null.
+ */
+export interface SavedHarvestState {
+  shrunk: Array<{ id: string; harvestedAt: number; cx: number; cz: number }>;
+  removed: string[];
+  progress: Array<{ id: string; progress: number }>;
+  spawnedLogs: Array<{
+    id: string;
+    x: number;
+    z: number;
+    cx: number;
+    cz: number;
+  }>;
+  pendingSpawns: Array<{
+    dueAt: number;
+    nearX: number;
+    nearZ: number;
+    seed: number;
+  }>;
+  spawnCounter: number;
+  felled: Array<{
+    id: string;
+    x: number;
+    z: number;
+    cx: number;
+    cz: number;
+  }>;
+  saplings: Array<{
+    id: string;
+    x: number;
+    z: number;
+    cx: number;
+    cz: number;
+    plantedAt: number;
+  }>;
+  saplingCounter: number;
+  clearedSpots: Array<{ x: number; z: number }>;
+}
+
+/**
+ * Fresh empty harvest snapshot: the default for saves predating
+ * it. A function (not a shared const) so no caller can mutate a
+ * shared array through a returned document.
+ */
+export function emptySavedHarvestState(): SavedHarvestState {
+  return {
+    shrunk: [],
+    removed: [],
+    progress: [],
+    spawnedLogs: [],
+    pendingSpawns: [],
+    spawnCounter: 0,
+    felled: [],
+    saplings: [],
+    saplingCounter: 0,
+    clearedSpots: [],
+  };
+}
+
+/**
+ * Sky state, as saved. Structural mirror of the game layer's
+ * SkySnapshot (sky.ts) by literal: cycle position t in [0,1)
+ * ONLY (month is an input, not state). 0 = dawn (sky.ts).
+ */
+export interface SavedSky {
+  cycleT: number;
+}
+
+/** Dawn default: the sky default for saves predating it. */
+export const DAWN_SAVED_SKY: SavedSky = { cycleT: 0 };
+
+/**
+ * Facing, as saved. Structural mirror of the game layer's
+ * FacingSnapshot (player.ts) by literal. yaw 0 faces -z;
+ * pitch clamps to ±1.45 on restore.
+ */
+export interface SavedFacing {
+  yaw: number;
+  pitch: number;
+}
+
+/** Default look: the facing default for saves predating it. */
+export const DEFAULT_SAVED_FACING: SavedFacing = { yaw: 0, pitch: 0 };
+
 export interface SaveData {
   version: typeof SAVE_VERSION;
   savedAt: number;
@@ -144,6 +258,12 @@ export interface SaveData {
   piles: GroundPile[];
   /** Placed traps (craft-placed); [] for old saves. */
   traps: SavedTrap[];
+  /** World harvest state; empty snapshot for old saves. */
+  harvestState: SavedHarvestState;
+  /** Sky cycle position; dawn ({ cycleT: 0 }) for old saves. */
+  sky: SavedSky;
+  /** Facing (yaw/pitch); default look for old saves. */
+  facing: SavedFacing;
 }
 
 /** Draft input to serializeSave — the shell's live values. */
@@ -154,7 +274,13 @@ export interface SaveDraft {
   inventory: ReadonlyArray<{ item: string; quantity: number }>;
   hunger: number;
   worn: readonly string[];
-  fires: ReadonlyArray<{ type: string; x: number; z: number; lit: boolean }>;
+  fires: ReadonlyArray<{
+    type: string;
+    x: number;
+    z: number;
+    lit: boolean;
+    lighting?: SavedLightingProcess | null;
+  }>;
   houses: ReadonlyArray<{
     type: string;
     x: number;
@@ -162,6 +288,16 @@ export interface SaveDraft {
     contents: ReadonlyArray<{ item: string; quantity: number }>;
   }>;
   looms: ReadonlyArray<{ x: number; z: number }>;
+  /**
+   * World-state fields (Background's persistence seams,
+   * a39f47f). ALL OPTIONAL so existing saveNow call sites
+   * keep compiling unchanged until the App wiring lands
+   * (UI's parallel brief): serialize writes defaults for
+   * missing fields, deserialize defaults them on read.
+   */
+  harvestState?: SavedHarvestState;
+  sky?: SavedSky;
+  facing?: SavedFacing;
   /**
    * Ground piles from the pile source (Background's singleton,
    * once it lands). OPTIONAL so existing saveNow call sites
@@ -239,7 +375,40 @@ export function serializeSave(draft: SaveDraft): SaveData {
       x: fire.x,
       z: fire.z,
       lit: fire.lit,
+      // Lighting in progress, as-is (null when not lighting).
+      // The engine's validLighting() validates on restore.
+      lighting: fire.lighting ?? null,
     })),
+    // World state: written AS-IS (fresh objects, same content —
+    // no filtering, no normalization). Missing draft fields
+    // serialize to the deserialize defaults, so the document
+    // always carries the full shape.
+    harvestState:
+      draft.harvestState !== undefined
+        ? {
+            shrunk: draft.harvestState.shrunk.map((e) => ({ ...e })),
+            removed: [...draft.harvestState.removed],
+            progress: draft.harvestState.progress.map((e) => ({ ...e })),
+            spawnedLogs: draft.harvestState.spawnedLogs.map((e) => ({
+              ...e,
+            })),
+            pendingSpawns: draft.harvestState.pendingSpawns.map((e) => ({
+              ...e,
+            })),
+            spawnCounter: draft.harvestState.spawnCounter,
+            felled: draft.harvestState.felled.map((e) => ({ ...e })),
+            saplings: draft.harvestState.saplings.map((e) => ({ ...e })),
+            saplingCounter: draft.harvestState.saplingCounter,
+            clearedSpots: draft.harvestState.clearedSpots.map((e) => ({
+              ...e,
+            })),
+          }
+        : emptySavedHarvestState(),
+    sky: draft.sky !== undefined ? { ...draft.sky } : { ...DAWN_SAVED_SKY },
+    facing:
+      draft.facing !== undefined
+        ? { ...draft.facing }
+        : { ...DEFAULT_SAVED_FACING },
     houses: draft.houses.map((house) => ({
       type: house.type,
       x: house.x,
@@ -347,11 +516,18 @@ export function deserializeSave(value: unknown): SaveData | null {
         return null;
       }
       if (!isFiniteNumber(entry.x) || !isFiniteNumber(entry.z)) return null;
+      // Lighting passes through as-is when it is a record (the
+      // engine's validLighting() validates shape on restore and
+      // turns bad shapes into null); anything else becomes null.
+      // A bad lighting value never corrupts the fire entry.
       fires.push({
         type: entry.type,
         x: entry.x,
         z: entry.z,
         lit: entry.lit === true,
+        lighting: isRecord(entry.lighting)
+          ? (entry.lighting as unknown as SavedLightingProcess)
+          : null,
       });
     }
     if (!Array.isArray(value.houses)) return null;
@@ -410,6 +586,27 @@ export function deserializeSave(value: unknown): SaveData | null {
         });
       }
     }
+    // World state: optional on read, same additive-field rule
+    // as piles/traps — an old v1 save without these fields
+    // loads defaults, never breaks. Invalid entries pass
+    // through: the engine restores validate and drop
+    // (fireState.validLighting, harvestState per-field guards
+    // with replace-not-merge, sky/facing finite checks that
+    // ignore bad snapshots), so a bad world-state record can
+    // never corrupt the whole document. A missing or
+    // non-record field loads its default.
+    const harvestState: SavedHarvestState = isRecord(value.harvestState)
+      ? (value.harvestState as unknown as SavedHarvestState)
+      : emptySavedHarvestState();
+    const sky: SavedSky = isRecord(value.sky)
+      ? { cycleT: value.sky.cycleT as number }
+      : { ...DAWN_SAVED_SKY };
+    const facing: SavedFacing = isRecord(value.facing)
+      ? {
+          yaw: value.facing.yaw as number,
+          pitch: value.facing.pitch as number,
+        }
+      : { ...DEFAULT_SAVED_FACING };
     // Traps are optional on read: an old v1 save without them
     // loads with traps: []. DELIBERATE deviation from the piles
     // strictness above: when present, entries pass through
@@ -445,6 +642,9 @@ export function deserializeSave(value: unknown): SaveData | null {
       looms,
       piles,
       traps,
+      harvestState,
+      sky,
+      facing,
     };
   } catch {
     return null;
