@@ -15,6 +15,10 @@
  * - grantFromPile() is the pickup path: the same addPartial()
  *   underneath, so pickup grants what fits and the remainder
  *   STAYS in the pile — never vanishes, never duplicates.
+ * - UNIT (since 2026-10-27): "what fits" is WEIGHT in pounds
+ *   (inventory.ts weight model) — no code change was needed
+ *   here, because both paths already delegate to addPartial(),
+ *   which now grants floor(free weight / item weight).
  * - dropFromInventory() is the drop path (Adam's "next pass"
  *   brief, 2026-10-26): remove a carried quantity and return
  *   the GroundPile record for the shell to hand to pileState's

@@ -21,57 +21,102 @@
  *   connecting harvest outcomes to inventory add() is the wiring
  *   step AFTER this lands, not something inside this file.
  *
- * CAPACITY MODEL (count-based; no slots, no weight, no size classes —
- * size-based capacity was brainstorm, not a pick):
- * - used = sum of all stacks EXCEPT carrying gear (see below).
- * - capacity = pockets base + each owned gear type's bonus (additive).
+ * CAPACITY MODEL (WEIGHT-BASED since 2026-10-27, DEV brief —
+ * count-based before that; no slots, no size classes):
+ * - used = sum over stacks of quantity × weight, EXCEPT carrying
+ *   gear and worn garments (see below). Unit: POUNDS (lb).
+ * - capacity = pockets base + each owned gear type's bonus
+ *   (additive), all in pounds.
+ * - used() / capacity() / free() return POUNDS. The explicit
+ *   accessors for UI are usedLb() / capacityLb() (same values,
+ *   clearer names); weightOf(item) gives one item's pounds.
  *
- * PINNED NUMBERS (do not retune silently):
- * - Pockets base: 10. Apron: +10. Small Basket: +25. Large Basket: 50
- *   (all Adam, 2026-10-25). Trundle-Tool: +50 (PINNED by Adam,
- *   2026-10-26 — previously "hefty, size TBD").
+ * PINNED NUMBERS (do not retune silently — the 2026-10-27 change
+ * is the UNIT only, count -> pounds; every number below is
+ * unchanged):
+ * - Pockets base: 10 lb. Apron: +10 lb. Small Basket: +25 lb.
+ *   Large Basket: 50 lb (all Adam, 2026-10-25). Trundle-Tool:
+ *   +50 lb (PINNED by Adam, 2026-10-26 — previously "hefty, size
+ *   TBD"). Full kit: 130 lb (10 + 10 + 50 + 50 + 10 worn) —
+ *   FLAGGED for Adam's pin pass (the trundle is wheeled, but
+ *   130 is his call to keep or trim).
  *
  * PINNED (Adam, 2026-10-26): LARGE BASKET REPLACES SMALL BASKET.
- *     Total with pockets + apron + large = 70; the small basket's
- *     +25 does NOT stack with the large basket's 50. (The 'stack'
- *     total, 95, is no longer live — it survives only as the
- *     non-ruled alternative of the `largeBasketMode` option, which
- *     wiring must NOT pass.) The mode stays a required constructor
- *     option with NO default: shell construction passes the ruled
- *     value explicitly — new PersonalInventory({ largeBasketMode:
- *     'replace' }) — and no silent default was added to the model.
- *     Practical note: crafting a large basket CONSUMES the small
- *     basket (upgrade), so right after the upgrade the player holds
- *     only the large basket; the modes diverge only if the player
- *     later holds both baskets at once (e.g. by crafting a second
- *     small basket while owning a large one) — under the ruling,
- *     that second small basket adds nothing while the large basket
- *     is held.
+ *     Total with pockets + apron + large = 70 lb; the small
+ *     basket's +25 lb does NOT stack with the large basket's
+ *     50 lb. (The 'stack' total, 95 lb, is no longer live — it
+ *     survives only as the non-ruled alternative of the
+ *     `largeBasketMode` option, which wiring must NOT pass.)
+ *     The mode stays a required constructor option with NO
+ *     default: shell construction passes the ruled value
+ *     explicitly — new PersonalInventory({ largeBasketMode:
+ *     'replace' }) — and no silent default was added to the
+ *     model. Practical note: crafting a large basket CONSUMES
+ *     the small basket (upgrade), so right after the upgrade
+ *     the player holds only the large basket; the modes diverge
+ *     only if the player later holds both baskets at once (e.g.
+ *     by crafting a second small basket while owning a large
+ *     one) — under the ruling, that second small basket adds
+ *     nothing while the large basket is held.
  *
- * PINNED (Adam, 2026-10-26): Trundle-Tool carrying bonus is +50.
+ * PINNED (Adam, 2026-10-26): Trundle-Tool carrying bonus is +50 lb.
  *     It was previously "hefty, size TBD"; that TBD is now closed.
  *     The bonus is the TRUNDLE_TOOL_BONUS constant below — the live
  *     value, not a tunable and not an unset placeholder. It applies
  *     only while the player holds a Trundle-Tool.
  *
  * PINNED (Adam, 2026-10-26): WORN clothes capacity bonuses, ADDITIVE
- *     with the gear above — Pointy Hat +1, Shawl +3, Cloak +6
- *     (mittens and bog boots add none). Worn garments follow the
- *     gear rule: a worn garment is NOT counted against used
+ *     with the gear above — Pointy Hat +1 lb, Shawl +3 lb, Cloak
+ *     +6 lb (mittens and bog boots add none). Worn garments follow
+ *     the gear rule: a worn garment is NOT counted against used
  *     capacity, and its bonus counts while it is both worn and
  *     carried. The worn list lives in clothes.ts (Wardrobe);
  *     wiring keeps this inventory in sync by calling setWorn()
  *     after any wear/remove. Until then worn is empty and
  *     capacity is unchanged.
  *
+ * WEIGHT TABLE (DEV draft 2026-10-27, lane-decided, for Adam's
+ * pin pass — every weight divides 1 lb evenly, so 1/weight is
+ * 1, 2, 4, 5, or 10):
+ * - 0.1 lb: acorns, bog-berries, elderberries, luminous-spores.
+ * - 0.25 lb: dry-kindling, twined-cordage, grass, salt-crystal,
+ *   edible-mushroom, poison-mushroom, apple.
+ * - 0.5 lb: tender-vines, peat-moss, bone, flint, pointy-hat,
+ *   mossy-mittens.
+ * - 1 lb: snap-wood, river-silt, clay, dirt, mud, garden-trowel,
+ *   sharp-trowel, shawl, umbrella, clay-pot.
+ * - 2 lb: river-stone, downed-oak, spade, axe-trowel,
+ *   hooded-cloak, bog-boots.
+ * - 4 lb: spade-axe, clay-brick, and homes / fires / stations
+ *   while carried between craft and place (short interval —
+ *   flagged: primitive-lean-to, thatch-hut, wattle-and-daub-hut,
+ *   woven-cottage, small-wooden-hut, moss-cradle, campfire,
+ *   hearth, kiln, bloomery, stumpy-workstation,
+ *   crafted-workstation, potters-wheel, loom).
+ * - Unknown ids default to 1 lb (never block the game on a
+ *   missing row — flagged). LANE JUDGMENTS inside that rule,
+ *   for the pin pass: cooked-acorns 0.1 lb (same as acorns —
+ *   cooking adds no mass) and the plural mushroom ids
+ *   ('mushrooms', 'poison-mushrooms') 0.25 lb (same food family
+ *   as the singulars the brief names); traps are unmapped, so
+ *   old-save trap items weigh the 1 lb default.
+ * - FLOAT SAFETY: pounds like 0.1 are not exact in binary, so
+ *   all capacity math runs in INTEGER units of 0.05 lb
+ *   (1 lb = 20 units; every table weight is a whole number of
+ *   units: 2, 5, 10, 20, 40, 80). Pounds are computed once, at
+ *   the boundary (units / 20), never accumulated as floats.
+ *   A partial grant is floor(free units / units per item).
+ *
  * IMPLEMENTATION CHOICES (not pinned rulings — Adam can overturn):
  * - Carrying gear grants capacity and is NOT counted against it.
  *   Rationale: the doc's totals read as contents capacity, and a
  *   basket you just crafted must be carryable. Gear = apron, small
- *   basket, large basket, Trundle-Tool. Every other item (including
- *   other tools) counts toward used capacity.
+ *   basket, large basket, Trundle-Tool. Every other item counts
+ *   toward used capacity — tools count (ladder tools at their
+ *   table weights; the Trundle-Tool itself is gear, not counted),
+ *   and the umbrella counts (1 lb, not gear).
  * - A gear bonus applies once per gear TYPE owned, not per unit:
- *   two aprons do not give +20.
+ *   two aprons do not give +20 lb.
  * - add() enforces capacity with a HARD cap (throws
  *   InventoryCapacityError). The soft-cap brainstorm
  *   (overfill-but-slow) was NOT picked, and movement speed lives in
@@ -82,6 +127,10 @@
  *   a state-restoration path (e.g. loading), and a later capacity
  *   ruling change must not make old states unloadable. Gameplay
  *   additions go through add(), which does enforce.
+ * - Home storage stays COUNT-based (shelter.ts) — out of scope
+ *   for this change unless Adam orders it. Save format unchanged:
+ *   stacks store item + quantity, weight is derived — no
+ *   migration.
  *
  * ID NORMALIZATION (2026-10-26 bug fix — Adam's live playtest):
  * Harvest yields in src/game/objects.ts spell items UPPER_SNAKE
@@ -120,13 +169,104 @@ import {
 import { WORN_CAPACITY_BONUS } from './clothes';
 import { ITEMS, type ItemId, type Recipe } from './recipes';
 
-/** Pinned numbers — see the header. Change only on Adam's word. */
+/** Pinned numbers, in POUNDS — see the header. Change only on Adam's word. */
 export const POCKETS_BASE_CAPACITY = 10;
 export const APRON_BONUS = 10;
 export const SMALL_BASKET_BONUS = 25;
 export const LARGE_BASKET_BONUS = 50;
-/** PINNED by Adam 2026-10-26 (was "hefty, size TBD"). */
+/** PINNED by Adam 2026-10-26 (was "hefty, size TBD"). Pounds. */
 export const TRUNDLE_TOOL_BONUS = 50;
+
+/**
+ * Integer weight units per pound (0.05 lb per unit). Every table
+ * weight below is a whole number of units, so capacity math never
+ * accumulates binary-float error (see the header's float note).
+ */
+export const POUND_UNITS_PER_LB = 20;
+
+/** Default weight in pounds for ids with no table row. */
+export const DEFAULT_ITEM_WEIGHT_LB = 1;
+
+/**
+ * Weight table (DEV draft 2026-10-27, lane-decided, for Adam's
+ * pin pass). Keyed by NORMALIZED id; weightOf() normalizes its
+ * input, so either spelling resolves. Rows the brief did not name
+ * but the lane mapped by parity are marked in the header.
+ */
+export const ITEM_WEIGHT_LB: Readonly<Record<string, number>> = {
+  // 0.1 lb
+  acorns: 0.1,
+  'bog-berries': 0.1,
+  elderberries: 0.1,
+  [ITEMS.luminousSpores]: 0.1,
+  'cooked-acorns': 0.1, // lane judgment: same as acorns
+  // 0.25 lb
+  [ITEMS.dryKindling]: 0.25,
+  [ITEMS.twinedCordage]: 0.25,
+  grass: 0.25,
+  'salt-crystal': 0.25,
+  'edible-mushroom': 0.25,
+  'poison-mushroom': 0.25,
+  mushrooms: 0.25, // lane judgment: plural food family
+  'poison-mushrooms': 0.25, // lane judgment: plural food family
+  apple: 0.25,
+  // 0.5 lb
+  [ITEMS.tenderVines]: 0.5,
+  [ITEMS.peatMoss]: 0.5,
+  bone: 0.5,
+  [ITEMS.flint]: 0.5,
+  [ITEMS.pointyHat]: 0.5,
+  [ITEMS.mossyMittens]: 0.5,
+  // 1 lb
+  [ITEMS.snapWood]: 1,
+  [ITEMS.riverSilt]: 1,
+  [ITEMS.clay]: 1,
+  dirt: 1,
+  mud: 1,
+  [ITEMS.gardenTrowel]: 1,
+  [ITEMS.sharpTrowel]: 1,
+  [ITEMS.shawl]: 1,
+  [ITEMS.umbrella]: 1,
+  [ITEMS.clayPot]: 1,
+  // 2 lb
+  [ITEMS.riverStone]: 2,
+  [ITEMS.downedOak]: 2,
+  [ITEMS.spade]: 2,
+  [ITEMS.axeTrowel]: 2,
+  [ITEMS.hoodedCloak]: 2,
+  [ITEMS.bogBoots]: 2,
+  // 4 lb
+  [ITEMS.spadeAxe]: 4,
+  [ITEMS.clayBrick]: 4,
+  // Homes / fires / stations while carried (flagged interval).
+  [ITEMS.primitiveLeanTo]: 4,
+  [ITEMS.thatchHut]: 4,
+  [ITEMS.wattleAndDaubHut]: 4,
+  [ITEMS.wovenCottage]: 4,
+  [ITEMS.smallWoodenHut]: 4,
+  [ITEMS.mossCradle]: 4,
+  [ITEMS.campfire]: 4,
+  [ITEMS.hearth]: 4,
+  [ITEMS.kiln]: 4,
+  [ITEMS.bloomery]: 4,
+  [ITEMS.stumpyWorkstation]: 4,
+  [ITEMS.craftedWorkstation]: 4,
+  [ITEMS.pottersWheel]: 4,
+  [ITEMS.loom]: 4,
+};
+
+/**
+ * One item's weight in pounds, in either spelling. Unknown ids
+ * weigh the 1 lb default — a missing row never blocks the game.
+ */
+export function weightOf(item: ItemId): number {
+  return ITEM_WEIGHT_LB[normalizeItemId(item)] ?? DEFAULT_ITEM_WEIGHT_LB;
+}
+
+/** One item's weight in integer 0.05 lb units (exact). */
+function weightUnits(item: ItemId): number {
+  return Math.round(weightOf(item) * POUND_UNITS_PER_LB);
+}
 
 /**
  * Items that grant carrying capacity. Gear is not counted against
@@ -295,7 +435,7 @@ export function displayNameFor(item: ItemId): string {
 export type LargeBasketMode = 'replace' | 'stack';
 
 export interface PersonalInventoryOptions {
-  /** REQUIRED — pass the RULED mode 'replace' (total 70). 'stack' (95) is the non-ruled alternative; wiring must not pass it. No default. */
+  /** REQUIRED — pass the RULED mode 'replace' (total 70 lb). 'stack' (95 lb) is the non-ruled alternative; wiring must not pass it. No default. */
   largeBasketMode: LargeBasketMode;
   /** Starting stacks (restoration path; not capacity-checked). */
   initial?: Record<string, number>;
@@ -303,17 +443,18 @@ export interface PersonalInventoryOptions {
   worn?: readonly ItemId[];
 }
 
+/** All values in POUNDS (weight model, 2026-10-27). */
 export interface CapacityBreakdown {
   pockets: number;
   apron: number;
   smallBasket: number;
   largeBasket: number;
   trundleTool: number;
-  /** PINNED worn bonuses total (hat +1, shawl +3, cloak +6). */
+  /** PINNED worn bonuses total (hat +1 lb, shawl +3 lb, cloak +6 lb). */
   worn: number;
   total: number;
   largeBasketMode: LargeBasketMode;
-  /** PINNED 50 (Adam 2026-10-26) — the live Trundle-Tool bonus. */
+  /** PINNED 50 lb (Adam 2026-10-26) — the live Trundle-Tool bonus. */
   trundleToolBonus: number;
 }
 
@@ -333,7 +474,7 @@ export interface PartialGrant {
   remainder: number;
 }
 
-/** Thrown by add() when a non-gear addition would exceed capacity. */
+/** Thrown by add() when a non-gear addition would exceed capacity. `free` is in pounds. */
 export class InventoryCapacityError extends Error {
   readonly item: ItemId;
   readonly quantity: number;
@@ -341,7 +482,7 @@ export class InventoryCapacityError extends Error {
 
   constructor(item: ItemId, quantity: number, free: number) {
     super(
-      `Cannot carry ${quantity} ${item}: only ${free} capacity free.`,
+      `Cannot carry ${quantity} ${item}: only ${free} lb free.`,
     );
     this.name = 'InventoryCapacityError';
     this.item = item;
@@ -407,14 +548,17 @@ export class PersonalInventory implements CraftingInventory {
   }
 
   /**
-   * Partial grant (harvest overflow, 2026-10-26): add what fits,
-   * return the remainder instead of throwing. granted + remainder
-   * always equals the requested quantity, and a full pack grants
-   * 0 with the whole quantity as remainder — never a throw for
+   * Partial grant (harvest overflow, 2026-10-26; weight-based
+   * since 2026-10-27): add what fits BY WEIGHT, return the
+   * remainder instead of throwing. granted + remainder always
+   * equals the requested quantity, and a full pack grants 0
+   * with the whole quantity as remainder — never a throw for
    * lack of room (invalid quantities still throw, exactly like
-   * add()). Gear and worn garments always fit in full, mirroring
-   * canCarry()/add(): adding a basket while full must still work.
-   * The harvest listener uses this to split fits vs remainder;
+   * add()). The fit is floor(free weight / item weight): a
+   * 0.25 lb item with 0.4 lb free grants 1, not 1.6. Gear and
+   * worn garments always fit in full, mirroring canCarry() /
+   * add(): adding a basket while full must still work. The
+   * harvest listener uses this to split fits vs remainder;
    * the remainder becomes a ground pile (see ./piles.ts), never
    * silently dropped. add() itself is unchanged — crafting keeps
    * its hard cap and its atomicity.
@@ -422,9 +566,13 @@ export class PersonalInventory implements CraftingInventory {
   addPartial(item: ItemId, quantity: number): PartialGrant {
     assertPositiveInteger(quantity, 'addPartial');
     const id = normalizeItemId(item);
-    const granted = isCarryingGear(id) || this.worn.has(id)
-      ? quantity
-      : Math.min(quantity, this.free());
+    const granted =
+      isCarryingGear(id) || this.worn.has(id)
+        ? quantity
+        : Math.min(
+            quantity,
+            Math.floor(this.freeUnits() / weightUnits(id)),
+          );
     if (granted > 0) {
       this.stacks.set(id, this.count(id) + granted);
     }
@@ -448,14 +596,19 @@ export class PersonalInventory implements CraftingInventory {
     }
   }
 
-  // --- Capacity ---
+  // --- Capacity (pounds) ---
 
-  /** Total carrying capacity right now, given owned gear. */
+  /** Total carrying capacity right now, given owned gear, in pounds. */
   capacity(): number {
     return this.capacityBreakdown().total;
   }
 
-  /** Per-source breakdown, so both open-question totals stay visible. */
+  /** Explicit pounds accessor for UI (same value as capacity()). */
+  capacityLb(): number {
+    return this.capacity();
+  }
+
+  /** Per-source breakdown, in pounds. */
   capacityBreakdown(): CapacityBreakdown {
     const hasApron = this.count(ITEMS.apron) >= 1;
     const hasSmallBasket = this.count(ITEMS.smallBasket) >= 1;
@@ -502,33 +655,60 @@ export class PersonalInventory implements CraftingInventory {
     return breakdown;
   }
 
-  /** Contents count: every stack except carrying gear and worn garments. */
+  /**
+   * Contents weight in pounds: every stack except carrying gear
+   * and worn garments, quantity × weight. Computed in integer
+   * 0.05 lb units and converted once, so 0.1 lb items never
+   * drift (ten bog-berries weigh exactly 1 lb, not 0.999...).
+   */
   used(): number {
+    return this.usedUnits() / POUND_UNITS_PER_LB;
+  }
+
+  /** Explicit pounds accessor for UI (same value as used()). */
+  usedLb(): number {
+    return this.used();
+  }
+
+  /** Contents weight in integer 0.05 lb units (exact; the math unit). */
+  private usedUnits(): number {
     let total = 0;
     for (const [item, quantity] of this.stacks) {
       if (!isCarryingGear(item) && !this.worn.has(item)) {
-        total += quantity;
+        total += quantity * weightUnits(item);
       }
     }
     return total;
   }
 
-  /** Remaining contents capacity (never below 0 in normal play). */
+  /** Remaining free weight in integer 0.05 lb units (never below 0). */
+  private freeUnits(): number {
+    return Math.max(
+      0,
+      this.capacityBreakdown().total * POUND_UNITS_PER_LB -
+        this.usedUnits(),
+    );
+  }
+
+  /** Remaining contents capacity in pounds (never below 0 in normal play). */
   free(): number {
-    return Math.max(0, this.capacity() - this.used());
+    return this.freeUnits() / POUND_UNITS_PER_LB;
   }
 
   /**
    * Would this addition fit? Gear and worn garments always fit
-   * (they are not counted). Other items fit when used + quantity
-   * <= capacity.
+   * (they are not counted). Other items fit when used weight +
+   * added weight <= capacity, compared in integer units.
    */
   canCarry(item: ItemId, quantity: number): boolean {
     const id = normalizeItemId(item);
     if (isCarryingGear(id) || this.worn.has(id)) {
       return true;
     }
-    return this.used() + quantity <= this.capacity();
+    return (
+      this.usedUnits() + quantity * weightUnits(id) <=
+      this.capacityBreakdown().total * POUND_UNITS_PER_LB
+    );
   }
 
   // --- Inspection / cloning ---
