@@ -690,18 +690,24 @@
  *   split by the engine's own cycleSplit at the world's
  *   fixed SEASON_START_MONTH, read on the 1 s timer — no
  *   shell season logic). Daytime shows no Sleep control.
- *   The press emits 'sleep:requested' { houseId } — the
- *   request the engine acts on (sky jumps to dawn,
- *   time-only, no restore). CONTRACT NOTE, flagged: no
- *   sleep channel existed at tip, and the typed bus
- *   cannot emit an undeclared event, so this landing
- *   adds the one type-only EventMap entry in events.ts
- *   (no behavior) — Background subscribes to it, it does
- *   not re-declare it. Until that listener lands the
- *   press is a no-op by construction. Label is the lane's
- *   pick, flagged: "Sleep until sunrise". No new panel,
- *   no other invented text. App + ShelteredIndicator +
- *   the one contract line.
+ *   The press emits 'sleep:requested' { x, z } — her
+ *   position at press time — and App owns the ONE
+ *   createSleepListener (Fill-in's sleep.ts, landed in
+ *   parallel as 69f5393): it checks night, then shelter
+ *   from the position, and jumps the sky to dawn,
+ *   time-only, no restore. Outcomes 'sleep:completed' /
+ *   'sleep:failed' need no UI action (the dawn jump hides
+ *   the button via the night gate; failures show nothing
+ *   per the brief's no-invented-text rule). REPAIR NOTE:
+ *   the first push of this landing (cf5f813) was built
+ *   from a stale base and its whole-file events.ts
+ *   clobbered Fill-in's landed sleep contract (the three
+ *   sleep entries + the sleep.ts import); the repair
+ *   restores that contract byte-identical and corrects
+ *   the emit to { x, z }. Label is the lane's pick,
+ *   flagged: "Sleep until sunrise". No new panel, no
+ *   other invented text. App + ShelteredIndicator +
+ *   events.ts (restored, not re-authored).
  * - TRAP SAVE WIRING, LIVE (Adam, 2026-10-27 — DEV brief,
  *   Systems format half 4f3fa69): placed traps survive a
  *   refresh — saveNow passes trapState.snapshot() as
@@ -760,6 +766,7 @@ import {
   type HouseType,
 } from './game/shelter';
 import { cycleSplit } from './game/sky';
+import { createSleepListener } from './game/sleep';
 import {
   DEFAULT_SEED,
   PLAYER_EYE_HEIGHT,
@@ -1222,11 +1229,19 @@ export default function App() {
   // SLEEP (Adam, 2026-10-27): the button renders only when
   // sheltered AND night (see the ShelteredIndicator wiring
   // below) — daytime shows no Sleep control. The press emits
-  // the sleep request the engine acts on: sky jumps to dawn,
-  // time-only, no restore. No listener exists yet —
-  // Background subscribes to 'sleep:requested'.
+  // the sleep request { x, z } — her position at press time
+  // — that the engine's sleep listener acts on: it checks
+  // night, then shelter (from the position), and jumps the
+  // sky to dawn, time-only, no restore. The one listener
+  // lives in the boot effect below (createSleepListener);
+  // outcomes 'sleep:completed'/'sleep:failed' need no UI
+  // action — the dawn jump hides the button via the night
+  // gate, and failures show nothing per the brief's
+  // no-invented-text rule.
   const handleSleep = (): void => {
-    bus.emit('sleep:requested', { houseId: shelterHouseId });
+    const player = playerRef.current;
+    if (!player) return;
+    bus.emit('sleep:requested', { x: player.x, z: player.z });
   };
 
   // Gap-closing state (see the header): one Systems FireState
@@ -1870,6 +1885,17 @@ export default function App() {
     const offShelterChanged = bus.on('shelter:changed', ({ houseId }) => {
       applyShelterHouse(houseId);
     });
+    // SLEEP LISTENER (Fill-in's sleep.ts, shell half): ONE
+    // listener for the shell, created here after the
+    // renderer exists. Deps are lazy closures over the
+    // live rig: cycleT from snapshotSky, dawn jump via
+    // restoreSky({ cycleT: 0 }). A second listener would
+    // double-emit the outcome events, so this is created
+    // exactly once in this effect and unsubscribed below.
+    const offSleep = createSleepListener({
+      getCycleT: () => rendererRef.current?.snapshotSky()?.cycleT ?? null,
+      restoreDawn: () => rendererRef.current?.restoreSky({ cycleT: 0 }),
+    });
     // Autosave on pagehide: the last-chance write when she leaves
     // or refreshes. saveNow reads only refs + singletons (see its
     // note), so this first-render closure stays correct for the
@@ -1974,6 +2000,7 @@ export default function App() {
       offFireLit();
       offShelterPlaced();
       offShelterChanged();
+      offSleep();
       unsubHarvestOutcome();
       offLoaded();
       offUnloaded();
