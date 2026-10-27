@@ -49,6 +49,14 @@ const SCATTER_KINDS: ScatterKind[] = [
   // Apple landing (2026-10-27): first fruit tree, old orchard
   // remnants in oldfieldRise + meadow (mix-driven, unlike acorns).
   'appleTree',
+  // Flint + pond landing (2026-10-27): flint is a mix-driven
+  // scatter stone (the "wherever" spread); pond is a big
+  // standing-water disc in wet biomes. Appended last, like
+  // appleTree — the pick loop walks this order, so existing
+  // kinds keep their relative order (the added mix weights still
+  // re-roll kind picks per slot, as the apple landing did).
+  'flint',
+  'pond',
 ];
 
 export function createWorldGen(seed: string): WorldGen {
@@ -124,7 +132,7 @@ export function createWorldGen(seed: string): WorldGen {
         x,
         z,
         // Ground-hugging kinds sit on the plane; uprights rise from it.
-        y: kind === 'bogPatch' || kind === 'standingWater' || kind === 'peatMoss' || kind === 'riverSilt'
+        y: kind === 'bogPatch' || kind === 'standingWater' || kind === 'pond' || kind === 'peatMoss' || kind === 'riverSilt'
           ? 0.02
           : 0,
         scale: 0.7 + rand() * 0.7,

@@ -43,15 +43,18 @@
  *   raw generator is used because stumps are never depleted,
  *   so it gives the same stump set as the renderer's
  *   depletion-wrapped generator.
- * - Inventory capacity mode: PINNED by Adam 2026-10-26 — a large
- *   basket REPLACES a small basket (full kit: pockets 10 + apron
- *   10 + large 50 = 70). The shell constructs PersonalInventory
- *   directly with largeBasketMode 'replace' — the ruled mode, not
- *   Systems' temporary wiring placeholder, which this shell no
- *   longer references (Systems deletes the placeholder function
- *   separately). The modes coincide right after the upgrade in
- *   normal play (the upgrade consumes the small basket); they
- *   diverge only if she later holds both baskets at once.
+ * - Inventory capacity (Adam, 2026-10-27): weights pinned —
+ *   pockets base 10, apron +10, small basket +25, large
+ *   basket 50, Trundle-Tool +50, additive. Large basket
+ *   REPLACES the small basket's +25 — question CLOSED
+ *   on Adam's 2026-10-27 "for simplicity" ruling (final
+ *   state; provenance: 10-26 replace pin → 10-27 open
+ *   note → 10-27 replace ruling): pockets 10 + apron 10
+ *   + large 50 = 70 with the large basket (not 95);
+ *   Trundle-Tool's +50 still adds on top (full kit 130
+ *   lb with worn clothes). The shell constructs
+ *   PersonalInventory with largeBasketMode 'replace' —
+ *   the settled mode, matching Systems.
  * - Remove option (Adam, 2026-10-26): alongside normal harvest,
  *   she may TOTALLY REMOVE a plant — more resources at once, but
  *   the plant is gone permanently (no regrow), for clearing
@@ -421,14 +424,15 @@
  *   with no pile in range USE behaves exactly as before.
  *   Systems' listener owns the grant now (systems/piles.ts
  *   handlePilePickupRequest, landed on DEV's bridge-out
- *   signal): grant what fits, take exactly that much
- *   (partial, remainder stays), then refresh + save +
- *   feedback; missing pile grants nothing, full pack takes
- *   nothing + note. LIMITS: touch USE only
- *   (desktop has no USE affordance — desktop pile pickup
- *   needs a button or a key, follow-up); if piles should
- *   outrank ground outright, that is a one-line priority
- *   change for Adam's call.
+ *   signal): the WHOLE pile, kinds in stacks order,
+ *   partial by weight (remainder stays), then refresh +
+ *   save + feedback; missing pile grants nothing, full
+ *   pack takes nothing + note. Touch USE and the desktop
+ *   button emit the same event to that one listener, so
+ *   the grant matches on both (desktop/phone parity,
+ *   Adam 2026-10-27); if piles should outrank ground
+ *   outright, that is a one-line priority change for
+ *   Adam's call.
  * - PILE BRIDGE OUT (DEV sequencing plan, 2026-10-26): the
  *   shell's 'pile:pickup-requested' grant bridge is removed
  *   (App.tsx only). The touch USE handler STILL emits
@@ -565,21 +569,23 @@
  *   pause"). NO auto-resume anywhere — focus/visible return
  *   deliberately clears nothing; only the button resumes.
  * - PILE SAVE WIRING, LIVE (Adam, 2026-10-26 — DEV brief,
- *   merge #5 on hold until everything is built): piles are no
- *   longer session-only. saveNow passes pileState.snapshot()
- *   (mapped to item/quantity/x/z, the id dropped) as
- *   draft.piles, so serializeSave writes them normalized,
- *   order preserved, never merged; boot restore, inside the
- *   saveRestoredRef guard after the renderer exists, drops
- *   each saved pile back through pileState.drop() (merge-safe,
- *   emits pile:dropped for tracker + renderer visuals; the
- *   100 ms moved tick then surfaces in-range piles). The
- *   guard also protects against a double restore doubling
- *   quantities (drop merges by id). Regenerate clears piles
- *   via setWorldGen and the next save snapshots the empty
- *   set — a new world is a new pile set, by design. Old
- *   saves load piles: []. App.tsx only; no format change
- *   (SaveData.piles already existed).
+ *   merge #5 on hold until everything is built; multi-kind
+ *   2026-10-27): piles are no longer session-only. saveNow
+ *   passes pileState.snapshot() (stacks + position, no id
+ *   in the document) as draft.piles, so serializeSave
+ *   writes them normalized, order preserved, never merged;
+ *   boot restore, inside the saveRestoredRef guard after
+ *   the renderer exists, drops each saved KIND back
+ *   through pileState.drop() (merge-safe by coords, emits
+ *   pile:dropped/pile:changed for tracker + renderer
+ *   visuals; the 100 ms moved tick then surfaces in-range
+ *   piles). The guard also protects against a double
+ *   restore doubling quantities (drop merges by coords).
+ *   Regenerate clears piles via setWorldGen and the next
+ *   save snapshots the empty set — a new world is a new
+ *   pile set, by design. Old single-kind saves migrate on
+ *   read (grouped by rounded coords, kinds in saved order,
+ *   nothing dropped); saves without piles load piles: [].
  * - DESKTOP PILE PICKUP, LIVE (Adam, 2026-10-26 — DEV brief,
  *   second of two; SUPERSEDES the desktop limit in PILE
  *   PICKUP BY USE above): desktop gets a visible button —
@@ -742,6 +748,81 @@
  *   what every world tap near a fire does, so it waits
  *   on DEV/Adam approval rather than shipping silently.
  *   FireState.tsx + this bullet only.
+ * - WEIGHT DISPLAY, LIVE (Adam, 2026-10-27 — DEV brief,
+ *   unheld on Systems' tool-exclusion fix 8d0aff2):
+ *   personal capacity is pounds now. Panel header reads
+ *   "X lb / Y lb" from Systems' usedLb()/capacityLb(),
+ *   trimmed to at most 2 decimals with trailing zeros
+ *   dropped (never a raw float). Rows show per-item
+ *   weight, plus the stack total above one ("0.5 lb each
+ *   · 1.5 lb"). Rows whose weight is NOT in the header
+ *   total never show a counting number: the owned tool's
+ *   row reads "carried free" (one unit free; a duplicate
+ *   unit counts, shown as "N lb · 1 carried free"), and
+ *   carrying gear + worn garments read "carried free"
+ *   too — same rule, or the row would contradict the
+ *   total. Worn carrying-bonus note reads "+N lb".
+ *   Home-storage rows stay count-based (out of scope);
+ *   pack-full notes carry no numbers, so nothing to
+ *   convert there. Large replace-vs-stack is CLOSED
+ *   (Adam, 2026-10-27, "for simplicity": large replaces
+ *   small — 70 with the large basket, full kit 130 lb
+ *   with worn clothes; final state after the 10-27 open
+ *   note); the header still reads capacityLb only, so
+ *   no computed total lives in the display.
+ *   InventoryPanel + App + types only.
+ * - PILE CHIP + MENU, LIVE (Adam, 2026-10-27 — DEV brief,
+ *   on Systems' take-N + deposit 0e16c91; kind-scoped
+ *   grant 2026-10-27, menu redesign still UI's turn):
+ *   every in-range pile gets a world-anchored chip (item
+ *   + ×count, fire-chip pattern, 44 px touch target); tap
+ *   opens Take one / Take all / Deposit one / Deposit
+ *   all, scoped to one kind (deposit disabled when she
+ *   carries none of it). SUPERSEDED by the multi-kind
+ *   menu below: the menu now lists every kind. Take calls
+ *   handlePileTakeRequest directly (kind + 1 / kind
+ *   quantity); deposit calls depositIntoPile + one
+ *   pileState.drop with the pile's EXACT x/z verbatim — a
+ *   deposit to a gone pile still lands at those coords,
+ *   and the chip refreshes straight from pileState after
+ *   every menu action. USE (touch) + desktop button keep
+ *   take-all as the fast path (the WHOLE pile, via
+ *   Systems' listener); exact-number picker not built.
+ *   PileChip + App only.
+ * - MULTI-KIND PILE MENU, LIVE (Adam, 2026-10-27 — DEV brief,
+ *   on Systems' kind-scoped grant 509ee84; SUPERSEDES the
+ *   interim first-kind menu above): one chip per PILE (the
+ *   pile itself multi-kind — no spot grouping); a
+ *   single-kind pile keeps "{name} × {qty}", a multi-kind
+ *   pile reads "Pile × {total} ({n} kinds)". Tap opens a
+ *   menu listing the pile's kinds LIVE in stacks order
+ *   (first-dropped first), each with per-kind Take one /
+ *   Take all, plus deposit of any carried kind (one / all;
+ *   pile kinds with none carried show deposit disabled,
+ *   "Needs carried {kind}"). The menu STAYS OPEN after a
+ *   press (repeated one-by-one without reopening) and
+ *   re-renders live — a kind at zero leaves the menu, an
+ *   emptied pile closes it. Take passes the tapped kind
+ *   (verbatim stack item — pileState matches verbatim);
+ *   deposit passes the tapped kind + the pile's EXACT x/z
+ *   verbatim. USE (touch) + desktop button emit
+ *   pile:pickup-requested to Systems' WHOLE-pile listener
+ *   (kinds in stacks order, partial by weight — Systems
+ *   09c4658, restored in the repair bullet below); the
+ *   menu's per-kind Take all is separate from that fast path. Exact-number picker not built. PileChip + App only.
+ * - MULTI-KIND MENU REPAIR (2026-10-27, UI lane): the menu
+ *   push landed on a moved parent (Systems' whole-pile
+ *   listener 09c4658) and its whole-file App write
+ *   reverted Systems' 5 App hunks (header wording ×2,
+ *   listener comment, subscriber taken-list feedback,
+ *   desktop whole-pile label) — owned clobber, caught by
+ *   post-push parent + diff verification before any
+ *   report, and the tip stood tsc-red on outcome.item
+ *   until this repair. This repair restores all 5 hunks
+ *   verbatim on top of the menu and corrects this
+ *   bullet's USE/desktop sentence (the listener takes
+ *   the WHOLE pile now, not the first kind). Menu code
+ *   untouched by the repair. App only.
  * - TRAP SAVE WIRING, LIVE (Adam, 2026-10-27 — DEV brief,
  *   Systems format half 4f3fa69): placed traps survive a
  *   refresh — saveNow passes trapState.snapshot() as
@@ -788,6 +869,7 @@ import {
 } from './game/fireState';
 import { loomState } from './game/loomState';
 import { pileState, type PileTarget } from './game/pileState';
+import { HARVEST_RANGE } from './game/proximity';
 import { trapState } from './game/trapState';
 import type { TrapType } from './game/traps';
 import { harvestState } from './game/harvestState';
@@ -827,6 +909,7 @@ import { UmbrellaIcon } from './ui/UmbrellaIcon';
 import { FireState, type FireChipStatus } from './ui/FireState';
 import { PlacementPreview } from './ui/PlacementPreview';
 import { ContextMenu } from './ui/ContextMenu';
+import { PileChip } from './ui/PileChip';
 import type { ContextAction } from './ui/types';
 import { TouchControls } from './ui/TouchControls';
 import { LocationChip } from './ui/LocationChip';
@@ -858,10 +941,15 @@ import type {
 import {
   PersonalInventory,
   displayNameFor,
+  isCarryingGear,
+  normalizeItemId,
+  weightOf,
 } from './systems/inventory';
 import {
+  depositIntoPile,
   dropFromInventory,
   handlePilePickupRequest,
+  handlePileTakeRequest,
 } from './systems/piles';
 import { executeCraft } from './systems/crafting-execution';
 import {
@@ -888,7 +976,12 @@ import {
   type OwnedToolItem,
 } from './systems/owned-tool';
 import { canCraft } from './systems/crafting';
-import { ITEMS, RECIPES, type CraftingStation } from './systems/recipes';
+import {
+  ITEMS,
+  RECIPES,
+  type CraftingStation,
+  type ItemId,
+} from './systems/recipes';
 
 type BusHarvestTarget = EventMap['harvest:inRange']['targets'][number];
 
@@ -1136,11 +1229,55 @@ const HOUSE_TYPE_TO_ITEM: Record<HouseType, string> = {
   smallWoodenHut: ITEMS.smallWoodenHut,
 };
 
+/**
+ * Pounds, trimmed: at most 2 decimals, trailing zeros dropped
+ * ("12.5 lb", never "12.50 lb" or a raw float). Weights step
+ * in 0.05 lb, so 2 decimals are exact; toFixed absorbs binary
+ * noise (3 × 0.1 prints "0.30" before the strip, never
+ * "0.30000000000000004").
+ */
+function formatLb(pounds: number): string {
+  return pounds.toFixed(2).replace(/\.?0+$/, '') || '0';
+}
+
+/**
+ * One inventory row's weight line (weight display, Adam
+ * 2026-10-27). Excluded rows never show a counting number, or
+ * the row would contradict the header total (which already
+ * excludes them): carrying gear and worn garments exclude the
+ * whole stack, and the owned tool excludes exactly one unit —
+ * Systems' usedLb rule, mirrored here for display only
+ * (Systems owns the math; this never recomputes the total).
+ * Normal rows show per-item weight, plus the stack total when
+ * the count is above one ("0.5 lb each · 1.5 lb").
+ */
+function weightTextFor(
+  item: string,
+  quantity: number,
+  inventory: PersonalInventory,
+): string {
+  const id = item as ItemId;
+  if (isCarryingGear(id) || inventory.wornItems().includes(id)) {
+    return 'carried free';
+  }
+  const owned = ownedToolItem(inventory);
+  if (id === owned) {
+    if (quantity <= 1) return 'carried free';
+    return `${formatLb((quantity - 1) * weightOf(id))} lb · 1 carried free`;
+  }
+  const each = weightOf(id);
+  if (quantity <= 1) return `${formatLb(each)} lb`;
+  return `${formatLb(each)} lb each · ${formatLb(quantity * each)} lb`;
+}
+
 /** One inventory stack as a panel row, with the umbrella icon attached. */
-function toInventoryItem(stack: {
-  item: string;
-  quantity: number;
-}): InventoryItem {
+function toInventoryItem(
+  stack: {
+    item: string;
+    quantity: number;
+  },
+  inventory: PersonalInventory,
+): InventoryItem {
   return {
     id: stack.item,
     // Display spelling, never the raw code id (Adam, 2026-10-26:
@@ -1148,6 +1285,7 @@ function toInventoryItem(stack: {
     // the systems table). The id stays the key for actions.
     name: displayNameFor(stack.item),
     quantityText: String(stack.quantity),
+    weightText: weightTextFor(stack.item, stack.quantity, inventory),
     icon: stack.item === UMBRELLA_ITEM_ID ? <UmbrellaIcon /> : undefined,
   };
 }
@@ -1323,10 +1461,13 @@ export default function App() {
   const [harvestTargets, setHarvestTargets] = useState<HarvestTarget[]>([]);
   // In-range dropped piles (harvest overflow), nearest first per
   // the tracker. Drives the touch USE fallback, the touch
-  // PICK UP label, and the desktop pickup button (see
-  // handleTouchInteract + the pile computations before
-  // return); piles get no screen of their own.
+  // PICK UP label, the desktop pickup button, and the pile
+  // chips + menu (see handleTouchInteract + the pile
+  // computations before return + pileMenuActions /
+  // handlePileAction). Ref mirrors state so the
+  // first-render recomputeAnchors closure sees piles fresh.
   const [piles, setPiles] = useState<PileTarget[]>([]);
+  const pilesRef = useRef<PileTarget[]>([]);
   // Harvest outcome feedback + multi-step progress, rendered
   // through WorldAnchor + ObjectFeedback / InteractionProgress.
   // Populated only by the outcome events (see the header) — never
@@ -1345,6 +1486,21 @@ export default function App() {
     { fire: PlacedFire; x: number; y: number }[]
   >([]);
   const [selectedFireId, setSelectedFireId] = useState<string | null>(null);
+  // Pile chips (projected anchors, fire-chip pattern) and the
+  // pile whose menu is open. The menu is LIVE, not a tap-time
+  // snapshot: selectedPileId names the pile, and the menu
+  // renders from the live pile in piles state — a kind taken
+  // to zero leaves the menu, a deposit's new kind joins it,
+  // and an emptied pile closes it (auto-close in
+  // refreshPilesFromState / piles:inRange). Ref mirrors the
+  // key so the first-render piles:inRange closure can
+  // auto-close a vanished pile. The pile's x/z are its true
+  // coords verbatim, which the deposit path reuses exactly.
+  const [pileAnchors, setPileAnchors] = useState<
+    { pile: PileTarget; x: number; y: number }[]
+  >([]);
+  const [selectedPileId, setSelectedPileId] = useState<string | null>(null);
+  const selectedPileIdRef = useRef<string | null>(null);
   const [placement, setPlacement] = useState<PlacementMode | null>(null);
   const [placementAnchor, setPlacementAnchor] = useState<{
     x: number;
@@ -1354,10 +1510,11 @@ export default function App() {
   const placementRef = useRef<PlacementMode | null>(null);
 
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>(() =>
-    inventory.stacksSnapshot().map(toInventoryItem),
+    inventory.stacksSnapshot().map((stack) => toInventoryItem(stack, inventory)),
   );
   const [capacityText, setCapacityText] = useState(
-    () => `Carrying ${inventory.used()} / ${inventory.capacity()}`,
+    () =>
+      `Carrying ${formatLb(inventory.usedLb())} lb / ${formatLb(inventory.capacityLb())} lb`,
   );
 
   const busTargetsRef = useRef<BusHarvestTarget[]>([]);
@@ -1376,9 +1533,11 @@ export default function App() {
   const [paused, setPaused] = useState(false);
 
   const refreshInventory = () => {
-    setInventoryItems(inventory.stacksSnapshot().map(toInventoryItem));
+    setInventoryItems(
+      inventory.stacksSnapshot().map((stack) => toInventoryItem(stack, inventory)),
+    );
     setCapacityText(
-      `Carrying ${inventory.used()} / ${inventory.capacity()}`,
+      `Carrying ${formatLb(inventory.usedLb())} lb / ${formatLb(inventory.capacityLb())} lb`,
     );
     // UMBRELLA DRIVING: every inventory change flows through
     // here (harvest, craft, eat, cook, place, wear, deposit,
@@ -1455,13 +1614,18 @@ export default function App() {
             x: loom.x,
             z: loom.z,
           })),
-          // PILE SAVE WIRING: the live pile set rides every
-          // save (id dropped — serializeSave rebuilds nothing
-          // from it; it writes item/quantity/x/z normalized,
-          // order preserved, never merged).
+          // PILE SAVE WIRING (multi-kind, 2026-10-27): the
+          // live pile set rides every save as stacks +
+          // position (no id in the document — boot restore
+          // derives it from coords; serializeSave writes
+          // stacks normalized, order preserved, never
+          // merged). The legacy first-kind-only map is
+          // gone: it lost non-first kinds across a save.
           piles: pileState.snapshot().map((pile) => ({
-            item: pile.item,
-            quantity: pile.quantity,
+            stacks: pile.stacks.map((stack) => ({
+              item: stack.item,
+              quantity: stack.quantity,
+            })),
             x: pile.x,
             z: pile.z,
           })),
@@ -1564,6 +1728,13 @@ export default function App() {
       fires.push({ fire, x: anchor.x, y: anchor.y });
     }
     setFireAnchors(fires);
+    const pileAnchorsNext: { pile: PileTarget; x: number; y: number }[] = [];
+    for (const pile of pilesRef.current) {
+      const anchor = projectAnchor(pile.x, pile.z, 'scatter');
+      if (!anchor) continue;
+      pileAnchorsNext.push({ pile, x: anchor.x, y: anchor.y });
+    }
+    setPileAnchors(pileAnchorsNext);
     const mode = placementRef.current;
     if (mode) {
       const player = playerRef.current;
@@ -1572,6 +1743,29 @@ export default function App() {
       );
     } else {
       setPlacementAnchor(null);
+    }
+  };
+
+  // Re-derive the in-range pile list straight from pileState
+  // (same range + nearest-first order as the tracker's
+  // piles:inRange channel). Menu take/deposit call this after
+  // acting, so the chip reflects the new pile state even when
+  // the acted pile is gone: a deposit to a gone pile creates
+  // a pile at those coords, and the chip must appear — never
+  // assume the pile survived. It also auto-closes the live
+  // menu when its pile is gone (the menu then has nothing
+  // to render).
+  const refreshPilesFromState = () => {
+    const player = playerRef.current;
+    if (!player) return;
+    const inRange = pileState.pilesInRange(player.x, player.z, HARVEST_RANGE);
+    pilesRef.current = inRange;
+    setPiles(inRange);
+    recomputeAnchors();
+    const key = selectedPileIdRef.current;
+    if (key && !inRange.some((pile) => pile.id === key)) {
+      selectedPileIdRef.current = null;
+      setSelectedPileId(null);
     }
   };
 
@@ -1734,22 +1928,28 @@ export default function App() {
             // Same skip rule as fires.
           }
         }
-        // PILE SAVE WIRING: re-place each saved pile through
-        // pileState.drop() — merge-safe by id, and it emits
-        // pile:dropped, so the tracker and the renderer pile
-        // group pick the restored piles up (the tracker's
-        // 100 ms moved tick surfaces the in-range set once
-        // the loop runs at the restored position). Saved
-        // piles are deserialize-validated (normalized ids,
-        // positive quantities, finite coords); drop() returns
-        // null for anything invalid instead of throwing, so
-        // no skip rule is needed here. Inside the
-        // saveRestoredRef guard, so a second boot-effect run
-        // cannot double-drop (drop merges, which would double
-        // quantities). Runs after the renderer exists, so
-        // setWorldGen's pile clear cannot wipe the restore.
+        // PILE SAVE WIRING (multi-kind, 2026-10-27):
+        // re-place each saved KIND through pileState.drop()
+        // — merge-safe by coords, and it emits
+        // pile:dropped/pile:changed, so the tracker and the
+        // renderer pile group pick the restored piles up
+        // (the tracker's 100 ms moved tick surfaces the
+        // in-range set once the loop runs at the restored
+        // position). Kinds drop in saved order, so a
+        // restored pile's stacks match the saved order.
+        // Saved piles are deserialize-validated (normalized
+        // ids, positive quantities, finite coords); drop()
+        // returns null for anything invalid instead of
+        // throwing, so no skip rule is needed here. Inside
+        // the saveRestoredRef guard, so a second boot-effect
+        // run cannot double-drop (drop merges, which would
+        // double quantities). Runs after the renderer
+        // exists, so setWorldGen's pile clear cannot wipe
+        // the restore.
         for (const pile of saved.piles) {
-          pileState.drop(pile.item, pile.quantity, pile.x, pile.z);
+          for (const stack of pile.stacks) {
+            pileState.drop(stack.item, stack.quantity, pile.x, pile.z);
+          }
         }
         player.x = saved.position.x;
         player.z = saved.position.z;
@@ -1804,14 +2004,25 @@ export default function App() {
       recomputeAnchors();
     });
     const offPiles = bus.on('piles:inRange', ({ piles: inRange }) => {
+      pilesRef.current = inRange;
       setPiles(inRange);
+      recomputeAnchors();
+      const key = selectedPileIdRef.current;
+      if (key && !inRange.some((pile) => pile.id === key)) {
+        selectedPileIdRef.current = null;
+        setSelectedPileId(null);
+      }
     });
     // Systems' 'pile:pickup-requested' listener (see the header
     // + systems/piles.ts): the SOLE granter on the event since
-    // the shell bridge came out (b23a042). Behavior mirrors
-    // the bridge exactly — missing pile: silent nothing; full
-    // pack: Pack-full note, no take, no refresh/save; grant:
-    // refresh + save + Picked-up feedback, anchored at the pile.
+    // the shell bridge came out (b23a042) — touch USE and the
+    // desktop button emit the same event, so one listener
+    // grants both (desktop/phone parity by construction).
+    // Behavior: missing pile: silent nothing; full pack:
+    // Pack-full note, no take, no refresh/save; grant: the
+    // WHOLE pile (kinds in stacks order, partial by weight,
+    // remainder stays), then refresh + save + Picked-up
+    // feedback listing every kind taken, anchored at the pile.
     const offSystemsPilePickup = bus.on(
       'pile:pickup-requested',
       ({ pileId }) => {
@@ -1825,7 +2036,7 @@ export default function App() {
         if (outcome.granted <= 0) {
           if (anchor) {
             showFeedback(
-              `Pack full — no room for ${displayNameFor(outcome.item)}.`,
+              `Pack full — no room.`,
               'blocked',
               anchor.x,
               anchor.y,
@@ -1837,7 +2048,9 @@ export default function App() {
         saveNow();
         if (anchor) {
           showFeedback(
-            `Picked up ${outcome.granted} ${displayNameFor(outcome.item)}.`,
+            `Picked up ${outcome.taken
+              .map((t) => `${t.granted} ${displayNameFor(t.item)}`)
+              .join(', ')}.`,
             'gain',
             anchor.x,
             anchor.y,
@@ -2763,6 +2976,179 @@ export default function App() {
     recomputeAnchors();
   };
 
+  // Pile menu actions (chip menu, Adam's full pile ruling):
+  // selective take + deposit, scoped to the pile's item.
+  // Deposit is disabled when she carries none of it (the
+  // menu reads the live count at render, and the press
+  // re-reads it — a stale enabled button can never
+  // deposit what is not there).
+  // Multi-kind pile menu actions. The menu lists the pile's
+  // kinds LIVE in stacks order (first-dropped first), each
+  // with per-kind Take one / Take all; then deposit rows
+  // for every carried kind (one / all of a kind) — a
+  // carried kind not yet in the pile deposits as a new
+  // stack entry on drop merge. A kind in the pile she
+  // carries none of shows its deposit rows disabled with a
+  // "Needs carried" note, so deposit stays discoverable.
+  // Labels carry the kind (ContextMenu has no section
+  // headers) so a long menu stays scannable. Action ids
+  // encode verb + kind (ids never contain ':').
+  const pileMenuActions = (pile: PileTarget): ContextAction[] => {
+    const actions: ContextAction[] = [];
+    const pileKinds = new Set(
+      pile.stacks.map((stack) => normalizeItemId(stack.item as ItemId)),
+    );
+    for (const stack of pile.stacks) {
+      const name = displayNameFor(stack.item);
+      actions.push(
+        { id: `take-one:${stack.item}`, label: `${name} — Take one` },
+        {
+          id: `take-all:${stack.item}`,
+          label: `${name} — Take all`,
+          hint: `× ${stack.quantity}`,
+        },
+      );
+      const carried = inventory.count(stack.item as ItemId);
+      const noCarried = carried <= 0;
+      const needNote = `Needs carried ${name}`;
+      actions.push(
+        {
+          id: `deposit-one:${stack.item}`,
+          label: `${name} — Deposit one`,
+          disabled: noCarried,
+          disabledNote: noCarried ? needNote : undefined,
+        },
+        {
+          id: `deposit-all:${stack.item}`,
+          label: `${name} — Deposit all`,
+          hint: noCarried ? undefined : `× ${carried}`,
+          disabled: noCarried,
+          disabledNote: noCarried ? needNote : undefined,
+        },
+      );
+    }
+    for (const stack of inventory.stacksSnapshot()) {
+      if (pileKinds.has(stack.item)) continue;
+      const name = displayNameFor(stack.item);
+      actions.push(
+        { id: `deposit-one:${stack.item}`, label: `${name} — Deposit one` },
+        {
+          id: `deposit-all:${stack.item}`,
+          label: `${name} — Deposit all`,
+          hint: `× ${stack.quantity}`,
+        },
+      );
+    }
+    actions.push({ id: 'close', label: 'Close' });
+    return actions;
+  };
+
+  // Multi-kind pile menu press. The menu STAYS OPEN after a
+  // press — "one by one" means repeated presses without
+  // reopening — and re-renders from live piles: a kind
+  // taken to zero leaves the menu, a deposit's new kind
+  // joins it, an emptied pile closes it (auto-close in
+  // refreshPilesFromState / piles:inRange). Only Close
+  // closes it explicitly. Outcome handling mirrors the
+  // take-all listener (missing pile/kind: silent; full
+  // pack: Pack-full note, no refresh/save; grant: refresh
+  // + save + feedback). Take calls Systems' menu handler
+  // directly (no bus listener for it — the TAPPED kind,
+  // verbatim stack item since pileState matches verbatim;
+  // 1 for Take one, the kind's quantity for Take all; the
+  // handler caps at the live kind quantity). Deposit calls
+  // depositIntoPile + one pileState.drop with the pile's
+  // EXACT x/z verbatim — never rounded, never recomputed
+  // from her position — so a deposit to a gone pile still
+  // lands at those coords (drop creates when nothing
+  // matches). Both paths refresh the chip straight from
+  // pileState after acting (see refreshPilesFromState).
+  const handlePileAction = (pile: PileTarget, actionId: string) => {
+    // Menu feedback: the pile's anchor when visible, else
+    // her feet (ground rule, always visible) — a menu
+    // action's result must never vanish silently.
+    const sayAt = (x: number, z: number, text: string, tone: FeedbackTone) => {
+      const player = playerRef.current;
+      const anchor =
+        projectAnchor(x, z, 'scatter') ??
+        (player ? projectAnchor(player.x, player.z, 'ground') : null);
+      if (anchor) showFeedback(text, tone, anchor.x, anchor.y);
+    };
+    if (actionId === 'close') {
+      selectedPileIdRef.current = null;
+      setSelectedPileId(null);
+      return;
+    }
+    const sep = actionId.indexOf(':');
+    if (sep < 0) return;
+    const verb = actionId.slice(0, sep);
+    const kind = actionId.slice(sep + 1);
+    if (verb === 'take-one' || verb === 'take-all') {
+      const stack = pile.stacks.find((entry) => entry.item === kind);
+      const quantity = verb === 'take-one' ? 1 : (stack?.quantity ?? 0);
+      if (quantity <= 0) return;
+      const outcome = handlePileTakeRequest(
+        pile.id,
+        kind as ItemId,
+        quantity,
+        pileState,
+        inventory,
+      );
+      if (!outcome.found) return;
+      if (outcome.granted <= 0) {
+        sayAt(
+          outcome.x,
+          outcome.z,
+          `Pack full — no room for ${displayNameFor(outcome.item)}.`,
+          'blocked',
+        );
+        return;
+      }
+      refreshInventory();
+      saveNow();
+      refreshPilesFromState();
+      sayAt(
+        outcome.x,
+        outcome.z,
+        outcome.granted === outcome.requested
+          ? `Picked up ${outcome.granted} ${displayNameFor(outcome.item)}.`
+          : `Picked up ${outcome.granted} of ${outcome.requested} ${displayNameFor(outcome.item)}.`,
+        'gain',
+      );
+      return;
+    }
+    if (verb === 'deposit-one' || verb === 'deposit-all') {
+      const carried = inventory.count(kind as ItemId);
+      const quantity = verb === 'deposit-one' ? 1 : carried;
+      if (quantity <= 0) return;
+      try {
+        const record = depositIntoPile(
+          pile,
+          kind as ItemId,
+          quantity,
+          inventory,
+        );
+        pileState.drop(record.item, record.quantity, record.x, record.z);
+        refreshInventory();
+        saveNow();
+        refreshPilesFromState();
+        sayAt(
+          record.x,
+          record.z,
+          `Deposited ${record.quantity} ${displayNameFor(record.item)}.`,
+          'gain',
+        );
+      } catch (error) {
+        sayAt(
+          pile.x,
+          pile.z,
+          error instanceof Error ? error.message : 'Could not deposit that.',
+          'blocked',
+        );
+      }
+    }
+  };
+
   const handleRemove = (target: HarvestTarget) => {
     // Same shape as a harvest press, action 'remove' (Background's
     // documented shape, 2003619): the outcome listener resolves
@@ -2786,7 +3172,7 @@ export default function App() {
       : `Protection: rain ${Math.round((1 - wornRemaining.rain) * 100)}% · wind ${Math.round((1 - wornRemaining.wind) * 100)}% · cold ${Math.round((1 - wornRemaining.cold) * 100)}% · wet ${Math.round((1 - wornRemaining.wet) * 100)}%`;
   const capacityBonus = wardrobe.wornCapacityBonus();
   const capacityNote =
-    capacityBonus > 0 ? `Carrying bonus +${capacityBonus}` : undefined;
+    capacityBonus > 0 ? `Carrying bonus +${capacityBonus} lb` : undefined;
   // Umbrella precipitation note (see the coordination above):
   // shown only while an umbrella is carried, and its number
   // comes from Systems' single constant — never a UI-side
@@ -2844,6 +3230,18 @@ export default function App() {
     selectedFire === undefined
       ? null
       : (fireAnchors.find((a) => a.fire.id === selectedFire.id) ?? null);
+
+  // The pile whose menu is open, with its anchor.
+  // Live menu pile: the menu renders from piles state, not a
+  // tap-time snapshot (see the state comment above).
+  const selectedPile =
+    selectedPileId === null
+      ? null
+      : (piles.find((pile) => pile.id === selectedPileId) ?? null);
+  const selectedPileAnchor =
+    selectedPile === null
+      ? null
+      : (pileAnchors.find((a) => a.pile.id === selectedPile.id) ?? null);
 
   // TOUCH CONTROLS (phone build — see the header): coarse-pointer
   // devices get the touch layer and the collapsible HUD; desktop
@@ -3098,6 +3496,9 @@ export default function App() {
   // the pile button appears. Pressing emits
   // pile:pickup-requested; Systems' listener grants, the
   // existing subscriber refreshes, saves, and feeds back.
+  // Label names the whole pile (total count) when it holds
+  // many kinds — the grant takes everything, so naming
+  // only the first kind would understate the action.
   const desktopPilePickup =
     !isTouch &&
     pileWouldWin(
@@ -3171,6 +3572,30 @@ export default function App() {
             </Fragment>
           );
         })}
+        {pileAnchors.map(({ pile, x, y }) => {
+          const total = pile.stacks.reduce(
+            (sum, stack) => sum + stack.quantity,
+            0,
+          );
+          const single = pile.stacks.length === 1;
+          return (
+            <Fragment key={pile.id}>
+              <WorldAnchor x={x} y={y} interactive>
+                <PileChip
+                  name={
+                    single ? displayNameFor(pile.stacks[0].item) : 'Pile'
+                  }
+                  quantity={single ? pile.stacks[0].quantity : total}
+                  kinds={pile.stacks.length}
+                  onSelect={() => {
+                    selectedPileIdRef.current = pile.id;
+                    setSelectedPileId(pile.id);
+                  }}
+                />
+              </WorldAnchor>
+            </Fragment>
+          );
+        })}
         {selectedFire && selectedFireAnchor ? (
           <WorldAnchor
             x={selectedFireAnchor.x}
@@ -3182,6 +3607,27 @@ export default function App() {
               actions={fireMenuActions(selectedFire)}
               onSelect={(id) => handleFireAction(selectedFire.id, id)}
               onClose={() => setSelectedFireId(null)}
+            />
+          </WorldAnchor>
+        ) : null}
+        {selectedPile && selectedPileAnchor ? (
+          <WorldAnchor
+            x={selectedPileAnchor.x}
+            y={selectedPileAnchor.y}
+            interactive
+          >
+            <ContextMenu
+              objectName={
+                selectedPile.stacks.length === 1
+                  ? `${displayNameFor(selectedPile.stacks[0].item)} × ${selectedPile.stacks[0].quantity}`
+                  : `Pile × ${selectedPile.stacks.reduce((sum, stack) => sum + stack.quantity, 0)} (${selectedPile.stacks.length} kinds)`
+              }
+              actions={pileMenuActions(selectedPile)}
+              onSelect={(id) => handlePileAction(selectedPile, id)}
+              onClose={() => {
+                selectedPileIdRef.current = null;
+                setSelectedPileId(null);
+              }}
             />
           </WorldAnchor>
         ) : null}
@@ -3234,8 +3680,12 @@ export default function App() {
             }
             className="pointer-events-auto absolute left-1/2 top-[54%] min-h-[44px] -translate-x-1/2 rounded-full bg-black/60 px-4 py-2 text-sm font-medium text-[#f0ead6]"
           >
-            Pick up {displayNameFor(desktopPilePickup.item)} ×{' '}
-            {desktopPilePickup.quantity}
+            {desktopPilePickup.stacks.length > 1
+              ? `Pick up pile × ${desktopPilePickup.stacks.reduce(
+                  (n, s) => n + s.quantity,
+                  0,
+                )}`
+              : `Pick up ${displayNameFor(desktopPilePickup.item)} × ${desktopPilePickup.quantity}`}
           </button>
         ) : null}
       </div>

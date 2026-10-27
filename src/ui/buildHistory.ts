@@ -43,6 +43,14 @@ export interface BuildRecord {
 
 const ALL_RECORDS: BuildRecord[] = [
   {
+    merge: 'Merge #8',
+    pr: 17,
+    sha: '3f568d8',
+    date: '2026-10-27',
+    what: 'Sleep until sunrise, hunger drain pinned 1 point per 30 seconds + eat +5, edible mushrooms hunger-exempt, campfire visibility + tap fix, USE centered + pile pickup fix, build-history #7 entry + completeness.',
+    why: 'Sleep at night by her house, hunger tuned to the pinned pace with food that reopens foraging, edible mushrooms that no longer lock out the hungry, and a campfire she can see and tap — with USE centered and piles that pick up.',
+  },
+  {
     merge: 'Merge #7',
     pr: 15,
     sha: 'd0812a2',

@@ -51,6 +51,7 @@ import { hashSeed, mulberry32 } from './seed';
 const DISC_RADIUS: Partial<Record<ScatterKind, number>> = {
   bogPatch: 1.4,
   standingWater: 1.2,
+  pond: 4.5,
   peatMoss: 0.9,
   riverSilt: 1.0,
 };
@@ -404,6 +405,15 @@ export function buildKindGeometry(spec: MeshSpec, kind: ScatterKind): THREE.Buff
     case 'disc':
       return merge([part(flatDisc(DISC_RADIUS[kind] ?? 1.0, 12), c)]);
     case 'stone':
+      if (kind === 'flint') {
+        // Knapped shard: flat, elongated, angular — reads distinct
+        // from river stone's rounded pair at a glance, before the
+        // charcoal color even registers.
+        return merge([
+          part(new THREE.OctahedronGeometry(0.32, 0), c, { s: [1.5, 0.35, 0.8] }),
+          part(new THREE.OctahedronGeometry(0.14, 0), shade(c, 0.85), { p: [0.3, 0.02, 0.1], s: [1.2, 0.4, 0.7] }),
+        ]);
+      }
       return merge([
         part(new THREE.DodecahedronGeometry(0.28, 0), c),
         part(new THREE.DodecahedronGeometry(0.16, 0), shade(c, 0.9), { p: [0.3, 0, 0.15] }),

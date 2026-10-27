@@ -295,14 +295,20 @@ export class ProximityTracker {
    * Dropped-pile channel (harvest overflow, Adam 2026-10-26):
    * piles are NOT harvest targets and never ride 'harvest:inRange'
    * — they carry their own change-only event, keyed by id AND
-   * quantity so a merge-increase or partial take re-emits (UI
-   * re-renders the pile's quantity). Pickup itself is Systems'
-   * half; this channel is only the "piles near you" signal.
+   * the full stacks content so a kind added, topped up, or
+   * taken re-emits (UI re-renders the pile's kinds). Pickup
+   * itself is Systems' half; this channel is only the "piles
+   * near you" signal.
    */
   private recomputePiles(): void {
     if (this.lastX === null || this.lastZ === null) return;
     const piles = pileState.pilesInRange(this.lastX, this.lastZ, HARVEST_RANGE);
-    const keys = new Set(piles.map((p) => `${p.id}:${p.quantity}`));
+    const keys = new Set(
+      piles.map(
+        (p) =>
+          `${p.id}:${p.stacks.map((s) => `${s.item}=${s.quantity}`).join(',')}`,
+      ),
+    );
     const changed =
       keys.size !== this.lastPileKeys.size ||
       [...keys].some((k) => !this.lastPileKeys.has(k));

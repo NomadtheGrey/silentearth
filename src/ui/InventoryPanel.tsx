@@ -171,9 +171,14 @@ export function InventoryPanel({
                       </span>
                     ) : null}
                   </span>
-                  {item.quantityText ? (
+                  {item.quantityText || item.weightText ? (
                     <span className="text-sm text-stone-300">
-                      {item.quantityText}
+                      {[item.quantityText, item.weightText]
+                        .filter(
+                          (part): part is string =>
+                            part !== undefined && part !== '',
+                        )
+                        .join(' · ')}
                     </span>
                   ) : null}
                 </button>

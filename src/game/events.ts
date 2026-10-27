@@ -168,20 +168,24 @@ export interface EventMap {
   };
   /**
    * Dropped piles (harvest overflow, Adam 2026-10-26 — see
-   * pileState.ts). 'pile:dropped' fires for a NEW pile only;
-   * 'pile:changed' fires when a drop merges into an existing pile
-   * or a pickup takes part of one; 'pile:removed' fires when a
-   * pile empties. The tracker carries in-range piles separately
+   * pileState.ts; MULTI-KIND model, Adam 2026-10-27: one pile
+   * holds many kinds in `stacks`). 'pile:dropped' fires for a
+   * NEW pile only; 'pile:changed' fires when a drop merges into
+   * an existing pile (kind added or topped up) or a pickup takes
+   * part of one; 'pile:removed' fires when a pile's last kind
+   * leaves. The tracker carries in-range piles separately
    * as 'piles:inRange' (change-only, like 'harvest:inRange').
    * 'pile:pickup-requested' is UI's future pile button → Systems'
    * pickup grant listener (Systems' half, not emitted by the
    * engine yet — no pile buttons exist until UI builds them).
+   * `item` + `quantity` on the pile payloads are pileState's
+   * INTERIM legacy (first stack only); new readers use stacks.
    */
-  'pile:dropped': { id: string; item: string; quantity: number; x: number; z: number };
-  'pile:changed': { id: string; item: string; quantity: number; x: number; z: number };
+  'pile:dropped': { id: string; stacks: { item: string; quantity: number }[]; item: string; quantity: number; x: number; z: number };
+  'pile:changed': { id: string; stacks: { item: string; quantity: number }[]; item: string; quantity: number; x: number; z: number };
   'pile:removed': { id: string };
   'piles:inRange': {
-    piles: { id: string; item: string; quantity: number; x: number; z: number; distance: number }[];
+    piles: { id: string; stacks: { item: string; quantity: number }[]; item: string; quantity: number; x: number; z: number; distance: number }[];
   };
   'pile:pickup-requested': { pileId: string };
   /**

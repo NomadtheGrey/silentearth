@@ -109,6 +109,7 @@ export type ItemId =
   | 'PEAT_MOSS'
   | 'RIVER_SLUDGE'
   | 'RIVER_STONE'
+  | 'FLINT'
   | 'BONE'
   | 'SALT_CRYSTAL'
   | 'DOWNED_OAK'
@@ -427,9 +428,11 @@ export interface HarvestSourceDef {
    * 2026-10-26): 'shrink' (default) = it shrinks and regrows for
    * more harvesting; 'spawn-near-trees' = logs only — the log is
    * taken and a fresh log spawns near trees over time. Ground
-   * never uses this (it never depletes).
+   * never uses this (it never depletes). 'taken' (flint stones,
+   * Adam 2026-10-27) = a single pickup, gone from that spot for
+   * good with no respawn scheduled — stones do not regrow.
    */
-  renewal?: 'shrink' | 'spawn-near-trees';
+  renewal?: 'shrink' | 'spawn-near-trees' | 'taken';
   /**
    * Remove action (Adam, 2026-10-26): may this source be TOTALLY
    * removed for a bigger one-time yield (clearing ground for a
@@ -571,6 +574,21 @@ export const SOURCES: HarvestSourceDef[] = [
     mesh: { shape: 'disc', color: 0x2a4a5a, baseY: 0 },
   },
   {
+    id: 'pond',
+    kind: 'pond',
+    name: 'Pond',
+    description:
+      'A standing body of water in wet low ground — ground character, ' +
+      'not a source. Bigger than a standing-water pool; no fishing, ' +
+      'swimming, or water harvest here (visibility only, Adam 2026-10-27).',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['mirewood', 'deepBog', 'creekBottom'],
+    mesh: { shape: 'disc', color: 0x2f5a6e, baseY: 0 },
+  },
+  {
     id: 'standingTree',
     kind: 'tree',
     name: 'Standing Tree',
@@ -709,6 +727,37 @@ export const SOURCES: HarvestSourceDef[] = [
     provenance: 'prototype',
     biomes: ['creekBottom', 'oldfieldRise', 'saltFlat', 'mirewood', 'deepBog', 'tanglewood'],
     mesh: { shape: 'stone', color: 0x8a8a86, baseY: 0.15 },
+  },
+  // FLINT (Adam, 2026-10-27: "let's be able to find Flint" — the
+  // "lies around wherever" spread). A single dark stone, picked up
+  // by hand: the fast fire-starter, kept not consumed (three
+  // clicks and the fire catches; friction is the slow fallback).
+  // DEPLETION (lane-decided, flagged): renewal 'taken' — a picked
+  // flint is gone from that spot for good, no respawn scheduled.
+  // This DIFFERS from stoneCluster's shrink/regrow: a cluster has
+  // many stones to thin out, a single flint does not regrow.
+  // NOTE (Systems gap, flagged to DEV): the game yield here is
+  // 'FLINT', but Systems' ITEM_ID_ALIASES has no FLINT entry, so
+  // grants stack under 'FLINT' while the lighting menu counts
+  // 'flint' — flint lighting stays unreachable until Systems adds
+  // the one-line alias (FLINT: ITEMS.flint). The source alone
+  // does not complete the path.
+  {
+    id: 'flintStone',
+    kind: 'flint',
+    name: 'Flint Stone',
+    description:
+      'A dark, sharp-edged stone lying around wherever — the fast ' +
+      'fire-starter. Three clicks and the fire catches; the flint ' +
+      'itself is kept, not consumed.',
+    harvestable: true,
+    permitTier: 'hand',
+    primaryYield: 'FLINT',
+    secondaryYields: [],
+    renewal: 'taken',
+    provenance: 'draft',
+    biomes: ['mirewood', 'deepBog', 'oldfieldRise', 'creekBottom', 'tanglewood', 'saltFlat', 'meadow', 'forest'],
+    mesh: { shape: 'stone', color: 0x232326, baseY: 0.10 },
   },
   {
     id: 'boneScatter',
