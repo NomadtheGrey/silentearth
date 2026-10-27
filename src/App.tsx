@@ -786,9 +786,8 @@
  *   deposit to a gone pile still lands at those coords,
  *   and the chip refreshes straight from pileState after
  *   every menu action. USE (touch) + desktop button keep
- *   take-all as the fast path (first kind only, interim —
- *   whole-pile take-all needs a brief, see systems/
- *   piles.ts); exact-number picker not built.
+ *   take-all as the fast path (the WHOLE pile, via
+ *   Systems' listener); exact-number picker not built.
  *   PileChip + App only.
  * - MULTI-KIND PILE MENU, LIVE (Adam, 2026-10-27 — DEV brief,
  *   on Systems' kind-scoped grant 509ee84; SUPERSEDES the
@@ -806,12 +805,24 @@
  *   emptied pile closes it. Take passes the tapped kind
  *   (verbatim stack item — pileState matches verbatim);
  *   deposit passes the tapped kind + the pile's EXACT x/z
- *   verbatim. USE (touch) + desktop button: they emit
- *   pile:pickup-requested, and Systems' listener takes
- *   the WHOLE pile (kinds in stacks order, partial by
- *   weight, remainder stays); the menu's per-kind Take
- *   all is unaffected.
- *   Exact-number picker not built. PileChip + App only.
+ *   verbatim. USE (touch) + desktop button emit
+ *   pile:pickup-requested to Systems' WHOLE-pile listener
+ *   (kinds in stacks order, partial by weight — Systems
+ *   09c4658, restored in the repair bullet below); the
+ *   menu's per-kind Take all is separate from that fast path. Exact-number picker not built. PileChip + App only.
+ * - MULTI-KIND MENU REPAIR (2026-10-27, UI lane): the menu
+ *   push landed on a moved parent (Systems' whole-pile
+ *   listener 09c4658) and its whole-file App write
+ *   reverted Systems' 5 App hunks (header wording ×2,
+ *   listener comment, subscriber taken-list feedback,
+ *   desktop whole-pile label) — owned clobber, caught by
+ *   post-push parent + diff verification before any
+ *   report, and the tip stood tsc-red on outcome.item
+ *   until this repair. This repair restores all 5 hunks
+ *   verbatim on top of the menu and corrects this
+ *   bullet's USE/desktop sentence (the listener takes
+ *   the WHOLE pile now, not the first kind). Menu code
+ *   untouched by the repair. App only.
  * - TRAP SAVE WIRING, LIVE (Adam, 2026-10-27 — DEV brief,
  *   Systems format half 4f3fa69): placed traps survive a
  *   refresh — saveNow passes trapState.snapshot() as
