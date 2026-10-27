@@ -169,6 +169,13 @@ export const HARVEST_STAGES: ToolTier[][] = [
   ['trundleTool'],
 ];
 
+/**
+ * Axe family (Adam, 2026-10-26, downed-oak override): axe-trowel
+ * and its descendants. Spade and axe-trowel share stage 1, so
+ * stage rank alone cannot gate axe work — a spade is not an axe.
+ */
+export const AXE_FAMILY_TIERS: ToolTier[] = ['axeTrowel', 'spadeAxe', 'trundleTool'];
+
 /** Harvest stage of a tool, or -1 when she has no tool at all.
  *  Pure ordering data, not a harvest system. */
 export function harvestStageRank(tier: ToolTier | null): number {
@@ -268,7 +275,7 @@ export type HarvestYieldOutcome =
  */
 export type HarvestableSource = Pick<
   HarvestSourceDef,
-  'harvestable' | 'permitTier' | 'bonusChance' | 'anchor'
+  'harvestable' | 'permitTier' | 'permitFamily' | 'bonusChance' | 'anchor'
 >;
 
 export function harvestYieldForTool(
@@ -293,6 +300,13 @@ export function harvestYieldForTool(
     source.permitTier === 'hand' ? -1 : harvestStageRank(source.permitTier);
   const stage = harvestStageRank(tier);
   if (stage < permitStage) {
+    return { permitted: false, reason: 'below-permit' };
+  }
+  // Branch gate (Adam, 2026-10-26): when a source names a permit
+  // family, the tool must belong to it IN ADDITION to meeting the
+  // stage rank. Rank alone would let a spade (stage 1) take
+  // axe-family work (stage 1 permit) — a spade is not an axe.
+  if (source.permitFamily === 'axe' && (tier === null || !AXE_FAMILY_TIERS.includes(tier))) {
     return { permitted: false, reason: 'below-permit' };
   }
   return {
@@ -344,7 +358,8 @@ export type MeshShape =
   | 'bone'
   | 'flower'
   | 'tallTree'
-  | 'mushroom';
+  | 'mushroom'
+  | 'acornCluster';
 
 export interface MeshSpec {
   shape: MeshShape;
@@ -376,6 +391,14 @@ export interface HarvestSourceDef {
    * toolGatedYields, not here). Lane-decided: every other permit.
    */
   permitTier: PermitTier | null;
+  /**
+   * Branch gate (Adam, 2026-10-26, downed-oak override): when set,
+   * the tool must belong to this family in addition to meeting the
+   * permit stage rank. Needed because spade and axe-trowel share
+   * stage 1 — rank alone cannot express "an axe". Only 'axe'
+   * exists today (axe-trowel + spade-axe + trundle-tool).
+   */
+  permitFamily?: 'axe';
   /**
    * True only for a unique world anchor (the stump): it is claimed as
    * a workstation, not counted as a harvest amount. harvestYieldForTool
@@ -450,18 +473,14 @@ const SPORES_25: SecondaryYield = {
 
 /**
  * Nuts/berries secondaries (Adam, 2026-10-26 — weather + hunger
- * build; NO such sources existed before this landing, so the
- * exemption foods ride as secondaries on existing sources rather
- * than new scatter kinds: acorns with downed oak, bog berries
- * with bog growth, elderberries with brush. Chances are
- * LANE-DECIDED starting values (Adam's pin pass still applies) —
- * generous on purpose, so a too-hungry witch can actually recover.
+ * build; bog berries ride bog growth, elderberries ride brush.
+ * Acorns USED to ride downed oak the same way; Adam 2026-10-26
+ * overrode that — acorns are HAND PICKUP from their own ground
+ * source now (groundAcorns), so no ACORNS secondary remains here.
+ * Chances are LANE-DECIDED starting values (Adam's pin pass still
+ * applies) — generous on purpose, so a too-hungry witch can
+ * actually recover.
  */
-const ACORNS_50: SecondaryYield = {
-  item: 'ACORNS',
-  chance: 0.5,
-  message: 'Acorns scattered around the fallen oak — nuts for the hungry.',
-};
 
 const BOG_BERRIES_50: SecondaryYield = {
   item: 'BOG_BERRIES',
@@ -731,15 +750,15 @@ export const SOURCES: HarvestSourceDef[] = [
     name: 'Downed Oak',
     description:
       'Heavy structural logs that form the skeleton of true shelters. Hard to process. ' +
-      'Lane-decided permit: spade-axe — the heavy-wood gate, route-symmetric ' +
-      '(an axe-only gate would lock out spade-route players until convergence). ' +
-      'Acorns scatter around it (gather-exempt food, Adam 2026-10-26 — ' +
+      'Axe work (Adam, 2026-10-26, PINNED permit: axe-family — axe-trowel and its ' +
+      'descendants; a spade is not an axe). Acorns scatter around it on the ground — ' +
+      'hand-picked, not from the log (gather-exempt food, Adam 2026-10-26 — ' +
       'but acorns NEED COOKED: eating them requires the campfire ' +
       'cooking step, Adam 2026-10-26).',
     harvestable: true,
-    permitTier: 'spadeAxe',
+    permitTier: 'axeTrowel',
+    permitFamily: 'axe',
     renewal: 'spawn-near-trees',
-    hungerExempt: true,
     primaryYield: 'DOWNED_OAK',
     secondaryYields: [
       {
@@ -752,7 +771,6 @@ export const SOURCES: HarvestSourceDef[] = [
         chance: 0.2,
         message: 'You recover some dry splinters from the core.',
       },
-      ACORNS_50,
     ],
     multiStep: {
       action: 'STOMP',
@@ -895,6 +913,23 @@ export const SOURCES: HarvestSourceDef[] = [
     provenance: 'draft',
     biomes: ['mirewood', 'deepBog', 'creekBottom', 'tanglewood', 'forest'],
     mesh: { shape: 'mushroom', color: 0x9a4a28, extraColor: 0xe8dcc0, baseY: 0.2 },
+  },
+  {
+    id: 'groundAcorns',
+    kind: 'groundAcorns',
+    name: 'Ground Acorns',
+    description:
+      'Acorns on the ground around fallen oaks, hand-picked. Gather-exempt ' +
+      'nuts (Adam 2026-10-26) — but they NEED COOKED before eating ' +
+      '(campfire cooking step, Adam 2026-10-26).',
+    harvestable: true,
+    permitTier: 'hand',
+    hungerExempt: true,
+    primaryYield: 'ACORNS',
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['tanglewood', 'mirewood', 'oldfieldRise', 'saltFlat'],
+    mesh: { shape: 'acornCluster', color: 0x6b4a2f, extraColor: 0x4a2e18, baseY: 0.08 },
   },
 ];
 

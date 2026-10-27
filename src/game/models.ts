@@ -214,6 +214,22 @@ export function buildKindGeometry(spec: MeshSpec, kind: ScatterKind): THREE.Buff
         part(blob(0.7), shade(e, 1.1), { p: [-0.55, extraDy - 0.7, -0.3] }),
       ]);
     }
+    case 'acornCluster': {
+      // Ground acorns: a small cluster of nuts on the ground —
+      // hand-picked, not a bush or a disc. Static positions.
+      const nuts: THREE.BufferGeometry[] = [];
+      const spots: [Vec3, number][] = [
+        [[0, 0.05, 0], 0.07],
+        [[0.12, 0.04, 0.06], 0.06],
+        [[-0.1, 0.04, 0.08], 0.06],
+        [[0.05, 0.04, -0.11], 0.055],
+        [[-0.06, 0.03, -0.05], 0.05],
+      ];
+      spots.forEach(([p, r], i) => {
+        nuts.push(part(sphere(r, 6, 5), i % 2 === 0 ? c : e, { p, s: [1, 0.7, 1] }));
+      });
+      return merge(nuts);
+    }
     case 'mushroom': {
       // Toadstool: cream stem + dome cap in the spec color.
       // The poison kind wears pale cap spots — the close-look
