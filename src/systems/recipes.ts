@@ -309,6 +309,24 @@ const DRAFT_RECIPES: Recipe[] = [
       'finding a stump; the trowel itself still needs one.',
   },
 
+  // --- Kindling: snap wood split by hand (Adam's ruling, 2026-10-26).
+  {
+    id: 'dry-kindling',
+    name: 'Dry Kindling',
+    status: 'draft',
+    output: { item: ITEMS.dryKindling, quantity: 2 },
+    ingredients: [i(ITEMS.snapWood, 1)],
+    station: 'hand',
+    notes:
+      'DRAFT. Snap-Wood 1 -> 2 kindling, split by hand anywhere — ' +
+      'no stump or workstation needed (Adam\'s ruling, 2026-10-26: ' +
+      'kindling is made from snap wood, 2 per snap wood, by hand — ' +
+      'his daughter does this by hand). Explicit station "hand" ' +
+      '(not unstated) so the UI shows "by hand" plainly. This is ' +
+      'the friction-lighting fuel: slow lighting consumes 1 ' +
+      'dry-kindling (fire.ts), not raw snap-wood.',
+  },
+
   // --- Tool ladder: ONE tool, evolving. Upgrade costs, not rebuilds.
   // Route A: Trowel -> Sharp Trowel -> Spade -> Spade-Axe -> Trundle-Tool.
   // Route B: Trowel -> Sharp Trowel -> Axe-Trowel -> Spade-Axe.

@@ -72,14 +72,19 @@ export const LIGHTING_SECONDS: Readonly<Record<LightingMethod, number>> = {
 /**
  * Lighting costs, by method. LANE-DECIDED: flint requires a
  * carried flint item, NOT consumed (kept, like the river-stone
- * whetstone precedent); sticks/friction consumes 1 snap-wood
- * as kindling. For Adam's pin pass.
+ * whetstone precedent); sticks/friction consumes 1 dry-kindling
+ * (Adam, 2026-10-26: kindling is made from snap wood, 2 per
+ * snap wood, by hand — recipes.ts). Raw snap-wood NO LONGER
+ * lights a fire: friction lighting needs a carried kindling
+ * item. That is the rule's natural consequence, flagged for
+ * Adam's pin pass (he may overrule it, e.g. accept either).
+ * For Adam's pin pass.
  */
 export const LIGHTING_COST_ITEM: Readonly<
   Record<LightingMethod, ItemId | null>
 > = {
   flint: ITEMS.flint,
-  sticks: ITEMS.snapWood,
+  sticks: ITEMS.dryKindling,
 };
 
 export const LIGHTING_COST_CONSUMED: Readonly<
