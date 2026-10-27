@@ -56,6 +56,32 @@
  * - Positions are world x/z numbers, finite, in the same frame
  *   as player/fire/house positions. This module never interprets
  *   them beyond passing them through.
+ * - SELECTIVE TAKE + DEPOSIT (Adam's full pile ruling,
+ *   2026-10-27, UI's chip-menu shape via DEV): a world-anchored
+ *   pile chip opens Take one / Take all / Deposit one /
+ *   Deposit all, all scoped to the pile's item (USE + desktop
+ *   button keep take-all as the fast path; no exact-number
+ *   picker — the menu covers it). Systems' half, in this file:
+ *   takeFromPile() + handlePileTakeRequest() for the take
+ *   side (an exact requested quantity, capped at the pile,
+ *   partial by weight as today, remainder stays in the pile),
+ *   and depositIntoPile() for the deposit side (remove the
+ *   carried quantity and return the record for the shell to
+ *   hand to pileState.drop()/spawnPile() — the same
+ *   shell-composes-record-plus-drop shape as the existing
+ *   drop path). Deposit is structurally scoped to the pile's
+ *   item: there is NO item parameter on depositIntoPile, so a
+ *   deposit of anything but the pile's own item cannot even
+ *   be expressed. MERGE RULE (confirmed at origin in
+ *   pileState.ts, not assumed): drop() merges on the verbatim
+ *   item string + coords rounded to 2 decimals in the pile
+ *   id — so a deposit record reusing the pile's EXACT x/z
+ *   merges into that pile, and a different item at the same
+ *   coords is a separate pile. A deposit aimed at a pile that
+ *   is gone by the time drop() runs still lands as a pile at
+ *   those coords (drop creates when nothing matches) —
+ *   nothing vanishes, and the shell's chip should refresh
+ *   from pileState rather than assuming the pile survived.
  */
 
 import {
@@ -265,4 +291,143 @@ export function grantFromPile(
         ? { item: pile.item, quantity: grant.remainder, x: pile.x, z: pile.z }
         : null,
   };
+}
+
+/**
+ * Selective take: grant an exact requested quantity from a pile
+ * (the chip menu's Take one / Take all — Take all passes the
+ * pile's quantity, or any larger number; the grant caps at the
+ * pile). Weight capacity is honored exactly as in grantFromPile:
+ * the grant is min(requested, pile quantity, what fits by
+ * weight), and granted + pile?.quantity === the original pile
+ * quantity, always — a remainder never vanishes and a take
+ * never duplicates. An invalid requested quantity (not a
+ * positive integer) throws, like the other constructors here;
+ * a request against an empty pile record grants 0 with a null
+ * pile (the pile is already gone — the handler below reports
+ * missing piles before this is ever called).
+ */
+export function takeFromPile(
+  pile: GroundPile,
+  quantity: number,
+  inventory: PersonalInventory,
+): PileGrant {
+  if (!Number.isInteger(quantity) || quantity <= 0) {
+    throw new Error(`take quantity must be a positive integer.`);
+  }
+  const wanted = Math.min(quantity, pile.quantity);
+  if (wanted <= 0) {
+    return { granted: 0, pile: null };
+  }
+  const grant: PartialGrant = inventory.addPartial(pile.item, wanted);
+  const remaining = pile.quantity - grant.granted;
+  return {
+    granted: grant.granted,
+    pile:
+      remaining > 0
+        ? { item: pile.item, quantity: remaining, x: pile.x, z: pile.z }
+        : null,
+  };
+}
+
+/**
+ * Chip-menu take handler, mirroring handlePilePickupRequest's
+ * sequence with a requested quantity: look the pile up; grant
+ * the request (capped, partial by weight); take EXACTLY the
+ * granted amount from the pile (partial: the remainder stays);
+ * report. Stale/missing pile: silent nothing (found: false).
+ * Full pack: granted 0, NO take call, and the shell shows the
+ * Pack-full note without refresh or save — same as the
+ * take-all listener. `requested` in the outcome is the
+ * pile-scoped request (min(requested, pile quantity)), so menu
+ * feedback can say "Took N of M" truthfully; the take's
+ * remaining is authoritative for the outcome (it owns the
+ * pile). The shell registers no bus listener for this — the
+ * chip menu calls it directly with the tapped pile's id and
+ * the menu's quantity (1 for Take one, the pile's quantity
+ * for Take all).
+ */
+export type PileTakeOutcome =
+  | { found: false; pileId: string }
+  | {
+      found: true;
+      pileId: string;
+      item: ItemId;
+      /** Pile-scoped request: min(requested, pile quantity). */
+      requested: number;
+      granted: number;
+      remaining: number;
+      /** Pile position, for the shell's anchored feedback. */
+      x: number;
+      z: number;
+    };
+
+export function handlePileTakeRequest(
+  pileId: string,
+  quantity: number,
+  store: PileStore,
+  inventory: PersonalInventory,
+): PileTakeOutcome {
+  const pile = store.get(pileId);
+  if (!pile) {
+    return { found: false, pileId };
+  }
+  const wanted = Math.min(quantity, pile.quantity);
+  const grant = takeFromPile(
+    { item: pile.item, quantity: pile.quantity, x: pile.x, z: pile.z },
+    quantity,
+    inventory,
+  );
+  if (grant.granted <= 0) {
+    return {
+      found: true,
+      pileId,
+      item: normalizeItemId(pile.item),
+      requested: wanted,
+      granted: 0,
+      remaining: pile.quantity,
+      x: pile.x,
+      z: pile.z,
+    };
+  }
+  const take = store.take(pileId, grant.granted);
+  return {
+    found: true,
+    pileId,
+    item: normalizeItemId(pile.item),
+    requested: wanted,
+    granted: grant.granted,
+    remaining: take.remaining,
+    x: pile.x,
+    z: pile.z,
+  };
+}
+
+/**
+ * Deposit path: move a carried quantity of the PILE'S OWN item
+ * into that pile (the chip menu's Deposit one / Deposit all —
+ * Deposit all passes the carried count; the menu disables
+ * deposit when she carries none of it). There is deliberately
+ * NO item parameter: a deposit is always of the pile's item,
+ * so depositing anything else cannot be expressed here.
+ *
+ * ATOMIC, mirroring dropFromInventory(): the record is built
+ * (validating quantity + coords) BEFORE the removal, and
+ * remove() itself throws before mutating on insufficiency —
+ * so a failed deposit leaves the inventory exactly as it was.
+ * The shell hands the returned record to pileState.drop() (or
+ * spawnPile(), same delegation) — which merges it into the
+ * existing pile when the item + exact coords match (see the
+ * header's merge note), or creates a pile at those coords
+ * when the original is gone. Systems never touches the entity
+ * layer: merging lives in pileState, as everywhere else here.
+ */
+export function depositIntoPile(
+  pile: GroundPile,
+  quantity: number,
+  inventory: PersonalInventory,
+): GroundPile {
+  const record = createGroundPile(pile.item, quantity, pile.x, pile.z);
+  inventory.remove(pile.item, quantity);
+  return record;
 }
