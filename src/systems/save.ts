@@ -58,6 +58,13 @@
  *   entity provides one. Order preserved; duplicate
  *   positions allowed (two torches at one spot are two
  *   entries).
+ * - partial true names (name-sight look counts, key +
+ *   looks): same additive-field rule (old saves load
+ *   nameSight: []) and the same leniency as torches on
+ *   read (bad entries dropped, the document survives).
+ *   Trap-save pattern: format now, App wiring later —
+ *   serialize writes the snapshot as-is, restore()
+ *   validates again. Version stays 1.
  * - world state (Background's persistence seams, a39f47f):
  *   fires[].lighting (LightingProcess shape; lit needs no
  *   field — fires[].lit already exists), harvestState
@@ -109,6 +116,10 @@
 // ---------------------------------------------------------------------------
 
 import { normalizeItemId } from './inventory';
+// Single source for the name-sight record (name-sight.ts
+// owns it; save.ts imports it — no second mirror to drift,
+// the placed-torch id nuance taught us that lesson).
+import type { SavedNameLook } from './name-sight';
 
 /** Storage key. The version rides inside the document too. */
 export const SAVE_KEY = 'silentearth-save-v1';
@@ -338,6 +349,8 @@ export interface SaveData {
   traps: SavedTrap[];
   /** Placed torches (always lit); [] for old saves. */
   torches: SavedTorch[];
+  /** Partial-true-name look counts; [] for old saves. */
+  nameSight: SavedNameLook[];
   /** World harvest state; empty snapshot for old saves. */
   harvestState: SavedHarvestState;
   /** Sky cycle position; dawn ({ cycleT: 0 }) for old saves. */
@@ -413,6 +426,16 @@ export interface SaveDraft {
     x: number;
     z: number;
     id?: string;
+  }>;
+  /**
+   * Partial-true-name looks from NameSight.snapshot().
+   * OPTIONAL so existing saveNow call sites keep
+   * compiling unchanged until the App wiring lands
+   * (trap-save pattern: format now, wiring later).
+   */
+  nameSight?: ReadonlyArray<{
+    key: string;
+    looks: number;
   }>;
 }
 
@@ -539,6 +562,16 @@ export function serializeSave(draft: SaveDraft): SaveData {
       x: torch.x,
       z: torch.z,
       ...(torch.id !== undefined ? { id: torch.id } : {}),
+    })),
+    // Name-sight: written AS-IS (key + looks verbatim, no
+    // filtering, no normalization — keys are caller-defined
+    // thing keys, not inventory ids). Invalid entries are
+    // restore()'s problem, not serialize's: NameSight.
+    // restore() validates (non-empty key + positive-int
+    // looks) and drops them.
+    nameSight: (draft.nameSight ?? []).map((entry) => ({
+      key: entry.key,
+      looks: entry.looks,
     })),
     // Piles: multi-kind stacks, normalized ids, invalid
     // entries dropped (same filtering rule as
@@ -840,6 +873,24 @@ export function deserializeSave(value: unknown): SaveData | null {
         });
       }
     }
+    // Name-sight is optional on read, same additive-field
+    // rule: an old v1 save without it loads with
+    // nameSight: []. A non-array field loads as [] — the
+    // section drops, the document survives. Bad entries
+    // (non-record, empty key, non-positive-int looks)
+    // drop here AND again in NameSight.restore(), so a bad
+    // look record can never corrupt the whole document.
+    const nameSight: SavedNameLook[] = [];
+    if (value.nameSight !== undefined && Array.isArray(value.nameSight)) {
+      for (const entry of value.nameSight) {
+        if (!isRecord(entry)) continue;
+        if (typeof entry.key !== 'string' || entry.key === '') continue;
+        if (!Number.isInteger(entry.looks) || (entry.looks as number) <= 0) {
+          continue;
+        }
+        nameSight.push({ key: entry.key, looks: entry.looks as number });
+      }
+    }
     return {
       version: SAVE_VERSION,
       savedAt: value.savedAt,
@@ -855,6 +906,7 @@ export function deserializeSave(value: unknown): SaveData | null {
       piles,
       traps,
       torches,
+      nameSight,
       harvestState,
       sky,
       facing,
