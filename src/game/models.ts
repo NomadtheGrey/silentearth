@@ -639,3 +639,44 @@ export function buildCandle(): THREE.Group {
   g.add(flameInner);
   return g;
 }
+
+/** Flame-center height inside a buildTorch() group (stick bottom = 0). */
+export const TORCH_FLAME_Y = 0.8;
+
+/**
+ * Carried torch (Adam 2026-10-27 — Systems torch item + batch
+ * lighting landed first): dark stick + twine binding + charred
+ * head + two-part basic-material flame (amber outer, pale
+ * core — basic on purpose so the flame reads lit in darkness,
+ * like the candle's). Bigger flame than the candle's: this is
+ * the brighter light. Held in the left hand (the light hand);
+ * the renderer supersedes the candle with it while a lit
+ * torch is carried.
+ */
+export function buildTorch(): THREE.Group {
+  const g = new THREE.Group();
+  const stick = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.04, 0.65, 8), meshMat(0x4a3220));
+  stick.position.set(0, 0.325, 0);
+  g.add(stick);
+  const binding = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.08, 8), meshMat(0x8a7a50));
+  binding.position.set(0, 0.6, 0);
+  g.add(binding);
+  const head = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.045, 0.1, 8), meshMat(0x1a1208));
+  head.position.set(0, 0.68, 0);
+  g.add(head);
+  const flameOuter = new THREE.Mesh(
+    new THREE.SphereGeometry(0.05, 8, 8),
+    new THREE.MeshBasicMaterial({ color: 0xffa030 }),
+  );
+  flameOuter.scale.set(1, 1.8, 1);
+  flameOuter.position.set(0, TORCH_FLAME_Y, 0);
+  g.add(flameOuter);
+  const flameInner = new THREE.Mesh(
+    new THREE.SphereGeometry(0.03, 8, 8),
+    new THREE.MeshBasicMaterial({ color: 0xffe080 }),
+  );
+  flameInner.scale.set(1, 1.6, 1);
+  flameInner.position.set(0, 0.78, 0);
+  g.add(flameInner);
+  return g;
+}

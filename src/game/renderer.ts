@@ -27,7 +27,7 @@ import type { WorldGen } from './worldgen';
 import { PlayerController } from './player';
 import { marshWeight } from './biomes';
 import { SOURCE_FOR_KIND } from './objects';
-import { buildCandle, buildKindGeometry, buildUmbrella, buildWitch, CANDLE_FLAME_Y, vertexLambert } from './models';
+import { buildCandle, buildKindGeometry, buildTorch, buildUmbrella, buildWitch, CANDLE_FLAME_Y, TORCH_FLAME_Y, vertexLambert } from './models';
 import { ProximityTracker } from './proximity';
 import {
   harvestState,
@@ -209,6 +209,22 @@ export const CANDLE_LIGHT_DISTANCE = 22;
 export const CANDLE_LIGHT_DECAY = 2;
 export const CANDLE_FLICKER_AMPLITUDE = 0.12;
 /**
+ * Carried-torch light tunables (Adam 2026-10-27 — Systems torch
+ * item + batch lighting landed first; torch profile pinned:
+ * well-lit at 6 m, dim to ≥12 m, brighter than the candle
+ * overall — against the MOVED candle bar 30/22, not the old
+ * 10/16). Intensity 80, distance 30, decay 2: ~2.2 at 6 m (vs
+ * candle ~0.8 — well-lit, ~2.7×), ~0.6 at 12 m (dim but
+ * present), cutoff 30 > candle 22. Flicker ±15%: a torch
+ * flame dances more than a candle's ±12%, less than a
+ * campfire's ±22%. Flagged for pin pass.
+ */
+export const TORCH_LIGHT_COLOR = 0xffa050;
+export const TORCH_LIGHT_INTENSITY = 80;
+export const TORCH_LIGHT_DISTANCE = 30;
+export const TORCH_LIGHT_DECAY = 2;
+export const TORCH_FLICKER_AMPLITUDE = 0.15;
+/**
  * Placed-fire light tunables (Adam 2026-10-26 — lane-decided
  * starting values for his pin pass; same physical units as the
  * candle: a lit fire is a camp light, stronger and wider than
@@ -249,6 +265,18 @@ export const CANDLE_HAND: Readonly<{ x: number; y: number; z: number }> = {
   y: 1.02,
   z: 0.05,
 };
+/**
+ * Witch-local hand position of the torch group — the SAME left
+ * hand as the candle, by design: one light hand, and the torch
+ * supersedes the candle in it while a lit torch is carried
+ * (light replaces light, not rain-cover — the umbrella keeps
+ * the right hand throughout).
+ */
+export const TORCH_HAND: Readonly<{ x: number; y: number; z: number }> = {
+  x: -0.55,
+  y: 1.02,
+  z: 0.05,
+};
 
 /**
  * Rotate a witch-local (x, z) offset by a Y-rotation (facing)
@@ -274,8 +302,16 @@ export class WorldRenderer {
   private witch: THREE.Group;
   /** Carried umbrella graphic (models.ts), attached to the witch. */
   private umbrella: THREE.Group;
+  /** Carried-candle graphic (models.ts), attached to the witch. */
+  private candle: THREE.Group;
   /** Carried-candle point light (scene-level — see below). */
   private candleLight: THREE.PointLight;
+  /** Carried-torch graphic (models.ts), attached to the witch. */
+  private torch: THREE.Group;
+  /** Carried-torch point light (scene-level, like the candle's). */
+  private torchLight: THREE.PointLight;
+  /** True while a lit torch is carried (shell-driven setter). */
+  private carriesLitTorch = false;
   /** Placed-fire point lights (scene-level, rebuilt with the placed group). */
   private fireLights: THREE.PointLight[] = [];
   private gen: WorldGen;
@@ -446,6 +482,7 @@ export class WorldRenderer {
     const candle = buildCandle();
     candle.position.set(CANDLE_HAND.x, CANDLE_HAND.y, CANDLE_HAND.z);
     this.witch.add(candle);
+    this.candle = candle;
     this.candleLight = new THREE.PointLight(
       CANDLE_LIGHT_COLOR,
       CANDLE_LIGHT_INTENSITY,
@@ -453,6 +490,26 @@ export class WorldRenderer {
       CANDLE_LIGHT_DECAY,
     );
     this.scene.add(this.candleLight);
+    // Carried lit-torch (Adam 2026-10-27 — Systems item
+    // 'lit-torch' landed first): model in the SAME left hand
+    // as the candle (the light hand), witch-group child, so
+    // third-person-only visibility is free. Default hidden —
+    // the shell drives it via setCarriesLitTorch (below).
+    // While carried, the torch SUPERSEDES the candle: one
+    // hand light at a time — torch model + light on, candle
+    // model + light off. The umbrella (right hand) is
+    // untouched: light and rain-cover coexist.
+    this.torch = buildTorch();
+    this.torch.visible = false;
+    this.torch.position.set(TORCH_HAND.x, TORCH_HAND.y, TORCH_HAND.z);
+    this.witch.add(this.torch);
+    this.torchLight = new THREE.PointLight(
+      TORCH_LIGHT_COLOR,
+      TORCH_LIGHT_INTENSITY,
+      TORCH_LIGHT_DISTANCE,
+      TORCH_LIGHT_DECAY,
+    );
+    this.scene.add(this.torchLight);
 
     window.addEventListener('resize', this.onResize);
     this.loop();
@@ -469,6 +526,23 @@ export class WorldRenderer {
    */
   setCarriesUmbrella(carried: boolean): void {
     if (this.umbrella) this.umbrella.visible = carried;
+  }
+
+  /**
+   * Carried-lit-torch visibility + hand-light supersede (Adam
+   * 2026-10-27). The shell calls this when the inventory
+   * changes, passing whether a 'lit-torch' is carried
+   * (inventory.count(ITEMS.litTorch) > 0): the torch graphic
+   * shows exactly when a lit torch is carried, and while it
+   * does, the candle model + light hide — one hand light at
+   * a time, torch over candle. App-side driving is UI's
+   * follow-up; until the shell calls this, the torch stays
+   * hidden and the candle carries the light (default).
+   */
+  setCarriesLitTorch(carried: boolean): void {
+    this.carriesLitTorch = carried;
+    if (this.torch) this.torch.visible = carried;
+    if (this.candle) this.candle.visible = !carried;
   }
 
   /**
@@ -1237,20 +1311,37 @@ export class WorldRenderer {
     this.witch.rotation.y = this.player.facing;
     this.witch.visible = this.player.mode !== 'first';
 
-    // Carried-candle light follows the flame's world position:
-    // the hand offset rotated by facing (same Y-rotation the
-    // witch group itself uses), at flame height. Flicker is a
-    // small mixed-sine wobble on flameTime — deterministic,
-    // never random — in the same spirit as the fire flames.
-    {
-      const [ox, oz] = rotateOffsetY(CANDLE_HAND.x, CANDLE_HAND.z, this.player.facing);
-      this.candleLight.position.set(
+    // Hand light: exactly one shines — torch while a lit
+    // torch is carried (superseding the candle), else the
+    // candle. Each light follows its own flame's world
+    // position; the dark one sits at intensity 0.
+    if (this.carriesLitTorch) {
+      this.candleLight.intensity = 0;
+      const [ox, oz] = rotateOffsetY(TORCH_HAND.x, TORCH_HAND.z, this.player.facing);
+      this.torchLight.position.set(
         this.player.x + ox,
-        CANDLE_HAND.y + CANDLE_FLAME_Y,
+        TORCH_HAND.y + TORCH_FLAME_Y,
         this.player.z + oz,
       );
       const flick = (Math.sin(this.flameTime * 10) + Math.sin(this.flameTime * 23 + 1.7)) / 2;
-      this.candleLight.intensity = CANDLE_LIGHT_INTENSITY * (1 + CANDLE_FLICKER_AMPLITUDE * flick);
+      this.torchLight.intensity = TORCH_LIGHT_INTENSITY * (1 + TORCH_FLICKER_AMPLITUDE * flick);
+    } else {
+      this.torchLight.intensity = 0;
+      // Carried-candle light follows the flame's world position:
+      // the hand offset rotated by facing (same Y-rotation the
+      // witch group itself uses), at flame height. Flicker is a
+      // small mixed-sine wobble on flameTime — deterministic,
+      // never random — in the same spirit as the fire flames.
+      {
+        const [ox, oz] = rotateOffsetY(CANDLE_HAND.x, CANDLE_HAND.z, this.player.facing);
+        this.candleLight.position.set(
+          this.player.x + ox,
+          CANDLE_HAND.y + CANDLE_FLAME_Y,
+          this.player.z + oz,
+        );
+        const flick = (Math.sin(this.flameTime * 10) + Math.sin(this.flameTime * 23 + 1.7)) / 2;
+        this.candleLight.intensity = CANDLE_LIGHT_INTENSITY * (1 + CANDLE_FLICKER_AMPLITUDE * flick);
+      }
     }
 
     if (this.player.mode === 'first') {
