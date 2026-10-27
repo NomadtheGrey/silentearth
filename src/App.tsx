@@ -804,6 +804,19 @@
  *   route is NOT rebuilt here — the inventory torch
  *   rows' Light button already covers it (flint route
  *   only). App.tsx only.
+ * - TORCH DRIVING, LIVE (Adam, 2026-10-27 — DEV brief,
+ *   umbrella precedent): the shell calls renderer.
+ *   setCarriesLitTorch(inventory.count(ITEMS.litTorch)
+ *   > 0) in refreshInventory (every inventory change
+ *   flows through it) plus a boot call after the
+ *   renderer exists for a restored lit torch — one
+ *   boolean, not per-platform (the renderer half is
+ *   shared by construction). Background's torch model +
+ *   light (44ead3d) stayed hidden by default until this
+ *   call; with it, the torch piece is functionally
+ *   complete (item + hand recipe + batch API + pill +
+ *   driving; the light values themselves stay
+ *   Background's). App.tsx only.
  * - WEIGHT DISPLAY, LIVE (Adam, 2026-10-27 — DEV brief,
  *   unheld on Systems' tool-exclusion fix 8d0aff2):
  *   personal capacity is pounds now. Panel header reads
@@ -1616,6 +1629,14 @@ export default function App() {
     // refreshInventory is never called before boot, but the
     // ?. keeps an early call from crashing.
     rendererRef.current?.setCarriesUmbrella(carriesUmbrella(inventory));
+    // TORCH DRIVING (same pattern): the carried lit-torch
+    // model + light tracks the live inventory — one
+    // boolean, lit torch carried or not. The renderer owns
+    // the model + light (left hand, supersedes the candle);
+    // the shell only drives the boolean.
+    rendererRef.current?.setCarriesLitTorch(
+      inventory.count(ITEMS.litTorch) > 0,
+    );
   };
 
   // Save meta mirror: seed / camera / position as of the latest
@@ -2036,6 +2057,10 @@ export default function App() {
     // leaves the renderer's default hidden standing. Later
     // inventory changes drive it via refreshInventory above.
     renderer.setCarriesUmbrella(carriesUmbrella(inventory));
+    // TORCH DRIVING: initial visibility from the boot
+    // inventory — a restored lit torch shows, no lit torch
+    // leaves the renderer's default hidden standing.
+    renderer.setCarriesLitTorch(inventory.count(ITEMS.litTorch) > 0);
     // Hunger wiring (see the header): the engine reads the stage
     // through this query — movement slowdown + harvest lockout.
     player.setHungerStageQuery(() => hunger.stage());
