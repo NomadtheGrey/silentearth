@@ -165,9 +165,9 @@
  *   no duration, no chain-lighting, all Adam-pinned).
  *   Inventory torch rows gain a Light button (the FLINT
  *   route only — no invented "nearby fire" range; the
- *   fire route arrives with UI's lit-fire 'light torches'
- *   pill, whose host menu already opens in every state
- *   since UI's lit-menu fix fe7b304). Carried torch light
+ *   fire route is UI's lit-fire 'light torches' pill
+ *   (TORCH PILL bullet below), whose host menu already
+ *   opens in every state since UI's lit-menu fix fe7b304). Carried torch light
  *   itself is Background's (Adam: well-lit to 6 m, dim to
  *   at least 12 m, torch stays brighter than the candle —
  *   exact values theirs, above the candle's new 30/22
@@ -780,10 +780,30 @@
  *   acorns, + Close). The lit menu is also the torch
  *   pill's host: the additional "light torches" pill
  *   (ONLY when she carries >=1 unlit torch, one press
- *   lights ALL carried unlit torches) stays HELD until
- *   Systems' batch lighting API lands and DEV signals
- *   with the API name — no guessed API, no dead UI.
+ *   lights ALL carried unlit torches) is BUILT in the
+ *   TORCH PILL bullet below (API landed + DEV signal
+ *   received — the hold is lifted, no guessed API).
  *   App.tsx only (chip onSelect + this bullet).
+ * - TORCH PILL, LIVE (Adam, 2026-10-27 — DEV brief,
+ *   hold lifted on Systems' batch API 3dd6999 + DEV
+ *   signal): any lit fire's menu gains an additional
+ *   "Light torches" pill (Adam's text; casing follows
+ *   the menu convention — "Light with flint", "Cook
+ *   acorns" — flagged, correct to lowercase if Adam
+ *   wants it verbatim). The pill appears ONLY when she
+ *   carries >=1 unlit torch (inventory.count(ITEMS.
+ *   torch)) — no torches, no pill, no dead button — and
+ *   sits FIRST in the lit menu (lane's pick). One press
+ *   calls lightTorches(inventory, { litFirePresent:
+ *   true }) — ALL carried unlit torches light in one
+ *   batch, nothing consumed, fire wins when both routes
+ *   are available; feedback names the count lit ("Lit N
+ *   torch(es)."), failure shows the API's reason; the
+ *   menu stays open and the pill is gone on re-render
+ *   (count 0), leaving cook. The flint + river-stone
+ *   route is NOT rebuilt here — the inventory torch
+ *   rows' Light button already covers it (flint route
+ *   only). App.tsx only.
  * - WEIGHT DISPLAY, LIVE (Adam, 2026-10-27 — DEV brief,
  *   unheld on Systems' tool-exclusion fix 8d0aff2):
  *   personal capacity is pounds now. Panel header reads
@@ -2911,7 +2931,17 @@ export default function App() {
   const fireMenuActions = (fire: PlacedFire): ContextAction[] => {
     if (fire.lit) {
       const hasAcorns = inventory.count(FOOD_ACORNS) > 0;
+      const unlitTorches = inventory.count(ITEMS.torch);
       return [
+        ...(unlitTorches >= 1
+          ? [
+              {
+                id: 'light-torches',
+                label: 'Light torches',
+                hint: `×${unlitTorches}`,
+              },
+            ]
+          : []),
         {
           id: 'cook-stick',
           label: 'Cook acorns (stick)',
@@ -3009,6 +3039,27 @@ export default function App() {
       }
       mirrorLightingStart(fireId, 'friction');
       say('Rubbing… wait, then rub again.', 'info');
+    } else if (actionId === 'light-torches') {
+      // Fire route: this menu only opens on a lit fire's
+      // chip, so litFirePresent is true — nothing
+      // consumed, fire wins when both routes are
+      // available. Batch: ALL carried unlit torches in
+      // one press. The menu stays open; the pill itself
+      // is gone on re-render (count is 0), leaving cook.
+      // Equality check, not truthiness: non-strict tsc
+      // does not narrow this union's boolean discriminant
+      // on truthiness (see the torch Light button handler).
+      const outcome = lightTorches(inventory, { litFirePresent: true });
+      if (outcome.lit === false) {
+        say(outcome.reason, 'blocked');
+      } else {
+        say(
+          `Lit ${outcome.count} torch${outcome.count === 1 ? '' : 'es'}.`,
+          'gain',
+        );
+      }
+      refreshInventory();
+      saveNow();
     } else if (actionId === 'cook-stick' || actionId === 'cook-buried') {
       // Open-fire only: stick or fire-buried, never pot
       // cooking (cook() takes no pot method). One acorn per
