@@ -83,7 +83,7 @@
  *     'ACORNS' (nuts), 'BOG_BERRIES' (berries),
  *     'ELDERBERRIES' (berries).
  *   Added 2026-10-26 (Adam, brief 2 of 2): 'MUSHROOMS'
- *   (eaten as gathered, nutrition 10 lane-decided) and
+ *   (eaten as gathered, nutrition 15 after Adam's 2026-10-27 +5 bump) and
  *   'POISON_MUSHROOMS' (NOT food: no nutrition, no Eat
  *   button, eat() refuses with a plain poison warning — no
  *   sickness effect is modelled because no health system
@@ -241,20 +241,21 @@ export const COOK_REQUIRED_ITEMS: ReadonlyArray<ItemId> = [FOOD_ACORNS];
 
 /**
  * Nutrition restored by eating one of each directly-eatable
- * food. LANE-DECIDED starting tunables (NOT pinned) — cooked
- * acorns included (MVP round, fire.ts output; 20 = the value
- * raw acorns carried in the first hunger draft, now earned
- * through cooking instead of granted raw). Mushrooms 10: a
- * modest gathered bite, bog-berry tier, for Adam's pin pass.
- * Apples 10: berry parity, LANE-DECIDED, for Adam's pin pass.
+ * food. BUMPED +5 across the board (Adam, 2026-10-27): she
+ * could eat something and still be too hungry to forage —
+ * now one food from empty reaches exactly 15 (hungry), so a
+ * single meal reopens foraging. Cooked acorns included (MVP
+ * round, fire.ts output; 25 = the first draft's 20, earned
+ * through cooking instead of granted raw, + 5). Mushrooms /
+ * apples 15: bog-berry tier, for Adam's pin pass.
  */
 export const FOOD_NUTRITION: Readonly<Record<string, number>> = {
-  [FOOD_BOG_BERRIES]: 10,
-  [FOOD_ELDERBERRIES]: 15,
-  [FOOD_COOKED_ACORNS]: 20,
-  [FOOD_MUSHROOMS]: 10,
-  [FOOD_EDIBLE_MUSHROOM]: 10,
-  [FOOD_APPLE]: 10,
+  [FOOD_BOG_BERRIES]: 15,
+  [FOOD_ELDERBERRIES]: 20,
+  [FOOD_COOKED_ACORNS]: 25,
+  [FOOD_MUSHROOMS]: 15,
+  [FOOD_EDIBLE_MUSHROOM]: 15,
+  [FOOD_APPLE]: 15,
 };
 
 /**
