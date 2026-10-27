@@ -752,11 +752,12 @@ const DRAFT_RECIPES: Recipe[] = [
     capacityBonus: 50,
     notes:
       'DRAFT cost; BONUS PINNED (50). Upgrade of the small basket. ' +
-      'PINNED (Adam, 2026-10-26): the large basket REPLACES the ' +
-      'small basket\'s +25 (total 70 with pockets + apron); it does ' +
-      'NOT stack (95 is the non-ruled alternative). The ' +
-      'capacityBonus here is the basket\'s own 50; the replacement ' +
-      'itself is modelled in inventory.ts capacityBreakdown().',
+      'Replace-vs-stack is OPEN (DEV 2026-10-27): whether the ' +
+      'large basket\'s 50 replaces the small\'s +25 (total 70 ' +
+      'with pockets + apron) or stacks (95) awaits Adam\'s pick; ' +
+      'neither is settled. The capacityBonus here is the ' +
+      'basket\'s own 50; the replace/stack accounting itself ' +
+      'is modelled in inventory.ts capacityBreakdown().',
   },
   {
     id: 'apron',
