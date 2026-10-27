@@ -612,6 +612,13 @@
  *   group child) stays renderer-owned and hidden by
  *   default until this call. App.tsx only; no game/systems
  *   change.
+ * - TRAP CRAFT CONFIRM, LIVE (Adam, 2026-10-26 — DEV brief,
+ *   first of two briefs): trap recipe Craft buttons ask first —
+ *   "PLACE TRAP HERE?" in the staged Popup dialog shell, Yes
+ *   runs the existing Systems trap-craft execution (consumes +
+ *   places), No or Close aborts with nothing consumed and no
+ *   trap. Trap rows only (Traps group); no other recipe
+ *   changes. App.tsx only; no game/systems change.
  * POINTER DISCIPLINE: overlays are pointer-events-none except the
  * small interactive pieces (HUD buttons, panels, harvest buttons),
  * so world clicks — including the first-person mouse-capture click
@@ -674,6 +681,7 @@ import type { ContextAction } from './ui/types';
 import { TouchControls } from './ui/TouchControls';
 import { LocationChip } from './ui/LocationChip';
 import { PausedIndicator } from './ui/PausedIndicator';
+import { Popup } from './ui/Popup';
 import {
   OptionsModal,
   fontClassFor,
@@ -1941,7 +1949,19 @@ export default function App() {
       : []),
   ];
 
-  const handleCraft = (recipeId: string) => {
+  // Trap-craft confirm (Adam, 2026-10-26): a trap recipe's Craft
+  // button asks FIRST, in the staged Popup dialog shell — the
+  // existing execution below runs only on Yes. No aborts with
+  // nothing consumed and no trap, because execution never
+  // starts. Trap rows are the Traps group, nothing else.
+  const [pendingTrapRecipeId, setPendingTrapRecipeId] = useState<
+    string | null
+  >(null);
+  const pendingTrapRecipe = pendingTrapRecipeId
+    ? RECIPES.find((candidate) => candidate.id === pendingTrapRecipeId)
+    : undefined;
+
+  const executeCraftNow = (recipeId: string) => {
     const recipe = RECIPES.find((candidate) => candidate.id === recipeId);
     if (!recipe) return;
     const ownedBefore = ownedToolItem(inventory);
@@ -1966,6 +1986,24 @@ export default function App() {
     }
     refreshInventory();
     saveNow();
+  };
+
+  const handleCraft = (recipeId: string) => {
+    if (CRAFTING_GROUP_BY_RECIPE_ID[recipeId] === 'Traps') {
+      setPendingTrapRecipeId(recipeId);
+      return;
+    }
+    executeCraftNow(recipeId);
+  };
+
+  const handleTrapConfirmYes = () => {
+    const recipeId = pendingTrapRecipeId;
+    setPendingTrapRecipeId(null);
+    if (recipeId) executeCraftNow(recipeId);
+  };
+
+  const handleTrapConfirmNo = () => {
+    setPendingTrapRecipeId(null);
   };
 
   const handleHarvest = (request: HarvestRequest) => {
@@ -3201,6 +3239,47 @@ export default function App() {
           onClose={() => setOptionsOpen(false)}
           comfortable={isTouch}
         />
+      ) : null}
+
+      {/* Trap-craft confirm: Adam's words, verbatim, asked FIRST
+        on trap Craft — Yes runs the existing execution, No or
+        Close aborts with nothing consumed and no trap. The
+        Popup shell is the staged dialog (z-50 modal); the
+        buttons match the placement banner's touch sizing. */}
+      {pendingTrapRecipe ? (
+        <Popup
+          open={true}
+          title="PLACE TRAP HERE?"
+          onClose={handleTrapConfirmNo}
+        >
+          <p className="text-sm text-stone-200">
+            Place {pendingTrapRecipe.name} here?
+          </p>
+          <div className="mt-3 flex gap-2">
+            <button
+              type="button"
+              onClick={handleTrapConfirmYes}
+              className={
+                isTouch
+                  ? 'min-h-[44px] rounded bg-[#3a4436] px-3 py-2 text-sm hover:bg-[#4a5546]'
+                  : 'rounded bg-[#3a4436] px-2 py-0.5 text-xs hover:bg-[#4a5546]'
+              }
+            >
+              Yes
+            </button>
+            <button
+              type="button"
+              onClick={handleTrapConfirmNo}
+              className={
+                isTouch
+                  ? 'min-h-[44px] rounded bg-[#44403c] px-3 py-2 text-sm hover:bg-[#57534e]'
+                  : 'rounded bg-[#44403c] px-2 py-0.5 text-xs hover:bg-[#57534e]'
+              }
+            >
+              No
+            </button>
+          </div>
+        </Popup>
       ) : null}
 
       {/* Location chip: always visible, including with the HUD
