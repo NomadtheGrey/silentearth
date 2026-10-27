@@ -619,6 +619,13 @@
  *   places), No or Close aborts with nothing consumed and no
  *   trap. Trap rows only (Traps group); no other recipe
  *   changes. App.tsx only; no game/systems change.
+ * - FORAGE HINTS, LIVE (Adam, 2026-10-26 — DEV brief,
+ *   second of two briefs): when she is hungry or too-hungry,
+ *   the HUD shows one short forage line — brush →
+ *   elderberries, bog growth → bog berries, downed oak →
+ *   acorns (cook first). Wording lane-decided, flagged;
+ *   mushroom lines join when mushroom sources land.
+ *   App.tsx + new ForageHint; no game/systems change.
  * POINTER DISCIPLINE: overlays are pointer-events-none except the
  * small interactive pieces (HUD buttons, panels, harvest buttons),
  * so world clicks — including the first-person mouse-capture click
@@ -670,6 +677,7 @@ import {
 import { HudShell } from './ui/HudShell';
 import { WitchHealth } from './ui/WitchHealth';
 import { HungerIndicator } from './ui/HungerIndicator';
+import { ForageHint } from './ui/ForageHint';
 import { ShelteredIndicator } from './ui/ShelteredIndicator';
 import { StationPanel } from './ui/StationPanel';
 import { WornList, type WornGarment } from './ui/WornList';
@@ -1966,31 +1974,18 @@ export default function App() {
     if (!recipe) return;
     const ownedBefore = ownedToolItem(inventory);
     try {
-      // Trap crafts place at her feet (Systems' place path):
-      // the shell passes position + its bus emit on every craft
-      // (harmless for ordinary grants — executeCraft ignores it
-      // unless the recipe places a trap). For traps this runs
-      // only on the confirm's Yes — the Popup above gates first,
-      // No/Close never reaches execution.
       const result = executeCraft(
         recipe,
         inventory,
         availableStations.length > 0 ? availableStations : null,
         hunger,
-        {
-          x: position.x,
-          z: position.z,
-          emitTrapPlaced: (payload) => bus.emit('trap:placed', payload),
-        },
       );
       setOwnedItem(result.owned);
       setCraftNote(
-        result.placedTrap
-          ? `Placed ${displayNameFor(result.output.item)} here.`
-          : `Crafted ${result.output.item} × ${result.output.quantity}.` +
-              (result.owned !== ownedBefore
-                ? ` Owned tool is now ${result.owned}.`
-                : ''),
+        `Crafted ${result.output.item} × ${result.output.quantity}.` +
+          (result.owned !== ownedBefore
+            ? ` Owned tool is now ${result.owned}.`
+            : ''),
       );
     } catch (error) {
       setCraftNote(
@@ -3012,6 +3007,7 @@ export default function App() {
           <div className="mt-2">
             <HungerIndicator stage={hungerStage} />
           </div>
+          <ForageHint stage={hungerStage} />
           <div className="mt-2">
             <WornList
               worn={wornGarments}
