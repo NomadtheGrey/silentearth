@@ -124,7 +124,11 @@
  *   Place here drops the fire at her position AND consumes
  *   the carried item (the engine primitives are cost-free,
  *   so UI-side consumption is the gating — placing without
- *   it would duplicate the item). Every placed fire gets an
+ *   it would duplicate the item). Campfire is the exception:
+ *   single-tap (Adam, 2026-10-28) — its Place press places
+ *   instantly at her feet, no mode, no ghost, no panel;
+ *   hearth/kiln/bloomery keep the flow above. Every placed
+ *   fire gets an
  *   anchored FireState chip (unlit / lighting / lit, with
  *   click count or friction phase); tapping an unlit fire
  *   opens its lighting menu (ContextMenu): flint (disabled
@@ -1786,10 +1790,10 @@ const HOUSE_ITEM_TO_TYPE: Record<string, HouseType> = {
 };
 
 /** Item ids the inventory panel offers a Place button for.
- * Lit torches and altars ride this set for the BUTTON only —
- * their handlers branch to instant-at-feet (see
- * handlePlaceItem), never the preview-ghost flow the other
- * ids use. */
+ * Lit torches, altars, and campfires ride this set for the
+ * BUTTON only — their handlers branch to instant-at-feet
+ * (see handlePlaceItem), never the preview-ghost flow the
+ * other ids (hearth/kiln/bloomery/houses/looms) use. */
 const PLACEABLE_IDS: ReadonlySet<string> = new Set([
   ...Object.keys(FIRE_ITEM_TO_TYPE),
   ...Object.keys(HOUSE_ITEM_TO_TYPE),
@@ -2189,6 +2193,7 @@ export default function App() {
   const [eatNote, setEatNote] = useState<string | null>(null);
   const [torchNote, setTorchNote] = useState<string | null>(null);
   const [altarNote, setAltarNote] = useState<string | null>(null);
+  const [fireNote, setFireNote] = useState<string | null>(null);
   const [dropNote, setDropNote] = useState<string | null>(null);
   const [storageNote, setStorageNote] = useState<string | null>(null);
 
@@ -4345,6 +4350,38 @@ export default function App() {
       handlePlaceAltar();
       return;
     }
+    // Single-tap campfire (Adam, 2026-10-28): Place places at
+    // her feet immediately — no placement mode, no ghost, no
+    // "Place here" panel. Hearth/kiln/bloomery keep the
+    // two-step flow below; this branch is campfire only.
+    if (itemId === ITEMS.campfire) {
+      // Clear any armed placement mode first so no stale ghost
+      // lingers after the tap.
+      placementRef.current = null;
+      setPlacement(null);
+      setPlacementAnchor(null);
+      setPlacementNote(null);
+      const player = playerRef.current;
+      if (!player) return;
+      if (inventory.count(itemId) < 1) {
+        setFireNote('Nothing to place — that item is no longer carried.');
+        return;
+      }
+      try {
+        fireState.placeFire('campfire', player.x, player.z);
+        inventory.remove(itemId, 1);
+      } catch (error) {
+        setFireNote(
+          error instanceof Error ? error.message : 'Placement failed.',
+        );
+        return;
+      }
+      setFireNote(null);
+      refreshInventory();
+      saveNow();
+      setInventoryOpen(false);
+      return;
+    }
     const fireType = FIRE_ITEM_TO_TYPE[itemId];
     const houseType = HOUSE_ITEM_TO_TYPE[itemId];
     const loom = itemId === ITEMS.loom;
@@ -6256,6 +6293,11 @@ export default function App() {
         {altarNote ? (
           <p className="rounded bg-black/50 px-2 py-1 text-xs text-stone-200">
             {altarNote}
+          </p>
+        ) : null}
+        {fireNote ? (
+          <p className="rounded bg-black/50 px-2 py-1 text-xs text-stone-200">
+            {fireNote}
           </p>
         ) : null}
         {dropNote ? (
