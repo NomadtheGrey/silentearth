@@ -1615,6 +1615,7 @@ import { ProximityHarvestButtons } from './ui/ProximityHarvestButtons';
 import { InteractionProgress } from './ui/InteractionProgress';
 import { ObjectFeedback } from './ui/ObjectFeedback';
 import { WorldAnchor } from './ui/WorldAnchor';
+import { UI_THEMES } from './ui/themes';
 import { CameraTransition } from './ui/CameraTransition';
 import { CAMERA_TRANSITION } from './ui/cameraPresentation';
 import { projectWorldToScreen } from './ui/worldProjection';
@@ -5919,6 +5920,35 @@ export default function App() {
       )
     : null;
 
+  // Nearest-target tag (Adam, 2026-10-28): display name only,
+  // v1 — the nearest harvestable scatter target, world-anchored
+  // so the name sits ON the thing (the column button alone
+  // never links name to object). Derived per render, like
+  // frogHint — no cache. First scatter = nearest (tracker
+  // sorts scatter by distance, App never re-sorts; find, not
+  // [0], so ground-first order never matters). Ground targets
+  // (dirt/mud/grass) are skipped — ground-only shows no tag
+  // (the Dirt button stays; the tag never labels dirt). Piles
+  // are not harvestTargets and get no tag (PileChip + pile
+  // menu already label them). Anchor projected fresh per
+  // render (stored anchorX/anchorY are mapping-time and go
+  // stale as she moves/turns — stationAnchor precedent);
+  // null anchor (behind camera) shows no tag. Name verbatim
+  // from the bus (Background's vine merge changes bus names
+  // — the tag follows them automatically, no tag logic
+  // change).
+  const nearestScatter = harvestTargets.find(
+    (target) => target.kind === 'scatter',
+  );
+  const tagAnchor =
+    nearestScatter !== undefined
+      ? projectAnchor(
+          nearestScatter.worldX,
+          nearestScatter.worldZ,
+          'scatter',
+        )
+      : null;
+
   // Crow pile arrows (glow landing, 2026-10-28): derived per
   // render from live state, like frogHint — no cache. Tier
   // from the same Systems fact as syncCrowTier (UI never
@@ -6939,6 +6969,37 @@ export default function App() {
           arrows={crowArrows}
           lifted={frogHint !== null || scryVisible}
         />
+      ) : null}
+
+      {/* Nearest-target tag (Adam, 2026-10-28): the nearest
+        scatter target's bus name, world-anchored ON the thing
+        via WorldAnchor (FrogHint pill styling, visual only —
+        non-interactive, pointer-events-none, so parity holds:
+        no input to differ). Same hiding as the CrowArrows
+        rows (any panel/modal open or paused);
+        world-anchored contextual panels (ritual/pile/
+        placement) are NOT in the set, consistent with
+        CrowArrows. */}
+      {nearestScatter !== undefined &&
+      tagAnchor !== null &&
+      !inventoryOpen &&
+      !craftingOpen &&
+      !charmsOpen &&
+      !optionsOpen &&
+      !introOpen &&
+      !pendingTrapRecipe &&
+      pendingRemoveTarget === null &&
+      !paused ? (
+        <WorldAnchor x={tagAnchor.x} y={tagAnchor.y}>
+          <p
+            className={
+              'whitespace-nowrap rounded px-2 py-1 text-xs text-stone-100 ' +
+              UI_THEMES['mire'].overlay
+            }
+          >
+            {nearestScatter.name}
+          </p>
+        </WorldAnchor>
       ) : null}
 
       {/* Esc hint: desktop only, and only while no modal is
