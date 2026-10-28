@@ -49,6 +49,89 @@
 import { ITEMS } from './recipes';
 import type { PersonalInventory } from './inventory';
 
+/**
+ * SOURCES (flagged, not this build): no world source
+ * yields individual kinds yet — Bone Scatter yields
+ * generic 'bone' (prototype, hand-pickable). Per-kind
+ * sources, or a generic→individual mapping, are a
+ * Background/content follow-up. This build registers
+ * the ITEMS, not the sources.
+ *
+ * Kind <-> item mapping (single source for the rule):
+ * kind = shape slug as displayed after "Primal Bone - "
+ * (e.g. 'shrew-skull', 'owl-talon', 'pigeon-wing-bone');
+ * item = 'primal-bone-<kind>'. The derivation matches
+ * the ITEMS registry by construction (probe-guarded:
+ * boneItemFor(kind) === ITEMS value for all 18 kinds).
+ * boneKindFor returns null for non-bone ids.
+ */
+export function boneItemFor(kind: string): string {
+  return `primal-bone-${kind}`;
+}
+
+export function boneKindFor(item: string): string | null {
+  const prefix = 'primal-bone-';
+  if (!item.startsWith(prefix)) return null;
+  const kind = item.slice(prefix.length);
+  return kind === '' ? null : kind;
+}
+
+/** Is this inventory id a primal bone? */
+export function isBoneItem(item: string): boolean {
+  return boneKindFor(item) !== null;
+}
+
+/**
+ * Effect phrases for awakened bones (DRAFT, flagged —
+ * phrases drafted from the bone-charms doc's effects,
+ * not pins; shrew's phrase is UI's draft note shape).
+ * Tier flows from the awakening record (see boneNote).
+ */
+export const BONE_EFFECT_NOTES: Readonly<Record<string, string>> = {
+  'shrew-skull':
+    'Stirs when hunger falls, warning before the slowdown; small hunger bonus while carried',
+  'pigeon-wing-bone': 'A sense of the way home',
+  'snake-vertebra': 'Needing less',
+  'turtle-shell-fragment': 'Shell protection',
+  'crow-beak': 'Remembers where things lie',
+  'owl-talon': 'Night sight',
+  'bat-wing-bone': 'Night way-finding',
+  'mouse-spine': 'A hoarder’s store',
+  'raccoon-tooth': 'A scavenger’s nose',
+  'groundhog-tooth': 'Deep sleep',
+  'fox-femur': 'A swift step',
+  'deer-antler-tip': 'A sense of coming weather',
+  'wolf-tooth': 'Tracking',
+  'frog-pelvis': 'A sense of water',
+  'mole-paw': 'Earth sense',
+  'bear-claw': 'Strength',
+  'rabbit-jaw': 'Calm',
+  'beaver-incisor': 'Shelter warmth',
+};
+
+/**
+ * PICKUP IDENTIFICATION (Adam, DEV chat 2026-10-28:
+ * "the description can change once picked up" — world
+ * description is partial (LOOK portions), a picked-up
+ * bone's description is IDENTIFIED):
+ * - Unawakened: 'Needs a ritual site' (the brief's raw
+ *   note, verbatim — no period added).
+ * - Awakened: 'Tier <n> · <effect>' (tier from the
+ *   record, so tier-ups flow through; phrase fallback
+ *   'Awakened' for a kind without a drafted phrase).
+ * World description needs NO new code (NameSight
+ * already returns partial portions); bone-kind portion
+ * CONTENT (family/shape/deeper) is a content follow-up.
+ * Row wiring is UI's (InventoryItem.note already
+ * renders).
+ */
+export function boneNote(kind: string, charms: CharmState): string {
+  const tier = charms.tierOf(kind);
+  if (tier <= 0) return 'Needs a ritual site';
+  const phrase = BONE_EFFECT_NOTES[kind] ?? 'Awakened';
+  return `Tier ${tier} · ${phrase}`;
+}
+
 /** First charm's bone kind (shape slug). */
 export const FIRST_CHARM_KIND = 'shrew-skull';
 

@@ -108,11 +108,34 @@ export const ITEMS = {
   // Ritual altar (2026-10-27 — made ritual site, placeable
   // only; see altar.ts for the place grant + scope guard).
   altar: 'altar',
-  // First charm ONLY (2026-10-27 — tier-1 Waking build;
-  // see charms.ts). Other primal-bone ids land with the
-  // bone build, not here. Kind rule, documented:
-  // 'primal-bone-<shape-slug>' (e.g. shrew-skull).
+  // Primal bones (2026-10-27 first charm + 2026-10-28
+  // individual bones build; see charms.ts). Kind rule,
+  // documented: 'primal-bone-<shape-slug>'. Grouped by
+  // ritual sky (rituals.ts order). Shrew is the outright
+  // first charm (no Waking); the rest are Waking kinds.
   primalBoneShrewSkull: 'primal-bone-shrew-skull',
+  // DAY.
+  primalBonePigeonWingBone: 'primal-bone-pigeon-wing-bone',
+  primalBoneSnakeVertebra: 'primal-bone-snake-vertebra',
+  primalBoneTurtleShellFragment: 'primal-bone-turtle-shell-fragment',
+  primalBoneCrowBeak: 'primal-bone-crow-beak',
+  // NIGHT.
+  primalBoneOwlTalon: 'primal-bone-owl-talon',
+  primalBoneBatWingBone: 'primal-bone-bat-wing-bone',
+  primalBoneMouseSpine: 'primal-bone-mouse-spine',
+  primalBoneRaccoonTooth: 'primal-bone-raccoon-tooth',
+  primalBoneGroundhogTooth: 'primal-bone-groundhog-tooth',
+  // TWILIGHT.
+  primalBoneFoxFemur: 'primal-bone-fox-femur',
+  primalBoneDeerAntlerTip: 'primal-bone-deer-antler-tip',
+  // MOON PHASE.
+  primalBoneWolfTooth: 'primal-bone-wolf-tooth',
+  // SKY-INDEPENDENT.
+  primalBoneFrogPelvis: 'primal-bone-frog-pelvis',
+  primalBoneMolePaw: 'primal-bone-mole-paw',
+  primalBoneBearClaw: 'primal-bone-bear-claw',
+  primalBoneRabbitJaw: 'primal-bone-rabbit-jaw',
+  primalBoneBeaverIncisor: 'primal-bone-beaver-incisor',
   // Traps (brainstorm only — nothing picked; see their notes).
   snare: 'snare',
   fishWeirTrap: 'fish-weir-trap',

@@ -60,10 +60,17 @@
 // SHELL CONTRACTS (Systems logic is pure state — the
 // shell owns the world moves, documented, not assumed):
 // - Inventory moves at each step are the shell's: the
-//   shell consumes the offering iff giveOffering accepts,
-//   and verifies bone possession before placeBone (bone
-//   items don't exist yet — placeBone records; the check
-//   lands with the bone build).
+//   shell consumes the offering iff giveOffering accepts.
+// - PLACE-BONE CONSUMES (2026-10-28 bone build — UI gap
+//   #3 CLOSED): shells stage a bone via
+//   stageBoneFromInventory (possession check + consume
+//   1 bone), NOT raw RitualStaging.placeBone (a
+//   record-only primitive — calling it without consuming
+//   is a shell bug: the bone would be both carried and
+//   staged). One-bone-per-site (ritualSite) is NOT
+//   enforced here (Systems never imports game) — the
+//   shell checks the ritualSite snapshot first (refuse,
+//   or replace + clear the old StagingBook entry).
 // - Sky facts arrive as INPUT (systems never imports
 //   game): phase from cycleSplit/cyclePhase + moonPhase
 //   from currentMoonPhase. TRAP (documented): day means
@@ -73,6 +80,21 @@
 //   ritual condition).
 // - Looks arrive as INPUT from NameSight (shell queries
 //   looksAt(kind)); speakName enforces minLooks itself.
+// - PICKUP vs LOOK (FLAG SHAPING, 2026-10-28 — Adam
+//   pins, NOT silently decided): RECOMMEND inventory-
+//   LOOK path — pickup identifies SHAPE (mundane, see
+//   charms.boneNote) but does NOT count toward looks;
+//   speakName needs ≥1 LOOK at the kind via world LOOK
+//   (before pickup) OR inventory LOOK (after pickup —
+//   UI follow-up, REQUIRED for the post-pickup path
+//   since world LOOK is impossible once carried).
+//   Alternative (A) pickup counts as a look: simplest,
+//   but makes speakName vacuous + LOOK pointless for
+//   rituals. (B) world-LOOK-only: REJECTED in shaping
+//   — soft-locks rituals when she picks up first (bone
+//   gone from the world, no LOOK possible, speakName
+//   unreachable). Shape ≠ true name: pickup tells her
+//   WHAT it is, LOOK tells her its name.
 // - Site keys are caller-defined (altar ids 'altar:N' or
 //   the stump's key — Background's call); staging keys on
 //   (siteKey, boneKind).
@@ -95,6 +117,8 @@
 
 import { FOOD_ITEMS } from './hunger';
 import { normalizeItemId } from './inventory';
+import type { PersonalInventory } from './inventory';
+import { boneItemFor } from './charms';
 
 /** Sky/time condition kinds for Waking rituals. */
 export type SkyCondition =
@@ -350,6 +374,47 @@ export class RitualStaging {
       completed: this.completed,
     };
   }
+}
+
+/**
+ * Stage a bone from the carried inventory onto a site
+ * (THE shell path for placing — see header contracts).
+ * Order: recipe exists? -> not already placed? -> bone
+ * carried? -> consume 1 + record. Refusals consume
+ * NOTHING. No-recipe kinds refuse (shrew: no Waking —
+ * the found-bone stacking question stays open, flagged;
+ * unknown kinds likewise). One-bone-per-site is the
+ * shell's check (ritualSite snapshot first), not this
+ * function's — Systems never imports game.
+ */
+export function stageBoneFromInventory(
+  inventory: PersonalInventory,
+  book: StagingBook,
+  siteKey: string,
+  boneKind: string,
+): { staged: boolean; reason?: string } {
+  const recipe = ritualRecipeFor(boneKind);
+  if (!recipe) {
+    return { staged: false, reason: 'No Waking for this bone.' };
+  }
+  const staging = book.getOrCreate(siteKey, boneKind);
+  if (staging.bonePlaced) {
+    return { staged: false, reason: 'Bone already placed.' };
+  }
+  const item = boneItemFor(boneKind);
+  if (inventory.count(item) < 1) {
+    return { staged: false, reason: 'No such bone carried.' };
+  }
+  inventory.remove(item, 1);
+  const recorded = staging.placeBone();
+  if (!recorded.ok) {
+    // Defensive rollback (unreachable: bonePlaced was
+    // just checked false, single-threaded) — the bone
+    // goes back rather than vanishing.
+    inventory.add(item, 1);
+    return { staged: false, reason: recorded.reason };
+  }
+  return { staged: true };
 }
 
 /**
