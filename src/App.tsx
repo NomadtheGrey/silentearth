@@ -472,10 +472,15 @@
  *   touched, no presence-kind plumbing added — presence is
  *   booleans only, so the shell cannot split stump from
  *   crafted workstation or Stumpy upgrade. Other stations
- *   keep the old template. FOLLOW-UP, NOT CHANGED: the menu
- *   header line still reads "Nearby stations: workstation,
- *   loom" — it lists station contexts, not kinds, so it
- *   stays truthful but still does not name the stump.
+ *   keep the old template. HEADER FIX (2026-10-28, Adam-
+ *   approved): the menu header now names the stump —
+ *   "Nearby stations: tree stump, loom" — by mapping
+ *   the workstation context to "tree stump" at the
+ *   display step ONLY (availableStations keeps the
+ *   'workstation' id for canCraft; presence comes
+ *   solely from stumps today, so the name is truthful).
+ *   FOLLOW-UP, NOT CHANGED: when presence learns kinds,
+ *   the header follows the kind per StationPanel's map.
  * - STATION UI V1, LIVE (Adam, 2026-10-26): when she is at a
  *   stump, a station panel appears in the HUD stack naming it
  *   ("Tree stump") with one action: Craft, which opens the
@@ -3514,10 +3519,21 @@ export default function App() {
   if (stationPresenceValue.loom) {
     availableStations.push('loom');
   }
+  // Header display names (stump-header fix, Adam-approved
+  // 2026-10-28): ONLY the displayed string maps — the
+  // 'workstation' context keeps its id in availableStations
+  // for the canCraft checks below. Workstation presence
+  // comes solely from stumps today, so "tree stump" is
+  // truthful now; when presence learns kinds later, this
+  // mapping follows the kind per StationPanel's map.
   const stationNote =
     availableStations.length === 0
       ? 'No station nearby'
-      : `Nearby station${availableStations.length > 1 ? 's' : ''}: ${availableStations.join(', ')}`;
+      : `Nearby station${availableStations.length > 1 ? 's' : ''}: ${availableStations
+          .map((station) =>
+            station === 'workstation' ? 'tree stump' : station,
+          )
+          .join(', ')}`;
 
   const craftingRecipes: CraftingRecipe[] = RECIPES.map((recipe) => {
     // OR over every present station: a recipe is craftable
