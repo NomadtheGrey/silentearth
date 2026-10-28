@@ -331,41 +331,6 @@ const PROTOTYPE_RECIPES: Recipe[] = [
     notes: 'Prototype verbatim. Prototype lists no workstation requirement.',
   },
   {
-    id: 'wattle-and-daub-hut',
-    name: 'Wattle-and-Daub Hut',
-    status: 'prototype',
-    output: { item: ITEMS.wattleAndDaubHut, quantity: 1 },
-    ingredients: [
-      i(ITEMS.downedOak, 4),
-      i(ITEMS.riverSilt, 12),
-      i(ITEMS.tenderVines, 8),
-    ],
-    // Prototype lists no workstation requirement; station left unstated.
-    notes:
-      'Prototype verbatim (prototype key RIVER_SLUDGE = River Silt). ' +
-      'Silt restored 2026-10-25 (the cut was withdrawn): the hut spends 12.',
-  },
-  {
-    id: 'woven-cottage-prototype',
-    name: 'Woven Cottage (prototype)',
-    status: 'prototype',
-    output: { item: ITEMS.wovenCottage, quantity: 1 },
-    ingredients: [
-      i(ITEMS.downedOak, 10),
-      i(ITEMS.twinedCordage, 6),
-      i(ITEMS.peatMoss, 15),
-      i(ITEMS.riverStone, 4),
-    ],
-    station: 'workstation', // prototype: requiresWorkstation = true
-    notes:
-      'Prototype verbatim, kept for the record. SUPERSEDED by the merged ' +
-      'Woven Cottage draft recipe below (wattle-and-daub and woven cottage ' +
-      'are one ladder stage; the merged recipe drops the workstation ' +
-      'requirement per the 2026-10-25 workstation ruling). Do not craft ' +
-      'from this entry once the merged recipe is pinned; it is retained ' +
-      'so the verbatim prototype is not silently lost.',
-  },
-  {
     id: 'moss-cradle',
     name: 'Moss Cradle',
     status: 'prototype',
