@@ -2425,6 +2425,16 @@ export default function App() {
   const updatePlacedTents = (next: { id: string; x: number; z: number }[]) => {
     placedTentsRef.current = next;
     setPlacedTents(next);
+    // RENDERER SYNC (setTents wiring, 2026-10-28): the
+    // renderer holds no tent state — the shell is the
+    // source of truth and pushes its list on every
+    // mutation (place / pickup / regenerate-clear).
+    // The push rebuilds the placed group immediately
+    // and nudges the proximity tracker, so the shelter
+    // signal updates at once. Null-safe: the renderer
+    // does not exist before boot constructs it, and
+    // mutations run only after boot.
+    rendererRef.current?.setTents(next.map((tent) => ({ x: tent.x, z: tent.z })));
   };
   const [tentAnchors, setTentAnchors] = useState<
     { tent: { id: string; x: number; z: number }; x: number; y: number }[]
@@ -3480,6 +3490,17 @@ export default function App() {
       shelterAt(player.x, player.z, shelterState.snapshot()).houseId,
     );
     recomputeAnchors();
+    // TENT BOOT RE-SUPPLY (setTents wiring): the
+    // renderer was just constructed with an empty tent
+    // list, and setWorldGen is not called on boot — so
+    // the shell pushes its restored tents now (the
+    // renderer's own contract: setTents on boot
+    // restore). Without this, reloaded tents would
+    // have chips + save entries but no model and no
+    // shelter signal.
+    rendererRef.current?.setTents(
+      placedTentsRef.current.map((tent) => ({ x: tent.x, z: tent.z })),
+    );
 
     const offCamera = bus.on('camera:switched', ({ mode }) => {
       setCameraMode(mode);
@@ -4015,6 +4036,14 @@ export default function App() {
     renderer.setWorldGen(gen);
     setSeed(nextSeed);
     setPosition({ x: spawn.x, z: spawn.z });
+    // A new world clears placed tents: setWorldGen
+    // already cleared the renderer's list, and the
+    // shell store clears with it — or chips + save
+    // would keep old-world tents alive in the new
+    // world. The clear syncs to the renderer via
+    // updatePlacedTents (setTents([])); the next
+    // saveNow persists the empty list.
+    updatePlacedTents([]);
     // A new world clears the scry reveal (new camps, new water).
     divinationRef.current.dismiss();
     renderer.setCampArrowsVisible(false);
