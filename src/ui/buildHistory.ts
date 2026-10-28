@@ -43,6 +43,14 @@ export interface BuildRecord {
 
 const ALL_RECORDS: BuildRecord[] = [
   {
+    merge: 'Merge #15',
+    pr: 31,
+    sha: 'pending',
+    date: '2026-10-28',
+    what: 'Crow pile-glow arrows + shell wiring: per-pile arrow rows (tier-2 direction-only, tier-3 + range + compass), visibility strictly via crowPileArrow, glyph rotation verified per camera mode, syncCrowTier beside syncCharmHooks (boot + ritual completion). Closes the crow glow landing.',
+    why: 'The crow charm finally points the way — bright piles gain arrows that show where they are, near or far, so she can follow her memory instead of wandering.',
+  },
+  {
     merge: 'Merge #14',
     pr: 29,
     sha: '623cc3e',
