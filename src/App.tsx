@@ -332,7 +332,7 @@
  *   touch state (desktop keeps max-w-sm); (2) Hide HUD —
  *   already a fixed top-right control outside the stack and
  *   the sheets (z-40, visible in every expanded state) — now
- *   also closes both panels, so one tap fully reclaims the
+ *   also closes all panels, so one tap fully reclaims the
  *   look field. Panel taps and scrolling are untouched
  *   (pointer-events-auto + overflow-y throughout, 44 px
  *   targets kept). Per-state look geometry: collapsed, no
@@ -1178,9 +1178,11 @@
  *   the site (unstage), says 'The {bone} awakens.'
  *   ('gain') at the site, and saves. First-charm row:
  *   boot grantFirstCharm AFTER the CharmState restore
- *   (idempotent — fresh save gains the shrew charm,
- *   loaded awakening gains nothing, full pack gains
- *   nothing) + row note from Systems' boneNote in the
+ *   (idempotent — fresh save gains the shrew charm
+ *   in the LIST, loaded awakening gains nothing, no
+ *   full-pack failure since Systems 9e9a9dd — the
+ *   grant records no item) + row note from Systems'
+ *   boneNote in the
  *   bone build below (SUPERSEDES the numbers note
  *   'Stirs at hunger 45; drains 10% slower' computed
  *   from the DRAFT constants — shrew's row now reads
@@ -1318,28 +1320,61 @@
  *   path AND the loaded-save boot, since the
  *   multiplier is session state, never saved). The
  *   sync calls latch update(hunger, carried) +
- *   setDrainMultiplier(carried && awakened ? 0.9
- *   : 1). Carried is SHELL-SUPPLIED (today: main
- *   inventory count; when Adam's weight-exempt
- *   pseudo-inventory list lands, that one line
- *   switches — no Systems change). FLAGGED
- *   DEVIATION (DEV's blessing owed): the landed
+ *   setDrainMultiplier(carried ? 0.9 : 1). Carried
+ *   is SHELL-SUPPLIED — LIST MEMBERSHIP since the
+ *   charm-list build below (Systems 9e9a9dd): the
+ *   list IS the awakened kinds, so carried =
+ *   isAwakened, and the old carried && awakened
+ *   formula collapses to it. The interim main-
+ *   inventory count is gone (the shrew item no
+ *   longer sits in main inventory). DEVIATION
+ *   BLESSED (DEV 2026-10-28): the landed
  *   shrewEffectActive(inventory, charms) reads the
- *   main inventory directly, which conflicts with
- *   the shell-supplied-carried instruction — it is
- *   NOT used; the shell computes the same result
- *   (carried && awakened → 0.9) from its own
- *   carried boolean. If DEV prefers the helper,
- *   the switch is one line + a Systems signature
- *   change later. Latch edges honored: fires once
- *   on entry into ≤ 45 while carried (including a
- *   below-threshold boot), re-arms above 45, resets
- *   when not carried. Drain note: carried but
- *   unawakened gets NO multiplier (effect follows
- *   awakening, not possession) — in practice the
- *   grant awakens, so carried implies awakened.
- *   Tier 1 only; LOOK parked. Parity: the meter +
- *   line are shared, touch + desktop alike.
+ *   main inventory directly and is NOT used — the
+ *   shell path is the list-ready one and stays;
+ *   Systems noted the helper UNUSED pending a
+ *   signature change to a shell-supplied boolean.
+ *   Latch edges honored: fires once on entry into
+ *   ≤ 45 while listed (including a below-threshold
+ *   boot), re-arms above 45, resets when not
+ *   listed. Tier 1 only; LOOK parked. Parity: the
+ *   meter + line are shared, touch + desktop alike.
+ * - CHARM LIST PANEL, LIVE (DEV signal, Systems
+ *   9e9a9dd — listCharms view, grant-to-list,
+ *   shrew-only save migration): the playable charm
+ *   system completes on the UI side. PANEL: new
+ *   CharmsPanel (props-driven, InventoryPanel
+ *   pattern) — list in awakening order (kind +
+ *   tier, from listCharms) + detail per charm
+ *   (display name, tier, Systems' note — no
+ *   invented effect text). DOOR: a Charms button
+ *   beside Inventory/Crafting in BOTH rows (HUD
+ *   stack row + touch slim bar); opening selects
+ *   the first charm when the current selection is
+ *   not listed. The panel hides the LocationChip +
+ *   Scry button like every other panel, closes via
+ *   its X + the Hide HUD button, and reads the list
+ *   live each render (no refresh plumbing — a
+ *   ritual completion re-renders through the
+ *   ritual version bump, and the panel opens fresh
+ *   on the current list). SWITCH: syncShrewEffect's
+ *   carried line moves to list membership (above)
+ *   — this RESUMES the shrew effect, closing the
+ *   interim window (no visible row + carried false
+ *   since the list landed). CALL: the boot grant
+ *   call updates to grant-to-list semantics (no
+ *   item → no refreshInventory on grant; a grant
+ *   saves the awakening; the legacy inventory
+ *   param is still passed — its removal rides a
+ *   Systems change, flagged to DEV). ROWS: no
+ *   duplicate rows — the shrew item is gone from
+ *   main inventory by migration (loaded saves) or
+ *   never granted (fresh saves), and the charm
+ *   shows in the list panel only; raw bones still
+ *   show in main inventory via boneNote ('Needs a
+ *   ritual site' / 'Tier n · phrase' for a second
+ *   copy of an awakened kind). Parity: panel +
+ *   door shared, touch + desktop alike.
  * POINTER DISCIPLINE: overlays are pointer-events-none except the
  * small interactive pieces (HUD buttons, panels, harvest buttons),
  * so world clicks — including the first-person mouse-capture click
@@ -1510,16 +1545,17 @@ import {
 import {
   CharmState,
   grantFirstCharm,
+  listCharms,
   boneNote,
   boneKindFor,
   isBoneItem,
   recordBonePickupLook,
   HungerWarning,
-  FIRST_CHARM_ITEM,
   FIRST_CHARM_KIND,
   FIRST_CHARM_EFFECT,
 } from './systems/charms';
 import { RitualPanel } from './ui/RitualPanel';
+import { CharmsPanel } from './ui/CharmsPanel';
 
 type BusHarvestTarget = EventMap['harvest:inRange']['targets'][number];
 
@@ -2029,6 +2065,10 @@ export default function App() {
   const [switching, setSwitching] = useState(false);
   const [inventoryOpen, setInventoryOpen] = useState(false);
   const [craftingOpen, setCraftingOpen] = useState(false);
+  const [charmsOpen, setCharmsOpen] = useState(false);
+  const [selectedCharmKind, setSelectedCharmKind] = useState<string | null>(
+    null,
+  );
   const [selectedItemId, setSelectedItemId] = useState<string | undefined>(
     undefined,
   );
@@ -2134,17 +2174,22 @@ export default function App() {
   const warningFlashTimerRef = useRef<number | undefined>(undefined);
   const syncShrewEffect = () => {
     // Carried source, SHELL-SIDE (DEV instruction):
-    // TODAY the main inventory count; when Adam's
-    // weight-exempt pseudo-inventory list lands, this
-    // one line switches to it — no Systems change.
-    // Deliberately NOT shrewEffectActive(inventory,
-    // charms): the landed helper reads the main
-    // inventory directly, which would bake in the
-    // source this instruction forbids. Same result
-    // today (carried && awakened → 0.9, else 1),
-    // switchable tomorrow. Flagged deviation from
-    // the landed helper, stated for DEV's blessing.
-    const shrewCarried = inventory.count(FIRST_CHARM_ITEM) > 0;
+    // LIST MEMBERSHIP since the charm-list landing
+    // (Systems 9e9a9dd) — the list IS the awakened
+    // kinds, so carried = isAwakened, and the drain
+    // formula's carried && awakened collapses to it.
+    // This is the switch the shrew build staged: the
+    // interim main-inventory count is gone (the shrew
+    // item no longer sits in main inventory — the
+    // save migration drops it on load, and the grant
+    // records no item). Deliberately NOT
+    // shrewEffectActive(inventory, charms): the landed
+    // helper reads the main inventory directly, which
+    // goes wrong once the list lands (list charms are
+    // not inventory stacks) — DEV blessed leaving it
+    // unused, and Systems noted it UNUSED pending a
+    // signature change to a shell-supplied boolean.
+    const shrewCarried = charmStateRef.current.isAwakened(FIRST_CHARM_KIND);
     const result = warningRef.current.update(hunger.value(), shrewCarried);
     // Boolean setState bails out when unchanged, so
     // the steady state costs no re-render; fired is an
@@ -2159,9 +2204,7 @@ export default function App() {
       }, 2000);
     }
     hunger.setDrainMultiplier(
-      shrewCarried && charmStateRef.current.isAwakened(FIRST_CHARM_KIND)
-        ? FIRST_CHARM_EFFECT.drainMultiplier
-        : 1,
+      shrewCarried ? FIRST_CHARM_EFFECT.drainMultiplier : 1,
     );
   };
   const [ritualNote, setRitualNote] = useState<string | null>(null);
@@ -2873,32 +2916,38 @@ export default function App() {
     setPlacedFires(fireState.snapshot());
     setPlacedTorches(torchState.snapshot());
     setPlacedAltars(altarState.snapshot());
-    // FIRST-CHARM BOOT GRANT (outright, tier 1): runs
+    // FIRST-CHARM BOOT GRANT (outright, tier 1,
+    // GRANT-TO-LIST since Systems 9e9a9dd): runs
     // AFTER the CharmState restore above, so a loaded
     // awakening is never double-granted. Idempotent — a
-    // fresh save gains the shrew charm; a loaded save
-    // with the awakening gains nothing (no duplicate
-    // bone, even if she dropped it); a full pack gains
-    // nothing and awakens nothing (defensive). A grant
-    // refreshes the panel + saves at once (a meaningful
-    // change, not a boot-time save of nothing).
+    // fresh save gains the shrew charm IN THE LIST; a
+    // loaded save with the awakening gains nothing.
+    // NO item is granted (no full-pack failure mode —
+    // the old addPartial gate is gone with the item),
+    // so a grant refreshes nothing in main inventory:
+    // it saves at once (the awakening is save data)
+    // and the panel reads the list live on open. The
+    // inventory param is LEGACY, IGNORED by Systems
+    // (void inventory) — still passed because the
+    // signature keeps it; its removal rides a Systems
+    // change, flagged to DEV (UI does not edit
+    // Systems files unclaimed).
     const firstCharmGrant = grantFirstCharm(
       inventory,
       charmStateRef.current,
     );
     if (firstCharmGrant.granted > 0) {
-      refreshInventory();
       saveNow();
     }
     // Shrew effect boot sync (follow-up call path):
     // runs whether or not the grant fired — a loaded
-    // save carrying shrew needs its 0.9 multiplier from
-    // boot (multiplier is session state, never saved),
-    // and a boot hunger below 45 while carried fires
-    // the latch fresh (she IS in the warning zone).
-    // refreshInventory above already synced once; this
-    // call is harmless duplication that covers the
-    // no-grant boot (loaded awakening, no refresh).
+    // save with the shrew in its list needs its 0.9
+    // multiplier from boot (multiplier is session
+    // state, never saved), and a boot hunger below 45
+    // while listed fires the latch fresh (she IS in
+    // the warning zone). No refreshInventory runs on
+    // the grant path anymore (grant-to-list grants no
+    // item) — this call is the sync, not a duplicate.
     syncShrewEffect();
     applyShelterHouse(
       shelterAt(player.x, player.z, shelterState.snapshot()).houseId,
@@ -3697,6 +3746,28 @@ export default function App() {
   // id (flagged presentation call, UI's).
   const boneDisplayFor = (kind: string): string =>
     `Primal Bone - ${kind.replace(/-/g, ' ')}`;
+
+  // Charm-list rows for the examination panel (charm-list
+  // build, Systems 9e9a9dd): listCharms is the examination
+  // contract — kind + tier + note in awakening order;
+  // App maps kind to its display name. Derived live each
+  // render, so the panel always opens on the current list.
+  const charmEntries = listCharms(charmStateRef.current).map((charm) => ({
+    ...charm,
+    display: boneDisplayFor(charm.kind),
+  }));
+
+  // Open the charms panel with a valid selection: keep
+  // the current one if it is still listed (awakenings
+  // never drop), else fall to the first charm.
+  const openCharmsPanel = () => {
+    setCharmsOpen(true);
+    setSelectedCharmKind((current) =>
+      charmEntries.some((charm) => charm.kind === current)
+        ? current
+        : (charmEntries[0]?.kind ?? null),
+    );
+  };
 
   const skyLabelFor = (sky: string): string => {
     switch (sky) {
@@ -5529,6 +5600,18 @@ export default function App() {
             </button>
             <button
               type="button"
+              onClick={openCharmsPanel}
+              aria-pressed={charmsOpen}
+              className={
+                isTouch
+                  ? 'rounded bg-[#3a4436] px-3 py-2 text-sm min-h-[44px] hover:bg-[#4a5546]'
+                  : 'rounded bg-[#3a4436] px-3 py-1 text-xs hover:bg-[#4a5546]'
+              }
+            >
+              Charms
+            </button>
+            <button
+              type="button"
               onClick={() => setOptionsOpen(true)}
               className={
                 isTouch
@@ -5655,6 +5738,14 @@ export default function App() {
             </button>
             <button
               type="button"
+              onClick={openCharmsPanel}
+              aria-pressed={charmsOpen}
+              className="min-h-[44px] rounded bg-[#3a4436] px-3 py-2 text-sm hover:bg-[#4a5546]"
+            >
+              Charms
+            </button>
+            <button
+              type="button"
               onClick={() => setOptionsOpen(true)}
               className="min-h-[44px] rounded bg-[#3a4436] px-3 py-2 text-sm hover:bg-[#4a5546]"
             >
@@ -5667,13 +5758,14 @@ export default function App() {
             // One tap reclaims the look field: collapsing the
             // stack alone would leave an open bottom sheet
             // (60vh) covering the look field's lower half,
-            // so Hide also closes both panels. Panel state is
+            // so Hide also closes all panels. Panel state is
             // view-only — inventory, crafting, and wardrobe
             // state live on, reopening restores the same rows.
             onClick={() => {
               setHudCollapsed(true);
               setInventoryOpen(false);
               setCraftingOpen(false);
+              setCharmsOpen(false);
             }}
             aria-label="Hide HUD panels to reveal the game"
             className="pointer-events-auto absolute right-2 top-2 z-40 min-h-[44px] rounded bg-black/50 px-3 py-2 text-sm"
@@ -5721,6 +5813,15 @@ export default function App() {
             onSelectRecipe={setSelectedRecipeId}
             onCraft={handleCraft}
             onClose={() => setCraftingOpen(false)}
+          />
+        ) : null}
+        {charmsOpen ? (
+          <CharmsPanel
+            charms={charmEntries}
+            selectedKind={selectedCharmKind}
+            onSelectKind={setSelectedCharmKind}
+            onClose={() => setCharmsOpen(false)}
+            comfortable={isTouch}
           />
         ) : null}
         {craftNote ? (
@@ -5868,7 +5969,11 @@ export default function App() {
         collapsed on touch (it lives outside the collapsible
         stack). It hides only while a panel or the modal is
         open, where it would sit on top of the bottom sheet. */}
-      {!inventoryOpen && !craftingOpen && !optionsOpen && !introOpen ? (
+      {!inventoryOpen &&
+      !craftingOpen &&
+      !charmsOpen &&
+      !optionsOpen &&
+      !introOpen ? (
         <LocationChip
           x={position.x}
           z={position.z}
@@ -5892,6 +5997,7 @@ export default function App() {
       {scryVisible &&
       !inventoryOpen &&
       !craftingOpen &&
+      !charmsOpen &&
       !optionsOpen &&
       !introOpen &&
       !pendingTrapRecipe &&
