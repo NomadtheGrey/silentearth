@@ -1114,6 +1114,31 @@
  *   one optional lookNode prop on
  *   ProximityHarvestButtons (UI-owned file; claim
  *   surface grew by that prop — stated plainly).
+ * - ALTAR PLACE + MARKER, LIVE (Adam, 2026-10-27 —
+ *   DEV signal, Systems 508fcb7 + Background 8302cdc):
+ *   the altar's inventory row gains Place (ITEMS.altar
+ *   joins PLACEABLE_IDS for the BUTTON only) placing
+ *   INSTANTLY AT HER FEET — torch precedent, not the
+ *   house/fire preview flow. Grant FIRST (Systems
+ *   placeAltar consumes one carried altar; failure
+ *   touches nothing + shows the reason), then the
+ *   entity place (Background primitive, emits
+ *   altar:placed → refreshAltars). Panel stays open,
+ *   count drops, altarNote carries the result ('Placed
+ *   an altar.'). One world-anchored AltarChip per
+ *   placed altar (label 'Altar', torch-chip styling) —
+ *   LABEL-ONLY, deliberately not a button: no menu
+ *   (rituals are not in this order), no invented
+ *   Pick-up (removal is Adam's word later). No hunger
+ *   gate (a move, like drop/pickup). Save: altars ride
+ *   saveNow as-is + boot restore BEFORE construction
+ *   (torch pattern; id-less dropped — real saved
+ *   altars always carry an id). Regenerate staleness
+ *   matches the fire/torch precedent (setWorldGen
+ *   clears the entity; shell state re-reads on the
+ *   next event). New AltarChip.tsx + App wiring.
+ *   Parity: shared row button + label chip, touch +
+ *   desktop. Placeable candles still later, distinct.
  * POINTER DISCIPLINE: overlays are pointer-events-none except the
  * small interactive pieces (HUD buttons, panels, harvest buttons),
  * so world clicks — including the first-person mouse-capture click
@@ -1190,6 +1215,7 @@ import { PlacementPreview } from './ui/PlacementPreview';
 import { ContextMenu } from './ui/ContextMenu';
 import { PileChip } from './ui/PileChip';
 import { TorchChip } from './ui/TorchChip';
+import { AltarChip } from './ui/AltarChip';
 import type { ContextAction } from './ui/types';
 import { TouchControls } from './ui/TouchControls';
 import { LocationChip } from './ui/LocationChip';
@@ -1267,6 +1293,8 @@ import {
 } from './systems/recipes';
 import { torchState, type PlacedTorch as PlacedTorchEntity } from './game/torchState';
 import { lightTorches, placeTorch as grantPlaceTorch, pickupTorch as grantPickupTorch } from './systems/torch';
+import { altarState, type PlacedAltar as PlacedAltarEntity } from './game/altarState';
+import { placeAltar as grantPlaceAltar } from './systems/altar';
 
 type BusHarvestTarget = EventMap['harvest:inRange']['targets'][number];
 
@@ -1354,14 +1382,16 @@ const HOUSE_ITEM_TO_TYPE: Record<string, HouseType> = {
 };
 
 /** Item ids the inventory panel offers a Place button for.
- * Lit torches ride this set for the BUTTON only — their
- * handler branches to instant-at-feet (see handlePlaceItem),
- * never the preview-ghost flow the other ids use. */
+ * Lit torches and altars ride this set for the BUTTON only —
+ * their handlers branch to instant-at-feet (see
+ * handlePlaceItem), never the preview-ghost flow the other
+ * ids use. */
 const PLACEABLE_IDS: ReadonlySet<string> = new Set([
   ...Object.keys(FIRE_ITEM_TO_TYPE),
   ...Object.keys(HOUSE_ITEM_TO_TYPE),
   ITEMS.loom,
   ITEMS.litTorch,
+  ITEMS.altar,
 ]);
 
 const FIRE_NAME: Record<FireType, string> = {
@@ -1732,6 +1762,7 @@ export default function App() {
   const homeStoreItemsRef = useRef(new Map<string, Set<string>>());
   const [eatNote, setEatNote] = useState<string | null>(null);
   const [torchNote, setTorchNote] = useState<string | null>(null);
+  const [altarNote, setAltarNote] = useState<string | null>(null);
   const [dropNote, setDropNote] = useState<string | null>(null);
   const [storageNote, setStorageNote] = useState<string | null>(null);
 
@@ -1803,6 +1834,17 @@ export default function App() {
     { torch: PlacedTorchEntity; x: number; y: number }[]
   >([]);
   const [selectedTorchId, setSelectedTorchId] = useState<string | null>(null);
+  // Placed altars (Background singleton, read fresh on every
+  // event) and their projected anchors — the torch pattern
+  // minus the menu: the altar chip is label-only (no ritual
+  // actions exist yet, no Pick-up invented), so there is no
+  // selected-altar state at all.
+  const [placedAltars, setPlacedAltars] = useState<PlacedAltarEntity[]>(
+    () => altarState.snapshot(),
+  );
+  const [altarAnchors, setAltarAnchors] = useState<
+    { altar: PlacedAltarEntity; x: number; y: number }[]
+  >([]);
   // Scry button (Adam 2026-10-27 — DEV split, not a rewrite):
   // visibility = near still water on movement, reveal = press
   // only (Systems 9927ddab stands as the query). The shell
@@ -1991,6 +2033,12 @@ export default function App() {
           // restore validates on load and drops id-less
           // entries). A path of torches survives refresh.
           torches: torchState.snapshot(),
+          // PLACED-ALTAR SAVE WIRING: the live placed-altar
+          // set rides every save as-is (ids + positions
+          // verbatim; serialize writes ids when present,
+          // restore validates on load and drops id-less
+          // entries). Placed altars survive refresh.
+          altars: altarState.snapshot(),
           // LOOK SAVE WIRING: the live look counts ride
           // every save (snapshot as-is, first-look order;
           // serialize writes them verbatim, restore
@@ -2097,6 +2145,13 @@ export default function App() {
       torches.push({ torch, x: anchor.x, y: anchor.y });
     }
     setTorchAnchors(torches);
+    const altars: { altar: PlacedAltarEntity; x: number; y: number }[] = [];
+    for (const altar of altarState.snapshot()) {
+      const anchor = projectAnchor(altar.x, altar.z, 'scatter');
+      if (!anchor) continue;
+      altars.push({ altar, x: anchor.x, y: anchor.y });
+    }
+    setAltarAnchors(altars);
     const pileAnchorsNext: { pile: PileTarget; x: number; y: number }[] = [];
     for (const pile of pilesRef.current) {
       const anchor = projectAnchor(pile.x, pile.z, 'scatter');
@@ -2272,6 +2327,27 @@ export default function App() {
             })),
         );
         harvestState.restore(bootSaved.harvestState);
+        // PLACED-ALTAR SAVE WIRING (same restore-before-
+        // first-build pattern): altarState.restore() is
+        // silent and the constructor's initial placed-group
+        // build picks restored altars up. SavedAltar.id is
+        // optional (Systems' shape) while PlacedAltar.id is
+        // required — real saved altars always carry an id
+        // (snapshot always has one); an id-less entry is
+        // dropped here (restore drops it too), so nothing
+        // real is lost. Torch pattern, id nuance closed
+        // the torch way (zero behavioral difference).
+        altarState.restore(
+          (bootSaved.altars ?? [])
+            .filter(
+              (altar) => typeof altar.id === 'string' && altar.id !== '',
+            )
+            .map((altar) => ({
+              id: altar.id as string,
+              x: altar.x,
+              z: altar.z,
+            })),
+        );
         // LOOK SAVE WIRING (same pre-construction pattern):
         // nameSight.restore() is silent and replaces; the
         // shell's NameSight starts empty, so a second
@@ -2380,6 +2456,7 @@ export default function App() {
     // was snapshotted before this effect re-placed anything).
     setPlacedFires(fireState.snapshot());
     setPlacedTorches(torchState.snapshot());
+    setPlacedAltars(altarState.snapshot());
     applyShelterHouse(
       shelterAt(player.x, player.z, shelterState.snapshot()).houseId,
     );
@@ -2544,6 +2621,12 @@ export default function App() {
       setPlacedTorches(torchState.snapshot());
       recomputeAnchors();
     };
+    // Placed-altar subscriptions: altars re-read from the
+    // Background singleton on every altar event, torch pattern.
+    const refreshAltars = () => {
+      setPlacedAltars(altarState.snapshot());
+      recomputeAnchors();
+    };
     // PAUSE SUBSCRIPTION (core 54e525c): the shell's half of the
     // flag. The ref gates the timers (below + the turn-stick and
     // FPS loops); the state drives the Paused indicator. Fires
@@ -2557,6 +2640,8 @@ export default function App() {
     const offFireLit = bus.on('fire:lit', refreshFires);
     const offTorchPlaced = bus.on('torch:placed', refreshTorches);
     const offTorchRemoved = bus.on('torch:removed', refreshTorches);
+    const offAltarPlaced = bus.on('altar:placed', refreshAltars);
+    const offAltarRemoved = bus.on('altar:removed', refreshAltars);
     const offShelterPlaced = bus.on('shelter:placed', () => {
       const p = playerRef.current;
       if (!p) return;
@@ -2681,6 +2766,8 @@ export default function App() {
       offFireLit();
       offTorchPlaced();
       offTorchRemoved();
+      offAltarPlaced();
+      offAltarRemoved();
       offShelterPlaced();
       offShelterChanged();
       offSleep();
@@ -3039,11 +3126,45 @@ export default function App() {
     setTorchNote('Placed a lit torch.');
   };
 
+  // PLACED ALTAR (settled lean — instant at her feet, the
+  // torch precedent; the preview ghost is the house/fire
+  // pattern, heavy for a site placed where she stands).
+  // Grant FIRST (Systems placeAltar consumes one carried
+  // altar; failure touches nothing), then the entity place
+  // (Background primitive, emits altar:placed →
+  // refreshAltars). Panel action, not a world action:
+  // the panel stays open, the count drops, the note
+  // carries the result — the torch Place shape. No
+  // hunger gate (a move, like drop/pickup). No menu
+  // behind the chip: rituals are not in this order.
+  const handlePlaceAltar = () => {
+    const player = playerRef.current;
+    if (!player) return;
+    const outcome = grantPlaceAltar(inventory, player.x, player.z);
+    // Equality check, not truthiness: non-strict tsc does
+    // not narrow this union's boolean discriminant on
+    // truthiness (see the torch Light button handler).
+    if (outcome.placed === false) {
+      setAltarNote(outcome.reason);
+      return;
+    }
+    altarState.placeAltar(outcome.altar.x, outcome.altar.z);
+    refreshInventory();
+    saveNow();
+    setAltarNote('Placed an altar.');
+  };
+
   const handlePlaceItem = (itemId: string) => {
     // Placed torches never enter the preview flow — the
     // branch above places instantly at her feet.
     if (itemId === ITEMS.litTorch) {
       handlePlaceLitTorch();
+      return;
+    }
+    // Placed altars never enter the preview flow either —
+    // the branch above places instantly at her feet.
+    if (itemId === ITEMS.altar) {
+      handlePlaceAltar();
       return;
     }
     const fireType = FIRE_ITEM_TO_TYPE[itemId];
@@ -4256,6 +4377,13 @@ export default function App() {
             </WorldAnchor>
           </Fragment>
         ))}
+        {altarAnchors.map(({ altar, x, y }) => (
+          <Fragment key={altar.id}>
+            <WorldAnchor x={x} y={y}>
+              <AltarChip />
+            </WorldAnchor>
+          </Fragment>
+        ))}
         {pileAnchors.map(({ pile, x, y }) => {
           const total = pile.stacks.reduce(
             (sum, stack) => sum + stack.quantity,
@@ -4672,6 +4800,11 @@ export default function App() {
         {torchNote ? (
           <p className="rounded bg-black/50 px-2 py-1 text-xs text-stone-200">
             {torchNote}
+          </p>
+        ) : null}
+        {altarNote ? (
+          <p className="rounded bg-black/50 px-2 py-1 text-xs text-stone-200">
+            {altarNote}
           </p>
         ) : null}
         {dropNote ? (
