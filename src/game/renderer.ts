@@ -47,12 +47,13 @@ import { fireState } from './fireState';
 import { torchState } from './torchState';
 import { altarState } from './altarState';
 import { ritualSiteState } from './ritualSite';
-import type { PlacedHouse } from './shelter';
+import type { PlacedHouse, TentPosition } from './shelter';
 import { FIRE_DEFS } from './fire';
 import { shelterState, HOUSE_DEFS } from './shelter';
 import { loomState } from './loomState';
 import { pileState } from './pileState';
 import { trapState } from './trapState';
+import { stumpState } from './stumpState';
 import type { TrapType } from './traps';
 import { pauseState } from './pause';
 import { SkyRig } from './sky';
@@ -391,6 +392,8 @@ export class WorldRenderer {
   private campEdgeArrows: { mesh: THREE.Group; house: PlacedHouse }[] = [];
   /** True while a water scry has revealed the camp arrows (shell-driven setter). */
   private campArrowsVisible = false;
+  /** Tent positions for the placed group (shell-driven via setTents — no game tent state exists; camping state is systems-side). */
+  private tents: TentPosition[] = [];
   /** Pigeon wing bone — way-home sense (tier-1 charm): arrows show without water while carried + awakened. */
   private pigeonWayHome = false;
   /** Bat wing bone — night way-finding (tier-1 charm): fog thins at night while carried + awakened. */
@@ -487,7 +490,7 @@ export class WorldRenderer {
     // generator delegates fieldsAt/weightsAt untouched, so the
     // slow reads true world data, not harvest state.
     this.player.setTerrainSpeedQuery((x, z) => terrainSpeedAt(this.gen, x, z));
-    this.proximity = new ProximityTracker(this.gen);
+    this.proximity = new ProximityTracker(this.gen, true, () => this.tents);
     // Chunk reload on harvest completion: the harvested chunk is
     // rebuilt, so the object visibly shrinks (or leaves, on remove
     // or a taken log) instead of lingering until the player walks
@@ -508,11 +511,13 @@ export class WorldRenderer {
       bus.on('fire:placed', rebuild),
       bus.on('fire:lit', rebuild),
       bus.on('shelter:placed', rebuild),
+      bus.on('shelter:upgraded', rebuild),
       bus.on('loom:placed', rebuild),
       bus.on('torch:placed', rebuild),
       bus.on('torch:removed', rebuild),
       bus.on('altar:placed', rebuild),
       bus.on('altar:removed', rebuild),
+      bus.on('stump:upgraded', rebuild),
     );
     // Staged bones rebuild on staging events only (separate
     // group, separate lifecycle — see the field comment).
@@ -684,6 +689,23 @@ export class WorldRenderer {
   }
 
   /**
+   * Set the tent list for the placed group (shell-driven: the
+   * shell maps Systems' tents to TentPosition {x, z} and calls
+   * this on place / pickup / boot restore). Rebuilds the placed
+   * group immediately, and nudges the proximity tracker so the
+   * shelter signal updates at once — placing a tent at her feet
+   * must shelter her without waiting for her next step (the
+   * house path's direct-recompute precedent). No bus event:
+   * pickup needs no event, the rebuild + recompute carry it.
+   * No heading: tents face +Z.
+   */
+  setTents(positions: TentPosition[]): void {
+    this.tents = [...positions];
+    this.rebuildPlacedGroup();
+    this.proximity.recompute();
+  }
+
+  /**
    * Camp arrows show while scry OR pigeon holds (pigeon wing
    * bone — way-home sense, tier-1 charm: the same arrows,
    * ungated by water, while carried + awakened). The shell
@@ -828,6 +850,9 @@ export class WorldRenderer {
     torchState.clear();
     // Placed altars belong to the old world's map too.
     altarState.clear();
+    // Placed tents belong to the old world's map too (the shell
+    // re-supplies them via setTents on boot restore).
+    this.tents = [];
     this.rebuildPlacedGroup();
     // Staged bones belong to the old world's sites too.
     ritualSiteState.clear();
@@ -1100,6 +1125,12 @@ export class WorldRenderer {
     // Friction lighting display: waits that elapsed become 'ready'
     // (the rub itself checks the clock, so this is display only).
     fireState.advanceLighting(now);
+    // Trap hour trigger: the 2 s tick is the boundary clock —
+    // checkHour emits 'trap:hour' only when the game hour changes
+    // (null sky = rig gone, skip; unchanged hour = no-op, so this
+    // is pause-safe by construction).
+    const sky = this.snapshotSky();
+    if (sky) trapState.checkHour(sky.cycleT);
   }
 
   /**
@@ -1216,6 +1247,29 @@ export class WorldRenderer {
       mesh.position.set(px, py, pz);
       return mesh;
     };
+    // House meshes are DOUBLE-SIDED (Adam 2026-10-28 — inside
+    // a hut the FrontSide walls/roof culled to nothing, leaving
+    // the flat ground plane + outside world showing through):
+    // lambert() mints a fresh material per mesh, so setting
+    // .side here touches only house meshes. Shared box()/cyl()
+    // stay FrontSide — scatter, fires, looms read unchanged —
+    // and DoubleSide renders outward faces identically, so
+    // exteriors read exactly as before.
+    const houseBox = (...args: Parameters<typeof box>): THREE.Mesh => {
+      const mesh = box(...args);
+      (mesh.material as THREE.MeshLambertMaterial).side = THREE.DoubleSide;
+      return mesh;
+    };
+    const houseCyl = (...args: Parameters<typeof cyl>): THREE.Mesh => {
+      const mesh = cyl(...args);
+      (mesh.material as THREE.MeshLambertMaterial).side = THREE.DoubleSide;
+      return mesh;
+    };
+    const houseRoof = (geo: THREE.BufferGeometry, color: number): THREE.Mesh => {
+      const mat = lambert(color);
+      mat.side = THREE.DoubleSide;
+      return new THREE.Mesh(geo, mat);
+    };
     for (const fire of fireState.snapshot()) {
       const fg = new THREE.Group();
       fg.position.set(fire.x, 0, fire.z);
@@ -1274,49 +1328,84 @@ export class WorldRenderer {
       const hg = new THREE.Group();
       hg.position.set(house.x, 0, house.z);
       if (house.type === 'leanTo') {
-        hg.add(cyl(0.07, 0.07, 2.2, 0x6b4a2f, -f / 2, 1.1, 0));
-        hg.add(cyl(0.07, 0.07, 2.2, 0x6b4a2f, f / 2, 1.1, 0));
-        hg.add(box(f + 0.4, 0.12, 1.6, 0x8a7a4a, 0, 1.9, 0, 0, -0.5));
+        hg.add(houseCyl(0.07, 0.07, 2.2, 0x6b4a2f, -f / 2, 1.1, 0));
+        hg.add(houseCyl(0.07, 0.07, 2.2, 0x6b4a2f, f / 2, 1.1, 0));
+        // Roof underside only — open shelter, NO floor: the
+        // ground IS the floor (stated exclusion, approved).
+        hg.add(houseBox(f + 0.4, 0.12, 1.6, 0x8a7a4a, 0, 1.9, 0, 0, -0.5));
         // Bedroll under the roof + stick back wall.
-        const bed = cyl(0.14, 0.14, 1.2, 0x6a5a3a, 0, 0.14, 0.3);
+        const bed = houseCyl(0.14, 0.14, 1.2, 0x6a5a3a, 0, 0.14, 0.3);
         bed.rotation.z = Math.PI / 2;
         hg.add(bed);
         for (let i = -1; i <= 1; i++) {
-          hg.add(cyl(0.04, 0.04, 1.7, 0x6b4a2f, i * (f / 3), 0.85, -0.7));
+          hg.add(houseCyl(0.04, 0.04, 1.7, 0x6b4a2f, i * (f / 3), 0.85, -0.7));
         }
       } else if (house.type === 'thatchHut') {
-        hg.add(cyl(f / 2, f / 2, 1.6, 0xcbb59a, 0, 0.8, 0, 12));
-        const roof = new THREE.Mesh(new THREE.ConeGeometry(f / 2 + 0.3, 1.5, 12), lambert(0x8a7a4a));
+        hg.add(houseCyl(f / 2, f / 2, 1.6, 0xcbb59a, 0, 0.8, 0, 12));
+        const roof = houseRoof(new THREE.ConeGeometry(f / 2 + 0.3, 1.5, 12), 0x8a7a4a);
         roof.position.y = 2.35;
         hg.add(roof);
-        hg.add(box(0.7, 1.3, 0.1, 0x3a2812, 0, 0.65, f / 2 + 0.01));
-        hg.add(box(0.9, 0.1, 0.5, 0x8a8a86, 0, 0.05, f / 2 + 0.25));
-        hg.add(cyl(0.09, 0.09, 0.3, 0x1a1a1a, 0, 3.1, 0));
+        hg.add(houseBox(0.7, 1.3, 0.1, 0x3a2812, 0, 0.65, f / 2 + 0.01));
+        hg.add(houseBox(0.9, 0.1, 0.5, 0x8a8a86, 0, 0.05, f / 2 + 0.25));
+        hg.add(houseCyl(0.09, 0.09, 0.3, 0x1a1a1a, 0, 3.1, 0));
+        // Floor disc, inset within the round wall.
+        hg.add(houseCyl(f / 2 - 0.1, f / 2 - 0.1, 0.04, 0x9a8a6a, 0, 0.02, 0, 12));
       } else if (house.type === 'wovenCottage') {
-        hg.add(box(f, 2.2, f * 0.8, 0xd8c9a8, 0, 1.1, 0));
-        const roof = new THREE.Mesh(new THREE.ConeGeometry(f * 0.75, 1.4, 4), lambert(0x8a7a4a));
+        hg.add(houseBox(f, 2.2, f * 0.8, 0xd8c9a8, 0, 1.1, 0));
+        const roof = houseRoof(new THREE.ConeGeometry(f * 0.75, 1.4, 4), 0x8a7a4a);
         roof.position.y = 2.9;
         roof.rotation.y = Math.PI / 4;
         hg.add(roof);
-        hg.add(box(0.8, 1.6, 0.1, 0x4a3220, 0, 0.8, (f * 0.8) / 2 + 0.01));
+        hg.add(houseBox(0.8, 1.6, 0.1, 0x4a3220, 0, 0.8, (f * 0.8) / 2 + 0.01));
         // Windows + wattle bands around the wall.
-        hg.add(box(0.5, 0.5, 0.06, 0x2a2018, -f / 4, 1.3, (f * 0.8) / 2 + 0.01));
-        hg.add(box(0.5, 0.5, 0.06, 0x2a2018, f / 4, 1.3, (f * 0.8) / 2 + 0.01));
-        hg.add(box(f + 0.06, 0.08, f * 0.8 + 0.06, 0xb09a6a, 0, 0.6, 0));
-        hg.add(box(f + 0.06, 0.08, f * 0.8 + 0.06, 0xb09a6a, 0, 1.7, 0));
+        hg.add(houseBox(0.5, 0.5, 0.06, 0x2a2018, -f / 4, 1.3, (f * 0.8) / 2 + 0.01));
+        hg.add(houseBox(0.5, 0.5, 0.06, 0x2a2018, f / 4, 1.3, (f * 0.8) / 2 + 0.01));
+        hg.add(houseBox(f + 0.06, 0.08, f * 0.8 + 0.06, 0xb09a6a, 0, 0.6, 0));
+        hg.add(houseBox(f + 0.06, 0.08, f * 0.8 + 0.06, 0xb09a6a, 0, 1.7, 0));
+        // Woven texture (Adam 2026-10-28 — texture pass before
+        // the merge goes live): vertical wattle strands on all
+        // four exterior faces, interlaced with the horizontal
+        // bands above. Strands sit 0.02 proud of the wall face
+        // (box depth 0.06 centered 0.01 inside the face), so
+        // the bands (0.03 proud) pass OVER them at crossings
+        // — no coplanar faces, reads as weave from every
+        // outside angle. Front-face strands skip the door
+        // x-range (±0.4) and the window x-ranges (±f/4 ±
+        // 0.25); the openings interrupt the weave. Strands
+        // use the shared FrontSide box(): exterior-only by
+        // wall occlusion, so nothing shows inside — the
+        // interior (ff44e00) is untouched.
+        const frontFace = (f * 0.8) / 2;
+        for (let x = -f / 2 + 0.25; x < f / 2; x += 0.5) {
+          const inDoor = Math.abs(x) <= 0.4;
+          const inWindow = Math.abs(Math.abs(x) - f / 4) <= 0.25;
+          if (!inDoor && !inWindow) {
+            hg.add(box(0.06, 2.2, 0.06, 0xb09a6a, x, 1.1, frontFace - 0.01));
+          }
+          hg.add(box(0.06, 2.2, 0.06, 0xb09a6a, x, 1.1, -frontFace + 0.01));
+        }
+        const sideDepth = f * 0.8;
+        for (let z = -sideDepth / 2 + 0.25; z < sideDepth / 2; z += 0.5) {
+          hg.add(box(0.06, 2.2, 0.06, 0xb09a6a, f / 2 - 0.01, 1.1, z));
+          hg.add(box(0.06, 2.2, 0.06, 0xb09a6a, -f / 2 + 0.01, 1.1, z));
+        }
+        // Floor plane, inset within the wall footprint.
+        hg.add(houseBox(f - 0.2, 0.04, f * 0.8 - 0.2, 0x8a7a5a, 0, 0.02, 0));
       } else {
-        hg.add(box(f, 2.6, f * 0.85, 0x7a5a38, 0, 1.3, 0));
-        const roof = new THREE.Mesh(new THREE.ConeGeometry(f * 0.72, 1.6, 4), lambert(0x5a3d24));
+        hg.add(houseBox(f, 2.6, f * 0.85, 0x7a5a38, 0, 1.3, 0));
+        const roof = houseRoof(new THREE.ConeGeometry(f * 0.72, 1.6, 4), 0x5a3d24);
         roof.position.y = 3.4;
         roof.rotation.y = Math.PI / 4;
         hg.add(roof);
-        hg.add(box(0.9, 1.8, 0.1, 0x3a2812, 0, 0.9, (f * 0.85) / 2 + 0.01));
+        hg.add(houseBox(0.9, 1.8, 0.1, 0x3a2812, 0, 0.9, (f * 0.85) / 2 + 0.01));
         // Windows, porch posts, chimney.
-        hg.add(box(0.5, 0.5, 0.06, 0x2a2018, -f / 4, 1.5, (f * 0.85) / 2 + 0.01));
-        hg.add(box(0.5, 0.5, 0.06, 0x2a2018, f / 4, 1.5, (f * 0.85) / 2 + 0.01));
-        hg.add(cyl(0.07, 0.07, 2.2, 0x6b4a2f, -f / 3, 1.1, (f * 0.85) / 2 + 0.4));
-        hg.add(cyl(0.07, 0.07, 2.2, 0x6b4a2f, f / 3, 1.1, (f * 0.85) / 2 + 0.4));
-        hg.add(box(0.5, 1.0, 0.5, 0x8a8a86, f / 3, 3.6, -f / 4));
+        hg.add(houseBox(0.5, 0.5, 0.06, 0x2a2018, -f / 4, 1.5, (f * 0.85) / 2 + 0.01));
+        hg.add(houseBox(0.5, 0.5, 0.06, 0x2a2018, f / 4, 1.5, (f * 0.85) / 2 + 0.01));
+        hg.add(houseCyl(0.07, 0.07, 2.2, 0x6b4a2f, -f / 3, 1.1, (f * 0.85) / 2 + 0.4));
+        hg.add(houseCyl(0.07, 0.07, 2.2, 0x6b4a2f, f / 3, 1.1, (f * 0.85) / 2 + 0.4));
+        hg.add(houseBox(0.5, 1.0, 0.5, 0x8a8a86, f / 3, 3.6, -f / 4));
+        // Floor plane, inset within the wall footprint.
+        hg.add(houseBox(f - 0.2, 0.04, f * 0.85 - 0.2, 0x5a4028, 0, 0.02, 0));
       }
       group.add(hg);
     }
@@ -1372,6 +1461,51 @@ export class WorldRenderer {
       ag.position.set(altar.x, 0, altar.z);
       ag.add(buildAltarGroup());
       group.add(ag);
+    }
+    for (const record of stumpState.snapshot()) {
+      // Workbench overlay (Adam 2026-10-28 — stumpy
+      // workstation upgrade): the stump base is RETAINED
+      // (it stays in the instanced scatter, untouched —
+      // one InstancedMesh per kind cannot carry a
+      // per-stump overlay), and the workbench addition
+      // draws ON TOP of it in the placed group: bench
+      // slab + vise block, wood tones from the existing
+      // palette. Slab bottom 0.62 clears the stump-top
+      // disc (world 0.61) with no coplanar face. Only
+      // the workstation addition draws here — the altar
+      // addition rides the ritual system and draws
+      // nothing in this loop, so the two coexist.
+      if (!record.additions.includes('workstation')) continue;
+      const wg = new THREE.Group();
+      wg.position.set(record.x, 0, record.z);
+      wg.add(box(1.1, 0.08, 0.8, 0x7a5a38, 0, 0.66, 0));
+      wg.add(box(0.25, 0.15, 0.2, 0x3a2818, 0.35, 0.775, 0));
+      group.add(wg);
+    }
+    for (const tent of this.tents) {
+      // A-frame tent (camping branch): triangular prism
+      // (3-segment cylinder, axis rotated horizontal) in canvas,
+      // dark door triangle on the +Z end, ground sheet under.
+      // Prism radius 0.8 → 1.2 m tall (vertex-up after
+      // rotation.x = -PI/2), 2 m long, ~1.39 m wide; centre
+      // y 0.4 puts the flat side on the ground (triangle
+      // vertices span -0.4..+0.8 rel. centre). No heading:
+      // every tent faces +Z.
+      const tg = new THREE.Group();
+      tg.position.set(tent.x, 0, tent.z);
+      const prism = cyl(0.8, 0.8, 2, 0x8a7a5a, 0, 0.4, 0, 3);
+      prism.rotation.x = -Math.PI / 2;
+      tg.add(prism);
+      const doorShape = new THREE.Shape();
+      doorShape.moveTo(-0.45, 0);
+      doorShape.lineTo(0.45, 0);
+      doorShape.lineTo(0, 0.9);
+      doorShape.closePath();
+      const door = new THREE.Mesh(new THREE.ShapeGeometry(doorShape), lambert(0x2a2018));
+      door.position.set(0, 0.05, 1.01);
+      tg.add(door);
+      tg.add(box(1.6, 0.02, 2.2, 0x6a5a3a, 0, 0.01, 0));
+      group.add(tg);
     }
     this.scene.add(group);
     this.placedGroup = group;

@@ -507,24 +507,25 @@
  *   'stump' is the kind passed; the component maps all three
  *   brief-named kinds (stump / workstation / Stumpy) so the
  *   title follows from a prop when presence learns kinds.
- * - INVENTORY DROP V1, LIVE (Adam, 2026-10-26 — "for next
- *   pass"): every personal inventory row gains a Drop button
- *   (storage rows never get one). One item per press, dropped
- *   at her feet as a ground pile in the same pile system as
- *   overflow — merges by item at the same spot, pick-up-able
- *   later via the pile USE trigger. Shell wiring: Systems'
- *   dropFromInventory(item, 1) validates + removes, then the
- *   shell hands the record to pileState.drop() (no
- *   pileState.spawn exists; drop() is the spawn equivalent
- *   and emits pile:dropped for tracker + renderer). A failed
- *   drop leaves the inventory exact (Systems builds the
- *   record before removing; remove() throws before mutating).
- *   Dropped piles ride the pending pile save wiring; no
- *   separate save handling invented. Worn garments drop
- *   without unwearing (mirroring deposit: bonus self-cancels
- *   at count 0, returns on pickup). Quantity choice: one per
- *   press, per the brief and Systems' V1 note — unless Adam
- *   corrects it.
+ * - INVENTORY DROP, LIVE (Adam, 2026-10-26 — "for next
+ *   pass", arrows 2026-10-28): every personal inventory
+ *   row gains ↓ drop-one + ↓↓ drop-all arrows (storage
+ *   rows never get one), both dropped at her feet as a
+ *   ground pile in the same pile system as overflow —
+ *   merges by item at the same spot, pick-up-able later
+ *   via the pile USE trigger. Shell wiring: Systems'
+ *   dropFromInventory(item, quantity) validates + removes,
+ *   then the shell hands the record to pileState.drop()
+ *   (no pileState.spawn exists; drop() is the spawn
+ *   equivalent and emits pile:dropped for tracker +
+ *   renderer). A failed drop leaves the inventory exact
+ *   (Systems builds the record before removing; remove()
+ *   throws before mutating). Dropped piles ride the
+ *   pending pile save wiring; no separate save handling
+ *   invented. Worn-gear rows never reach the Drop arrows
+ *   (worn-gear landing); carried-unworn garments drop
+ *   without unwearing (mirroring deposit: bonus
+ *   self-cancels at count 0, returns on pickup).
  * - BELOW-PERMIT WORDING, LIVE (Adam, 2026-10-26 — "below
  *   permit" too vague): a below-permit harvest failure now
  *   reads "Needs {Tool}." (e.g. downed oak → "Needs
@@ -579,7 +580,7 @@
  *   brief): the shell gates its timers on 'game:pause-changed'
  *   via a pausedRef (intervals/rAF close over the ref, never
  *   state) + a paused state driving a small "Paused" badge
- *   (new PausedIndicator, bottom-centre above the LocationChip,
+ *   (new PausedIndicator, viewport-centred,
  *   pointer-events-none, badge only). Gated: the 1 s hunger
  *   timer (hunger.tick + advanceLighting + Systems fire ticks
  *   — the 25 s friction wait no longer flips to 'ready'
@@ -836,7 +837,7 @@
  *   out (Esc-to-close-panels-first is a follow-up if Adam
  *   wants it). INDICATOR: "Esc — Options" (wording draft
  *   for Adam's pin pass), bottom-right — seed controls
- *   own bottom-left, the LocationChip owns bottom-centre,
+ *   own bottom-left, the readout chip sits in the top row,
  *   bottom-right is free. Desktop only (hidden on touch:
  *   no Esc key there, the visible Options control is
  *   already the touch path); hidden while any modal is
@@ -1062,10 +1063,9 @@
  *   along-course projection; ponds scanned from
  *   generateChunk scatter in the 3x3 chunks around her,
  *   radius 4.5 × scale (mirrors the renderer's pond
- *   disc). Placement: bottom-centre above the
- *   LocationChip, the PausedIndicator's seat — the two
- *   never show together (Scry hides while paused);
- *   hidden with any panel/modal open, like the
+ *   disc). Placement: bottom-centre, the PausedIndicator's
+ *   seat — the two never show together (Scry hides while
+ *   paused); hidden with any panel/modal open, like the
  *   LocationChip. 44 px, same family as the pile
  *   button; touch + desktop identical (parity). The
  *   button IS the magic signal — no tutorial popup.
@@ -1431,10 +1431,9 @@
  *   8-point compass from the fact's unit vector
  *   under the compass pin (East +x, North −z),
  *   whole meters rounded for display only (the
- *   fact's float is the truth). Seat: bottom-centre
- *   above the LocationChip, hidden with any panel/
- *   modal open or paused; when the scry button is
- *   also showing, the hint lifts above it so the two
+ *   fact's float is the truth). Seat: bottom-centre,
+ *   hidden with any panel/modal open or paused; when
+ *   the scry button is also showing, the hint lifts above it so the two
  *   never stack on one seat. Parity: shared, touch +
  *   desktop alike.
  * - GROUNDHOG WIRING + SNAKE FACTOR, LIVE (Systems
@@ -1526,6 +1525,8 @@ import { bus, type EventMap } from './game/events';
 import { pauseState } from './game/pause';
 import {
   createHarvestOutcomeListener,
+  hivePositions,
+  placedTorchNearHive,
   setMoleEarthSense,
   stationPresence,
   stumpPositions,
@@ -1541,8 +1542,19 @@ import {
 import { loomState } from './game/loomState';
 import { pileState, type PileTarget } from './game/pileState';
 import { HARVEST_RANGE } from './game/proximity';
-import { trapState } from './game/trapState';
+import { trapState, type PlacedTrap } from './game/trapState';
+import { stumpState, type StumpAddition } from './game/stumpState';
+import { TRAP_DEFS } from './game/traps';
+import { biomePresentKinds } from './game/animals';
+import {
+  collectTrapCatch,
+  catchItemFor,
+  eligibleKindsFor,
+  resolveTrapHour,
+} from './systems/trap-catch';
 import type { TrapType } from './game/traps';
+import { placeTent, pickupTent } from './systems/camping';
+import { harvestHoney } from './systems/honey';
 import { harvestState } from './game/harvestState';
 import { SOURCE_BY_ID, type ToolTier } from './game/objects';
 import type { FireType } from './game/fire';
@@ -1551,6 +1563,8 @@ import {
   shelterState,
   shelterAt,
   HOUSE_DEFS,
+  HOUSE_LADDER,
+  SHELTER_RADIUS,
   type HouseType,
 } from './game/shelter';
 import {
@@ -1575,7 +1589,7 @@ import {
   BEHIND_LOOK_HEIGHT,
 } from './constants';
 import type { CameraMode, BiomeWeights } from './types';
-import { Wardrobe, GARMENTS } from './systems/clothes';
+import { Wardrobe, GARMENTS, WORN_CAPACITY_BONUS } from './systems/clothes';
 import {
   carriesUmbrella,
   UMBRELLA_PRECIPITATION_PROTECTION,
@@ -1591,8 +1605,10 @@ import { UmbrellaIcon } from './ui/UmbrellaIcon';
 import { FireState, type FireChipStatus } from './ui/FireState';
 import { PlacementPreview } from './ui/PlacementPreview';
 import { ContextMenu } from './ui/ContextMenu';
+import { PileInventoryModal } from './ui/PileInventoryModal';
 import { PileChip } from './ui/PileChip';
 import { TorchChip } from './ui/TorchChip';
+import { TentChip } from './ui/TentChip';
 import { AltarChip } from './ui/AltarChip';
 import type { ContextAction } from './ui/types';
 import { TouchControls } from './ui/TouchControls';
@@ -1674,7 +1690,7 @@ import {
   emptyQuestFlags,
   type QuestFlags,
 } from './systems/quests';
-import { canCraft } from './systems/crafting';
+import { canCraft, CRAFT_OWNERSHIP_LABELS } from './systems/crafting';
 import {
   ITEMS,
   RECIPES,
@@ -1816,6 +1832,7 @@ const PLACEABLE_IDS: ReadonlySet<string> = new Set([
   ITEMS.loom,
   ITEMS.litTorch,
   ITEMS.altar,
+  ITEMS.tent,
 ]);
 
 const FIRE_NAME: Record<FireType, string> = {
@@ -2082,7 +2099,17 @@ function toInventoryItem(
     // Phrases are DRAFT (bone-charms doc, not pins),
     // flagged for Adam's pin pass. Non-bone stacks
     // keep no note.
+    //
+    // BAG ROW (tent shell, 2026-10-28): the sleeping
+    // bag's row carries its category as its note —
+    // 'Bedding' (PROPOSED copy). The bag is carried
+    // passive bedding (umbrella precedent: no equip,
+    // no use-action), and this note is its V1 marker —
+    // the fiction that she carries bedding, visible
+    // wherever the inventory shows. No number attaches
+    // (no cold/exposure-during-sleep model exists yet).
     note: (() => {
+      if (stack.item === ITEMS.sleepingBag) return 'Bedding';
       const kind = boneKindFor(normalizeItemId(stack.item));
       return kind === null ? undefined : boneNote(kind, charms);
     })(),
@@ -2199,18 +2226,22 @@ export default function App() {
   // split says night at the world's fixed start month.
   const [isNight, setIsNight] = useState(false);
 
-  // SLEEP (Adam, 2026-10-27): the button renders only when
-  // sheltered AND night (see the ShelteredIndicator wiring
-  // below) — daytime shows no Sleep control. The press emits
-  // the sleep request { x, z } — her position at press time
-  // — that the engine's sleep listener acts on: it checks
-  // night, then shelter (from the position), and jumps the
-  // sky to dawn, time-only, no restore. The one listener
-  // lives in the boot effect below (createSleepListener);
+  // SLEEP (Adam, 2026-10-28 — moved): Rest lives in the
+  // home menu, not the shelter indicator (the indicator
+  // button sat far left where it went unnoticed; the menu
+  // is where Rest belongs). The menu's Rest row runs
+  // handleSleep unchanged: it emits the sleep request
+  // { x, z } — her position at press time — that the
+  // engine's sleep listener acts on: it checks night,
+  // then shelter (from the position), and jumps the sky
+  // to dawn, time-only, no restore. The one listener lives
+  // in the boot effect below (createSleepListener);
   // outcomes 'sleep:completed'/'sleep:failed' need no UI
-  // action — the dawn jump hides the button via the night
+  // action — the dawn jump disables the row via the night
   // gate, and failures show nothing per the brief's
-  // no-invented-text rule.
+  // no-invented-text rule. Daytime shows the row disabled
+  // with a "Night only" note; the menu stays open after
+  // a Rest press.
   const handleSleep = (): void => {
     const player = playerRef.current;
     if (!player) return;
@@ -2231,6 +2262,7 @@ export default function App() {
   const homeStoreItemsRef = useRef(new Map<string, Set<string>>());
   const [eatNote, setEatNote] = useState<string | null>(null);
   const [torchNote, setTorchNote] = useState<string | null>(null);
+  const [tentNote, setTentNote] = useState<string | null>(null);
   const [altarNote, setAltarNote] = useState<string | null>(null);
   const [fireNote, setFireNote] = useState<string | null>(null);
   const [dropNote, setDropNote] = useState<string | null>(null);
@@ -2310,6 +2342,16 @@ export default function App() {
   // handlePileAction). Ref mirrors state so the
   // first-render recomputeAnchors closure sees piles fresh.
   const [piles, setPiles] = useState<PileTarget[]>([]);
+  // TRAP ROW (Adam, 2026-10-28): live placed-trap
+  // snapshot, re-read on trap events (placed / catch /
+  // hour-roll) and on collection. The row derivation
+  // below filters this by range per render.
+  const [traps, setTraps] = useState<PlacedTrap[]>(() =>
+    trapState.snapshot(),
+  );
+  const refreshTrapsFromState = () => {
+    setTraps(trapState.snapshot());
+  };
   const pilesRef = useRef<PileTarget[]>([]);
   // Harvest outcome feedback + multi-step progress, rendered
   // through WorldAnchor + ObjectFeedback / InteractionProgress.
@@ -2349,6 +2391,55 @@ export default function App() {
     { torch: PlacedTorchEntity; x: number; y: number }[]
   >([]);
   const [selectedTorchId, setSelectedTorchId] = useState<string | null>(null);
+  // PLACED TENTS (tent shell, 2026-10-28 — interim
+  // shell store, NOT Background's entity: Background's
+  // placed-tent entity + renderer.setTents setter have
+  // not landed yet, so the shell holds placed tents
+  // itself until the follow-up wiring hands them over.
+  // Records carry shell ids (tent:<n> scheme, trap
+  // precedent: new places take max suffix + 1; restored
+  // id-less entries take tent:boot-<index>, which
+  // cannot collide with tent:<n>). Multiples allowed,
+  // two tents at one spot are two entries (save.ts
+  // rule). Lazy init from bootSave (finite coords
+  // only); the ref mirror keeps recomputeAnchors fresh
+  // (pilesRef pattern) — every mutation goes through
+  // updatePlacedTents, never setPlacedTents alone.
+  // NOT a HouseType: no storage, no upgrade pill, no
+  // home chip, no FIND CAMP camp (camps = houses).
+  // Shelter effect is NOT live here (0.85 DRAFT rides
+  // Background's tent-aware shelter branch, still to
+  // land) — the chip claims no shelter state.
+  const [placedTents, setPlacedTents] = useState<
+    { id: string; x: number; z: number }[]
+  >(() =>
+    (bootSave?.tents ?? [])
+      .filter((tent) => Number.isFinite(tent.x) && Number.isFinite(tent.z))
+      .map((tent, index) => ({
+        id: tent.id ?? `tent:boot-${index}`,
+        x: tent.x,
+        z: tent.z,
+      })),
+  );
+  const placedTentsRef = useRef(placedTents);
+  const updatePlacedTents = (next: { id: string; x: number; z: number }[]) => {
+    placedTentsRef.current = next;
+    setPlacedTents(next);
+    // RENDERER SYNC (setTents wiring, 2026-10-28): the
+    // renderer holds no tent state — the shell is the
+    // source of truth and pushes its list on every
+    // mutation (place / pickup / regenerate-clear).
+    // The push rebuilds the placed group immediately
+    // and nudges the proximity tracker, so the shelter
+    // signal updates at once. Null-safe: the renderer
+    // does not exist before boot constructs it, and
+    // mutations run only after boot.
+    rendererRef.current?.setTents(next.map((tent) => ({ x: tent.x, z: tent.z })));
+  };
+  const [tentAnchors, setTentAnchors] = useState<
+    { tent: { id: string; x: number; z: number }; x: number; y: number }[]
+  >([]);
+  const [selectedTentId, setSelectedTentId] = useState<string | null>(null);
   // Placed altars (Background singleton, read fresh on every
   // event) and their projected anchors — the torch pattern
   // minus the menu: the altar chip is label-only (no ritual
@@ -2611,6 +2702,7 @@ export default function App() {
     { pile: PileTarget; x: number; y: number }[]
   >([]);
   const [selectedPileId, setSelectedPileId] = useState<string | null>(null);
+  const [homeMenuOpen, setHomeMenuOpen] = useState(false);
   const selectedPileIdRef = useRef<string | null>(null);
   const [placement, setPlacement] = useState<PlacementMode | null>(null);
   const [placementAnchor, setPlacementAnchor] = useState<{
@@ -2762,6 +2854,25 @@ export default function App() {
           // filtering; serializeSave writes them verbatim and
           // trapState.restore() validates on load).
           traps: trapState.snapshot(),
+          // TENT SAVE WIRING (tent shell, 2026-10-28):
+          // the shell's placed-tent set rides every save
+          // (x + z + shell id verbatim; serializeSave
+          // writes them verbatim and deserialize passes
+          // them through — the shell validates finite
+          // coords at boot). Without this, placed tents
+          // vanish on reload.
+          tents: placedTentsRef.current.map((tent) => ({
+            x: tent.x,
+            z: tent.z,
+            id: tent.id,
+          })),
+          // STUMP SAVE WIRING (stumpy shell, 2026-10-28):
+          // the live stump-addition set rides every save
+          // (snapshot as-is — site ids + coords + additions
+          // verbatim; serializeSave writes them verbatim
+          // and stumpState.restore() validates on load).
+          // Without this, upgrades vanish on reload.
+          stumps: stumpState.snapshot(),
           // PLACED-TORCH SAVE WIRING: the live placed-torch
           // set rides every save as-is (ids + positions
           // verbatim; serialize writes ids when present,
@@ -2904,6 +3015,20 @@ export default function App() {
       torches.push({ torch, x: anchor.x, y: anchor.y });
     }
     setTorchAnchors(torches);
+    // Placed tents (tent shell): the shell store, not
+    // an entity — read from the ref mirror (fresh),
+    // same skip-null rule as torches.
+    const tents: {
+      tent: { id: string; x: number; z: number };
+      x: number;
+      y: number;
+    }[] = [];
+    for (const tent of placedTentsRef.current) {
+      const anchor = projectAnchor(tent.x, tent.z, 'scatter');
+      if (!anchor) continue;
+      tents.push({ tent, x: anchor.x, y: anchor.y });
+    }
+    setTentAnchors(tents);
     const altars: { altar: PlacedAltarEntity; x: number; y: number }[] = [];
     for (const altar of altarState.snapshot()) {
       const anchor = projectAnchor(altar.x, altar.z, 'scatter');
@@ -3071,6 +3196,20 @@ export default function App() {
           (bootSaved.traps ?? []).map((trap) => ({
             ...trap,
             type: trap.type as TrapType,
+          })),
+        );
+        // STUMP SAVE WIRING (stumpy shell, 2026-10-28):
+        // same restore-before-first-build pattern as
+        // traps — stumpState.restore() is silent and
+        // validates (drops non-member additions), so a
+        // bad stump record can never corrupt the
+        // document. Old saves carry no stumps field and
+        // load [] (fresh state is already empty, so the
+        // clear inside restore() is a no-op there).
+        stumpState.restore(
+          (bootSaved.stumps ?? []).map((stump) => ({
+            ...stump,
+            additions: stump.additions as StumpAddition[],
           })),
         );
         // WORLD-STATE SAVE WIRING (fires + harvest, same
@@ -3351,6 +3490,17 @@ export default function App() {
       shelterAt(player.x, player.z, shelterState.snapshot()).houseId,
     );
     recomputeAnchors();
+    // TENT BOOT RE-SUPPLY (setTents wiring): the
+    // renderer was just constructed with an empty tent
+    // list, and setWorldGen is not called on boot — so
+    // the shell pushes its restored tents now (the
+    // renderer's own contract: setTents on boot
+    // restore). Without this, reloaded tents would
+    // have chips + save entries but no model and no
+    // shelter signal.
+    rendererRef.current?.setTents(
+      placedTentsRef.current.map((tent) => ({ x: tent.x, z: tent.z })),
+    );
 
     const offCamera = bus.on('camera:switched', ({ mode }) => {
       setCameraMode(mode);
@@ -3554,6 +3704,41 @@ export default function App() {
     });
     const offFirePlaced = bus.on('fire:placed', refreshFires);
     const offFireLighting = bus.on('fire:lighting', refreshFires);
+    // TRAP ROW (Adam, 2026-10-28): the shell owns trap
+    // rolls + row refresh. 'trap:catch' (emitted by
+    // setCatch, the shell's only catch writer) re-reads
+    // the snapshot + saves; 'trap:placed' re-reads for a
+    // newly placed trap; 'trap:hour' rolls every
+    // still-empty placed trap (uncaught-only, per emit —
+    // a mid-burst catch skips later emits in the same
+    // burst, since setCatch updates the trap at once).
+    // Eligible kinds = the trap's set ∩ biome-present
+    // kinds at the TRAP's position (the shell calls
+    // eligibleKindsFor directly — no new Systems
+    // function). Rolls use the trap's baited flag
+    // (always false until a baiting landing adds one).
+    const offTrapCatch = bus.on('trap:catch', () => {
+      refreshTrapsFromState();
+      saveNow();
+    });
+    const offTrapPlaced = bus.on('trap:placed', () => {
+      refreshTrapsFromState();
+    });
+    const offTrapHour = bus.on('trap:hour', () => {
+      const gen = genRef.current;
+      if (!gen) return;
+      for (const trap of trapState.snapshot()) {
+        if (trap.catch !== null) continue;
+        const eligible = eligibleKindsFor(
+          trap.type,
+          biomePresentKinds((x, z) => gen.weightsAt(x, z), trap.x, trap.z),
+        );
+        const outcome = resolveTrapHour(eligible, trap.baited);
+        if (outcome.caught) {
+          trapState.setCatch(trap.id, outcome.kind);
+        }
+      }
+    });
     const offFireLit = bus.on('fire:lit', refreshFires);
     const offTorchPlaced = bus.on('torch:placed', refreshTorches);
     const offTorchRemoved = bus.on('torch:removed', refreshTorches);
@@ -3782,6 +3967,9 @@ export default function App() {
       offProgress();
       offFirePlaced();
       offFireLighting();
+      offTrapCatch();
+      offTrapPlaced();
+      offTrapHour();
       offFireLit();
       offTorchPlaced();
       offTorchRemoved();
@@ -3848,6 +4036,14 @@ export default function App() {
     renderer.setWorldGen(gen);
     setSeed(nextSeed);
     setPosition({ x: spawn.x, z: spawn.z });
+    // A new world clears placed tents: setWorldGen
+    // already cleared the renderer's list, and the
+    // shell store clears with it — or chips + save
+    // would keep old-world tents alive in the new
+    // world. The clear syncs to the renderer via
+    // updatePlacedTents (setTents([])); the next
+    // saveNow persists the empty list.
+    updatePlacedTents([]);
     // A new world clears the scry reveal (new camps, new water).
     divinationRef.current.dismiss();
     renderer.setCampArrowsVisible(false);
@@ -3925,6 +4121,31 @@ export default function App() {
     }
     if (!nearest) return null;
     return projectAnchor(nearest.x, nearest.z, 'scatter');
+  })();
+  // NEAREST STUMP (stumpy shell, 2026-10-28): the FACED
+  // stump for the workstation upgrade — nearest record
+  // from stumpPositions, UNPROJECTED, stump-only (no loom
+  // fallback: a loom cannot be upgraded). NEAREST-ONLY,
+  // no cone: the recipe gate is workstation PRESENCE,
+  // not facing — standing at a plain stump facing away
+  // must not refuse an upgrade the recipe allows. Shared
+  // by the executeCraftNow branch, the mapping guard,
+  // and the press-refuse backstop, so the three cannot
+  // disagree. stumpPositions returns in-range records
+  // (HARVEST_RANGE), so no extra range filter here.
+  // Ties → first in stumpPositions order (strict <),
+  // mirroring the stationAnchor loop above.
+  const nearestStump = (() => {
+    let nearest: { x: number; z: number } | null = null;
+    let nearestD = Infinity;
+    for (const s of stumpPositions(genRef.current, position.x, position.z)) {
+      const d = Math.hypot(s.x - position.x, s.z - position.z);
+      if (d < nearestD) {
+        nearestD = d;
+        nearest = s;
+      }
+    }
+    return nearest;
   })();
   // Quest Log display (2026-10-28): derived on every render
   // from live state — no cached copy, no polling — so the tab
@@ -4050,6 +4271,21 @@ export default function App() {
         amountText: `${inventory.count(requirement.item)} / ${requirement.quantity} (kept, not used up)`,
       });
     }
+    // STUMPY DOUBLE-UPGRADE GUARD (shell-side, Adam
+    // 2026-10-28 — Systems cannot read anchor state):
+    // an upgradesStump recipe whose faced stump already
+    // carries the workstation addition disables + labels,
+    // overriding Systems' mapping. The label replaces
+    // the availability note via the no-recraft render
+    // (disabledLabel set → note not rendered). No stump
+    // in range → the station gate above already failed;
+    // the override needs a target, so it does not fire.
+    // Systems' canCraft is UNCHANGED — this is a shell
+    // mapping override only.
+    const stumpAlreadyWorkbench =
+      recipe.upgradesStump === true &&
+      nearestStump !== null &&
+      stumpState.isWorkbench(nearestStump.x, nearestStump.z);
     return {
       id: recipe.id,
       name: recipe.name,
@@ -4065,7 +4301,27 @@ export default function App() {
         })),
         ...dependencyRows,
       ],
-      canCraft: check.ok,
+      canCraft: stumpAlreadyWorkbench
+        ? false
+        : check.ok && check.ownership === 'available',
+      // NO-RECRAFT BINDING (Adam, 2026-10-28 — Systems owns
+      // the rule, the shell renders it): Systems' check.ok
+      // already folds ownership in (ok is false when
+      // ownership is not 'available'), so the && above is
+      // belt-and-braces, behavior-identical today — it
+      // makes the mapping literal: owned/superseded →
+      // canCraft false. The label is Systems' pinned word,
+      // rendered verbatim under the name; it replaces the
+      // availability note. The direct-upgrade exception
+      // lives in Systems' status (same-stage upgradeFrom
+      // stays available), so garden → sharp never lands
+      // here — if it ever did, the STATUS would be wrong,
+      // not this render.
+      disabledLabel: stumpAlreadyWorkbench
+        ? 'Already a Workbench'
+        : check.ownership === 'available'
+          ? undefined
+          : CRAFT_OWNERSHIP_LABELS[check.ownership],
       availabilityNote,
       icon:
         recipe.output.item === UMBRELLA_ITEM_ID ? (
@@ -4074,18 +4330,34 @@ export default function App() {
     };
   });
 
+  // NO-RECRAFT ORDER (Adam, 2026-10-28): one stable
+  // partition of the full list — available recipes first
+  // in current order, owned/superseded last in current
+  // order. The section filters below preserve relative
+  // order, so this IS the per-section stable partition
+  // (within-section only, no re-sort); section order +
+  // accordion unchanged, and disabled rows stay visible
+  // when their section is expanded (never hidden). The
+  // flat menu prop rides the same order. Header counts
+  // read canCraft, so an all-disabled section renders
+  // "0 of N craftable" with its rows visible on expand.
+  const orderedCraftingRecipes = [
+    ...craftingRecipes.filter((recipe) => recipe.canCraft),
+    ...craftingRecipes.filter((recipe) => !recipe.canCraft),
+  ];
+
   // CRAFTING GROUPS: sections in DEV's group order, each filtered
   // from the recipe-ordered menu rows above (never re-sorted);
   // empty groups dropped here, and the menu drops them again
   // defensively. Unmapped recipes (none today — all 38 map)
   // trail under "Other" instead of vanishing.
-  const ungroupedRecipes = craftingRecipes.filter(
+  const ungroupedRecipes = orderedCraftingRecipes.filter(
     (recipe) => CRAFTING_GROUP_BY_RECIPE_ID[recipe.id] === undefined,
   );
   const craftingSections = [
     ...CRAFTING_GROUP_ORDER.map((title) => ({
       title,
-      recipes: craftingRecipes.filter(
+      recipes: orderedCraftingRecipes.filter(
         (recipe) => CRAFTING_GROUP_BY_RECIPE_ID[recipe.id] === title,
       ),
     })).filter((section) => section.recipes.length > 0),
@@ -4116,6 +4388,22 @@ export default function App() {
     const recipe = RECIPES.find((candidate) => candidate.id === recipeId);
     if (!recipe) return;
     const ownedBefore = ownedToolItem(inventory);
+    // STUMPY PRESS-REFUSE BACKSTOP (shell-side guard):
+    // an upgradesStump press at an already-workbench
+    // stump refuses BEFORE executeCraft — consumption
+    // lives inside executeCraft, so a branch-only guard
+    // would be too late (materials already gone).
+    // Nothing consumed, no refresh, no save: plain
+    // return. Shares nearestStump with the mapping
+    // guard, so the two cannot disagree.
+    if (
+      recipe.upgradesStump === true &&
+      nearestStump !== null &&
+      stumpState.isWorkbench(nearestStump.x, nearestStump.z)
+    ) {
+      setCraftNote('This stump is already a workbench.');
+      return;
+    }
     try {
       const result = executeCraft(
         recipe,
@@ -4138,11 +4426,32 @@ export default function App() {
           position.z,
         );
       }
+      // STUMPY BRANCH (same single-caller rule): Systems
+      // reports upgradedStump {type} and never transforms
+      // — the SHELL transforms, here, via Background's
+      // anchor primitive on the FACED stump (nearestStump,
+      // NOT the projected anchor, NOT the player position).
+      // The output item is NOT granted (feedback naming
+      // only). The renderer rebuilds on the
+      // 'stump:upgraded' emit, so no shell refresh call
+      // is needed. False = already a workbench (the
+      // backstop above makes this unreachable in practice;
+      // the note below stays honest if it ever fires).
+      let stumpUpgraded = false;
+      if (result.upgradedStump) {
+        stumpUpgraded =
+          nearestStump !== null &&
+          stumpState.upgradeStump(nearestStump.x, nearestStump.z);
+      }
       setOwnedItem(result.owned);
       setCraftNote(
         result.placedTrap
           ? `Placed ${displayNameFor(result.output.item)} here.`
-          : `Crafted ${result.output.item} × ${result.output.quantity}.` +
+          : result.upgradedStump
+            ? stumpUpgraded
+              ? 'This stump is now a workbench.'
+              : 'This stump is already a workbench.'
+            : `Crafted ${result.output.item} × ${result.output.quantity}.` +
               (result.owned !== ownedBefore
                 ? ` Owned tool is now ${result.owned}.`
                 : ''),
@@ -4189,6 +4498,85 @@ export default function App() {
     // the feedback. Nothing here grants, counts, or previews an
     // outcome ahead of those events.
     bus.emit('harvest:requested', request);
+  };
+
+  // TRAP COLLECT (Adam, 2026-10-28): ONE collect
+  // request per press (trap id). Caught → Systems
+  // grants the carcass (pack-full → catch STAYS,
+  // pile-grant precedent) and the shell clears the
+  // catch (setCatch emits 'trap:catch' → row re-reads
+  // + saves; this handler refreshes the inventory +
+  // pills the outcome + re-reads traps, covering the
+  // no-emit edge). Empty → "Nothing caught yet."
+  // (no Systems call — nothing to collect). The trap
+  // stays placed and re-catches; the label flips on
+  // the next render. Feedback copy is proposed, not
+  // pinned ("Caught {kind}!" / "Nothing caught yet.");
+  // the pack-full note is the established pile-take
+  // wording, filling a gap the claim left unnamed.
+  const handleCollectTrap = (trapId: string) => {
+    const trap = trapState.get(trapId);
+    if (!trap || trap.catch === null) {
+      sayAt(
+        trap?.x ?? playerRef.current?.x ?? 0,
+        trap?.z ?? playerRef.current?.z ?? 0,
+        'Nothing caught yet.',
+        'info',
+      );
+      return;
+    }
+    const kind = trap.catch;
+    const outcome = collectTrapCatch(inventory, kind);
+    if (outcome.collected === false) {
+      const carcass = catchItemFor(kind);
+      sayAt(
+        trap.x,
+        trap.z,
+        outcome.reason === 'Pack full.'
+          ? `Pack full — no room for ${carcass ? displayNameFor(carcass) : kind}.`
+          : outcome.reason,
+        'blocked',
+      );
+      return;
+    }
+    trapState.setCatch(trapId, null);
+    refreshTrapsFromState();
+    refreshInventory();
+    sayAt(trap.x, trap.z, `Caught ${kind}!`, 'gain');
+  };
+
+  // HIVE HARVEST (Adam, 2026-10-28): ONE harvest per
+  // press (hive coords — hives carry no ids). Too-hungry
+  // refuses at the interaction layer (Systems owns no
+  // hunger gate in harvestHoney): the honest error,
+  // not a silent no-op (the engine's own 'Harvest
+  // failed: too-hungry.' wording), and NO Systems call.
+  // Else Systems' harvestHoney decides: torch-first
+  // refusal verbatim, pack-full expanded trap-style,
+  // success grants + refreshes + saves. The hive stays
+  // in both refusal cases (no depletion, repeatable) —
+  // no hive state to re-read (world-gen, not state),
+  // so a repeat press re-tries.
+  const handleHarvestHive = (x: number, z: number) => {
+    if (hungerStage === 'too-hungry') {
+      sayAt(x, z, 'Harvest failed: too-hungry.', 'blocked');
+      return;
+    }
+    const outcome = harvestHoney(inventory, placedTorchNearHive(x, z));
+    if (outcome.granted === 1) {
+      refreshInventory();
+      saveNow();
+      sayAt(x, z, 'Harvested honey!', 'gain');
+      return;
+    }
+    sayAt(
+      x,
+      z,
+      outcome.reason === 'Pack full.'
+        ? `Pack full — no room for ${displayNameFor(ITEMS.honey)}.`
+        : (outcome.reason ?? 'Harvest failed.'),
+      'blocked',
+    );
   };
 
   const handleWear = (garment: WornGarment) => {
@@ -4246,6 +4634,47 @@ export default function App() {
     refreshInventory();
     saveNow();
     setTorchNote('Placed a lit torch.');
+  };
+
+  // PLACED TENT (tent shell, 2026-10-28 — torch
+  // mirror: one press places one tent at her feet,
+  // no placement mode, no ghost). Grant FIRST
+  // (Systems placeTent consumes one carried tent;
+  // failure touches nothing), then the shell record
+  // (Background's placed-tent entity has not landed
+  // yet — the record lives in the shell store until
+  // the follow-up setTents wiring hands it over).
+  // Panel action, not a world action: the panel stays
+  // open, the count drops, the note carries the
+  // result — the torch Place shape. No hunger gate
+  // (a move, like drop/pickup). No paused guard
+  // (torch place has none either).
+  const handlePlaceTent = () => {
+    const player = playerRef.current;
+    if (!player) return;
+    const outcome = placeTent(inventory, player.x, player.z);
+    // Equality check, not truthiness: non-strict tsc does
+    // not narrow this union's boolean discriminant on
+    // truthiness (see the torch Light button handler).
+    if (outcome.placed === false) {
+      setTentNote(outcome.reason);
+      return;
+    }
+    // Shell id: max tent:<n> suffix + 1 (trap
+    // precedent — recomputed, never a stored counter,
+    // so restores cannot collide it).
+    const maxSuffix = placedTentsRef.current.reduce((max, tent) => {
+      const match = /^tent:(\d+)$/.exec(tent.id);
+      return match ? Math.max(max, Number(match[1])) : max;
+    }, 0);
+    updatePlacedTents([
+      ...placedTentsRef.current,
+      { id: `tent:${maxSuffix + 1}`, x: outcome.tent.x, z: outcome.tent.z },
+    ]);
+    refreshInventory();
+    saveNow();
+    recomputeAnchors();
+    setTentNote('Placed a tent.');
   };
 
   // PLACED ALTAR (settled lean — instant at her feet, the
@@ -4549,6 +4978,16 @@ export default function App() {
       handlePlaceAltar();
       return;
     }
+    // Placed tents never enter the preview flow either —
+    // the torch mirror: one press places one tent at her
+    // feet (camping.ts: "one press places one tent").
+    // No placement mode (the preview ghost is the
+    // house/fire pattern, heavy for a site placed where
+    // she stands).
+    if (itemId === ITEMS.tent) {
+      handlePlaceTent();
+      return;
+    }
     // Single-tap campfire (Adam, 2026-10-28): Place places at
     // her feet immediately — no placement mode, no ghost, no
     // "Place here" panel. Hearth/kiln/bloomery keep the
@@ -4646,6 +5085,70 @@ export default function App() {
     setPlacement(null);
     setPlacementAnchor(null);
     setPlacementNote(null);
+  };
+
+  // HOUSE-UPGRADE PRESS (Adam, 2026-10-28): mirrors
+  // handlePlaceConfirm (cost gate → act → consume →
+  // clear mode → refresh + save; catch → note, mode
+  // stays) with shelterState.upgradeHouse in place
+  // of placeHouse. setHouse ONLY if a store already
+  // exists (homeStoresRef.current.get — deliberately
+  // NOT getHomeStore, which lazy-creates: a
+  // never-deposited house needs no update, and a
+  // future first deposit creates its store from the
+  // new type — DEV-accepted refinement over the
+  // primitive doc's getHomeStore wording). Contents
+  // ride the preserved id (stores keyed by id;
+  // save/restore by id/order — nothing moves or
+  // drops). House visuals ride the primitive + the
+  // existing house render path (no new subscription
+  // — press-driven refresh covers it; the primitive
+  // emits 'shelter:upgraded', camp arrows are NOT
+  // subscribed). False from upgradeHouse (shouldn't
+  // happen — the pill shows only for upgradeable)
+  // → failure: note + mode stays.
+  const handleUpgradePress = (target: NonNullable<typeof upgradePill>) => {
+    const mode = placementRef.current;
+    if (!mode) return;
+    const player = playerRef.current;
+    if (!player) return;
+    if (inventory.count(mode.itemId) < 1) {
+      setPlacementNote(
+        'Nothing to place — that item is no longer carried.',
+      );
+      placementRef.current = null;
+      setPlacement(null);
+      setPlacementAnchor(null);
+      return;
+    }
+    try {
+      const upgraded = shelterState.upgradeHouse(
+        target.houseId,
+        target.carriedType,
+      );
+      if (!upgraded) {
+        setPlacementNote('That house cannot be upgraded.');
+        return;
+      }
+      homeStoresRef.current
+        .get(target.houseId)
+        ?.setHouse(HOUSE_TYPE_TO_ITEM[target.carriedType]);
+      inventory.remove(mode.itemId, 1);
+    } catch (error) {
+      setPlacementNote(
+        error instanceof Error ? error.message : 'Placement failed.',
+      );
+      return;
+    }
+    placementRef.current = null;
+    setPlacement(null);
+    setPlacementAnchor(null);
+    setPlacementNote(null);
+    if (shelterHouseId === target.houseId) {
+      applyShelterHouse(target.houseId);
+    }
+    refreshInventory();
+    saveNow();
   };
 
   const handleEatItem = (itemId: string) => {
@@ -4786,23 +5289,22 @@ export default function App() {
     saveNow();
   };
 
-  // INVENTORY DROP V1 (Adam, 2026-10-26 — "for next pass"):
-  // one item per press, dropped at her feet as a ground pile
-  // in the same pile system as overflow (merges by item at
-  // the same spot, pick-up-able later via the pile USE
-  // trigger). Systems validates + removes first — the pile
-  // record is built before the removal and remove() throws
-  // before mutating on insufficiency, so a failed drop leaves
-  // the inventory exactly as it was — then the shell hands
-  // the record to pileState.drop(), the spawn equivalent
-  // (no pileState.spawn exists; drop() creates/merges and
-  // emits pile:dropped for the tracker + renderer). Dropped
-  // piles ride the pending pile save wiring like overflow
-  // piles; no separate save handling is invented here.
-  // Worn garments drop like anything else (no unwear —
-  // mirroring deposit: the worn bonus already self-cancels
-  // when the carried count hits 0 via the setWorn re-sync,
-  // and returns if the garment is picked back up).
+  // INVENTORY DROP (Adam, 2026-10-26 — "for next pass",
+  // arrows 2026-10-28): ↓ drops one per press, ↓↓
+  // (handleDropAllItem) drops the live carried count —
+  // same feet destination, never retargeted into a pile.
+  // One item per press was the V1 UI calling convention,
+  // not a Systems limit: dropFromInventory takes quantity.
+  // The rest of the shape is unchanged (ground pile in
+  // the same pile system as overflow; Systems validates
+  // + removes first, so a failed drop leaves the
+  // inventory exactly as it was; then the shell hands
+  // the record to pileState.drop()). Worn-gear rows never
+  // reach the Drop arrows (worn-gear landing); a
+  // carried-unworn garment drops without unwearing (the
+  // worn bonus already self-cancels when the carried
+  // count hits 0 via the setWorn re-sync, and returns if
+  // the garment is picked back up).
   const handleDropItem = (itemId: string) => {
     const player = playerRef.current;
     if (!player) {
@@ -4815,6 +5317,40 @@ export default function App() {
       inventory.setWorn(wardrobe.wornItemIds());
       setWornGarments(wardrobe.wornGarments());
       setDropNote(`Dropped 1 ${displayNameFor(itemId)}.`);
+    } catch (error) {
+      setDropNote(
+        error instanceof Error ? error.message : 'Could not drop that.',
+      );
+    }
+    refreshInventory();
+    saveNow();
+  };
+
+  // INVENTORY DROP ALL (Adam, 2026-10-28 — arrows in the
+  // Inventory modal): the ↓↓ mate of handleDropItem —
+  // same flow, quantity = the live carried count, same
+  // feet destination (never retargeted into a pile).
+  // Note "Dropped {N} {name}." mirrors the one-drop note.
+  const handleDropAllItem = (itemId: string) => {
+    const player = playerRef.current;
+    if (!player) {
+      setDropNote('Could not drop that.');
+      return;
+    }
+    const quantity = inventory.count(itemId as ItemId);
+    if (quantity <= 0) return;
+    try {
+      const pile = dropFromInventory(
+        itemId,
+        quantity,
+        inventory,
+        player.x,
+        player.z,
+      );
+      pileState.drop(pile.item, pile.quantity, pile.x, pile.z);
+      inventory.setWorn(wardrobe.wornItemIds());
+      setWornGarments(wardrobe.wornGarments());
+      setDropNote(`Dropped ${quantity} ${displayNameFor(itemId)}.`);
     } catch (error) {
       setDropNote(
         error instanceof Error ? error.message : 'Could not drop that.',
@@ -5156,6 +5692,45 @@ export default function App() {
     recomputeAnchors();
   };
 
+  // TENT MENU ACTIONS (tent shell): Take down + Close —
+  // the torch menu's shape, over the shell store.
+  const tentMenuActions = (): ContextAction[] => [
+    { id: 'take-down', label: 'Take down' },
+    { id: 'close', label: 'Close' },
+  ];
+
+  const handleTentAction = (tentId: string, actionId: string) => {
+    const tent = placedTentsRef.current.find((t) => t.id === tentId);
+    if (!tent) return;
+    const anchor = tentAnchors.find((a) => a.tent.id === tentId) ?? null;
+    const say = (text: string, tone: FeedbackTone) => {
+      if (anchor) showFeedback(text, tone, anchor.x, anchor.y);
+    };
+    if (actionId === 'close') {
+      setSelectedTentId(null);
+      return;
+    }
+    if (actionId === 'take-down') {
+      // Grant FIRST, then the record removal — the
+      // pile-pickup rule (take granted only): a full
+      // pack grants 0, the tent stays placed, the menu
+      // stays open; a grant of 1 removes the record
+      // and the menu closes explicitly. No hunger gate
+      // (a move, like drop/pickup, not a build).
+      const grant = pickupTent(inventory);
+      if (grant.granted === 0) {
+        say('Pack full — no room.', 'blocked');
+        return;
+      }
+      updatePlacedTents(placedTentsRef.current.filter((t) => t.id !== tentId));
+      setSelectedTentId(null);
+      say('Took down the tent.', 'gain');
+      refreshInventory();
+      saveNow();
+    }
+    recomputeAnchors();
+  };
+
   // Scry press (DEV split): the press IS the reveal — call
   // Systems' evaluation directly (no wrapper, DEV declined
   // the trivial alias per no-rebuild). Shown + camps: reveal
@@ -5273,6 +5848,86 @@ export default function App() {
   // carried, and stays deposit-only when carried. Deposit
   // arrows always render, disabled iff carried is 0 (with
   // the "Needs carried" note under the arrows row).
+  // WORN GEAR (Adam, 2026-10-28): clothing, storage, and tools
+  // move up beside the avatar portrait, out of the droppable
+  // row list, and are NEVER droppable from the UI. The
+  // portrait section lists worn ∩ carried garments (slot
+  // order via wornItemIds), carried storage gear (apron,
+  // small basket, large basket), and the owned tool only
+  // (ownedToolItem; 'none' when no tool). Carried-but-unworn
+  // garments stay normal rows (loose until worn); the
+  // umbrella is not gear (counts 1 lb) and stays a normal
+  // row. Bonuses are the systems numbers: garments from
+  // WORN_CAPACITY_BONUS (mittens/boots 0 → worn mark only);
+  // apron +10, large basket +50, small basket +25 — except
+  // when large is also carried, small shows +0 ("large
+  // basket carries": large REPLACES small, pinned). The
+  // owned tool rides free; Trundle-Tool adds +50 lb.
+  // wornGear.ids (normalized) drives both the panel row
+  // filter (rows gone → Drop and home-Deposit gone with
+  // them) and the pile-menu deposit filter below (deposit
+  // arrows gone for worn-gear kinds; Take arrows stay as
+  // recovery, and home Withdraw stays). Functions are
+  // untouched (handleDropItem, handleDepositItem,
+  // handlePileAction stay for loose items).
+  const wornGear = (() => {
+    const ids: string[] = [];
+    const sections: { title: string; entries: string[] }[] = [];
+    const clothing: string[] = [];
+    for (const item of wardrobe.wornItemIds()) {
+      if (inventory.count(item) < 1) {
+        continue;
+      }
+      ids.push(item);
+      const bonus = WORN_CAPACITY_BONUS[item] ?? 0;
+      clothing.push(
+        bonus > 0
+          ? `${displayNameFor(item)} — worn, +${bonus} lb`
+          : `${displayNameFor(item)} — worn`,
+      );
+    }
+    if (clothing.length > 0) {
+      sections.push({ title: 'Clothing', entries: clothing });
+    }
+    const storage: string[] = [];
+    const largeCarried = inventory.count(ITEMS.largeBasket) >= 1;
+    if (inventory.count(ITEMS.apron) >= 1) {
+      ids.push(ITEMS.apron);
+      storage.push(`${displayNameFor(ITEMS.apron)} — +10 lb`);
+    }
+    if (inventory.count(ITEMS.smallBasket) >= 1) {
+      ids.push(ITEMS.smallBasket);
+      storage.push(
+        largeCarried
+          ? `${displayNameFor(ITEMS.smallBasket)} — +0 — large basket carries`
+          : `${displayNameFor(ITEMS.smallBasket)} — +25 lb`,
+      );
+    }
+    if (largeCarried) {
+      ids.push(ITEMS.largeBasket);
+      storage.push(`${displayNameFor(ITEMS.largeBasket)} — +50 lb`);
+    }
+    if (storage.length > 0) {
+      sections.push({ title: 'Storage', entries: storage });
+    }
+    const owned = ownedToolItem(inventory);
+    if (owned !== 'none') {
+      ids.push(owned);
+      sections.push({
+        title: 'Tools',
+        entries: [
+          owned === ITEMS.trundleTool
+            ? `${displayNameFor(owned)} — +50 lb`
+            : displayNameFor(owned),
+        ],
+      });
+    }
+    return {
+      sections,
+      ids: new Set(ids.map((item) => normalizeItemId(item as ItemId))),
+    };
+  })();
+
   const pileMenuActions = (pile: PileTarget): ContextAction[] => {
     const actions: ContextAction[] = [];
     const pileKinds = new Set(
@@ -5282,6 +5937,12 @@ export default function App() {
       const name = displayNameFor(stack.item);
       const carried = inventory.count(stack.item as ItemId);
       const noCarried = carried <= 0;
+      // Worn gear is never droppable: deposit arrows are
+      // GONE for worn-gear kinds (not disabled), while Take
+      // arrows stay as the recovery path.
+      const isWornGear = wornGear.ids.has(
+        normalizeItemId(stack.item as ItemId),
+      );
       actions.push({
         id: `kind:${stack.item}`,
         label: name,
@@ -5298,23 +5959,30 @@ export default function App() {
             glyph: '↑↑',
             ariaLabel: `Pick up all ${name}`,
           },
-          {
-            id: `deposit-one:${stack.item}`,
-            glyph: '↓',
-            ariaLabel: `Drop one ${name} here`,
-            disabled: noCarried,
-          },
-          {
-            id: `deposit-all:${stack.item}`,
-            glyph: '↓↓',
-            ariaLabel: `Drop all ${name} here`,
-            disabled: noCarried,
-          },
+          ...(isWornGear
+            ? []
+            : [
+                {
+                  id: `deposit-one:${stack.item}`,
+                  glyph: '↓',
+                  ariaLabel: `Drop one ${name} here`,
+                  disabled: noCarried,
+                },
+                {
+                  id: `deposit-all:${stack.item}`,
+                  glyph: '↓↓',
+                  ariaLabel: `Drop all ${name} here`,
+                  disabled: noCarried,
+                },
+              ]),
         ],
       });
     }
     for (const stack of inventory.stacksSnapshot()) {
       if (pileKinds.has(stack.item)) continue;
+      // Worn-gear kinds carried but not in this pile get no
+      // entry at all (no deposit path, nothing to take).
+      if (wornGear.ids.has(normalizeItemId(stack.item as ItemId))) continue;
       const name = displayNameFor(stack.item);
       actions.push({
         id: `kind:${stack.item}`,
@@ -5358,17 +6026,21 @@ export default function App() {
   // lands at those coords (drop creates when nothing
   // matches). Both paths refresh the chip straight from
   // pileState after acting (see refreshPilesFromState).
+  // Menu feedback (shared by the pile + home menus): the
+  // object's anchor when visible, else her feet (ground
+  // rule, always visible) — a menu action's result must
+  // never vanish silently. Hoisted from handlePileAction
+  // so the home handler shares it verbatim (moved, not
+  // re-authored — same body, same call sites).
+  const sayAt = (x: number, z: number, text: string, tone: FeedbackTone) => {
+    const player = playerRef.current;
+    const anchor =
+      projectAnchor(x, z, 'scatter') ??
+      (player ? projectAnchor(player.x, player.z, 'ground') : null);
+    if (anchor) showFeedback(text, tone, anchor.x, anchor.y);
+  };
+
   const handlePileAction = (pile: PileTarget, actionId: string) => {
-    // Menu feedback: the pile's anchor when visible, else
-    // her feet (ground rule, always visible) — a menu
-    // action's result must never vanish silently.
-    const sayAt = (x: number, z: number, text: string, tone: FeedbackTone) => {
-      const player = playerRef.current;
-      const anchor =
-        projectAnchor(x, z, 'scatter') ??
-        (player ? projectAnchor(player.x, player.z, 'ground') : null);
-      if (anchor) showFeedback(text, tone, anchor.x, anchor.y);
-    };
     if (actionId === 'close') {
       selectedPileIdRef.current = null;
       setSelectedPileId(null);
@@ -5460,6 +6132,114 @@ export default function App() {
     }
   };
 
+  // Home menu press (Adam, 2026-10-28): the home menu's
+  // Rest + Store + Take actions. Parse shape mirrors
+  // handlePileAction (verb:kind); the menu STAYS OPEN
+  // after every press except Close — entries re-render
+  // from live inventory + store, so counts update in
+  // place. Notes go through sayAt at the house (the
+  // panel's storageNote is the panel's surface, not the
+  // menu's). Single transfers mirror the panel's
+  // add-first atomicity per unit; all-transfers loop
+  // singles until the source is exhausted or the
+  // destination throws, and partial results stand. One
+  // refresh + one save at the end of each press, never
+  // per loop unit.
+  const handleHomeMenuAction = (actionId: string) => {
+    if (actionId === 'close') {
+      setHomeMenuOpen(false);
+      return;
+    }
+    if (actionId === 'rest') {
+      handleSleep();
+      refreshInventory();
+      saveNow();
+      return;
+    }
+    if (!shelterHouseId) return;
+    const store = getHomeStore(shelterHouseId);
+    const house = shelterState.snapshot().find((h) => h.id === shelterHouseId);
+    const player = playerRef.current;
+    const sayHouse = (text: string) =>
+      sayAt(
+        house?.x ?? player?.x ?? 0,
+        house?.z ?? player?.z ?? 0,
+        text,
+        'blocked',
+      );
+    if (!store) {
+      sayHouse('No home storage here.');
+      refreshInventory();
+      saveNow();
+      return;
+    }
+    const sep = actionId.indexOf(':');
+    if (sep < 0) return;
+    const verb = actionId.slice(0, sep);
+    const kind = actionId.slice(sep + 1);
+    const name = displayNameFor(kind);
+    const syncWorn = () => {
+      inventory.setWorn(wardrobe.wornItemIds());
+      setWornGarments(wardrobe.wornGarments());
+    };
+    const storeOne = (): boolean => {
+      try {
+        store.add(kind as ItemId, 1);
+        inventory.remove(kind as ItemId, 1);
+        homeStoreItemsRef.current.get(shelterHouseId)?.add(kind);
+        syncWorn();
+        return true;
+      } catch {
+        return false;
+      }
+    };
+    const takeOne = (): boolean => {
+      try {
+        inventory.add(kind as ItemId, 1);
+        store.remove(kind as ItemId, 1);
+        if (store.count(kind as ItemId) === 0) {
+          homeStoreItemsRef.current.get(shelterHouseId)?.delete(kind);
+        }
+        syncWorn();
+        return true;
+      } catch {
+        return false;
+      }
+    };
+    if (verb === 'store-one') {
+      if (!storeOne()) {
+        sayHouse(`Home storage full — no room for ${name}.`);
+      }
+    } else if (verb === 'store-all') {
+      const carried = inventory.count(kind as ItemId);
+      let stored = 0;
+      while (inventory.count(kind as ItemId) > 0) {
+        if (!storeOne()) break;
+        stored += 1;
+      }
+      if (stored < carried) {
+        sayHouse(
+          `Stored ${stored} of ${carried} ${name} — home storage full.`,
+        );
+      }
+    } else if (verb === 'take-one') {
+      if (!takeOne()) {
+        sayHouse(`Pack full — no room for ${name}.`);
+      }
+    } else if (verb === 'take-all') {
+      while (store.count(kind as ItemId) > 0) {
+        if (!takeOne()) {
+          sayHouse(`Pack full — no room for ${name}.`);
+          break;
+        }
+      }
+    } else {
+      return;
+    }
+    refreshInventory();
+    saveNow();
+  };
+
   const handleRemove = (target: HarvestTarget) => {
     // Same shape as a harvest press, action 'remove' (Background's
     // documented shape, 2003619): the outcome listener resolves
@@ -5526,11 +6306,201 @@ export default function App() {
           capacityText:
             openHomeStore === null
               ? 'Home storage — empty until first deposit'
-              : `Stored ${openHomeStore.used()} / ${openHomeStore.capacity()}`,
+              : // POUNDS (Adam, 2026-10-28 — "pounds here
+                // and going forward"): used()/capacity()
+                // return pounds since Systems' rework, so
+                // the header names the unit. Null-store
+                // text unchanged; per-kind counts below
+                // are item quantities, not pounds.
+                `Stored ${openHomeStore.used()} lb / ${openHomeStore.capacity()} lb`,
           note: storageNote,
           onWithdrawItem: handleWithdrawItem,
         }
       : undefined;
+
+  // Home menu actions (Adam, 2026-10-28): Rest + Store +
+  // Take kind-entries for the sheltering house. Entries
+  // derive per render from live inventory + store, so the
+  // menu re-renders in place after every press (pile
+  // precedent) and never auto-closes — not even when the
+  // store empties. Store entries skip worn-gear kinds
+  // (never droppable; the worn-gear landing's set); Take
+  // entries do not skip (recovery).
+  const homeMenuActions = (): ContextAction[] => {
+    if (!shelterHouseId) return [];
+    const store = openHomeStore;
+    const actions: ContextAction[] = [
+      {
+        id: 'rest',
+        label: 'Sleep until Sunrise',
+        disabled: !isNight,
+        disabledNote: isNight ? undefined : 'Night only',
+      },
+    ];
+    for (const stack of inventory.stacksSnapshot()) {
+      if (wornGear.ids.has(normalizeItemId(stack.item as ItemId))) continue;
+      const name = displayNameFor(stack.item);
+      const stored = store?.count(stack.item as ItemId) ?? 0;
+      actions.push({
+        id: `store-kind:${stack.item}`,
+        label: name,
+        countsText: `carried ×${stack.quantity} · stored ×${stored}`,
+        arrows: [
+          {
+            id: `store-one:${stack.item}`,
+            glyph: '↓',
+            ariaLabel: `Store one ${name}`,
+          },
+          {
+            id: `store-all:${stack.item}`,
+            glyph: '↓↓',
+            ariaLabel: `Store all ${name}`,
+          },
+        ],
+      });
+    }
+    for (const id of openHomeIds) {
+      const held = store?.count(id as ItemId) ?? 0;
+      if (held <= 0) continue;
+      const name = displayNameFor(id);
+      const carried = inventory.count(id as ItemId);
+      actions.push({
+        id: `take-kind:${id}`,
+        label: name,
+        countsText: `stored ×${held} · carried ×${carried}`,
+        arrows: [
+          {
+            id: `take-one:${id}`,
+            glyph: '↑',
+            ariaLabel: `Take one ${name}`,
+          },
+          {
+            id: `take-all:${id}`,
+            glyph: '↑↑',
+            ariaLabel: `Take all ${name}`,
+          },
+        ],
+      });
+    }
+    actions.push({ id: 'close', label: 'Close' });
+    return actions;
+  };
+
+  // Home chip anchor, derived per render (pile/fire
+  // precedent — stored anchors go stale on move): the
+  // sheltering house's position, projected as a scatter
+  // anchor. Null → no chip, no menu.
+  const homeHouse =
+    shelterHouseId !== null
+      ? shelterState.snapshot().find((h) => h.id === shelterHouseId)
+      : undefined;
+  const homeChipAnchor =
+    homeHouse !== undefined
+      ? projectAnchor(homeHouse.x, homeHouse.z, 'scatter')
+      : null;
+  const homeChipVisible =
+    sheltered && homeChipAnchor !== null && !paused;
+
+  // HOUSE-UPGRADE PILL (Adam, 2026-10-28): while
+  // placing a house item, the faced upgradeable house
+  // gets an "Upgrade to {carried}" chip at the house
+  // (home-chip pattern, inline in the overlay).
+  // Candidates = placed houses with tier BELOW the
+  // carried tier (ANY-higher — woven over lean-to
+  // skips thatch; next-tier-only is a one-line
+  // narrowing, NOT built). RANGE = center distance
+  // ≤ SHELTER_RADIUS 6 m (footprints to 6.5 m wide,
+  // so HARVEST_RANGE 2.5 m would miss big houses).
+  // CONE = angle < 45° via dot product (forward =
+  // (sin facing, cos facing); dot > cos45° =
+  // Math.SQRT1_2); d = 0 counts as faced. NO
+  // hysteresis v1. Tie-break: nearest distance,
+  // exact tie → first in snapshot order. Same-or-
+  // higher → no pill, feet "Place here" stands. NO
+  // paused guard (buttons, not canvas taps —
+  // placement buttons work while paused today).
+  // Capacity: the pill shows NO capacity number —
+  // engine HOUSE_DEFS (woven 200 / smallWooden 400)
+  // vs Systems' table (175 / 250) diverges; pin
+  // pass reconciles the tables. Per-render derivation
+  // (home-chip precedent) — no new subscription.
+  const upgradePill = (() => {
+    const mode = placement;
+    const player = playerRef.current;
+    if (!mode?.houseType || !player) return null;
+    const carriedTier = HOUSE_LADDER.indexOf(mode.houseType);
+    if (carriedTier === -1) return null;
+    const facingX = Math.sin(player.facing);
+    const facingZ = Math.cos(player.facing);
+    let best: {
+      houseId: string;
+      carriedType: HouseType;
+      placedName: string;
+      carriedName: string;
+      x: number;
+      z: number;
+    } | null = null;
+    let bestDistance = Infinity;
+    for (const house of shelterState.snapshot()) {
+      const placedTier = HOUSE_LADDER.indexOf(house.type);
+      if (placedTier === -1 || placedTier >= carriedTier) continue;
+      const dx = house.x - player.x;
+      const dz = house.z - player.z;
+      const d = Math.hypot(dx, dz);
+      if (d > SHELTER_RADIUS) continue;
+      if (d > 0) {
+        const dot = (facingX * dx + facingZ * dz) / d;
+        if (dot <= Math.SQRT1_2) continue;
+      }
+      if (d < bestDistance) {
+        bestDistance = d;
+        best = {
+          houseId: house.id,
+          carriedType: mode.houseType,
+          placedName: HOUSE_DEFS[house.type].name,
+          carriedName: HOUSE_DEFS[mode.houseType].name,
+          x: house.x,
+          z: house.z,
+        };
+      }
+    }
+    return best;
+  })();
+  const upgradePillAnchor = upgradePill
+    ? projectAnchor(upgradePill.x, upgradePill.z, 'scatter')
+    : null;
+
+  // Nearby pile for the Inventory modal's pickup section
+  // (Adam, 2026-10-28): the NEAREST pile in range from
+  // App's existing piles state — pilesInRange +
+  // HARVEST_RANGE 2.5 m, the pile menu/chips range
+  // (verified at build: App 2971 + proximity 305, range
+  // 2.5 at proximity 103 — no divergence). Nearest =
+  // smallest PileTarget.distance, ties → first in state
+  // order. Kinds in stacks order (pile-menu order), with
+  // live carried counts. Worn-gear kinds are NOT
+  // filtered here — pile Take is recovery. Undefined =
+  // no pile in range → the section hides. The modal
+  // STAYS OPEN when the pile empties (subject = pack):
+  // the section re-renders away (or switches to the
+  // next-nearest pile) as piles state updates.
+  const nearestPile =
+    piles.length === 0
+      ? undefined
+      : piles.reduce((best, pile) =>
+          pile.distance < best.distance ? pile : best,
+        );
+  const nearbyPile =
+    nearestPile === undefined
+      ? undefined
+      : {
+          kinds: nearestPile.stacks.map((stack) => ({
+            id: stack.item,
+            name: displayNameFor(stack.item),
+            pileQuantity: stack.quantity,
+            carriedQuantity: inventory.count(stack.item as ItemId),
+          })),
+        };
 
   // The fire whose lighting menu is open, with its anchor.
   const selectedFire =
@@ -5553,6 +6523,16 @@ export default function App() {
     selectedTorch === undefined
       ? null
       : (torchAnchors.find((a) => a.torch.id === selectedTorch.id) ?? null);
+  // The selected tent + its anchor — the torch pattern,
+  // over the shell store (no entity yet).
+  const selectedTent =
+    selectedTentId === null
+      ? undefined
+      : placedTents.find((t) => t.id === selectedTentId);
+  const selectedTentAnchor =
+    selectedTent === undefined
+      ? null
+      : (tentAnchors.find((a) => a.tent.id === selectedTent.id) ?? null);
 
   // The ritual site whose panel is open, with its anchor —
   // the torch pattern, live: the panel renders from the
@@ -5599,10 +6579,100 @@ export default function App() {
     selectedPileId === null
       ? null
       : (piles.find((pile) => pile.id === selectedPileId) ?? null);
-  const selectedPileAnchor =
-    selectedPile === null
-      ? null
-      : (pileAnchors.find((a) => a.pile.id === selectedPile.id) ?? null);
+
+  // TRAP ROW (Adam, 2026-10-28): the nearest placed
+  // trap within HARVEST_RANGE (2.5 m, the harvest
+  // range — piles/chips range, no divergence),
+  // nearest = smallest distance, ties → snapshot
+  // order. GATED: null with panels/modals open or
+  // paused (the App passes null when gated; legacy
+  // harvest rows stay ungated). Context menus do NOT
+  // gate it (the row is harvest-column UI, not a
+  // menu). Label follows the trap's catch: caught →
+  // "Collect {kind}", empty → "Check {TRAP_DEFS
+  // name}". Position: the row rides the existing
+  // harvest column (screen-fixed, same z-40 seat) —
+  // no projection, no column move (the stationAnchor
+  // precedent is the nearest-within-range shape,
+  // not a re-anchor).
+  const trapRowTrap = (() => {
+    const player = playerRef.current;
+    if (!player) return null;
+    if (
+      inventoryOpen ||
+      craftingOpen ||
+      charmsOpen ||
+      placement !== null ||
+      selectedSiteId !== null ||
+      optionsOpen ||
+      introOpen ||
+      pendingTrapRecipe ||
+      pendingRemoveTarget !== null ||
+      paused
+    ) {
+      return null;
+    }
+    let nearest: PlacedTrap | null = null;
+    let nearestDistance = Infinity;
+    for (const trap of traps) {
+      const distance = Math.hypot(trap.x - player.x, trap.z - player.z);
+      if (distance <= HARVEST_RANGE && distance < nearestDistance) {
+        nearest = trap;
+        nearestDistance = distance;
+      }
+    }
+    if (!nearest) return null;
+    return {
+      id: nearest.id,
+      label:
+        nearest.catch !== null
+          ? `Collect ${nearest.catch}`
+          : `Check ${TRAP_DEFS[nearest.type].name}`,
+    };
+  })();
+
+  // HIVE ROW (Adam, 2026-10-28 — honey end-to-end):
+  // nearest wild hive in range, trap-row precedent —
+  // the caller owns gating (panels/modals/paused pass
+  // null, same list as trapRowTrap verbatim, including
+  // pendingTrapRecipe/pendingRemoveTarget — inherited,
+  // harmless). Hives carry no ids — coords ARE the
+  // identity (pile/stump precedent). Label is proposed,
+  // not pinned ('Harvest honey', static — no catch
+  // state to follow; torch state surfaces on press).
+  const hiveRowHive = (() => {
+    const player = playerRef.current;
+    if (!player) return null;
+    if (
+      inventoryOpen ||
+      craftingOpen ||
+      charmsOpen ||
+      placement !== null ||
+      selectedSiteId !== null ||
+      optionsOpen ||
+      introOpen ||
+      pendingTrapRecipe ||
+      pendingRemoveTarget !== null ||
+      paused
+    ) {
+      return null;
+    }
+    let nearest: { x: number; z: number } | null = null;
+    let nearestDistance = Infinity;
+    for (const hive of hivePositions(genRef.current, player.x, player.z)) {
+      const distance = Math.hypot(hive.x - player.x, hive.z - player.z);
+      if (distance <= HARVEST_RANGE && distance < nearestDistance) {
+        nearest = hive;
+        nearestDistance = distance;
+      }
+    }
+    if (!nearest) return null;
+    return {
+      x: nearest.x,
+      z: nearest.z,
+      label: 'Harvest honey',
+    };
+  })();
 
   // TOUCH CONTROLS (phone build — see the header): coarse-pointer
   // devices get the touch layer and the collapsible HUD; desktop
@@ -5633,9 +6703,9 @@ export default function App() {
   // ESC TOGGLE (Adam, 2026-10-27 — Esc opens Options; extended
   // 2026-10-28 — Esc closes the topmost layer first): with
   // NO modal open, Esc closes the topmost open layer, one
-  // per press, in fixed order — placement panel, context
-  // menus (pile, torch, fire — reverse render order),
-  // ritual panel, panels (charms, crafting, inventory —
+  // per press, in fixed order — placement panel, pile
+  // modal, context menus (torch, tent, fire — reverse render
+  // order), ritual panel, panels (charms, crafting, inventory —
   // reverse render order) — and only with nothing open does
   // it open the Options modal. With a modal open, that
   // modal's own Esc listener closes it (previous brief
@@ -5667,6 +6737,10 @@ export default function App() {
         handlePlaceCancel();
         return;
       }
+      if (homeMenuOpen) {
+        setHomeMenuOpen(false);
+        return;
+      }
       if (selectedPileId !== null) {
         selectedPileIdRef.current = null;
         setSelectedPileId(null);
@@ -5674,6 +6748,10 @@ export default function App() {
       }
       if (selectedTorchId !== null) {
         setSelectedTorchId(null);
+        return;
+      }
+      if (selectedTentId !== null) {
+        setSelectedTentId(null);
         return;
       }
       if (selectedFireId !== null) {
@@ -5707,8 +6785,10 @@ export default function App() {
     pendingTrapRecipe,
     pendingRemoveTarget,
     placement,
+    homeMenuOpen,
     selectedPileId,
     selectedTorchId,
+    selectedTentId,
     selectedFireId,
     selectedSiteId,
     charmsOpen,
@@ -6317,6 +7397,13 @@ export default function App() {
             </WorldAnchor>
           </Fragment>
         ))}
+        {tentAnchors.map(({ tent, x, y }) => (
+          <Fragment key={tent.id}>
+            <WorldAnchor x={x} y={y} interactive>
+              <TentChip onSelect={() => setSelectedTentId(tent.id)} />
+            </WorldAnchor>
+          </Fragment>
+        ))}
         {altarAnchors.map(({ altar, x, y }) => (
           <Fragment key={altar.id}>
             <WorldAnchor x={x} y={y} interactive>
@@ -6387,30 +7474,69 @@ export default function App() {
             />
           </WorldAnchor>
         ) : null}
-        {selectedPile && selectedPileAnchor ? (
+        {selectedTent && selectedTentAnchor ? (
           <WorldAnchor
-            x={selectedPileAnchor.x}
-            y={selectedPileAnchor.y}
+            x={selectedTentAnchor.x}
+            y={selectedTentAnchor.y}
             interactive
           >
             <ContextMenu
-              objectName={
-                selectedPile.stacks.length === 1
-                  ? `${displayNameFor(selectedPile.stacks[0].item)} × ${selectedPile.stacks[0].quantity}`
-                  : `Pile × ${selectedPile.stacks.reduce((sum, stack) => sum + stack.quantity, 0)} (${selectedPile.stacks.length} kinds)`
-              }
+              objectName="Tent"
+              actions={tentMenuActions()}
+              onSelect={(id) => handleTentAction(selectedTent.id, id)}
+              onClose={() => setSelectedTentId(null)}
+            />
+          </WorldAnchor>
+        ) : null}
+        {homeChipVisible && homeChipAnchor ? (
+          <WorldAnchor x={homeChipAnchor.x} y={homeChipAnchor.y} interactive>
+            <button
+              type="button"
+              onClick={() => setHomeMenuOpen(true)}
+              aria-label={`Open ${shelterHouseName ?? 'Home'} menu`}
+              className="flex min-h-[44px] items-center rounded bg-black/50 px-2 py-1 text-sm text-stone-100"
+            >
+              {shelterHouseName ?? 'Home'}
+            </button>
+          </WorldAnchor>
+        ) : null}
+        {upgradePill && upgradePillAnchor ? (
+          <WorldAnchor
+            x={upgradePillAnchor.x}
+            y={upgradePillAnchor.y}
+            interactive
+          >
+            <button
+              type="button"
+              onClick={() => handleUpgradePress(upgradePill)}
+              aria-label={`Upgrade ${upgradePill.placedName} to ${upgradePill.carriedName}`}
+              className="flex min-h-[44px] items-center rounded bg-black/50 px-2 py-1 text-sm text-stone-100"
+            >
+              Upgrade to {upgradePill.carriedName}
+            </button>
+          </WorldAnchor>
+        ) : null}
+        {homeMenuOpen && homeHouse !== undefined && homeChipAnchor ? (
+          <WorldAnchor x={homeChipAnchor.x} y={homeChipAnchor.y} interactive>
+            <ContextMenu
+              objectName={shelterHouseName ?? 'Home'}
               header={
-                <p className="text-xs text-stone-400">
-                  ↑ Pick up one · ↑↑ Pick up all · ↓ Drop one here · ↓↓ Drop
-                  all here
-                </p>
+                <>
+                  <p className="text-sm text-stone-300">
+                    {openHomeStore === null
+                      ? 'Home storage — empty until first deposit'
+                      : // POUNDS (Adam, 2026-10-28): same
+                        // unit as the panel header above.
+                        `Stored ${openHomeStore.used()} lb / ${openHomeStore.capacity()} lb`}
+                  </p>
+                  <p className="text-xs text-stone-400">
+                    ↑ Take one · ↑↑ Take all · ↓ Store one · ↓↓ Store all
+                  </p>
+                </>
               }
-              actions={pileMenuActions(selectedPile)}
-              onSelect={(id) => handlePileAction(selectedPile, id)}
-              onClose={() => {
-                selectedPileIdRef.current = null;
-                setSelectedPileId(null);
-              }}
+              actions={homeMenuActions()}
+              onSelect={(id) => handleHomeMenuAction(id)}
+              onClose={() => setHomeMenuOpen(false)}
             />
           </WorldAnchor>
         ) : null}
@@ -6536,6 +7662,10 @@ export default function App() {
           onHarvest={handleHarvest}
           onRemove={handleRemove}
           stationAnchor={stationAnchor}
+          trap={trapRowTrap}
+          onCollectTrap={handleCollectTrap}
+          hive={hiveRowHive}
+          onHarvestHive={handleHarvestHive}
           lookNode={
             !LOOK_PARKED && lookTarget ? (
               <div className="flex flex-col items-center gap-1">
@@ -6585,7 +7715,33 @@ export default function App() {
       </div>
 
       {/* HUD shell: needs row (awaiting survival systems) + HUD block. */}
-      <HudShell hideNeeds={isTouch && hudCollapsed}>
+      {/* Location chip: top row of the HUD (in-flow
+        below the Needs row, via HudShell's topReadout
+        slot — NOT the old absolute bottom-centre seat).
+        Always visible, including with the HUD collapsed
+        on touch (the slot is not gated by collapse).
+        It hides only while a panel or the modal is open
+        (rule unchanged by the move). */}
+      <HudShell
+        hideNeeds={isTouch && hudCollapsed}
+        topReadout={
+          !inventoryOpen &&
+          !craftingOpen &&
+          !charmsOpen &&
+          !optionsOpen &&
+          !introOpen ? (
+            <LocationChip
+              x={position.x}
+              z={position.z}
+              biomeName={dominantBiome.name}
+              biomePercent={dominantBiome.percent}
+              fps={fps}
+              zoneX={zoneX}
+              zoneZ={zoneZ}
+            />
+          ) : null
+        }
+      >
         {(!isTouch || !hudCollapsed) ? (
         <div
           className={
@@ -6735,14 +7891,24 @@ export default function App() {
             <ShelteredIndicator
               sheltered={sheltered}
               houseName={shelterHouseName}
-              onSleep={isNight ? handleSleep : undefined}
-              sleepLabel="Sleep until sunrise"
             />
           </div>
           {stationPresenceValue.workstation ? (
             <div className="mt-2">
+              {/* STATION TITLE FOLLOWS THE UPGRADE
+                  (stumpy shell, 2026-10-28): the panel
+                  names the station she stands at — a
+                  stump that already carries the
+                  workstation addition reads 'Workbench'
+                  (the panel's own 'workstation' kind),
+                  a plain stump reads 'Tree stump'. */}
               <StationPanel
-                stationKind="stump"
+                stationKind={
+                  nearestStump !== null &&
+                  stumpState.isWorkbench(nearestStump.x, nearestStump.z)
+                    ? 'workstation'
+                    : 'stump'
+                }
                 actions={[
                   {
                     id: 'craft',
@@ -6758,17 +7924,22 @@ export default function App() {
             <div className="mt-2 rounded bg-black/50 px-2 py-1 text-sm">
               <p>Placing {placement.label} at your feet.</p>
               <div className="mt-1 flex gap-2">
-                <button
-                  type="button"
-                  onClick={handlePlaceConfirm}
-                  className={
-                    isTouch
-                      ? 'rounded bg-[#3a4436] px-3 py-2 text-sm min-h-[44px] hover:bg-[#4a5546]'
-                      : 'rounded bg-[#3a4436] px-2 py-0.5 text-xs hover:bg-[#4a5546]'
-                  }
-                >
-                  Place here
-                </button>
+                {/* UPGRADE PILL: one confirm at a time —
+                    while the pill shows, feet placement
+                    hides (the pill IS the confirm). */}
+                {upgradePill ? null : (
+                  <button
+                    type="button"
+                    onClick={handlePlaceConfirm}
+                    className={
+                      isTouch
+                        ? 'rounded bg-[#3a4436] px-3 py-2 text-sm min-h-[44px] hover:bg-[#4a5546]'
+                        : 'rounded bg-[#3a4436] px-2 py-0.5 text-xs hover:bg-[#4a5546]'
+                    }
+                  >
+                    Place here
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={handlePlaceCancel}
@@ -6868,9 +8039,27 @@ export default function App() {
             : 'pointer-events-auto absolute right-2 top-20 z-30 flex max-h-[calc(100vh-6rem)] w-80 max-w-[calc(100vw-1rem)] flex-col gap-2 overflow-y-auto'
         }
       >
+        {selectedPile ? (
+          <PileInventoryModal
+            title={
+              selectedPile.stacks.length === 1
+                ? `${displayNameFor(selectedPile.stacks[0].item)} × ${selectedPile.stacks[0].quantity}`
+                : `Pile × ${selectedPile.stacks.reduce((sum, stack) => sum + stack.quantity, 0)} (${selectedPile.stacks.length} kinds)`
+            }
+            actions={pileMenuActions(selectedPile)}
+            onSelect={(id) => handlePileAction(selectedPile, id)}
+            onClose={() => {
+              selectedPileIdRef.current = null;
+              setSelectedPileId(null);
+            }}
+          />
+        ) : null}
         {inventoryOpen ? (
           <InventoryPanel
-            items={inventoryItems}
+            items={inventoryItems.filter(
+              (item) => !wornGear.ids.has(normalizeItemId(item.id as ItemId)),
+            )}
+            worn={wornGear.sections}
             selectedItemId={selectedItemId}
             onSelectItem={setSelectedItemId}
             placeableIds={PLACEABLE_IDS}
@@ -6882,6 +8071,16 @@ export default function App() {
             storage={storageSection}
             onDepositItem={handleDepositItem}
             onDropItem={handleDropItem}
+            onDropAllItem={handleDropAllItem}
+            nearbyPile={nearbyPile}
+            onTakeItem={(kind, quantity) =>
+              nearestPile !== undefined
+                ? handlePileAction(
+                    nearestPile,
+                    quantity === 1 ? `take-one:${kind}` : `take-all:${kind}`,
+                  )
+                : undefined
+            }
             capacityText={capacityText}
             onClose={() => setInventoryOpen(false)}
             comfortable={isTouch}
@@ -6889,7 +8088,7 @@ export default function App() {
         ) : null}
         {craftingOpen ? (
           <CraftingMenu
-            recipes={craftingRecipes}
+            recipes={orderedCraftingRecipes}
             sections={craftingSections}
             stationNote={stationNote}
             comfortable={isTouch}
@@ -6921,6 +8120,11 @@ export default function App() {
         {torchNote ? (
           <p className="rounded bg-black/50 px-2 py-1 text-xs text-stone-200">
             {torchNote}
+          </p>
+        ) : null}
+        {tentNote ? (
+          <p className="rounded bg-black/50 px-2 py-1 text-xs text-stone-200">
+            {tentNote}
           </p>
         ) : null}
         {altarNote ? (
@@ -7072,33 +8276,13 @@ export default function App() {
         </Popup>
       ) : null}
 
-      {/* Location chip: always visible, including with the HUD
-        collapsed on touch (it lives outside the collapsible
-        stack). It hides only while a panel or the modal is
-        open, where it would sit on top of the bottom sheet. */}
-      {!inventoryOpen &&
-      !craftingOpen &&
-      !charmsOpen &&
-      !optionsOpen &&
-      !introOpen ? (
-        <LocationChip
-          x={position.x}
-          z={position.z}
-          biomeName={dominantBiome.name}
-          biomePercent={dominantBiome.percent}
-          fps={fps}
-          zoneX={zoneX}
-          zoneZ={zoneZ}
-        />
-      ) : null}
-
       {/* Scry button: appears at still water (DEV split —
         visibility on movement, reveal on press). Bottom-
-        centre above the LocationChip, the PausedIndicator's
-        seat — the two never show together (Scry hides while
-        paused), so the seat is shared, not stacked. Hidden
-        with any panel/modal open, like the LocationChip,
-        so it never sits on a bottom sheet. Label "Scry"
+        centre, the PausedIndicator's seat — the two never
+        show together (Scry hides while paused), so the seat
+        is shared, not stacked. Hidden with any panel/modal
+        open, like the readout chip, so it never sits on a
+        bottom sheet. Label "Scry"
         (Adam's verb); the button IS the magic signal — no
         tutorial popup. Press shows the renderer arrows
         (Background's API, wired in CAMP ARROWS WIRING);

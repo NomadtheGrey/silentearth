@@ -93,6 +93,35 @@
  *    still blocks it; the too-hungry trap exemption covers trap
  *    USE, once the set/check system exists, not trap crafting.
  *
+ * 6. STUMP-UPGRADE CRAFTS REPORT, THEY DON'T GRANT — AND THEY
+ *    DON'T TRANSFORM OR EMIT EITHER (Systems, 2026-10-28 — the
+ *    Stumpy Workstation fix; trap-report precedent). A recipe
+ *    with upgradesStump set (stumpy-workstation) never enters
+ *    inventory: on a craft at a stump this helper consumes the
+ *    ingredients and reports success via upgradedStump {type} —
+ *    and NOTHING else. It does not transform the anchor, and
+ *    it does not emit. SINGLE-CALLER RULE: the SHELL transforms
+ *    the FACED stump via Background's anchor primitive on an
+ *    upgradedStump result — that call is the one and only
+ *    transformer. The anchor is NOT consumed (transformation,
+ *    not harvest — pinned constraint); the stump's station
+ *    presence is unchanged ('workstation' before and after);
+ *    trundle-move is preserved (anchor property, Background's
+ *    transform must not drop it); the splitting-wood bonus keys
+ *    on the upgraded state when splitting lands (no numbers
+ *    now — nothing to attach them to). The recipe's station
+ *    gate ('workstation') IS the presence condition — presence
+ *    comes solely from stumps today — so the entry crafts only
+ *    AT a stump. The double-upgrade guard is shell-side
+ *    (Systems cannot read anchor state): at an already-upgraded
+ *    stump the entry must not execute. Upgrading takes no
+ *    capacity check (nothing enters the pack). Hunger/station/
+ *    tool-stage gates still apply in their usual order.
+ *    Additions-aware (Adam, 2026-10-28): the workstation is ONE
+ *    addition on the stump anchor, not an exclusive flag — other
+ *    additions (e.g. altar) coexist; this report path is
+ *    workstation-specific, the altar rides the ritual system.
+ *
  * ------------------------------------------------------------------
  * PINNED CONSTRUCTION (Adam, main chat 2026-10-27, "for
  * simplicity"): LARGE BASKET REPLACES SMALL BASKET. Total
@@ -107,7 +136,11 @@
  *   new PersonalInventory({ largeBasketMode: 'replace', initial })
  */
 
-import { canCraft } from './crafting';
+import {
+  canCraft,
+  craftOwnershipStatus,
+  CRAFT_OWNERSHIP_LABELS,
+} from './crafting';
 import { craftIntoInventory, PersonalInventory } from './inventory';
 import type { HungerState } from './hunger';
 import {
@@ -130,10 +163,12 @@ export type StationInput = CraftingStation | CraftingStation[] | null;
 
 export interface CraftExecutionResult {
   /**
-   * What was crafted. When `placedTrap` is present, this output
-   * was NOT added to inventory — the shell must not treat it as
-   * a grant (it is carried here for feedback naming only), and
-   * must place it via trapState.placeTrap (see header point 5).
+   * What was crafted. When `placedTrap` or `upgradedStump` is
+   * present, this output was NOT added to inventory — the shell
+   * must not treat it as a grant (it is carried here for
+   * feedback naming only), and must place / transform via
+   * trapState.placeTrap or Background's anchor primitive
+   * (see header points 5–6).
    */
   output: { item: ItemId; quantity: number };
   /**
@@ -144,6 +179,18 @@ export interface CraftExecutionResult {
    * ordinary grant craft.
    */
   placedTrap?: { type: string };
+  /**
+   * Present only for upgradesStump crafts: the upgraded
+   * workbench's type (recipe id — == its output item, as with
+   * traps). The shell transforms the FACED stump via
+   * Background's anchor primitive on this result (single-caller
+   * rule, trap precedent). Systems never transforms and never
+   * emits. Absent for every ordinary grant craft. The anchor is
+   * NOT consumed; station presence unchanged; trundle-move
+   * preserved (Background's transform); the double-upgrade
+   * guard is shell-side (Systems cannot read anchor state).
+   */
+  upgradedStump?: { type: string };
   /** Owned tool after the craft, read from inventory ('none' if none). */
   owned: OwnedToolItem;
   /** Background-compatible tier of the owned tool, null for none. */
@@ -195,6 +242,20 @@ export function executeCraft(
   hunger: HungerState | null = null,
   nearCreek: boolean | null = null,
 ): CraftExecutionResult {
+  // Ownership gate, FIRST (before hunger): an already-owned
+  // or superseded recipe refuses with Adam's label and
+  // consumes nothing. Ownership is a recipe+inventory
+  // fact, not her state — it outranks the hunger message.
+  // canCraft reports the same status (ok=false) for the
+  // menu; this gate is the enforcement, never UI-only.
+  const ownership = craftOwnershipStatus(recipe, inventory);
+  if (ownership !== 'available') {
+    throw new Error(
+      `Cannot craft ${recipe.name}: ` +
+        `${CRAFT_OWNERSHIP_LABELS[ownership]}.`,
+    );
+  }
+
   // Hunger gate, before anything is consumed.
   if (hunger !== null && hunger.isTooHungry()) {
     throw new Error(
@@ -264,11 +325,16 @@ export function executeCraft(
         ? null
         : station;
 
-  // TRAP REPORT PATH: a placesTrap craft never enters inventory
-  // and never places or emits — it consumes and reports success
-  // (placedTrap {type}), and the SHELL places via placeTrap on
-  // that result (header point 5, single-caller rule).
-  if (recipe.placesTrap) {
+  // TRAP + STUMP-UPGRADE REPORT PATH: a placesTrap craft never
+  // enters inventory and never places or emits — it consumes and
+  // reports success (placedTrap {type}), and the SHELL places via
+  // placeTrap on that result (header point 5, single-caller rule).
+  // An upgradesStump craft mirrors it exactly (header point 6):
+  // it consumes and reports upgradedStump {type}, and the SHELL
+  // transforms the FACED stump via Background's anchor primitive
+  // on that result — never grants, never transforms, never emits.
+  // Upgrading takes no capacity check (nothing enters the pack).
+  if (recipe.placesTrap || recipe.upgradesStump) {
     // Ingredient / requirement / predecessor check, via the same
     // engine check the grant path uses — but the grant itself is
     // NOT run: placing takes no capacity check (nothing enters
@@ -328,7 +394,9 @@ export function executeCraft(
     }
     return {
       output: { ...recipe.output },
-      placedTrap: { type: recipe.id },
+      ...(recipe.placesTrap
+        ? { placedTrap: { type: recipe.id } }
+        : { upgradedStump: { type: recipe.id } }),
       owned: ownedToolItem(inventory),
       toolTier: ownedTier(inventory),
       harvestStage: ownedStage(inventory),

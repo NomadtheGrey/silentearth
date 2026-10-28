@@ -43,6 +43,31 @@ export interface InventoryStorageSection {
   onWithdrawItem?: (id: string) => void;
 }
 
+/** One worn-gear section in the portrait strip (caller-supplied display text). */
+export interface InventoryWornSection {
+  /** Section title: "Clothing", "Storage", or "Tools". */
+  title: string;
+  /** Display lines, e.g. "Cloak — worn, +6 lb". */
+  entries: string[];
+}
+
+/** One kind in the Inventory modal's nearby-pile section. */
+export interface InventoryNearbyPileKind {
+  /** Item id (kind key for take actions). */
+  id: string;
+  /** Display name. */
+  name: string;
+  /** Quantity in the pile. */
+  pileQuantity: number;
+  /** Quantity carried. */
+  carriedQuantity: number;
+}
+
+/** The nearest in-range pile for the modal's pickup section. */
+export interface InventoryNearbyPile {
+  kinds: InventoryNearbyPileKind[];
+}
+
 export interface InventoryPanelProps {
   items: InventoryItem[];
   /** Id of the selected item, if any. Undefined = nothing selected. */
@@ -83,13 +108,44 @@ export interface InventoryPanelProps {
   /** Called when the player presses Deposit on a carried item. */
   onDepositItem?: (id: string) => void;
   /**
-   * Called when the player presses Drop on a carried item.
-   * Every personal row gains a Drop button when this is
+   * Called when the player presses Drop-one on a carried item.
+   * Every personal row gains a ↓ button when this is
    * passed; storage rows never get one (dropping is from
    * the pack she carries, not the house store). Dropping
    * itself is the caller's job.
    */
   onDropItem?: (id: string) => void;
+  /**
+   * Called when the player presses Drop-all on a carried item.
+   * Every personal row gains a ↓↓ button when this is
+   * passed (same feet destination as ↓, whole carried
+   * stack). Dropping itself is the caller's job.
+   */
+  onDropAllItem?: (id: string) => void;
+  /**
+   * Nearby pile for the pickup section, shown after the
+   * personal rows when present (nearest in-range pile,
+   * caller-derived). Its kinds gain ↑/↑↑ buttons via
+   * onTakeItem. Omitted = no pickup section. Worn-gear
+   * kinds are NOT filtered here — pile Take is recovery.
+   */
+  nearbyPile?: InventoryNearbyPile;
+  /**
+   * Called when the player presses a Take arrow on a
+   * nearby-pile kind: quantity 1 (↑) or 'all' (↑↑, the
+   * live pile quantity). Taking itself is the caller's job.
+   */
+  onTakeItem?: (id: string, quantity: 1 | 'all') => void;
+  /**
+   * Worn-gear strip, shown directly under the portrait and
+   * above the Carrying line (Adam, 2026-10-28): the worn
+   * clothing, carried storage gear, and owned tool, as
+   * caller-composed display sections. These items are NOT
+   * in `items` (the caller filters them out), so they carry
+   * no Drop or Deposit button anywhere — display only.
+   * Omitted or empty = no strip.
+   */
+  worn?: InventoryWornSection[];
   /** Caller-supplied capacity line, e.g. a total the system provides. */
   capacityText?: string;
   /** Called when the panel is closed. Optional. */
@@ -113,6 +169,10 @@ export function InventoryPanel({
   storage,
   onDepositItem,
   onDropItem,
+  onDropAllItem,
+  nearbyPile,
+  onTakeItem,
+  worn,
   capacityText,
   onClose,
   comfortable = false,
@@ -147,26 +207,49 @@ export function InventoryPanel({
         <WitchPortrait />
       </div>
 
+      {/* Worn gear, directly under the portrait: one wrapping
+          line per section, display only — no buttons here. */}
+      {worn !== undefined &&
+      worn.some((section) => section.entries.length > 0) ? (
+        <div className="mb-2 flex flex-col gap-0.5">
+          {worn
+            .filter((section) => section.entries.length > 0)
+            .map((section) => (
+              <p key={section.title} className="text-sm">
+                <span className={t.muted}>{section.title}: </span>
+                {section.entries.join(' · ')}
+              </p>
+            ))}
+        </div>
+      ) : null}
+
       {capacityText ? (
         <p className={'mb-2 text-sm ' + t.muted}>{capacityText}</p>
       ) : null}
+      <p className={'mb-2 text-xs ' + t.muted}>
+        ↓ Drop one at feet · ↓↓ Drop all at feet · ↑ Take one from pile · ↑↑
+        Take all from pile
+      </p>
 
       {items.length === 0 ? (
         <p className={'italic ' + t.muted}>Nothing carried yet.</p>
       ) : (
-        <ul className="flex flex-col gap-1">
+        <ul className="grid grid-cols-[minmax(0,1fr)_auto_auto] gap-x-2 gap-y-1">
           {items.map((item) => {
             const selected = item.id === selectedItemId;
             const placeable = placeableIds?.has(item.id) ?? false;
             const food = foodIds?.has(item.id) ?? false;
             return (
-              <li key={item.id} className="flex items-center gap-1">
+              <li
+                key={item.id}
+                className="col-span-3 grid grid-cols-subgrid items-center"
+              >
                 <button
                   type="button"
                   onClick={() => onSelectItem?.(item.id)}
                   aria-pressed={selected}
                   className={
-                    'flex flex-1 items-baseline justify-between gap-2 rounded px-2 py-1 text-left ' +
+                    'rounded px-2 py-1 text-left ' +
                     (selected ? t.selected : 'hover:bg-stone-800')
                   }
                 >
@@ -174,24 +257,23 @@ export function InventoryPanel({
                     {item.icon ? (
                       <span className="inline-flex shrink-0">{item.icon}</span>
                     ) : null}
-                    {item.name}
-                    {item.note ? (
-                      <span className={'ml-2 text-sm ' + t.muted}>
-                        {item.note}
-                      </span>
-                    ) : null}
+                    <span className="min-w-0">{item.name}</span>
                   </span>
-                  {item.quantityText || item.weightText ? (
-                    <span className="text-sm text-stone-300">
-                      {[item.quantityText, item.weightText]
-                        .filter(
-                          (part): part is string =>
-                            part !== undefined && part !== '',
-                        )
-                        .join(' · ')}
+                  {item.note ? (
+                    <span className={'block text-sm ' + t.muted}>
+                      {item.note}
                     </span>
                   ) : null}
                 </button>
+                <span className="whitespace-nowrap text-right text-sm tabular-nums text-stone-300">
+                  {[item.quantityText, item.weightText]
+                    .filter(
+                      (part): part is string =>
+                        part !== undefined && part !== '',
+                    )
+                    .join(' · ')}
+                </span>
+                <span className="flex gap-1">
                 {placeable && onPlaceItem ? (
                   <button
                     type="button"
@@ -236,18 +318,74 @@ export function InventoryPanel({
                   <button
                     type="button"
                     onClick={() => onDropItem(item.id)}
-                    aria-label={`Drop ${item.name}`}
-                    className={actionBtn}
+                    aria-label={`Drop one ${item.name} at feet`}
+                    className="min-h-[44px] min-w-[44px] rounded text-base hover:bg-stone-800"
                   >
-                    Drop
+                    <span aria-hidden="true">↓</span>
                   </button>
                 ) : null}
+                {onDropAllItem ? (
+                  <button
+                    type="button"
+                    onClick={() => onDropAllItem(item.id)}
+                    aria-label={`Drop all ${item.name} at feet`}
+                    className="min-h-[44px] min-w-[44px] rounded text-base hover:bg-stone-800"
+                  >
+                    <span aria-hidden="true">↓↓</span>
+                  </button>
+                ) : null}
+                </span>
               </li>
             );
           })}
         </ul>
       )}
 
+      {nearbyPile !== undefined && nearbyPile.kinds.length > 0 ? (
+        <>
+          <VineDivider className="mb-2 mt-3" />
+          <h3 className={'text-base font-semibold ' + t.heading}>
+            Nearby pile
+          </h3>
+          <ul className="grid grid-cols-[minmax(0,1fr)_auto_auto] gap-x-2 gap-y-1">
+            {nearbyPile.kinds.map((kind) => (
+              <li
+                key={kind.id}
+                className="col-span-3 grid grid-cols-subgrid items-center"
+              >
+                <span className="rounded px-2 py-1 text-left text-sm">
+                  {kind.name}
+                </span>
+                <span className="whitespace-nowrap text-right text-sm tabular-nums text-stone-300">
+                  pile ×{kind.pileQuantity} · carried ×{kind.carriedQuantity}
+                </span>
+                <span className="flex gap-1">
+                {onTakeItem ? (
+                  <button
+                    type="button"
+                    onClick={() => onTakeItem(kind.id, 1)}
+                    aria-label={`Take one ${kind.name} from pile`}
+                    className="min-h-[44px] min-w-[44px] rounded text-base hover:bg-stone-800"
+                  >
+                    <span aria-hidden="true">↑</span>
+                  </button>
+                ) : null}
+                {onTakeItem ? (
+                  <button
+                    type="button"
+                    onClick={() => onTakeItem(kind.id, 'all')}
+                    aria-label={`Take all ${kind.name} from pile`}
+                    className="min-h-[44px] min-w-[44px] rounded text-base hover:bg-stone-800"
+                  >
+                    <span aria-hidden="true">↑↑</span>
+                  </button>
+                ) : null}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </>
+      ) : null}
       {storage !== undefined ? (
         <>
           <VineDivider className="mb-2 mt-3" />
@@ -262,24 +400,24 @@ export function InventoryPanel({
           {storage.items.length === 0 ? (
             <p className={'italic ' + t.muted}>Nothing stored here yet.</p>
           ) : (
-            <ul className="flex flex-col gap-1">
+            <ul className="grid grid-cols-[minmax(0,1fr)_auto_auto] gap-x-2 gap-y-1">
               {storage.items.map((item) => (
-                <li key={item.id} className="flex items-center gap-1">
-                  <span className="flex flex-1 items-baseline justify-between gap-2 rounded px-2 py-1 text-left">
-                    <span className="flex items-center gap-1.5">
-                      {item.icon ? (
-                        <span className="inline-flex shrink-0">
-                          {item.icon}
-                        </span>
-                      ) : null}
-                      {item.name}
-                    </span>
-                    {item.quantityText ? (
-                      <span className="text-sm text-stone-300">
-                        {item.quantityText}
+                <li
+                  key={item.id}
+                  className="col-span-3 grid grid-cols-subgrid items-center"
+                >
+                  <span className="flex items-center gap-1.5 rounded px-2 py-1 text-left">
+                    {item.icon ? (
+                      <span className="inline-flex shrink-0">
+                        {item.icon}
                       </span>
                     ) : null}
+                    <span className="min-w-0">{item.name}</span>
                   </span>
+                  <span className="whitespace-nowrap text-right text-sm tabular-nums text-stone-300">
+                    {item.quantityText ?? null}
+                  </span>
+                  <span className="flex gap-1">
                   {storage.onWithdrawItem ? (
                     <button
                       type="button"
@@ -290,6 +428,7 @@ export function InventoryPanel({
                       Withdraw
                     </button>
                   ) : null}
+                  </span>
                 </li>
               ))}
             </ul>

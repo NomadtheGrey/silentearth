@@ -111,6 +111,11 @@ export function CraftingMenu({
             </span>
           ) : null}
         </button>
+        {recipe.disabledLabel ? (
+          <p className={'mt-1 block text-sm ' + t.muted}>
+            {recipe.disabledLabel}
+          </p>
+        ) : null}
         <ul className="mt-1 flex flex-col gap-0.5 text-sm text-stone-300">
           {recipe.ingredients.map((ingredient, index) => (
             <li key={index} className="flex items-center gap-1.5">
@@ -128,7 +133,7 @@ export function CraftingMenu({
             </li>
           ))}
         </ul>
-        {recipe.availabilityNote ? (
+        {recipe.availabilityNote && !recipe.disabledLabel ? (
           <p className={'mt-1 text-sm ' + t.muted}>
             {recipe.availabilityNote}
           </p>

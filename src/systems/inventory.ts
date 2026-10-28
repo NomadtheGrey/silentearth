@@ -220,6 +220,7 @@ export const ITEM_WEIGHT_LB: Readonly<Record<string, number>> = {
   mushrooms: 0.25, // lane judgment: plural food family
   'poison-mushrooms': 0.25, // lane judgment: plural food family
   apple: 0.25,
+  [ITEMS.honey]: 0.25, // lane judgment: food cluster, flagged
   // Paper chain: dry paper lighter than damp sheets.
   [ITEMS.paper]: 0.25,
   // 0.5 lb
@@ -273,6 +274,7 @@ export const ITEM_WEIGHT_LB: Readonly<Record<string, number>> = {
   [ITEMS.axeTrowel]: 2,
   [ITEMS.hoodedCloak]: 2,
   [ITEMS.bogBoots]: 2,
+  [ITEMS.sleepingBag]: 2, // camping: hooded-cloak precedent, flagged
   // 4 lb
   [ITEMS.spadeAxe]: 4,
   [ITEMS.clayBrick]: 4,
@@ -295,6 +297,7 @@ export const ITEM_WEIGHT_LB: Readonly<Record<string, number>> = {
   // homes / fires / stations — placed structures ride 4 lb
   // between craft and place).
   [ITEMS.altar]: 4,
+  [ITEMS.tent]: 4, // camping: carried-structure precedent, flagged
 };
 
 /**
@@ -305,8 +308,12 @@ export function weightOf(item: ItemId): number {
   return ITEM_WEIGHT_LB[normalizeItemId(item)] ?? DEFAULT_ITEM_WEIGHT_LB;
 }
 
-/** One item's weight in integer 0.05 lb units (exact). */
-function weightUnits(item: ItemId): number {
+/**
+ * One item's weight in integer 0.05 lb units (exact). Exported
+ * for HomeStorage's exact-units arithmetic (pounds rework,
+ * 2026-10-28) — float pounds would dust at exact boundaries.
+ */
+export function weightUnits(item: ItemId): number {
   return Math.round(weightOf(item) * POUND_UNITS_PER_LB);
 }
 
@@ -500,6 +507,9 @@ export const ITEM_DISPLAY_NAMES: Readonly<Record<string, string>> = {
   'edible-mushroom': 'Edible Mushroom',
   'poison-mushroom': 'Poison Mushroom',
   apple: 'Apple',
+  honey: 'Honey',
+  'sleeping-bag': 'Sleeping Bag',
+  tent: 'Tent',
 };
 
 /**

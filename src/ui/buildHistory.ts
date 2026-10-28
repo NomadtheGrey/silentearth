@@ -43,6 +43,15 @@ export interface BuildRecord {
 
 const ALL_RECORDS: BuildRecord[] = [
   {
+    merge: 'Merge #17',
+    pr: 35,
+    // sha 'pending' until the follow-up merge records the real merge SHA (pre-merge it is unknowable).
+    sha: 'pending',
+    date: '2026-10-28',
+    what: 'Camping: sleeping bag (loom) + tent (workstation) place/pickup, pack-counted weights, SavedTent save shape; house-entries merge (one Woven Cottage entry, wattle + prototype recipes removed); tent shelter branch (tent query 0.85 within 2.5 m, best-of with houses, houseId null on tent win; A-frame tent model + renderer.setTents); tent shell rows (tent place row + world-anchored TentChip + take-down) + setTents wiring (place/pickup/boot restore/regenerate clear push the shell list to the renderer).',
+    why: 'She can camp where she stands — a bag to sleep on and a tent that shelters her — with one cottage entry to build toward, and the tent she places actually reading as shelter in the world.',
+  },
+  {
     merge: 'Merge #16',
     pr: 33,
     sha: '305af73',

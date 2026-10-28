@@ -75,6 +75,17 @@ export const ANIMAL_KINDS: AnimalKind[] = [
 export type Temperament = 'skittish' | 'indifferent' | 'curious' | 'wary';
 export type AnimalMovement = 'ground' | 'water' | 'fly';
 export type AnimalAnim = 'bob' | 'hop' | 'swim' | 'flutter';
+/**
+ * How a kind flees (DRAFT for Adam's pin pass — proposed here,
+ * shaped by him, not baked silently): 'straight' runs directly
+ * away; 'zigzag' weaves ±ZIGZAG_ANGLE_RAD around the away line,
+ * alternating each re-target; 'cover' runs for home (burrow /
+ * lodge) and holds there while the player stays close; 'freeze'
+ * holds still instead of fleeing (opossum playing dead, turtle
+ * pulled in). Flyers carry 'straight' — their perch-height
+ * handling is separate and unchanged.
+ */
+export type FleeStyle = 'straight' | 'zigzag' | 'cover' | 'freeze';
 
 export interface AnimalDef {
   /** Biomes the kind lives in (lane-decided DRAFT for Adam's pin pass). */
@@ -82,45 +93,57 @@ export interface AnimalDef {
   temperament: Temperament;
   movement: AnimalMovement;
   anim: AnimalAnim;
+  flee: FleeStyle;
+  /**
+   * Ground-wander radius in meters (DRAFT for Adam's pin pass).
+   * Read ONLY by the ground branch of pickWanderTarget — water
+   * and fly kinds wander by anchor picks, not by this number.
+   */
+  wanderRange: number;
   /** Owl + bat fly at night; everything else is active by day. */
   active: 'night' | 'day';
 }
 
 export const ANIMAL_DEFS: Record<AnimalKind, AnimalDef> = {
-  owl: { biomes: ['forest', 'tanglewood'], temperament: 'wary', movement: 'fly', anim: 'flutter', active: 'night' },
-  bat: { biomes: ['forest', 'tanglewood'], temperament: 'skittish', movement: 'fly', anim: 'flutter', active: 'night' },
-  pigeon: { biomes: ['meadow', 'oldfieldRise', 'forest'], temperament: 'skittish', movement: 'fly', anim: 'flutter', active: 'day' },
-  beaver: { biomes: ['creekBottom', 'mirewood'], temperament: 'wary', movement: 'water', anim: 'swim', active: 'day' },
-  turtle: { biomes: ['creekBottom', 'mirewood'], temperament: 'indifferent', movement: 'water', anim: 'swim', active: 'day' },
-  deer: { biomes: ['meadow', 'forest', 'oldfieldRise'], temperament: 'wary', movement: 'ground', anim: 'bob', active: 'day' },
-  fox: { biomes: ['forest', 'oldfieldRise', 'meadow'], temperament: 'wary', movement: 'ground', anim: 'bob', active: 'day' },
-  mole: { biomes: ['meadow', 'oldfieldRise', 'forest'], temperament: 'indifferent', movement: 'ground', anim: 'bob', active: 'day' },
-  snake: { biomes: ['meadow', 'creekBottom', 'oldfieldRise'], temperament: 'skittish', movement: 'ground', anim: 'bob', active: 'day' },
-  mouse: { biomes: ['meadow', 'oldfieldRise', 'forest'], temperament: 'skittish', movement: 'ground', anim: 'hop', active: 'day' },
-  bear: { biomes: ['forest', 'tanglewood'], temperament: 'wary', movement: 'ground', anim: 'bob', active: 'day' },
-  rabbit: { biomes: ['meadow', 'oldfieldRise', 'forest'], temperament: 'skittish', movement: 'ground', anim: 'hop', active: 'day' },
-  raccoon: { biomes: ['forest', 'creekBottom', 'mirewood'], temperament: 'curious', movement: 'ground', anim: 'bob', active: 'day' },
-  wolf: { biomes: ['forest', 'tanglewood', 'meadow'], temperament: 'wary', movement: 'ground', anim: 'bob', active: 'day' },
-  crow: { biomes: ['meadow', 'oldfieldRise', 'forest'], temperament: 'curious', movement: 'fly', anim: 'flutter', active: 'day' },
-  frog: { biomes: ['creekBottom', 'mirewood', 'deepBog'], temperament: 'indifferent', movement: 'water', anim: 'hop', active: 'day' },
-  groundhog: { biomes: ['meadow', 'oldfieldRise'], temperament: 'wary', movement: 'ground', anim: 'bob', active: 'day' },
-  squirrel: { biomes: ['forest', 'tanglewood', 'oldfieldRise'], temperament: 'skittish', movement: 'ground', anim: 'hop', active: 'day' },
-  crayfish: { biomes: ['creekBottom', 'mirewood'], temperament: 'indifferent', movement: 'water', anim: 'swim', active: 'day' },
-  muskrat: { biomes: ['creekBottom', 'mirewood', 'deepBog'], temperament: 'wary', movement: 'water', anim: 'swim', active: 'day' },
-  mice: { biomes: ['meadow', 'oldfieldRise'], temperament: 'skittish', movement: 'ground', anim: 'hop', active: 'day' },
-  voles: { biomes: ['meadow', 'creekBottom'], temperament: 'skittish', movement: 'ground', anim: 'hop', active: 'day' },
-  fish: { biomes: ['creekBottom', 'mirewood'], temperament: 'skittish', movement: 'water', anim: 'swim', active: 'day' },
-  eels: { biomes: ['creekBottom', 'mirewood'], temperament: 'skittish', movement: 'water', anim: 'swim', active: 'day' },
-  opossum: { biomes: ['forest', 'oldfieldRise', 'tanglewood'], temperament: 'skittish', movement: 'ground', anim: 'bob', active: 'day' },
-  shrew: { biomes: ['forest', 'meadow'], temperament: 'skittish', movement: 'ground', anim: 'hop', active: 'day' },
+  owl: { biomes: ['forest', 'tanglewood'], temperament: 'wary', movement: 'fly', anim: 'flutter', active: 'night', flee: 'straight', wanderRange: 8 },
+  bat: { biomes: ['forest', 'tanglewood'], temperament: 'skittish', movement: 'fly', anim: 'flutter', active: 'night', flee: 'straight', wanderRange: 8 },
+  pigeon: { biomes: ['meadow', 'oldfieldRise', 'forest'], temperament: 'skittish', movement: 'fly', anim: 'flutter', active: 'day', flee: 'straight', wanderRange: 8 },
+  beaver: { biomes: ['creekBottom', 'mirewood'], temperament: 'wary', movement: 'water', anim: 'swim', active: 'day', flee: 'cover', wanderRange: 8 },
+  turtle: { biomes: ['creekBottom', 'mirewood'], temperament: 'indifferent', movement: 'water', anim: 'swim', active: 'day', flee: 'freeze', wanderRange: 8 },
+  deer: { biomes: ['meadow', 'forest', 'oldfieldRise'], temperament: 'wary', movement: 'ground', anim: 'bob', active: 'day', flee: 'straight', wanderRange: 12 },
+  fox: { biomes: ['forest', 'oldfieldRise', 'meadow'], temperament: 'wary', movement: 'ground', anim: 'bob', active: 'day', flee: 'straight', wanderRange: 10 },
+  mole: { biomes: ['meadow', 'oldfieldRise', 'forest'], temperament: 'indifferent', movement: 'ground', anim: 'bob', active: 'day', flee: 'straight', wanderRange: 3 },
+  snake: { biomes: ['meadow', 'creekBottom', 'oldfieldRise'], temperament: 'skittish', movement: 'ground', anim: 'bob', active: 'day', flee: 'straight', wanderRange: 8 },
+  mouse: { biomes: ['meadow', 'oldfieldRise', 'forest'], temperament: 'skittish', movement: 'ground', anim: 'hop', active: 'day', flee: 'zigzag', wanderRange: 3 },
+  bear: { biomes: ['forest', 'tanglewood'], temperament: 'wary', movement: 'ground', anim: 'bob', active: 'day', flee: 'straight', wanderRange: 10 },
+  rabbit: { biomes: ['meadow', 'oldfieldRise', 'forest'], temperament: 'skittish', movement: 'ground', anim: 'hop', active: 'day', flee: 'zigzag', wanderRange: 8 },
+  raccoon: { biomes: ['forest', 'creekBottom', 'mirewood'], temperament: 'curious', movement: 'ground', anim: 'bob', active: 'day', flee: 'straight', wanderRange: 8 },
+  wolf: { biomes: ['forest', 'tanglewood', 'meadow'], temperament: 'wary', movement: 'ground', anim: 'bob', active: 'day', flee: 'straight', wanderRange: 12 },
+  crow: { biomes: ['meadow', 'oldfieldRise', 'forest'], temperament: 'curious', movement: 'fly', anim: 'flutter', active: 'day', flee: 'straight', wanderRange: 8 },
+  frog: { biomes: ['creekBottom', 'mirewood', 'deepBog'], temperament: 'indifferent', movement: 'water', anim: 'hop', active: 'day', flee: 'straight', wanderRange: 8 },
+  groundhog: { biomes: ['meadow', 'oldfieldRise'], temperament: 'wary', movement: 'ground', anim: 'bob', active: 'day', flee: 'cover', wanderRange: 3 },
+  squirrel: { biomes: ['forest', 'tanglewood', 'oldfieldRise'], temperament: 'skittish', movement: 'ground', anim: 'hop', active: 'day', flee: 'zigzag', wanderRange: 8 },
+  crayfish: { biomes: ['creekBottom', 'mirewood'], temperament: 'indifferent', movement: 'water', anim: 'swim', active: 'day', flee: 'straight', wanderRange: 8 },
+  muskrat: { biomes: ['creekBottom', 'mirewood', 'deepBog'], temperament: 'wary', movement: 'water', anim: 'swim', active: 'day', flee: 'cover', wanderRange: 8 },
+  mice: { biomes: ['meadow', 'oldfieldRise'], temperament: 'skittish', movement: 'ground', anim: 'hop', active: 'day', flee: 'zigzag', wanderRange: 3 },
+  voles: { biomes: ['meadow', 'creekBottom'], temperament: 'skittish', movement: 'ground', anim: 'hop', active: 'day', flee: 'zigzag', wanderRange: 3 },
+  fish: { biomes: ['creekBottom', 'mirewood'], temperament: 'skittish', movement: 'water', anim: 'swim', active: 'day', flee: 'straight', wanderRange: 8 },
+  eels: { biomes: ['creekBottom', 'mirewood'], temperament: 'skittish', movement: 'water', anim: 'swim', active: 'day', flee: 'straight', wanderRange: 8 },
+  opossum: { biomes: ['forest', 'oldfieldRise', 'tanglewood'], temperament: 'skittish', movement: 'ground', anim: 'bob', active: 'day', flee: 'freeze', wanderRange: 8 },
+  shrew: { biomes: ['forest', 'meadow'], temperament: 'skittish', movement: 'ground', anim: 'hop', active: 'day', flee: 'zigzag', wanderRange: 3 },
 };
 
 /** Draft tunables (all flagged for Adam's pin pass). */
+/** Default ground-wander radius; per-kind wanderRange in ANIMAL_DEFS now governs ground wander. */
 export const HOME_RANGE_M = 8;
 export const FLEE_RADIUS_M = 4;
 export const WARY_FLEE_RADIUS_M = 8;
 export const WANDER_SPEED_MPS = 1;
 export const FLEE_SPEED_MPS = 1.5;
+/** Zigzag half-angle off the away line, radians (DRAFT, ~34°). */
+export const ZIGZAG_ANGLE_RAD = 0.6;
+/** A cover animal this close to home counts as home and holds. */
+export const COVER_HOME_EPSILON_M = 0.5;
 export const MAX_PER_CHUNK = 3;
 /** A biome counts as present in a chunk at this blended weight or more. */
 export const BIOME_WEIGHT_MIN = 0.15;
@@ -156,6 +179,8 @@ export interface AnimalInstance {
   targetY: number;
   timer: number;
   perchY: number;
+  /** Zigzag side flag — toggled on each flee re-target (zigzag kinds only). */
+  fleeTurn: boolean;
   /** Water points (water kinds) / perch points (flying kinds) in this chunk. */
   anchors: AnimalPoint[];
 }
@@ -191,7 +216,7 @@ function pickWanderTarget(
     return { x: p.x, z: p.z, y: a.perchY };
   }
   const angle = Math.random() * Math.PI * 2;
-  const dist = Math.random() * HOME_RANGE_M;
+  const dist = Math.random() * def.wanderRange;
   return {
     x: a.homeX + Math.cos(angle) * dist,
     z: a.homeZ + Math.sin(angle) * dist,
@@ -261,6 +286,7 @@ export function spawnAnimalsForChunk(input: SpawnAnimalsInput): AnimalInstance[]
       targetY: 0,
       timer: 1 + rng() * 3,
       perchY: 0,
+      fleeTurn: false,
       anchors: [],
     };
     if (def.movement === 'water') {
@@ -303,6 +329,31 @@ export function spawnAnimalsForChunk(input: SpawnAnimalsInput): AnimalInstance[]
   return out;
 }
 
+/**
+ * Trap presence at ONE point (the trap's position): kinds whose
+ * ANIMAL_DEFS biomes appear at ≥ BIOME_WEIGHT_MIN (0.15, the decided
+ * threshold — one presence rule everywhere) in weightsAt(x, z).
+ * Single-point variant of the spawn rule above (which samples 5
+ * points per chunk); NO water-point refinement in v1 (trap sets
+ * already encode water plausibility) and no shrew special-casing
+ * (shrew is in no trap set, so the shell's intersection drops it).
+ * The shell feeds this list to Systems' eligibleKindsFor.
+ */
+export function biomePresentKinds(
+  weightsAt: (x: number, z: number) => { weights: Record<BiomeId, number> },
+  x: number,
+  z: number,
+): string[] {
+  const { weights } = weightsAt(x, z);
+  const present = new Set<BiomeId>();
+  for (const id of Object.keys(weights) as BiomeId[]) {
+    if (weights[id] >= BIOME_WEIGHT_MIN) present.add(id);
+  }
+  return ANIMAL_KINDS.filter((kind) =>
+    ANIMAL_DEFS[kind].biomes.some((b) => present.has(b)),
+  );
+}
+
 export interface AnimalUpdateInput {
   playerX: number;
   playerZ: number;
@@ -311,8 +362,8 @@ export interface AnimalUpdateInput {
 
 /**
  * Gameplay-time behavior step (Math.random allowed here — this is
- * gameplay, not worldgen). Wander within the home range, idle/feed
- * pauses, flee from a close player, perch + short flights for
+ * gameplay, not worldgen). Wander within the kind's range, idle/feed
+ * pauses, per-kind flee styles from a close player, perch + short flights for
  * flyers, water patrol for swimmers. Night kinds (owl, bat) fly
  * at night and perch by day; day kinds rest at night.
  */
@@ -324,15 +375,49 @@ export function updateAnimal(a: AnimalInstance, dt: number, input: AnimalUpdateI
   const dzP = a.z - input.playerZ;
   const distP = Math.hypot(dxP, dzP);
   if (distP < fleeRadius) {
-    // Re-targeted every frame while the player is close, so a
-    // chased animal keeps running instead of stalling at its
-    // first flee point.
-    const angle = distP > 0.001 ? Math.atan2(dzP, dxP) : Math.random() * Math.PI * 2;
-    a.targetX = a.x + Math.cos(angle) * 6;
-    a.targetZ = a.z + Math.sin(angle) * 6;
-    a.targetY = def.movement === 'fly' ? a.perchY : a.y;
-    a.mode = 'flee';
-    a.flying = def.movement === 'fly';
+    // Per-kind flee style (DRAFT values — see ANIMAL_DEFS).
+    // Temperament still sets WHEN (the radius above); style sets HOW.
+    if (def.flee === 'freeze') {
+      // Hold still instead of fleeing. Timer refreshed each frame
+      // so the hold never expires into a wander step while the
+      // player stays close; it counts down once the player leaves.
+      a.mode = 'idle';
+      a.flying = false;
+      a.targetX = a.x;
+      a.targetZ = a.z;
+      a.timer = 1;
+    } else if (def.flee === 'cover') {
+      const distHome = Math.hypot(a.x - a.homeX, a.z - a.homeZ);
+      if (distHome < COVER_HOME_EPSILON_M) {
+        // Home (burrow / lodge): hold while the player stays close.
+        a.mode = 'idle';
+        a.flying = false;
+        a.targetX = a.x;
+        a.targetZ = a.z;
+        a.timer = 1;
+      } else {
+        a.targetX = a.homeX;
+        a.targetZ = a.homeZ;
+        a.targetY = def.movement === 'fly' ? a.perchY : a.y;
+        a.mode = 'flee';
+        a.flying = def.movement === 'fly';
+      }
+    } else {
+      // Straight + zigzag: re-targeted every frame while the player
+      // is close, so a chased animal keeps running instead of
+      // stalling at its first flee point. Zigzag alternates sides
+      // of the away line on each re-target.
+      const away = distP > 0.001 ? Math.atan2(dzP, dxP) : Math.random() * Math.PI * 2;
+      const angle = def.flee === 'zigzag'
+        ? away + (a.fleeTurn ? ZIGZAG_ANGLE_RAD : -ZIGZAG_ANGLE_RAD)
+        : away;
+      if (def.flee === 'zigzag') a.fleeTurn = !a.fleeTurn;
+      a.targetX = a.x + Math.cos(angle) * 6;
+      a.targetZ = a.z + Math.sin(angle) * 6;
+      a.targetY = def.movement === 'fly' ? a.perchY : a.y;
+      a.mode = 'flee';
+      a.flying = def.movement === 'fly';
+    }
   }
   const moving = a.mode === 'wander' || a.mode === 'fly' || a.mode === 'flee';
   if (!moving) {

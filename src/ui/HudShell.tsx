@@ -31,6 +31,15 @@ export interface HudShellProps {
   needSlots?: NeedSlot[];
   /** Hide the needs row (touch HUD-collapsed state). Default false. */
   hideNeeds?: boolean;
+  /**
+   * Top readout row (Adam, 2026-10-28 — the LocationChip
+   * moved up top): rendered between the Needs row and
+   * the children, ALWAYS — never gated by hideNeeds or
+   * collapse (the readout shows with the HUD collapsed,
+   * as it did at the bottom). Null = no row, no offset
+   * (the caller's hide rule lives in the prop value).
+   */
+  topReadout?: ReactNode;
   /** Caller-composed content inside the shell (panels, toggles, etc.). */
   children?: ReactNode;
   /** Look for the overlay pill. Default "mire" (the world outside). */
@@ -41,6 +50,7 @@ export interface HudShellProps {
 export function HudShell({
   needSlots = [],
   hideNeeds = false,
+  topReadout,
   children,
   theme = 'mire',
   className,
@@ -77,6 +87,31 @@ export function HudShell({
         </div>
       </div>
       )}
+      {/* TOP READOUT ROW (Adam, 2026-10-28): the
+          LocationChip lives here now, in flow below the
+          Needs row and above the children — flow, not a
+          fixed offset, so wrapping Needs / HUD rows
+          shift it instead of overlapping it. The row
+          needs no z: the readout hides with panels /
+          modals open (the caller's rule), so its old
+          above-panels/below-modals stacking is moot,
+          and it paints in shell flow above the canvas.
+          COLLAPSED MARGIN: hideNeeds is true exactly
+          when touch is HUD-collapsed, the one state
+          with the absolute slim bar across the top
+          (left-2 right-2 top-2) — the 112px margin
+          clears its wrapped two-row height (104px +
+          8px clearance; single-row 52px covered). */}
+      {topReadout ? (
+        <div
+          className={
+            'pointer-events-none flex justify-center' +
+            (hideNeeds ? ' mt-[112px]' : '')
+          }
+        >
+          {topReadout}
+        </div>
+      ) : null}
       <div className="pointer-events-none flex-1">{children}</div>
     </div>
   );

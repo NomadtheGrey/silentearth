@@ -240,6 +240,16 @@ export interface EventMap {
    */
   'shelter:placed': { id: string; type: HouseType; x: number; z: number };
   /**
+   * A placed house UPGRADED in place (shelterState.upgradeHouse):
+   * same id, same position, new type. Deliberately NOT
+   * 'shelter:placed' — an upgrade is not a new house, and
+   * placement-counting listeners (e.g. App's new-houses count)
+   * must not fire on it. Renderer rebuilds the placed group on
+   * this (new type = new meshes); the shell follows it with
+   * getHomeStore(id).setHouse(newType) for capacity.
+   */
+  'shelter:upgraded': { id: string; type: HouseType };
+  /**
    * A loom was placed (loomState.placeLoom). Free placement
    * — no zone/plot gate, like fires and houses. Renderer
    * rebuilds the placed group; stationPresence reads live
@@ -279,6 +289,16 @@ export interface EventMap {
    */
   'altar:removed': { id: string };
   /**
+   * A stump anchor gained the workstation addition
+   * (stumpState.upgradeStump, Adam 2026-10-28 — stumpy
+   * workstation upgrade). Same stumpSiteId, same
+   * position — transformation, not consumption, and
+   * NOT a new entity. Renderer rebuilds the placed
+   * group (workbench overlay appears on the stump);
+   * the shell follows it with its branch (UI follow-up).
+   */
+  'stump:upgraded': { siteId: string; x: number; z: number };
+  /**
    * A bone was staged on a ritual site (ritualSiteState
    * .stageBone, Adam 2026-10-27 — tier-1 Waking, site
    * side). Site is the full site ref (kind + siteId + x/z);
@@ -314,6 +334,13 @@ export interface EventMap {
    * cleared). Shell saves + UI row re-reads the snapshot on this.
    */
   'trap:catch': { id: string; kind: string | null };
+  /**
+   * The game hour rolled (trapState.checkHour, called from the
+   * renderer's 2 s worldTick). The shell rolls per placed trap on
+   * this (biomePresent → eligibleKindsFor → resolveTrapHour →
+   * setCatch on caught); the emit itself carries only the hour.
+   */
+  'trap:hour': { hour: number };
   /**
    * Shelter state at her position changed (tracker, change-only,
    * like weather:changed): multiplier from real placed houses

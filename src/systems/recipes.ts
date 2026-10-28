@@ -155,6 +155,12 @@ export const ITEMS = {
   opossumCarcass: 'opossum-carcass',
   groundhogCarcass: 'groundhog-carcass',
   raccoonCarcass: 'raccoon-carcass',
+  // Beehive honey (2026-10-28 — Systems follow-up to Background's
+  // wildHive landing; see honey.ts for the harvest rule).
+  honey: 'honey',
+  // Camping (2026-10-28 — sleeping bag + tent; see camping.ts).
+  sleepingBag: 'sleeping-bag',
+  tent: 'tent',
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -258,6 +264,27 @@ export interface Recipe {
    */
   placesTrap?: boolean;
   /**
+   * Stump-upgrade (Systems, 2026-10-28 — the Stumpy Workstation
+   * fix; trap-report precedent). Crafting this recipe transforms
+   * the FACED stump into a workbench instead of granting an
+   * inventory item — executeCraft consumes the ingredients and
+   * reports upgradedStump {type}, and the SHELL transforms via
+   * Background's anchor primitive on that result (single-caller
+   * rule, trap precedent). The anchor is NOT consumed
+   * (transformation, not harvest); station presence unchanged;
+   * trundle-move preserved; the splitting bonus keys on the
+   * upgraded state when splitting lands. The recipe's station
+   * gate ('workstation') IS the presence condition —
+   * 'workstation' presence comes solely from stumps today — so
+   * the entry crafts only AT a stump. First use:
+   * stumpy-workstation. Additions-aware (Adam, 2026-10-28):
+   * the workstation is ONE addition on the stump anchor, not an
+   * exclusive flag — other additions (e.g. altar) coexist;
+   * Systems' report path is workstation-specific, the altar
+   * rides the ritual system.
+   */
+  upgradesStump?: boolean;
+  /**
    * Carrying-capacity bonus, containers only. The BONUS numbers are
    * Adam's pinned numbers; the COSTS beside them are draft. Where the
    * doc leaves a bonus open, this field is left off and the open
@@ -302,41 +329,6 @@ const PROTOTYPE_RECIPES: Recipe[] = [
     ],
     // Prototype lists no workstation requirement; station left unstated.
     notes: 'Prototype verbatim. Prototype lists no workstation requirement.',
-  },
-  {
-    id: 'wattle-and-daub-hut',
-    name: 'Wattle-and-Daub Hut',
-    status: 'prototype',
-    output: { item: ITEMS.wattleAndDaubHut, quantity: 1 },
-    ingredients: [
-      i(ITEMS.downedOak, 4),
-      i(ITEMS.riverSilt, 12),
-      i(ITEMS.tenderVines, 8),
-    ],
-    // Prototype lists no workstation requirement; station left unstated.
-    notes:
-      'Prototype verbatim (prototype key RIVER_SLUDGE = River Silt). ' +
-      'Silt restored 2026-10-25 (the cut was withdrawn): the hut spends 12.',
-  },
-  {
-    id: 'woven-cottage-prototype',
-    name: 'Woven Cottage (prototype)',
-    status: 'prototype',
-    output: { item: ITEMS.wovenCottage, quantity: 1 },
-    ingredients: [
-      i(ITEMS.downedOak, 10),
-      i(ITEMS.twinedCordage, 6),
-      i(ITEMS.peatMoss, 15),
-      i(ITEMS.riverStone, 4),
-    ],
-    station: 'workstation', // prototype: requiresWorkstation = true
-    notes:
-      'Prototype verbatim, kept for the record. SUPERSEDED by the merged ' +
-      'Woven Cottage draft recipe below (wattle-and-daub and woven cottage ' +
-      'are one ladder stage; the merged recipe drops the workstation ' +
-      'requirement per the 2026-10-25 workstation ruling). Do not craft ' +
-      'from this entry once the merged recipe is pinned; it is retained ' +
-      'so the verbatim prototype is not silently lost.',
   },
   {
     id: 'moss-cradle',
@@ -699,20 +691,27 @@ const DRAFT_RECIPES: Recipe[] = [
     name: 'Stumpy Workstation',
     status: 'draft',
     output: { item: ITEMS.stumpyWorkstation, quantity: 1 },
+    station: 'workstation',
     ingredients: [
-      i(ITEMS.oldStump, 1),
       i(ITEMS.snapWood, 4),
       i(ITEMS.twinedCordage, 4),
     ],
+    upgradesStump: true,
     notes:
       'DRAFT. A found Old Stump upgraded into a proper workbench ' +
       '("feed the stump wood and cordage and it BECOMES the proper ' +
       'workbench"). PINNED 2026-10-25: stumps upgrade to a workstation. ' +
-      'Moveable via the Trundle-Tool; splitting wood there yields more ' +
-      'lumber than in the field. The found stump is modelled as an ' +
-      'ingredient because the engine works on inventory counts; the ' +
-      'world-side "found stump" object is a later wiring concern, not ' +
-      'something this data module settles.',
+      'Presence condition: station \'workstation\' (presence comes ' +
+      'solely from stumps today), so the entry crafts only AT a stump. ' +
+      'Execution reports upgradedStump (trap-report precedent): the ' +
+      'shell transforms the FACED stump; the anchor is NOT consumed ' +
+      '(transformation, not harvest); station presence unchanged; ' +
+      'trundle-move preserved. Moveable via the Trundle-Tool; ' +
+      'splitting wood there yields more lumber than in the field ' +
+      '(bonus keys on the upgraded state when splitting lands — no ' +
+      'splitting mechanic exists yet, no numbers now). Additions-aware: ' +
+      'the workstation is ONE addition on the stump anchor, not an ' +
+      'exclusive flag — other additions (e.g. altar) coexist.',
   },
   {
     id: 'crafted-workstation',
@@ -1038,6 +1037,54 @@ const DRAFT_RECIPES: Recipe[] = [
       'dressing, flagged — do not add them). Upgrade tiers ' +
       'NOT built. RITUALS THEMSELVES NOT IN THIS ORDER — ' +
       'the altar is the SITE; rituals come later.',
+  },
+
+  // --- Camping (Adam, 2026-10-28: portable sleeping bag + tent;
+  // ingredients DELEGATED — existing materials only, all numbers
+  // DRAFT for Adam's pin pass; see camping.ts).
+  {
+    id: 'sleeping-bag',
+    name: 'Sleeping Bag',
+    status: 'draft',
+    output: { item: ITEMS.sleepingBag, quantity: 1 },
+    station: 'loom',
+    ingredients: [
+      i(ITEMS.twinedCordage, 4),
+      i(ITEMS.grass, 6),
+      i(ITEMS.tenderVines, 2),
+    ],
+    notes:
+      'DRAFT. Carried bedding, passive while carried (umbrella ' +
+      'precedent: no equip, no use-action, does NOT gate sleep — ' +
+      'sleep-anywhere already works). V1 effect is the marker + ' +
+      'the fiction (carriesSleepingBag, checked at sleep time); ' +
+      'no number today — no cold/exposure-during-sleep model to ' +
+      'attach one to, and a waking-refresh number would collide ' +
+      'with groundhog +10 (Adam\'s word needed, not baked). ' +
+      'Multiples by default (one-person-one-bag single is a ' +
+      'follow-up only if Adam wants it); not a no-recraft single.',
+  },
+  {
+    id: 'tent',
+    name: 'Tent',
+    status: 'draft',
+    output: { item: ITEMS.tent, quantity: 1 },
+    station: 'workstation',
+    ingredients: [
+      i(ITEMS.snapWood, 4),
+      i(ITEMS.twinedCordage, 6),
+      i(ITEMS.tenderVines, 4),
+    ],
+    notes:
+      'DRAFT. Placeable portable shelter (torch mirror: place ' +
+      'consumes 1, pickup grants 1, pack-full pickup leaves it ' +
+      'placed; multiples allowed). NOT a HouseType — no ' +
+      'HomeStorage/Store/Take, no upgrade pill, no FIND CAMP ' +
+      'camp, no home chip (all house-anchored). Shelter effect ' +
+      'PROPOSED draft 0.85 (lean-to 0.7, unsheltered 1.0) with ' +
+      'NO live benefit until Background\'s tent-aware ' +
+      'shelterQuery branch lands (their claim, DEV-routed). ' +
+      'Not a no-recraft single (multiples by design).',
   },
 ];
 

@@ -113,6 +113,36 @@ export const MOONLIGHT_FULL = 0.25;
  * (a hemisphere 0.65 against a torch point 80/decay-2).
  */
 export const OWL_NIGHT_SIGHT_FLOOR = 0.2;
+/**
+ * DAYLIGHT BALANCE (Adam 2026-10-28 — sun disc bright in a
+ * blue sky, ground barely lit: the scene lighting did not
+ * match the sun). DIAGNOSIS, probed: the disc is a
+ * MeshBasicMaterial and the dome is a raw shader — both
+ * render at full color regardless of scene lights — while
+ * lit geometry passes through three's BRDF_Lambert, which
+ * divides diffuse response by PI (verified in
+ * three.module.js). The old daytime ends (sun 0.8, hemi
+ * 0.9) therefore lit noon ground at only ~0.37 × albedo
+ * (sun term 0.196 + hemi scale 0.286 × muted sky color),
+ * against a full-bright disc: the mismatch was structural,
+ * not a dim disc. FIX (numbers DRAFT, pin pass): lift the
+ * daytime ends so lit ground matches a bright sun — sun
+ * noon 0.8 → 1.6, hemi noon 0.9 → 1.30, total ≈ 0.64 ×
+ * albedo at noon, no clipping (white stays ~0.65). NIGHT
+ * UNTOUCHED BY CONSTRUCTION: the moonlight branch is
+ * separate, and the hemi night floor stays 0.45
+ * (dayFactor 0); dawn/dusk rise only mildly (hemi 0.525
+ * → 0.592 at the horizon, sun ~0 at rise/set since
+ * sin(alt) ≈ 0). Fog, dome colors, hemi sky color, and
+ * torch/candle lights are unchanged — intensity balance
+ * only. HUT-INTERIOR INTERACTION: DoubleSide inner faces
+ * share the same Lambert response, so interiors brighten
+ * with daylight exactly like exteriors — the faces fix
+ * (ff44e00) is unaffected, only brighter.
+ */
+export const SUN_DAYLIGHT_BASE = 0.5;
+export const SUN_DAYLIGHT_PEAK = 1.1;
+export const HEMI_DAYLIGHT_GAIN = 0.85;
 /** Dark-side earthshine as a fraction of moon color (faintly visible new moon). */
 export const MOON_EARTHSHINE = 0.08;
 /** Terminator softness in disc units (penumbra band, lane-decided). */
@@ -678,7 +708,7 @@ export class SkyRig {
       this.domeUniforms.moonGlow.value = 0;
       this.sunLight.position.copy(dir).multiplyScalar(100);
       this.sunLight.color.set(0xd8d0b0);
-      this.sunLight.intensity = 0.25 + 0.55 * Math.sin(Math.PI * split.dayProgress);
+      this.sunLight.intensity = SUN_DAYLIGHT_BASE + SUN_DAYLIGHT_PEAK * Math.sin(Math.PI * split.dayProgress);
     } else {
       const dir = moonDirection(split.nightProgress);
       this.moonMesh.position.copy(dir).multiplyScalar(SKY_BODY_RADIUS);
@@ -708,7 +738,7 @@ export class SkyRig {
       this.sunLight.intensity =
         MOONLIGHT_FULL * terms.illumination * altFactor * (0.35 + 0.65 * clarity);
     }
-    this.hemiLight.intensity = 0.45 + 0.45 * dayFactor;
+    this.hemiLight.intensity = 0.45 + HEMI_DAYLIGHT_GAIN * dayFactor;
     // Owl talon — night sight (tier-1 charm, DRAFT floor):
     // the night ambient floor rises while carried + awakened.
     // Scaled by nightFactor (full at night, zero by day) —
