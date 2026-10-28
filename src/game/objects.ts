@@ -362,7 +362,8 @@ export type MeshShape =
   | 'tallTree'
   | 'mushroom'
   | 'acornCluster'
-  | 'appleTree';
+  | 'appleTree'
+  | 'beehive';
 
 export interface MeshSpec {
   shape: MeshShape;
@@ -500,20 +501,6 @@ const ELDERBERRIES_50: SecondaryYield = {
 };
 
 export const SOURCES: HarvestSourceDef[] = [
-  {
-    id: 'vineTangle',
-    kind: 'vine',
-    name: 'Vine Tangle',
-    description:
-      'Thick hanging vines, scenery twin of the harvestable vine strands. ' +
-      'The harvestable form is tenderVines below; this tangle marks dense growth.',
-    harvestable: false,
-    permitTier: null,
-    secondaryYields: [],
-    provenance: 'draft',
-    biomes: ['mirewood', 'tanglewood', 'creekBottom', 'oldfieldRise'],
-    mesh: { shape: 'vine', color: 0x4a6b2f, baseY: 0.7 },
-  },
   {
     id: 'bush',
     kind: 'bush',
@@ -918,6 +905,23 @@ export const SOURCES: HarvestSourceDef[] = [
     provenance: 'draft',
     biomes: ['meadow', 'forest', 'oldfieldRise', 'creekBottom'],
     mesh: { shape: 'flower', color: 0xe08aa8, baseY: 0.18 },
+  },
+  {
+    id: 'wildHive',
+    kind: 'beehive',
+    name: 'Wild Hive',
+    description:
+      'A wild beehive in the flowered country — SCENERY ONLY v1 ' +
+      '(beehive landing, 2026-10-28): it marks where honey will ' +
+      'come from, but yields nothing yet — the honey item and ' +
+      'the harvest rule ride Systems\' follow-up, and no item ' +
+      'is invented here.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['meadow', 'forest', 'oldfieldRise', 'creekBottom'],
+    mesh: { shape: 'beehive', color: 0xc9a86a, baseY: 0 },
   },
   {
     id: 'forestTallTree',

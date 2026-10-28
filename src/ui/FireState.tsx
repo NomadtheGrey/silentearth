@@ -100,18 +100,32 @@ export function FireState({
 }: FireStateProps) {
   const word =
     status === 'lit' ? 'Lit' : status === 'lighting' ? 'Lighting…' : 'Unlit';
-  const inner = (
-    <>
-      {status === 'unlit' ? null : <FlameGlyph />}
-      <span>{KIND_WORD[kind]}</span>
-      <span className={status === 'unlit' ? 'italic text-stone-400' : ''}>
-        {word}
-      </span>
-      {lightingDetail ? (
-        <span className="text-xs text-stone-400">{lightingDetail}</span>
-      ) : null}
-    </>
-  );
+  // Unlit + no process (the caller passes no lightingDetail then —
+  // unlit ⟺ no process, proven by the shell's chip mapping):
+  // the chip reads "{Kind} — click to light" (Adam's words),
+  // an invitation at full brightness, not a dimmed status.
+  // All other statuses render exactly as before, so the chip
+  // never contradicts the menu (same lighting facts).
+  const ariaLabel =
+    status === 'unlit'
+      ? `${KIND_WORD[kind]}: click to light`
+      : `${KIND_WORD[kind]}: ${word}`;
+  const inner =
+    status === 'unlit' ? (
+      <>
+        <span>{KIND_WORD[kind]}</span>
+        <span>— click to light</span>
+      </>
+    ) : (
+      <>
+        <FlameGlyph />
+        <span>{KIND_WORD[kind]}</span>
+        <span>{word}</span>
+        {lightingDetail ? (
+          <span className="text-xs text-stone-400">{lightingDetail}</span>
+        ) : null}
+      </>
+    );
   const style =
     'flex items-center gap-2 rounded bg-black/50 px-2 py-1 text-sm text-stone-100 ' +
     (className ?? '');
@@ -123,7 +137,7 @@ export function FireState({
         onTouchStart={(e) => {
           e.stopPropagation();
         }}
-        aria-label={`${KIND_WORD[kind]}: ${word}`}
+        aria-label={ariaLabel}
         className={'pointer-events-auto min-h-[44px] ' + style}
       >
         {inner}
@@ -131,7 +145,7 @@ export function FireState({
     );
   }
   return (
-    <div aria-label={`${KIND_WORD[kind]}: ${word}`} className={style}>
+    <div aria-label={ariaLabel} className={style}>
       {inner}
     </div>
   );

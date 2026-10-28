@@ -1546,6 +1546,7 @@ import type { TrapType } from './game/traps';
 import { harvestState } from './game/harvestState';
 import { SOURCE_BY_ID, type ToolTier } from './game/objects';
 import type { FireType } from './game/fire';
+import { FLINT_CLICKS, FRICTION_WAIT_MS } from './game/fire';
 import {
   shelterState,
   shelterAt,
@@ -1615,6 +1616,7 @@ import { ProximityHarvestButtons } from './ui/ProximityHarvestButtons';
 import { InteractionProgress } from './ui/InteractionProgress';
 import { ObjectFeedback } from './ui/ObjectFeedback';
 import { WorldAnchor } from './ui/WorldAnchor';
+import { UI_THEMES } from './ui/themes';
 import { CameraTransition } from './ui/CameraTransition';
 import { CAMERA_TRANSITION } from './ui/cameraPresentation';
 import { projectWorldToScreen } from './ui/worldProjection';
@@ -2327,6 +2329,12 @@ export default function App() {
     { fire: PlacedFire; x: number; y: number }[]
   >([]);
   const [selectedFireId, setSelectedFireId] = useState<string | null>(null);
+  // Campfire tap (Adam, 2026-10-28): the pending pointerdown
+  // for tap-near-fire (touch-only, container handlers below).
+  // A ref, not state — a tap must not re-render on press.
+  const fireTapRef = useRef<{ x: number; y: number; time: number } | null>(
+    null,
+  );
   // Placed torches (Background singleton, read fresh on every
   // event), their projected anchors, and the torch whose menu
   // is open — the fire-chip pattern, one torch per chip. The
@@ -4884,6 +4892,49 @@ export default function App() {
   };
 
   /** Lighting + cooking menu actions for one placed fire. */
+  // Lighting progress bar (Adam, 2026-10-28): the fire menu's
+  // header, shown only while a lighting process exists (no
+  // process → null, no bar). Derived per render from
+  // PlacedFire.lighting — no new state, no new timer: the
+  // bar advances on the existing 1 s tick + fire:lighting
+  // refreshes, and freezes on pause by construction
+  // (waitUntil shifts on pause, so the waiting fraction
+  // stops moving; clicks don't advance while paused because
+  // lighting state doesn't change). Labels mirror the chip
+  // detail + menu action words exactly, so the bar never
+  // contradicts them. Menu-only — the chip keeps text.
+  const lightingBarFor = (fire: PlacedFire) => {
+    const lighting = fire.lighting;
+    if (lighting === null) return null;
+    const bar = (fraction: number, label: string) => (
+      <div>
+        <div className="h-2 w-full overflow-hidden rounded bg-black/40">
+          <div
+            className="h-full rounded bg-amber-400"
+            style={{ width: `${Math.round(fraction * 100)}%` }}
+          />
+        </div>
+        <p className="mt-1 text-xs text-stone-300">{label}</p>
+      </div>
+    );
+    if (lighting.method === 'friction') {
+      if (lighting.phase === 'ready') {
+        return bar(1, 'Ready — rub again');
+      }
+      const fraction = Math.min(
+        1,
+        Math.max(
+          0,
+          1 - (lighting.waitUntil - Date.now()) / FRICTION_WAIT_MS,
+        ),
+      );
+      return bar(fraction, `Waiting… ${Math.round(fraction * 100)}%`);
+    }
+    return bar(
+      lighting.clicks / FLINT_CLICKS,
+      `Clicks ${lighting.clicks} of ${FLINT_CLICKS}`,
+    );
+  };
   const fireMenuActions = (fire: PlacedFire): ContextAction[] => {
     if (fire.lit) {
       const hasAcorns = inventory.count(FOOD_ACORNS) > 0;
@@ -5210,6 +5261,18 @@ export default function App() {
   // Labels carry the kind (ContextMenu has no section
   // headers) so a long menu stays scannable. Action ids
   // encode verb + kind (ids never contain ':').
+  // Pile menu entries: ONE kind-entry per kind — pile kinds in
+  // stacks order, then carried kinds not in the pile — each
+  // carrying its arrow buttons under the SAME action ids the
+  // text rows used (take-one/take-all/deposit-one/
+  // deposit-all:kind), so handlePileAction below is untouched
+  // and every verb/quantity behaves exactly as today. Only
+  // the rendering changes (ContextMenu's kind-entry branch).
+  // Take arrows render iff the pile holds the kind: a kind
+  // taken to zero leaves the entry entirely when nothing is
+  // carried, and stays deposit-only when carried. Deposit
+  // arrows always render, disabled iff carried is 0 (with
+  // the "Needs carried" note under the arrows row).
   const pileMenuActions = (pile: PileTarget): ContextAction[] => {
     const actions: ContextAction[] = [];
     const pileKinds = new Set(
@@ -5217,44 +5280,59 @@ export default function App() {
     );
     for (const stack of pile.stacks) {
       const name = displayNameFor(stack.item);
-      actions.push(
-        { id: `take-one:${stack.item}`, label: `${name} — Take one` },
-        {
-          id: `take-all:${stack.item}`,
-          label: `${name} — Take all`,
-          hint: `× ${stack.quantity}`,
-        },
-      );
       const carried = inventory.count(stack.item as ItemId);
       const noCarried = carried <= 0;
-      const needNote = `Needs carried ${name}`;
-      actions.push(
-        {
-          id: `deposit-one:${stack.item}`,
-          label: `${name} — Deposit one`,
-          disabled: noCarried,
-          disabledNote: noCarried ? needNote : undefined,
-        },
-        {
-          id: `deposit-all:${stack.item}`,
-          label: `${name} — Deposit all`,
-          hint: noCarried ? undefined : `× ${carried}`,
-          disabled: noCarried,
-          disabledNote: noCarried ? needNote : undefined,
-        },
-      );
+      actions.push({
+        id: `kind:${stack.item}`,
+        label: name,
+        counts: { pile: stack.quantity, carried },
+        disabledNote: noCarried ? `Needs carried ${name}` : undefined,
+        arrows: [
+          {
+            id: `take-one:${stack.item}`,
+            glyph: '↑',
+            ariaLabel: `Pick up one ${name}`,
+          },
+          {
+            id: `take-all:${stack.item}`,
+            glyph: '↑↑',
+            ariaLabel: `Pick up all ${name}`,
+          },
+          {
+            id: `deposit-one:${stack.item}`,
+            glyph: '↓',
+            ariaLabel: `Drop one ${name} here`,
+            disabled: noCarried,
+          },
+          {
+            id: `deposit-all:${stack.item}`,
+            glyph: '↓↓',
+            ariaLabel: `Drop all ${name} here`,
+            disabled: noCarried,
+          },
+        ],
+      });
     }
     for (const stack of inventory.stacksSnapshot()) {
       if (pileKinds.has(stack.item)) continue;
       const name = displayNameFor(stack.item);
-      actions.push(
-        { id: `deposit-one:${stack.item}`, label: `${name} — Deposit one` },
-        {
-          id: `deposit-all:${stack.item}`,
-          label: `${name} — Deposit all`,
-          hint: `× ${stack.quantity}`,
-        },
-      );
+      actions.push({
+        id: `kind:${stack.item}`,
+        label: name,
+        counts: { pile: 0, carried: stack.quantity },
+        arrows: [
+          {
+            id: `deposit-one:${stack.item}`,
+            glyph: '↓',
+            ariaLabel: `Drop one ${name} here`,
+          },
+          {
+            id: `deposit-all:${stack.item}`,
+            glyph: '↓↓',
+            ariaLabel: `Drop all ${name} here`,
+          },
+        ],
+      });
     }
     actions.push({ id: 'close', label: 'Close' });
     return actions;
@@ -5552,20 +5630,23 @@ export default function App() {
   // Introduction section in Options (Settings tab).
   const [introOpen, setIntroOpen] = useState(() => bootSave === null);
 
-  // ESC TOGGLE (Adam, 2026-10-27 — Esc opens Options): with
-  // NO modal open, Esc opens the Options modal; with a modal
-  // open, that modal's own Esc listener closes it (previous
-  // brief stands) and this handler stands aside — one rule,
+  // ESC TOGGLE (Adam, 2026-10-27 — Esc opens Options; extended
+  // 2026-10-28 — Esc closes the topmost layer first): with
+  // NO modal open, Esc closes the topmost open layer, one
+  // per press, in fixed order — placement panel, context
+  // menus (pile, torch, fire — reverse render order),
+  // ritual panel, panels (charms, crafting, inventory —
+  // reverse render order) — and only with nothing open does
+  // it open the Options modal. With a modal open, that
+  // modal's own Esc listener closes it (previous brief
+  // stands) and this handler stands aside — one rule,
   // topmost-close else open-Options. Esc on open Options
   // closes Options; a second Esc with nothing open re-opens
   // it. The handler yields when focus sits in a text input,
   // textarea, or select (the seed field): typing Esc there
   // must not yank the player into Options. It acts on
   // Escape alone and swallows nothing, so V/C and WASD are
-  // untouched. Panels (inventory/crafting) are not modals,
-  // so they do not block the toggle — flagged, not carved
-  // out: if Adam wants Esc to close panels first, that is
-  // a follow-up. It also yields while the remove-confirm
+  // untouched. It also yields while the remove-confirm
   // dialog is open (PC keys, 2026-10-28) — that dialog owns
   // its own Enter/Esc, the single Esc path.
   useEffect(() => {
@@ -5582,11 +5663,58 @@ export default function App() {
       ) {
         return;
       }
+      if (placement !== null) {
+        handlePlaceCancel();
+        return;
+      }
+      if (selectedPileId !== null) {
+        selectedPileIdRef.current = null;
+        setSelectedPileId(null);
+        return;
+      }
+      if (selectedTorchId !== null) {
+        setSelectedTorchId(null);
+        return;
+      }
+      if (selectedFireId !== null) {
+        setSelectedFireId(null);
+        return;
+      }
+      if (selectedSiteId !== null) {
+        setSelectedSiteId(null);
+        setRitualNote(null);
+        return;
+      }
+      if (charmsOpen) {
+        setCharmsOpen(false);
+        return;
+      }
+      if (craftingOpen) {
+        setCraftingOpen(false);
+        return;
+      }
+      if (inventoryOpen) {
+        setInventoryOpen(false);
+        return;
+      }
       setOptionsOpen(true);
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [optionsOpen, introOpen, pendingTrapRecipe, pendingRemoveTarget]);
+  }, [
+    optionsOpen,
+    introOpen,
+    pendingTrapRecipe,
+    pendingRemoveTarget,
+    placement,
+    selectedPileId,
+    selectedTorchId,
+    selectedFireId,
+    selectedSiteId,
+    charmsOpen,
+    craftingOpen,
+    inventoryOpen,
+  ]);
   const handleFontChange = (next: FontId): void => {
     setFont(next);
     saveFontChoice(next);
@@ -5919,6 +6047,35 @@ export default function App() {
       )
     : null;
 
+  // Nearest-target tag (Adam, 2026-10-28): display name only,
+  // v1 — the nearest harvestable scatter target, world-anchored
+  // so the name sits ON the thing (the column button alone
+  // never links name to object). Derived per render, like
+  // frogHint — no cache. First scatter = nearest (tracker
+  // sorts scatter by distance, App never re-sorts; find, not
+  // [0], so ground-first order never matters). Ground targets
+  // (dirt/mud/grass) are skipped — ground-only shows no tag
+  // (the Dirt button stays; the tag never labels dirt). Piles
+  // are not harvestTargets and get no tag (PileChip + pile
+  // menu already label them). Anchor projected fresh per
+  // render (stored anchorX/anchorY are mapping-time and go
+  // stale as she moves/turns — stationAnchor precedent);
+  // null anchor (behind camera) shows no tag. Name verbatim
+  // from the bus (Background's vine merge changes bus names
+  // — the tag follows them automatically, no tag logic
+  // change).
+  const nearestScatter = harvestTargets.find(
+    (target) => target.kind === 'scatter',
+  );
+  const tagAnchor =
+    nearestScatter !== undefined
+      ? projectAnchor(
+          nearestScatter.worldX,
+          nearestScatter.worldZ,
+          'scatter',
+        )
+      : null;
+
   // Crow pile arrows (glow landing, 2026-10-28): derived per
   // render from live state, like frogHint — no cache. Tier
   // from the same Systems fact as syncCrowTier (UI never
@@ -6065,8 +6222,64 @@ export default function App() {
         fontClassFor(font)
       }
     >
-      {/* 3D viewport */}
-      <div ref={containerRef} className="absolute inset-0" />
+      {/* 3D viewport: campfire tap (Adam, 2026-10-28,
+        touch-only) — a tap (not a drag) on the world canvas
+        within 64 px of a placed fire's projected anchor
+        (fireAnchors, the SAME projection the chips use)
+        selects that fire, opening the same ContextMenu as
+        a chip tap. 64 px = 44 px chip + generous finger
+        margin, phone-first; nearest anchor wins on overlap.
+        Touch-only by design: an unlocked desktop tap would
+        ALSO request pointer lock (player.onCanvasClick),
+        leaving a locked pointer behind an unusable menu,
+        and locked desktop taps keep harvesting — desktop
+        keeps chip-click. Paused guard: PausedIndicator's
+        wrapper is pointer-events-none, so taps outside its
+        button DO reach the canvas — the guard is needed,
+        not optional. HUD buttons are siblings of this div,
+        never inside it, so their taps never reach here.
+        Chip taps never double-open: chips are siblings in
+        the z-30 overlay, not inside this div. */}
+      <div
+        ref={containerRef}
+        className="absolute inset-0"
+        onPointerDown={(e) => {
+          if (!isTouch || paused) return;
+          fireTapRef.current = {
+            x: e.clientX,
+            y: e.clientY,
+            time: Date.now(),
+          };
+        }}
+        onPointerUp={(e) => {
+          const down = fireTapRef.current;
+          fireTapRef.current = null;
+          if (!isTouch || paused || down === null) return;
+          const moved = Math.hypot(e.clientX - down.x, e.clientY - down.y);
+          if (moved > 8 || Date.now() - down.time > 500) return;
+          const container = containerRef.current;
+          if (!container) return;
+          const width = container.clientWidth;
+          const height = container.clientHeight;
+          if (width === 0 || height === 0) return;
+          let best: { id: string; distance: number } | null = null;
+          for (const anchor of fireAnchors) {
+            const ax = (anchor.x / 100) * width;
+            const ay = (anchor.y / 100) * height;
+            const distance = Math.hypot(e.clientX - ax, e.clientY - ay);
+            if (
+              distance <= 64 &&
+              (best === null || distance < best.distance)
+            ) {
+              best = { id: anchor.fire.id, distance };
+            }
+          }
+          if (best !== null) setSelectedFireId(best.id);
+        }}
+        onPointerCancel={() => {
+          fireTapRef.current = null;
+        }}
+      />
 
       {/* World-anchored overlay: fire chips, menus, feedback. */}
       <div className="pointer-events-none absolute inset-0 z-30">
@@ -6153,6 +6366,7 @@ export default function App() {
           >
             <ContextMenu
               objectName={FIRE_NAME[selectedFire.type]}
+              header={lightingBarFor(selectedFire)}
               actions={fireMenuActions(selectedFire)}
               onSelect={(id) => handleFireAction(selectedFire.id, id)}
               onClose={() => setSelectedFireId(null)}
@@ -6184,6 +6398,12 @@ export default function App() {
                 selectedPile.stacks.length === 1
                   ? `${displayNameFor(selectedPile.stacks[0].item)} × ${selectedPile.stacks[0].quantity}`
                   : `Pile × ${selectedPile.stacks.reduce((sum, stack) => sum + stack.quantity, 0)} (${selectedPile.stacks.length} kinds)`
+              }
+              header={
+                <p className="text-xs text-stone-400">
+                  ↑ Pick up one · ↑↑ Pick up all · ↓ Drop one here · ↓↓ Drop
+                  all here
+                </p>
               }
               actions={pileMenuActions(selectedPile)}
               onSelect={(id) => handlePileAction(selectedPile, id)}
@@ -6419,6 +6639,14 @@ export default function App() {
               }
             >
               Inventory
+              {!isTouch ? (
+                <span
+                  aria-hidden="true"
+                  className="ml-1 rounded border border-stone-500/60 bg-black/30 px-1 font-mono text-[10px]"
+                >
+                  I
+                </span>
+              ) : null}
             </button>
             <button
               type="button"
@@ -6431,6 +6659,14 @@ export default function App() {
               }
             >
               Crafting
+              {!isTouch ? (
+                <span
+                  aria-hidden="true"
+                  className="ml-1 rounded border border-stone-500/60 bg-black/30 px-1 font-mono text-[10px]"
+                >
+                  K
+                </span>
+              ) : null}
             </button>
             <button
               type="button"
@@ -6443,6 +6679,14 @@ export default function App() {
               }
             >
               Charms
+              {!isTouch ? (
+                <span
+                  aria-hidden="true"
+                  className="ml-1 rounded border border-stone-500/60 bg-black/30 px-1 font-mono text-[10px]"
+                >
+                  L
+                </span>
+              ) : null}
             </button>
             <button
               type="button"
@@ -6917,6 +7161,37 @@ export default function App() {
         />
       ) : null}
 
+      {/* Nearest-target tag (Adam, 2026-10-28): the nearest
+        scatter target's bus name, world-anchored ON the thing
+        via WorldAnchor (FrogHint pill styling, visual only —
+        non-interactive, pointer-events-none, so parity holds:
+        no input to differ). Same hiding as the CrowArrows
+        rows (any panel/modal open or paused);
+        world-anchored contextual panels (ritual/pile/
+        placement) are NOT in the set, consistent with
+        CrowArrows. */}
+      {nearestScatter !== undefined &&
+      tagAnchor !== null &&
+      !inventoryOpen &&
+      !craftingOpen &&
+      !charmsOpen &&
+      !optionsOpen &&
+      !introOpen &&
+      !pendingTrapRecipe &&
+      pendingRemoveTarget === null &&
+      !paused ? (
+        <WorldAnchor x={tagAnchor.x} y={tagAnchor.y}>
+          <p
+            className={
+              'whitespace-nowrap rounded px-2 py-1 text-xs text-stone-100 ' +
+              UI_THEMES['mire'].overlay
+            }
+          >
+            {nearestScatter.name}
+          </p>
+        </WorldAnchor>
+      ) : null}
+
       {/* Esc hint: desktop only, and only while no modal is
         open (while a modal is open, Esc closes it instead —
         the hint would read wrong). Bottom-right: seed
@@ -6936,7 +7211,10 @@ export default function App() {
         the button itself takes its own tap — that tap is the
         resume (tap-to-resume, pinned). */}
       {paused ? (
-        <PausedIndicator onResume={() => pauseState.setPaused(false)} />
+        <PausedIndicator
+          onResume={() => pauseState.setPaused(false)}
+          showKeyHint={!isTouch}
+        />
       ) : null}
 
       {/* Camera transition overlay (vignette at rest, fade on switch). */}

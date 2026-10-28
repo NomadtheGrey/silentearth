@@ -443,6 +443,16 @@ export function buildKindGeometry(spec: MeshSpec, kind: ScatterKind): THREE.Buff
         part(sphere(0.18, 6, 5), c, { p: [0, 0.2, 0] }),
         part(sphere(0.07, 6, 5), FLOWER_CENTER_COLOR, { p: [0, 0.38, 0] }),
       ]);
+    case 'beehive': {
+      // Ground skep v1 (not tree-hung): cylindrical straw body
+      // + domed top + dark entrance slot. ~0.76 m wide, ~0.85 m
+      // tall — reads at phone scale without tree coupling.
+      return merge([
+        part(cyl(0.35, 0.38, 0.5, 10), c, { p: [0, 0.25, 0] }),
+        part(new THREE.SphereGeometry(0.35, 10, 8, 0, Math.PI * 2, 0, Math.PI / 2), shade(c, 1.1), { p: [0, 0.5, 0] }),
+        part(box(0.14, 0.09, 0.03), 0x1a1a12, { p: [0, 0.12, 0.38] }),
+      ]);
+    }
   }
 }
 

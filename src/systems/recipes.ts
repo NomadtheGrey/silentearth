@@ -142,6 +142,19 @@ export const ITEMS = {
   potTrap: 'pot-trap',
   pitfall: 'pitfall',
   deadfall: 'deadfall',
+  // Trap catches (draft carcass ids, trap-catch.ts —
+  // Adam pins names/weights/uses; weight rides the
+  // 1 lb unknown-id default until pin pass).
+  rabbitCarcass: 'rabbit-carcass',
+  squirrelCarcass: 'squirrel-carcass',
+  muskratCarcass: 'muskrat-carcass',
+  fishCarcass: 'fish-carcass',
+  eelCarcass: 'eel-carcass',
+  crayfishCarcass: 'crayfish-carcass',
+  frogCarcass: 'frog-carcass',
+  opossumCarcass: 'opossum-carcass',
+  groundhogCarcass: 'groundhog-carcass',
+  raccoonCarcass: 'raccoon-carcass',
 } as const;
 
 // ---------------------------------------------------------------------------

@@ -16,6 +16,7 @@
  * in this directory.
  */
 
+import type { ReactNode } from 'react';
 import type { ContextAction } from './types';
 import { UI_THEMES, type UiThemeName } from './themes';
 
@@ -24,6 +25,12 @@ export interface ContextMenuProps {
   objectName: string;
   /** Actions the caller offers for this object. */
   actions: ContextAction[];
+  /**
+   * Optional node rendered above the actions (e.g. a progress
+   * bar for the object's ongoing process). Menus that pass
+   * nothing render exactly as before.
+   */
+  header?: ReactNode;
   /** Id of the highlighted action, if any. Undefined = none. */
   selectedActionId?: string;
   /** Called when the player picks an action. Optional. */
@@ -37,6 +44,7 @@ export interface ContextMenuProps {
 export function ContextMenu({
   objectName,
   actions,
+  header,
   selectedActionId,
   onSelect,
   onClose,
@@ -58,6 +66,7 @@ export function ContextMenu({
           </button>
         ) : null}
       </div>
+      {header ? <div className="mb-2">{header}</div> : null}
       {actions.length === 0 ? (
         <p className={'text-sm italic ' + t.muted}>
           No actions yet — actions arrive with the interaction system.
@@ -66,6 +75,42 @@ export function ContextMenu({
         <ul className="flex flex-col gap-0.5">
           {actions.map((action) => {
             const selected = action.id === selectedActionId;
+            if (action.arrows) {
+              return (
+                <li key={action.id}>
+                  <div>
+                    <span className="flex items-baseline justify-between gap-2">
+                      <span className="text-sm">{action.label}</span>
+                      {action.counts ? (
+                        <span className={'text-xs ' + t.muted}>
+                          pile ×{action.counts.pile} · carried ×
+                          {action.counts.carried}
+                        </span>
+                      ) : null}
+                    </span>
+                    <span className="mt-1 flex gap-1">
+                      {action.arrows.map((arrow) => (
+                        <button
+                          key={arrow.id}
+                          type="button"
+                          disabled={arrow.disabled}
+                          onClick={() => onSelect?.(arrow.id)}
+                          aria-label={arrow.ariaLabel}
+                          className="min-h-[44px] min-w-[44px] flex-1 rounded text-base disabled:cursor-not-allowed disabled:opacity-40 hover:bg-stone-800"
+                        >
+                          <span aria-hidden="true">{arrow.glyph}</span>
+                        </button>
+                      ))}
+                    </span>
+                    {action.disabledNote ? (
+                      <span className={'mt-0.5 block text-xs ' + t.muted}>
+                        {action.disabledNote}
+                      </span>
+                    ) : null}
+                  </div>
+                </li>
+              );
+            }
             return (
               <li key={action.id}>
                 <button

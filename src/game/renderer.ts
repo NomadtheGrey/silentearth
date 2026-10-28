@@ -1225,10 +1225,12 @@ export class WorldRenderer {
         // 0.32 m campfire read as nothing on a phone screen):
         // stone ring + ash bed + crossed base logs + a tipi pile
         // rising to CAMPFIRE_PILE_TOP_Y. The lit flame's base
-        // sits just under the pile top so it emerges from the
-        // sticks instead of hiding inside them.
+        // sits well inside the tipi (baseY 0.45) so the lower
+        // flame body hides among the sticks and only the tongue
+        // clears the pile top — a flame emerging FROM the pile,
+        // not balanced on it (Adam 2026-10-28, screenshot).
         fg.add(buildCampfireGroup());
-        if (lit) { fg.add(this.flameMesh(fire.x, fire.z, 0.75, 1)); this.addFireLight(fire.x, fire.z, 0.75, 1); }
+        if (lit) { fg.add(this.flameMesh(fire.x, fire.z, 0.45, 1)); this.addFireLight(fire.x, fire.z, 0.45, 1); }
       } else if (fire.type === 'hearth') {
         // Stone base, side pillars, mantel, dark firebox opening,
         // inner logs — a hearth, not a slab.
