@@ -61,6 +61,14 @@ const SCATTER_KINDS: ScatterKind[] = [
   // biomes only, mix-driven. Appended last, like flint/pond
   // — existing kinds keep their relative order.
   'beehive',
+  // Flowers landing (2026-10-28): 13 new flower kinds in the
+  // four flowered biomes only, mix-driven. Appended last, like
+  // beehive — existing kinds keep their relative order (the
+  // added mix weights still re-roll kind picks per slot, as the
+  // apple landing noted).
+  'yarrow', 'coneflower', 'clover', 'dandelion', 'milkweed',
+  'poppy', 'sunflower', 'aster', 'trillium', 'violet',
+  'ladySlipper', 'iris', 'waterLily',
 ];
 
 export function createWorldGen(seed: string): WorldGen {

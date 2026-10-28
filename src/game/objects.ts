@@ -125,7 +125,26 @@ export type ItemId =
   | 'ELDERBERRIES'
   | 'EDIBLE_MUSHROOM'
   | 'POISON_MUSHROOM'
-  | 'APPLE';
+  | 'APPLE'
+  /**
+   * Flower item ids (Background flowers landing, 2026-10-28):
+   * KEBAB strings, verbatim from Systems' approved list — the
+   * single shared list both halves key on. The union mixes cases
+   * BY DESIGN: do not "fix" these to UPPER_SNAKE, or Systems'
+   * ITEMS keys and these primaryYield values stop matching.
+   */
+  | 'white-yarrow'
+  | 'gold-coneflower'
+  | 'purple-clover'
+  | 'yellow-dandelion'
+  | 'pink-milkweed'
+  | 'red-poppy'
+  | 'tall-sunflower'
+  | 'blue-aster'
+  | 'white-trillium'
+  | 'wood-violet'
+  | 'creek-iris'
+  | 'white-water-lily';
 
 /**
  * Tool ladder stages for tool-gated yields (the garden trowel and its
@@ -367,6 +386,14 @@ export type MeshShape =
   | 'crystal'
   | 'bone'
   | 'flower'
+  | 'flowerDisc'
+  | 'flowerCone'
+  | 'flowerCup'
+  | 'flowerTallDisc'
+  | 'flowerTrillium'
+  | 'flowerPouch'
+  | 'flowerIris'
+  | 'flowerPad'
   | 'tallTree'
   | 'mushroom'
   | 'acornCluster'
@@ -435,6 +462,15 @@ export interface HarvestSourceDef {
   fixedYield?: boolean;
   /** Primary yield, when harvestable. */
   primaryYield?: ItemId;
+  /**
+   * Bee-forage tier (Background flowers landing, 2026-10-28):
+   * a beehive parameter, DATA ONLY in v1 — the beehive branch
+   * interprets these tiers later. Words are the brainstorm doc's
+   * own: 'high' / 'low' plain tiers, 'early' / 'late' seasonal
+   * (their semantics need the season axis, still open),
+   * 'forage' plain. Absent = no forage value (not bee food).
+   */
+  beeForage?: 'high' | 'low' | 'early' | 'late' | 'forage';
   /** Prototype-carried secondary yields (empty when the prototype had none). */
   secondaryYields: SecondaryYield[];
   /** Tool-gated yields (clay on silt ground only, per the 2026-10-26
@@ -926,6 +962,208 @@ export const SOURCES: HarvestSourceDef[] = [
     provenance: 'draft',
     biomes: ['meadow', 'forest', 'oldfieldRise', 'creekBottom'],
     mesh: { shape: 'flower', color: 0xe08aa8, baseY: 0.18 },
+  },
+  {
+    id: 'whiteYarrow',
+    kind: 'yarrow',
+    name: 'White Yarrow',
+    description:
+      'Low meadow weed: thin green stems topped with flat clusters of tiny white flowers. ' +
+      'Picked by hand for bouquets.',
+    harvestable: true,
+    permitTier: 'hand',
+    primaryYield: 'white-yarrow',
+    secondaryYields: [],
+    beeForage: 'low',
+    provenance: 'draft',
+    biomes: ['meadow', 'oldfieldRise'],
+    mesh: { shape: 'flowerDisc', color: 0xf2f0e6, extraColor: 0xe8e0c8, baseY: 0 },
+  },
+  {
+    id: 'goldConeflower',
+    kind: 'coneflower',
+    name: 'Gold Coneflower',
+    description:
+      'Tall meadow flower: a dark brown cone centre ringed with yellow petal rays — ' +
+      'the loudest flower in the meadow. Picked by hand; a show flower for home.',
+    harvestable: true,
+    permitTier: 'hand',
+    primaryYield: 'gold-coneflower',
+    secondaryYields: [],
+    beeForage: 'high',
+    provenance: 'draft',
+    biomes: ['meadow'],
+    mesh: { shape: 'flowerCone', color: 0xe8c832, extraColor: 0x4a2e18, baseY: 0 },
+  },
+  {
+    id: 'purpleClover',
+    kind: 'clover',
+    name: 'Purple Clover',
+    description:
+      'Low meadow clover: small purple sphere heads on low stems. Picked by hand; bee food first.',
+    harvestable: true,
+    permitTier: 'hand',
+    primaryYield: 'purple-clover',
+    secondaryYields: [],
+    beeForage: 'high',
+    provenance: 'draft',
+    biomes: ['meadow'],
+    mesh: { shape: 'flower', color: 0x8a5ab8, baseY: 0 },
+  },
+  {
+    id: 'yellowDandelion',
+    kind: 'dandelion',
+    name: 'Yellow Dandelion',
+    description:
+      'Low meadow weed: a yellow disc head on a low stem, greens eaten raw. ' +
+      'Picked by hand; early bee forage. (Disc form v1; the white puff form is deferred.)',
+    harvestable: true,
+    permitTier: 'hand',
+    primaryYield: 'yellow-dandelion',
+    secondaryYields: [],
+    beeForage: 'early',
+    provenance: 'draft',
+    biomes: ['meadow', 'oldfieldRise'],
+    mesh: { shape: 'flowerDisc', color: 0xf2d832, extraColor: 0xe8a832, baseY: 0 },
+  },
+  {
+    id: 'pinkMilkweed',
+    kind: 'milkweed',
+    name: 'Pink Milkweed',
+    description:
+      'Meadow milkweed: stems topped with pink blob clusters. Picked by hand; high bee forage. ' +
+      '(Blob-cluster form v1; the pod form is deferred.)',
+    harvestable: true,
+    permitTier: 'hand',
+    primaryYield: 'pink-milkweed',
+    secondaryYields: [],
+    beeForage: 'high',
+    provenance: 'draft',
+    biomes: ['meadow', 'oldfieldRise'],
+    mesh: { shape: 'flower', color: 0xe89ab8, baseY: 0 },
+  },
+  {
+    id: 'redPoppy',
+    kind: 'poppy',
+    name: 'Red Poppy',
+    description:
+      'Oldfield poppy: a thin stem holding an open red cup with a dark centre — ' +
+      'the red accent flower. Picked by hand.',
+    harvestable: true,
+    permitTier: 'hand',
+    primaryYield: 'red-poppy',
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['oldfieldRise'],
+    mesh: { shape: 'flowerCup', color: 0xc83228, extraColor: 0x1a1a12, baseY: 0 },
+  },
+  {
+    id: 'tallSunflower',
+    kind: 'sunflower',
+    name: 'Tall Sunflower',
+    description:
+      'Tall oldfield sunflower: a thick tall stem with a large yellow disc head and dark centre — ' +
+      'a landmark flower, visible from afar. Seeds eaten; picked by hand.',
+    harvestable: true,
+    permitTier: 'hand',
+    primaryYield: 'tall-sunflower',
+    secondaryYields: [],
+    beeForage: 'forage',
+    provenance: 'draft',
+    biomes: ['oldfieldRise', 'meadow'],
+    mesh: { shape: 'flowerTallDisc', color: 0xf2c832, extraColor: 0x2a2018, baseY: 0 },
+  },
+  {
+    id: 'blueAster',
+    kind: 'aster',
+    name: 'Blue Aster',
+    description:
+      'Late-season oldfield aster: a star disc of blue-purple petal rays, blooming when other ' +
+      'flowers are done. Picked by hand; late bee forage.',
+    harvestable: true,
+    permitTier: 'hand',
+    primaryYield: 'blue-aster',
+    secondaryYields: [],
+    beeForage: 'late',
+    provenance: 'draft',
+    biomes: ['oldfieldRise', 'forest'],
+    mesh: { shape: 'flowerDisc', color: 0x7a6ac8, extraColor: 0xf2d832, baseY: 0 },
+  },
+  {
+    id: 'whiteTrillium',
+    kind: 'trillium',
+    name: 'White Trillium',
+    description:
+      'Rare forest trillium: three white petal discs in a triangle over three green leaves — ' +
+      'unmistakable, and rare on purpose. Picked by hand.',
+    harvestable: true,
+    permitTier: 'hand',
+    primaryYield: 'white-trillium',
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['forest'],
+    mesh: { shape: 'flowerTrillium', color: 0xf5f2ea, extraColor: 0x3a5a2a, baseY: 0 },
+  },
+  {
+    id: 'woodViolet',
+    kind: 'violet',
+    name: 'Wood Violet',
+    description:
+      'Very low forest violet: a small purple disc head over green leaves at the base. ' +
+      'Picked by hand; a small raw garnish.',
+    harvestable: true,
+    permitTier: 'hand',
+    primaryYield: 'wood-violet',
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['forest'],
+    mesh: { shape: 'flowerDisc', color: 0x7a4ab8, extraColor: 0xf2f0e6, baseY: 0 },
+  },
+  {
+    id: 'pinkLadySlipper',
+    kind: 'ladySlipper',
+    name: 'Pink Lady Slipper',
+    description:
+      'Rare forest orchid: a pink pouch (the slipper) with petal discs behind it. ' +
+      'SCENERY ONLY v1 — it yields nothing, so its rarity is preserved; a rare-harvest ' +
+      'option belongs to the later potion branch, not this landing.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['forest'],
+    mesh: { shape: 'flowerPouch', color: 0xdd7a9a, baseY: 0 },
+  },
+  {
+    id: 'creekIris',
+    kind: 'iris',
+    name: 'Creek Iris',
+    description:
+      'Tall creek-bottom iris: blade leaves and purple petal discs with a yellow centre, ' +
+      'growing at the wet edge. Picked by hand.',
+    harvestable: true,
+    permitTier: 'hand',
+    primaryYield: 'creek-iris',
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['creekBottom'],
+    mesh: { shape: 'flowerIris', color: 0x6a4ab8, extraColor: 0xf2d832, baseY: 0 },
+  },
+  {
+    id: 'whiteWaterLily',
+    kind: 'waterLily',
+    name: 'White Water Lily',
+    description:
+      'Pond-edge water lily of creek country: a wide green pad disc with a white petal flower ' +
+      'on top. V1 places it as creek-bottom ground scatter (true floating rides a later ' +
+      'water-placement pass). Picked by hand.',
+    harvestable: true,
+    permitTier: 'hand',
+    primaryYield: 'white-water-lily',
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['creekBottom'],
+    mesh: { shape: 'flowerPad', color: 0xf5f2ea, extraColor: 0x3a6a2a, baseY: 0 },
   },
   {
     id: 'wildHive',
