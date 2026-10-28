@@ -306,7 +306,8 @@
  *   centred card on desktop, per the phone-HUD rules.
  * - LOCATION CHIP, LIVE (Adam, 2026-10-26): a small
  *   translucent bottom-centre pill — dominant biome + percent,
- *   player position, and FPS — rendered outside the
+ *   player position, zone coords (2026-10-28, below),
+ *   and FPS — rendered outside the
  *   collapsible HUD stack, so it stays visible with the HUD
  *   collapsed on touch (collapse hides panels, never this
  *   chip). It hides only while a panel or the modal is open,
@@ -1375,6 +1376,33 @@
  *   ritual site' / 'Tier n · phrase' for a second
  *   copy of an awakened kind). Parity: panel +
  *   door shared, touch + desktop alike.
+ * - ZONE COORDS + CHARM-HOOK WIRING, LIVE (Adam,
+ *   2026-10-28 — "squeeze in next build"; Background
+ *   zones.ts 9dd1b36 + G1/G2/G3 hooks): two items,
+ *   one push. ZONES: the LocationChip gains the zone
+ *   readout — App calls zoneCoords(position) (the
+ *   helper is the single source of truth: 32 m chunk
+ *   zones, world origin, east +x, north-positive
+ *   second axis, floor) and passes the NUMBERS; the
+ *   chip formats [+10, 0] style ('+' on positives
+ *   both axes, plain zero/negatives) beside the
+ *   position, ticking as she walks. No size/sign/
+ *   origin invented here. HOOKS: syncCharmHooks
+ *   mirrors syncShrewEffect — five landed setters
+ *   on list-membership + awakened booleans (never
+ *   main-inventory count): renderer pigeon (arrows
+ *   without water while listed), owl (night sight),
+ *   bat (night way-finding); player fox (swift
+ *   step); module mole (clay bonus). Call sites are
+ *   the only list-change paths — boot (after
+ *   restore + grant) + ritual completion (after
+ *   awaken) — no timer. Pigeon always-on: the
+ *   arrival-dismiss path is untouched (it clears
+ *   only the scry flag; the OR keeps pigeon arrows
+ *   up while listed). Scry stays the early
+ *   water-gated path; frog hint display excluded
+ *   (waits for Systems' frog fact). Parity: chip +
+ *   hooks shared, touch + desktop alike.
  * POINTER DISCIPLINE: overlays are pointer-events-none except the
  * small interactive pieces (HUD buttons, panels, harvest buttons),
  * so world clicks — including the first-person mouse-capture click
@@ -1390,9 +1418,11 @@ import { bus, type EventMap } from './game/events';
 import { pauseState } from './game/pause';
 import {
   createHarvestOutcomeListener,
+  setMoleEarthSense,
   stationPresence,
   stumpPositions,
 } from './game/harvest';
+import { zoneCoords } from './game/zones';
 import { BIOME_BY_ID } from './game/biomes';
 import {
   fireState,
@@ -2207,6 +2237,35 @@ export default function App() {
       shrewCarried ? FIRST_CHARM_EFFECT.drainMultiplier : 1,
     );
   };
+  // CHARM-HOOK SYNC (zone + hooks build, Background G1/G2/G3):
+  // the five landed charm hooks take shell-supplied
+  // carried + awakened booleans — list membership via
+  // isAwakened per kind, NEVER main-inventory count
+  // (list charms are not inventory stacks, same rule
+  // as syncShrewEffect). The setters are idempotent
+  // booleans, so re-syncing is harmless. Call sites are
+  // the ONLY list-change paths — boot (after restore +
+  // grant) and ritual completion (after awaken) — no
+  // timer: hook booleans change only on awakening.
+  // Pigeon always-on: the renderer ORs scry + pigeon
+  // (arrowsVisible), so the arrival-dismiss path clears
+  // only the scry flag — pigeon arrows stay while the
+  // charm is listed, by design (effects are always on).
+  // Fox reaches the player controller (nullable ref);
+  // mole is a module-level setter; the three vision
+  // hooks reach the renderer (nullable ref).
+  const syncCharmHooks = () => {
+    const charms = charmStateRef.current;
+    rendererRef.current?.setPigeonWayHome(
+      charms.isAwakened('pigeon-wing-bone'),
+    );
+    rendererRef.current?.setOwlNightSight(charms.isAwakened('owl-talon'));
+    rendererRef.current?.setBatNightWayfinding(
+      charms.isAwakened('bat-wing-bone'),
+    );
+    playerRef.current?.setSwiftStep(charms.isAwakened('fox-femur'));
+    setMoleEarthSense(charms.isAwakened('mole-paw'));
+  };
   const [ritualNote, setRitualNote] = useState<string | null>(null);
   const [, setRitualVersion] = useState(0);
   const refreshRitual = () => {
@@ -2949,6 +3008,11 @@ export default function App() {
     // the grant path anymore (grant-to-list grants no
     // item) — this call is the sync, not a duplicate.
     syncShrewEffect();
+    // Charm-hook boot sync: a loaded save's listed
+    // charms need their hooks from boot (all five
+    // setters are session state, never saved) — same
+    // reason as the shrew sync above.
+    syncCharmHooks();
     applyShelterHouse(
       shelterAt(player.x, player.z, shelterState.snapshot()).houseId,
     );
@@ -3838,6 +3902,10 @@ export default function App() {
       const result = staging.complete(recipe, facts);
       if (!result) continue;
       charmStateRef.current.awaken(result.kind, result.tier);
+      // Awakening is a list change: re-sync the charm
+      // hooks at once (the newly listed kind's effect
+      // starts now, not on the next boot).
+      syncCharmHooks();
       // Anchor BEFORE unstaging: the staged site record
       // carries the site's true position for BOTH kinds
       // (altar + stump) — the old altarState-only lookup
@@ -5154,6 +5222,15 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [position.x, position.z, seed]);
 
+  // Zone coords for the chip (zone display build):
+  // zoneCoords is the single source of truth (Background
+  // zones.ts — 32 m chunk zones, world origin, east +x,
+  // north-positive second axis, floor). App passes the
+  // NUMBERS; the chip formats them. Derived per render
+  // from position, so the display ticks as she walks
+  // (~6.4 s per zone at walk speed).
+  const [zoneX, zoneZ] = zoneCoords(position.x, position.z);
+
   // FPS, shell-side (see the header): a requestAnimationFrame
   // sampler, not a renderer instrument — the renderer is
   // untouched. State updates about once a second, never per
@@ -5980,6 +6057,8 @@ export default function App() {
           biomeName={dominantBiome.name}
           biomePercent={dominantBiome.percent}
           fps={fps}
+          zoneX={zoneX}
+          zoneZ={zoneZ}
         />
       ) : null}
 
