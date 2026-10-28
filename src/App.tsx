@@ -1661,10 +1661,16 @@ import {
   SEASON_START_MONTH,
 } from './game/weather';
 import {
+  ownedStage,
   ownedTier,
   ownedToolItem,
   type OwnedToolItem,
 } from './systems/owned-tool';
+import {
+  evaluateQuests,
+  emptyQuestFlags,
+  type QuestFlags,
+} from './systems/quests';
 import { canCraft } from './systems/crafting';
 import {
   ITEMS,
@@ -1811,6 +1817,29 @@ const FIRE_NAME: Record<FireType, string> = {
   hearth: 'Hearth',
   kiln: 'Kiln',
   bloomery: 'Bloomery',
+};
+
+// QUEST HINTS (draft one-liners, Adam pins before merge):
+// one hint per Systems quest id, in priority order. The
+// Make Campfire hint says PLACE (the predicate completes on
+// a placed campfire, not a crafted one); the Wake a Charm
+// hint says ritual (the outright shrew grant is not one).
+const QUEST_HINTS: Record<string, string> = {
+  'collect-food': 'Gather something edible — berries, acorns, mushrooms, apples.',
+  'eat-when-hungry': 'Eat when hunger drops below fed.',
+  'make-campfire': 'Place a campfire.',
+  'light-campfire': 'Light a placed campfire.',
+  'make-lean-to': 'Build a lean-to.',
+  rest: 'Sleep until sunrise.',
+  'find-flint': 'Pick up flint.',
+  'make-torch': 'Craft a torch.',
+  'light-torch': 'Light a torch for carried light.',
+  'use-stump': 'Craft something at a stump workstation.',
+  'upgrade-tool': 'Sharpen or upgrade the trowel.',
+  'gather-clay': 'Gather clay.',
+  'better-house': 'Raise a thatch hut.',
+  'find-bone': 'Find a bone.',
+  'wake-charm': 'Complete a Waking ritual.',
 };
 
 /**
@@ -2200,6 +2229,18 @@ export default function App() {
   const [fireNote, setFireNote] = useState<string | null>(null);
   const [dropNote, setDropNote] = useState<string | null>(null);
   const [storageNote, setStorageNote] = useState<string | null>(null);
+  // Quest flags (Quest Log tab, 2026-10-28): shell-owned event
+  // flags Systems predicates read but cannot derive (eat while
+  // hungry, slept, ritual completed, crafted at stump). The
+  // state drives the tab; the ref mirrors it for saveNow
+  // (which reads refs + singletons). Boot init beside the
+  // stagings/awakenings restore; setters ride the wiring
+  // follow-up — the tab only reads, so all four read false
+  // until that landing.
+  const [questFlags, setQuestFlags] = useState<QuestFlags>(() =>
+    emptyQuestFlags(),
+  );
+  const questFlagsRef = useRef<QuestFlags>(emptyQuestFlags());
 
   const [seedInput, setSeedInput] = useState(bootSave?.seed ?? DEFAULT_SEED);
   const [seed, setSeed] = useState(bootSave?.seed ?? DEFAULT_SEED);
@@ -2700,6 +2741,11 @@ export default function App() {
           // refresh.
           stagings: stagingBookRef.current.snapshot(),
           awakenings: charmStateRef.current.snapshot(),
+          // QUEST SAVE WIRING: the live quest flags ride every
+          // save (all-false serializes as all-false; absent on
+          // old saves reads as all-false on load). Flags are
+          // set by the wiring follow-up; the tab only reads.
+          quests: { ...questFlagsRef.current },
           // LOOK SAVE WIRING: the live look counts ride
           // every save (snapshot as-is, first-look order;
           // serialize writes them verbatim, restore
@@ -3061,6 +3107,15 @@ export default function App() {
         // so altar positions are available here.
         stagingBookRef.current.restore(bootSaved.stagings ?? []);
         charmStateRef.current.restore(bootSaved.awakenings ?? []);
+        // QUEST SAVE WIRING: flags restore (all-false when the
+        // field is absent — old saves). Set by the wiring
+        // follow-up; the tab only reads.
+        const questFlagsInit = {
+          ...emptyQuestFlags(),
+          ...bootSaved.quests,
+        };
+        questFlagsRef.current = questFlagsInit;
+        setQuestFlags(questFlagsInit);
         ritualSiteState.restore(
           (bootSaved.stagings ?? []).flatMap((entry) => {
             if (!entry.bonePlaced || entry.completed) return [];
@@ -3818,6 +3873,30 @@ export default function App() {
     if (!nearest) return null;
     return projectAnchor(nearest.x, nearest.z, 'scatter');
   })();
+  // Quest Log display (2026-10-28): derived on every render
+  // from live state — no cached copy, no polling — so the tab
+  // reads fresh on activation (the tab switch re-renders) and
+  // on the 1 s tick, refreshInventory, and bus listeners like
+  // everything else. Hints are draft one-liners for Adam's
+  // pin pass; titles + completion come from Systems.
+  const questDisplay = inventory
+    ? evaluateQuests({
+        inventory,
+        ownedToolStage: ownedStage(inventory),
+        fires: fireState.snapshot().map((fire) => ({
+          type: fire.type,
+          lit: fire.lit,
+        })),
+        houses: shelterState.snapshot().map((house) => ({
+          type: house.type,
+        })),
+        placedTorches: torchState.snapshot().length,
+        flags: questFlags,
+      }).map((quest) => ({
+        ...quest,
+        hint: QUEST_HINTS[quest.id] ?? '',
+      }))
+    : undefined;
   const availableStations: CraftingStation[] = [];
   if (stationPresenceValue.workstation) {
     availableStations.push('workstation');
@@ -6412,6 +6491,7 @@ export default function App() {
             setOptionsOpen(false);
             setIntroOpen(true);
           }}
+          quests={questDisplay}
           onClose={() => setOptionsOpen(false)}
           comfortable={isTouch}
         />
