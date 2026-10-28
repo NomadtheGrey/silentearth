@@ -249,6 +249,34 @@ export function seasonalWeatherAt(
 }
 
 /**
+ * Deer antler tip — weather sense (tier-1 charm): storm-
+ * approach forecast fact for Systems' WeatherWarning
+ * latch. TRUE when harsh weather is APPROACHING her
+ * position: current harshness below the storm threshold
+ * AND harshness at a small month-step ahead at or above
+ * it (a rising-front crossing — not a storm already
+ * here, which reads false). Step + threshold are DRAFT,
+ * flagged. The design doc's 30-minute window is NOT a
+ * countdown here: month does not advance in-game yet
+ * (progression rate is Adam's open call), so this fact
+ * is the rising-front signal the latch builds on, and
+ * the minute-mapping waits on the clock rate.
+ */
+export const STORM_APPROACH_THRESHOLD = 0.7;
+export const STORM_APPROACH_MONTH_STEP = 0.05;
+export function stormApproaching(
+  gen: WorldGen,
+  x: number,
+  z: number,
+  month: number = SEASON_START_MONTH,
+): boolean {
+  const now = seasonalWeatherAt(gen, x, z, month).harshness;
+  if (now >= STORM_APPROACH_THRESHOLD) return false;
+  const ahead = seasonalWeatherAt(gen, x, z, month + STORM_APPROACH_MONTH_STEP).harshness;
+  return ahead >= STORM_APPROACH_THRESHOLD;
+}
+
+/**
  * SEASONAL DAY/NIGHT SPLIT (Adam, 2026-10-26 — refinement of
  * the light direction noted in fire.ts; sits with the
  * time-of-year axis above). The cycle is SEMI-REALISTIC: the
@@ -470,4 +498,60 @@ export function exposureAtPosition(
   const weather = seasonalWeatherAt(gen, x, z, modifiers.month ?? SEASON_START_MONTH);
   const shelter = modifiers.shelterQuery?.(x, z) ?? 1;
   return exposureAt(weather, { shelter, clothing: modifiers.clothing });
+}
+
+/**
+ * CHARM EXPOSURE INPUTS (tier-1 charms, Adam 2026-10-28).
+ * HARD LIMIT, stated plainly: exposureAt is a SINGLE
+ * scalar (harshness × shelter × clothing) — there are NO
+ * cold/wet axes in the exposure path to plug into (the
+ * rain/wind/cold/wet axes exist only in the garment-
+ * remaining table, not in exposureAt). So beaver + turtle
+ * land here as INPUTS, not live effects: shell-supplied
+ * carried + awakened booleans + pure factor helpers.
+ * The scalar is UNCHANGED (no axes invented in it).
+ * Live application awaits Systems' cold/wet meters,
+ * which read these factors; combined cold multiplies
+ * per the design doc (beaver × turtle = 0.81).
+ */
+
+/** Beaver incisor — shelter warmth: shell-supplied carried + awakened boolean. */
+let beaverShelterWarmth = false;
+/** Turtle shell fragment — protection: shell-supplied carried + awakened boolean. */
+let turtleProtection = false;
+
+/** Shell setter for the beaver input (UI wiring follows separately). */
+export function setBeaverShelterWarmth(active: boolean): void {
+  beaverShelterWarmth = active;
+}
+
+/** Shell setter for the turtle input (UI wiring follows separately). */
+export function setTurtleProtection(active: boolean): void {
+  turtleProtection = active;
+}
+
+/**
+ * Beaver cold factor (DRAFT ×0.9): 0.9 while carried +
+ * awakened AND in shelter, else 1. In-shelter is the
+ * caller's shelterAt read (houseId !== null) — the factor
+ * takes the boolean so Systems' meters can compose it
+ * with their own shelter read.
+ */
+export function beaverColdFactor(inShelter: boolean): number {
+  return beaverShelterWarmth && inShelter ? 0.9 : 1;
+}
+
+/** Turtle cold factor (DRAFT ×0.9). */
+export function turtleColdFactor(): number {
+  return turtleProtection ? 0.9 : 1;
+}
+
+/** Turtle wet factor (DRAFT ×0.9). */
+export function turtleWetFactor(): number {
+  return turtleProtection ? 0.9 : 1;
+}
+
+/** Combined cold factor (multiplicative: beaver × turtle). */
+export function charmColdFactor(inShelter: boolean): number {
+  return beaverColdFactor(inShelter) * turtleColdFactor();
 }
