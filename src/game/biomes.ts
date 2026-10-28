@@ -126,7 +126,7 @@ export const BIOMES: BiomeDef[] = [
       bush: 0.20, tree: 0.18, snapWood: 0.15, tenderVines: 0.05, log: 0.05,
       riverStone: 0.10, bone: 0.05, peatMoss: 0.05, vine: 0.05, downedOak: 0.05,
       riverSilt: 0.02, saltCrystal: 0.02, bogPatch: 0.01, standingWater: 0.01,
-      stump: 0.02, appleTree: 0.06, flint: 0.08, flower: 0.08,
+      stump: 0.02, appleTree: 0.06, flint: 0.08, flower: 0.08, beehive: 0.02,
     },
     // The pleasant neighbor: higher, drier, firm footing.
     anchor: {
@@ -144,7 +144,7 @@ export const BIOMES: BiomeDef[] = [
       riverSilt: 0.25, standingWater: 0.20, riverStone: 0.15, peatMoss: 0.10,
       snapWood: 0.05, tenderVines: 0.05, bush: 0.05, log: 0.05, bone: 0.03,
       bogPatch: 0.05, vine: 0.02, bogGrowth: 0.02, edibleMushroom: 0.04, poisonMushroom: 0.04,
-      flint: 0.10, pond: 0.03, flower: 0.03,
+      flint: 0.10, pond: 0.03, flower: 0.03, beehive: 0.01,
     },
     // Silt beds and shallow water along ridged creek lines.
     anchor: {
@@ -196,7 +196,7 @@ export const BIOMES: BiomeDef[] = [
     mix: {
       flower: 0.28, bush: 0.16, snapWood: 0.08, tree: 0.04, log: 0.04,
       tenderVines: 0.05, riverStone: 0.05, peatMoss: 0.03, vine: 0.03,
-      bone: 0.01, stump: 0.01, appleTree: 0.05, flint: 0.05,
+      bone: 0.01, stump: 0.01, appleTree: 0.05, flint: 0.05, beehive: 0.03,
     },
     // Pretty and open: light grass, flowers, scattered brush — the
     // pleasant far-out clearing. Drier and lower than Oldfield Rise
@@ -221,7 +221,7 @@ export const BIOMES: BiomeDef[] = [
       tallTree: 0.28, tree: 0.14, bush: 0.12, vine: 0.10, tenderVines: 0.08,
       log: 0.06, snapWood: 0.05, downedOak: 0.04, peatMoss: 0.04,
       flower: 0.03, riverStone: 0.02, bone: 0.01, stump: 0.01, bogGrowth: 0.01, edibleMushroom: 0.08, poisonMushroom: 0.08,
-      flint: 0.03,
+      flint: 0.03, beehive: 0.01,
     },
     // Pretty and deep: tall trees, dappled light, a sparse flower floor.
     // Dense like Tanglewood, but mid-elevation and distance-gated, so

@@ -72,7 +72,8 @@ export type ScatterKind =
   | 'groundAcorns'
   | 'appleTree'
   | 'flint'
-  | 'pond';
+  | 'pond'
+  | 'beehive';
 
 /** One placed scatter object in a chunk. y is its base height above ground. */
 export interface ScatterObject {

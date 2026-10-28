@@ -197,6 +197,7 @@ import { boneItemId, boneKindAt } from './boneKind';
 import { TOO_HUNGRY_STAGE, type HungerStageQuery } from './hunger';
 import { loomState } from './loomState';
 import { pileState } from './pileState';
+import { torchState } from './torchState';
 
 /** Re-exported so existing importers keep one harvest entry point. */
 export { harvestState };
@@ -376,6 +377,61 @@ export function stumpPositions(
     }
   }
   return out;
+}
+
+/**
+ * Hive positions at (x, z) (beehive landing, 2026-10-28):
+ * the harvest interaction point for wild hives. Mirrors
+ * stumpPositions exactly — hive objects in range from chunk
+ * data — MINUS the felled/removed branches: nothing removes
+ * hives v1 (no harvest path yet), so there is no removal
+ * state to consult; Systems' harvest landing adds removal
+ * tracking if hives deplete. Default range HARVEST_RANGE
+ * (a near-site interaction, same range as workstation
+ * presence).
+ */
+export function hivePositions(
+  gen: WorldGen,
+  x: number,
+  z: number,
+  range: number = HARVEST_RANGE,
+): Array<{ x: number; z: number }> {
+  const out: Array<{ x: number; z: number }> = [];
+  const minCx = Math.floor((x - range) / CHUNK_SIZE);
+  const maxCx = Math.floor((x + range) / CHUNK_SIZE);
+  const minCz = Math.floor((z - range) / CHUNK_SIZE);
+  const maxCz = Math.floor((z + range) / CHUNK_SIZE);
+  for (let cz = minCz; cz <= maxCz; cz++) {
+    for (let cx = minCx; cx <= maxCx; cx++) {
+      for (const obj of gen.generateChunk(cx, cz).objects) {
+        if (obj.kind !== 'beehive') continue;
+        if (Math.hypot(obj.x - x, obj.z - z) <= range) out.push({ x: obj.x, z: obj.z });
+      }
+    }
+  }
+  return out;
+}
+
+/**
+ * Torch-under-hive fact (beehive landing, 2026-10-28):
+ * true when a PLACED torch stands within range of the hive
+ * — the "torch under hive" half of the safe-harvest rule.
+ * Placed torches are ALWAYS lit (torchState: no lit flag,
+ * position is the whole state), so no lit check. Carried
+ * lit torches do NOT count v1 (literal smoker reading;
+ * carried-lit is Systems' inventory fact — if Adam wants
+ * it counted, Systems adds it to their rule with no
+ * Background change). Default range HARVEST_RANGE.
+ */
+export function placedTorchNearHive(
+  hiveX: number,
+  hiveZ: number,
+  range: number = HARVEST_RANGE,
+): boolean {
+  for (const torch of torchState.snapshot()) {
+    if (Math.hypot(torch.x - hiveX, torch.z - hiveZ) <= range) return true;
+  }
+  return false;
 }
 
 /**

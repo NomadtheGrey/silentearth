@@ -57,6 +57,10 @@ const SCATTER_KINDS: ScatterKind[] = [
   // re-roll kind picks per slot, as the apple landing did).
   'flint',
   'pond',
+  // Beehive landing (2026-10-28): wild hives in flowered
+  // biomes only, mix-driven. Appended last, like flint/pond
+  // — existing kinds keep their relative order.
+  'beehive',
 ];
 
 export function createWorldGen(seed: string): WorldGen {
