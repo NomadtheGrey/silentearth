@@ -15,12 +15,21 @@
  * are ONE ladder stage (merged 2026-10-25, in-game name 'Woven
  * Cottage'), so they share storage and protection values.
  *
- * STORAGE — lean-to PINNED, the rest lane-decided:
- * - primitive-lean-to: 50 (PINNED, Adam 2026-10-25).
+ * STORAGE — in POUNDS since 2026-10-28 (Adam's standing ruling:
+ * "pounds here and going forward"). The numerals below are
+ * POUNDS, not counts — carried over from the count era, ALL
+ * flagged for Adam's pin pass (the unit change redefines what
+ * they hold: a 50-lb lean-to holds far less than 50 count).
+ * - primitive-lean-to: 50 lb (PINNED numeral, Adam 2026-10-25).
  * - thatch-hut, woven-cottage / wattle-and-daub-hut, and
  *   small-wooden-hut: LANE-DECIDED starting tunables for Adam's
- *   pin pass (100 / 175 / 250), rising per house upgrade per
+ *   pin pass (100 / 175 / 250 lb), rising per house upgrade per
  *   the home-function rule (each type progressively larger).
+ * Per-kind rows stay QUANTITIES (count()); only used /
+ * capacity / free are pounds. Existing over-cap stores STAY:
+ * a store under the old count cap but over the pound cap keeps
+ * everything — future adds refuse, nothing is ever dropped
+ * (same rule as the upgrade capacity rule).
  *
  * PROTECTION — lane-decided values for Background's hook:
  * Background's weather.ts takes shelter as a ShelterQuery
@@ -38,6 +47,7 @@
  */
 
 import { ITEMS, type ItemId } from './recipes';
+import { POUND_UNITS_PER_LB, weightUnits } from './inventory';
 
 // ---------------------------------------------------------------------------
 // House types, storage, protection
@@ -51,9 +61,10 @@ export type HouseItem =
   | typeof ITEMS.smallWoodenHut;
 
 /**
- * Home storage capacity per house item. Lean-to 50 is PINNED;
- * the rest are LANE-DECIDED starting tunables (flagged for
- * Adam's pin pass).
+ * Home storage capacity per house item, in POUNDS (numerals
+ * carried over from the count era 2026-10-28, ALL flagged for
+ * Adam's pin pass). Lean-to 50 is PINNED (numeral); the rest
+ * are LANE-DECIDED starting tunables.
  */
 export const HOME_STORAGE_CAPACITY: Readonly<Record<string, number>> = {
   [ITEMS.primitiveLeanTo]: 50,
@@ -160,7 +171,7 @@ export class HomeStorage {
   private house: ItemId;
 
   /**
-   * Charm storage bonus in counts (mouse, Track B):
+   * Charm storage bonus in POUNDS (mouse, Track B):
    * session state, shell-synced (setCharmBonus on boot
    * + list change) — never saved; derives from the
    * awakening record, which IS saved. Default 0.
@@ -186,56 +197,77 @@ export class HomeStorage {
   }
 
   /**
-   * Set the charm storage bonus in counts (mouse +25
+   * Set the charm storage bonus in POUNDS (mouse +25 lb
    * while carried + awakened, else 0 — see
    * mouseStorageBonus in charms.ts). Must be a
    * non-negative integer.
    */
-  setCharmBonus(counts: number): void {
-    if (!Number.isInteger(counts) || counts < 0) {
+  setCharmBonus(pounds: number): void {
+    if (!Number.isInteger(pounds) || pounds < 0) {
       throw new Error('Charm storage bonus must be a non-negative integer.');
     }
-    this.charmBonus = counts;
+    this.charmBonus = pounds;
   }
 
-  /** Current charm storage bonus in counts. */
+  /**
+   * Current charm storage bonus, in pounds. Method name kept
+   * for call-site stability — the 'counts' in the name is
+   * stale since the pounds rework.
+   */
   charmBonusCounts(): number {
     return this.charmBonus;
   }
 
-  /** Storage capacity of the current house, including any charm bonus. */
+  /** Storage capacity in POUNDS of the current house, including any charm bonus. */
   capacity(): number {
     return homeStorageCapacity(this.house) + this.charmBonus;
   }
 
+  /** Stored quantity of one kind (counts — per-kind rows stay quantities). */
   count(item: ItemId): number {
     return this.stacks.get(item) ?? 0;
   }
 
+  /** Stored weight in POUNDS (sum over stacks of quantity × item weight). */
   used(): number {
+    return this.usedUnits() / POUND_UNITS_PER_LB;
+  }
+
+  /**
+   * Stored weight in integer 0.05-lb units (exact arithmetic —
+   * float pounds would dust at exact boundaries, the
+   * personal-carry precedent). The add() gate compares units.
+   */
+  private usedUnits(): number {
     let total = 0;
-    for (const quantity of this.stacks.values()) {
-      total += quantity;
+    for (const [item, quantity] of this.stacks.entries()) {
+      total += quantity * weightUnits(item);
     }
     return total;
   }
 
+  /** Free storage in POUNDS. */
   free(): number {
     return Math.max(0, this.capacity() - this.used());
   }
 
   /**
    * Store supplies. Throws (nothing stored) when the addition
-   * would exceed capacity. Unlike PersonalInventory there is no
-   * gear exception here — everything stored counts.
+   * would exceed capacity (compared in integer units, so an
+   * exactly-full store reads exactly full). Unlike
+   * PersonalInventory there is no gear exception here —
+   * everything stored counts toward the weight.
    */
   add(item: ItemId, quantity: number): void {
     if (!Number.isInteger(quantity) || quantity < 1) {
       throw new Error('Add quantity must be a positive integer.');
     }
-    if (this.used() + quantity > this.capacity()) {
+    if (
+      this.usedUnits() + quantity * weightUnits(item) >
+      this.capacity() * POUND_UNITS_PER_LB
+    ) {
       throw new Error(
-        `Cannot store ${quantity} ${item}: only ${this.free()} home ` +
+        `Cannot store ${quantity} ${item}: only ${this.free()} lb home ` +
           `storage free in ${this.house}.`,
       );
     }

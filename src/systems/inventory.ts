@@ -306,8 +306,12 @@ export function weightOf(item: ItemId): number {
   return ITEM_WEIGHT_LB[normalizeItemId(item)] ?? DEFAULT_ITEM_WEIGHT_LB;
 }
 
-/** One item's weight in integer 0.05 lb units (exact). */
-function weightUnits(item: ItemId): number {
+/**
+ * One item's weight in integer 0.05 lb units (exact). Exported
+ * for HomeStorage's exact-units arithmetic (pounds rework,
+ * 2026-10-28) — float pounds would dust at exact boundaries.
+ */
+export function weightUnits(item: ItemId): number {
   return Math.round(weightOf(item) * POUND_UNITS_PER_LB);
 }
 
