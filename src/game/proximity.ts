@@ -55,8 +55,8 @@
  *   gate by tool (Systems owns tool state). It carries permitTier so
  *   UI/Systems can filter; a below-permit target still appears, and
  *   Systems re-validates range + permit at outcome time.
- * - Excluded from targets: non-harvestable ground character (vine,
- *   bog patch, standing water, marsh grass, flowers, tall trees) and
+ * - Excluded from targets: non-harvestable ground character (bog
+ *   patch, standing water, marsh grass, flowers, tall trees) and
  *   anchors (the stump is claimed as a workstation, not harvested).
  *   Also excluded by the TRACKER (not by pure findInRange): regrowing
  *   targets (shrunk, not yet regrown — see harvestState.ts) and

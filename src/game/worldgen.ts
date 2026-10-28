@@ -32,7 +32,7 @@ export interface WorldGen {
 }
 
 const SCATTER_KINDS: ScatterKind[] = [
-  'vine', 'bush', 'log', 'bogPatch', 'standingWater', 'tree',
+  'bush', 'log', 'bogPatch', 'standingWater', 'tree',
   'snapWood', 'tenderVines', 'peatMoss', 'riverSilt', 'riverStone',
   'bone', 'saltCrystal', 'downedOak',
   // Fill-in landing (2026-10-25): stump, reed, marshGrass, bogGrowth.

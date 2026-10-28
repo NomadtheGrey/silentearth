@@ -502,28 +502,6 @@ const ELDERBERRIES_50: SecondaryYield = {
 
 export const SOURCES: HarvestSourceDef[] = [
   {
-    id: 'vineTangle',
-    kind: 'vine',
-    name: 'Vine Tangle',
-    description:
-      'Thick hanging vines marking dense growth. Cut them free ' +
-      'by hand for vine fiber, the same as the tender strands.',
-    harvestable: true,
-    removable: true,
-    permitTier: 'hand',
-    primaryYield: 'TENDER_VINES',
-    secondaryYields: [SPORES_25],
-    multiStep: {
-      action: 'TUG',
-      step: 0.5,
-      struggleMessage: 'You tug against the stubborn fibers... They groan but hold.',
-      successMessage: 'The vines finally snap free.',
-    },
-    provenance: 'draft',
-    biomes: ['mirewood', 'tanglewood', 'creekBottom', 'oldfieldRise'],
-    mesh: { shape: 'vine', color: 0x4a6b2f, baseY: 0.7 },
-  },
-  {
     id: 'bush',
     kind: 'bush',
     name: 'Brush',

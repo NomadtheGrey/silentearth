@@ -66,7 +66,7 @@ export interface BiomeDef {
   density: number;
   /** Object mix. Kinds map to the item vocabulary in world_data.json where
    *  one exists (snapWood -> SNAP_WOOD, riverSilt -> RIVER_SLUDGE, etc.);
-   *  vine/bush/log/bogPatch/standingWater/tree are pure scenery kinds. */
+   *  bush/log/bogPatch/standingWater/tree are pure scenery kinds. */
   mix: Partial<Record<ScatterKind, number>>;
   /** Preferred field-space position + blend width (sigma) per axis. Axes a
    *  biome does not care about are omitted (affinity factor 1). */
@@ -82,8 +82,8 @@ export const BIOMES: BiomeDef[] = [
     groundColor: 0x5a5a38,
     density: 1.0,
     mix: {
-      vine: 0.16, bush: 0.14, log: 0.08, bogPatch: 0.08, standingWater: 0.08,
-      tree: 0.05, snapWood: 0.10, tenderVines: 0.12, peatMoss: 0.10,
+      bush: 0.14, log: 0.08, bogPatch: 0.08, standingWater: 0.08,
+      tree: 0.05, snapWood: 0.10, tenderVines: 0.28, peatMoss: 0.10,
       riverSilt: 0.04, riverStone: 0.03, bone: 0.01, downedOak: 0.01,
       stump: 0.01, bogGrowth: 0.03, edibleMushroom: 0.04, poisonMushroom: 0.04,
       flint: 0.05, pond: 0.02,
@@ -123,8 +123,8 @@ export const BIOMES: BiomeDef[] = [
     groundColor: 0x7a7a4a,
     density: 0.70,
     mix: {
-      bush: 0.20, tree: 0.18, snapWood: 0.15, tenderVines: 0.05, log: 0.05,
-      riverStone: 0.10, bone: 0.05, peatMoss: 0.05, vine: 0.05, downedOak: 0.05,
+      bush: 0.20, tree: 0.18, snapWood: 0.15, tenderVines: 0.10, log: 0.05,
+      riverStone: 0.10, bone: 0.05, peatMoss: 0.05, downedOak: 0.05,
       riverSilt: 0.02, saltCrystal: 0.02, bogPatch: 0.01, standingWater: 0.01,
       stump: 0.02, appleTree: 0.06, flint: 0.08, flower: 0.08, beehive: 0.02,
     },
@@ -142,8 +142,8 @@ export const BIOMES: BiomeDef[] = [
     density: 0.80,
     mix: {
       riverSilt: 0.25, standingWater: 0.20, riverStone: 0.15, peatMoss: 0.10,
-      snapWood: 0.05, tenderVines: 0.05, bush: 0.05, log: 0.05, bone: 0.03,
-      bogPatch: 0.05, vine: 0.02, bogGrowth: 0.02, edibleMushroom: 0.04, poisonMushroom: 0.04,
+      snapWood: 0.05, tenderVines: 0.07, bush: 0.05, log: 0.05, bone: 0.03,
+      bogPatch: 0.05, bogGrowth: 0.02, edibleMushroom: 0.04, poisonMushroom: 0.04,
       flint: 0.10, pond: 0.03, flower: 0.03, beehive: 0.01,
     },
     // Silt beds and shallow water along ridged creek lines.
@@ -159,7 +159,7 @@ export const BIOMES: BiomeDef[] = [
     groundColor: 0x3d4a2a,
     density: 1.25,
     mix: {
-      vine: 0.25, tenderVines: 0.20, bush: 0.20, log: 0.08, snapWood: 0.08,
+      tenderVines: 0.45, bush: 0.20, log: 0.08, snapWood: 0.08,
       downedOak: 0.05, peatMoss: 0.05, tree: 0.05, riverStone: 0.02, bone: 0.02,
       stump: 0.01, bogGrowth: 0.02, edibleMushroom: 0.08, poisonMushroom: 0.08,
       flint: 0.03,
@@ -178,7 +178,7 @@ export const BIOMES: BiomeDef[] = [
     mix: {
       saltCrystal: 0.30, riverStone: 0.20, bone: 0.15, riverSilt: 0.10,
       bush: 0.05, snapWood: 0.05, log: 0.05, peatMoss: 0.03,
-      standingWater: 0.02, vine: 0.02, tenderVines: 0.02, downedOak: 0.01,
+      standingWater: 0.02, tenderVines: 0.04, downedOak: 0.01,
       flint: 0.03,
     },
     // The odd dry one: mineral crust, salt crystals, bone.
@@ -195,7 +195,7 @@ export const BIOMES: BiomeDef[] = [
     density: 0.85,
     mix: {
       flower: 0.28, bush: 0.16, snapWood: 0.08, tree: 0.04, log: 0.04,
-      tenderVines: 0.05, riverStone: 0.05, peatMoss: 0.03, vine: 0.03,
+      tenderVines: 0.08, riverStone: 0.05, peatMoss: 0.03,
       bone: 0.01, stump: 0.01, appleTree: 0.05, flint: 0.05, beehive: 0.03,
     },
     // Pretty and open: light grass, flowers, scattered brush — the
@@ -218,7 +218,7 @@ export const BIOMES: BiomeDef[] = [
     groundColor: 0x44552e,
     density: 1.30,
     mix: {
-      tallTree: 0.28, tree: 0.14, bush: 0.12, vine: 0.10, tenderVines: 0.08,
+      tallTree: 0.28, tree: 0.14, bush: 0.12, tenderVines: 0.18,
       log: 0.06, snapWood: 0.05, downedOak: 0.04, peatMoss: 0.04,
       flower: 0.03, riverStone: 0.02, bone: 0.01, stump: 0.01, bogGrowth: 0.01, edibleMushroom: 0.08, poisonMushroom: 0.08,
       flint: 0.03, beehive: 0.01,

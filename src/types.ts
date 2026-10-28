@@ -39,7 +39,7 @@ export interface BiomeWeights {
  *  snapWood -> SNAP_WOOD, tenderVines -> TENDER_VINES, peatMoss -> PEAT_MOSS,
  *  riverSilt -> RIVER_SLUDGE, riverStone -> RIVER_STONE, bone -> BONE,
  *  saltCrystal -> SALT_CRYSTAL, downedOak -> DOWNED_OAK, stump -> STUMP.
- *  The rest (vine, bush, log, bogPatch, standingWater, tree, reed,
+ *  The rest (bush, log, bogPatch, standingWater, tree, reed,
  *  marshGrass, bogGrowth) are sources or ground character whose yields are
  *  defined in src/game/objects.ts; standingWater and bogPatch yield
  *  nothing — they are ground character, not harvest sources.
@@ -47,7 +47,6 @@ export interface BiomeWeights {
  *  Meadow/forest landing (2026-10-26) added flower + tallTree: SCENERY
  *  ONLY, no harvestable item — they yield nothing. */
 export type ScatterKind =
-  | 'vine'
   | 'bush'
   | 'log'
   | 'bogPatch'
