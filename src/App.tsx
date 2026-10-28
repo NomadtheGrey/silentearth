@@ -1525,6 +1525,8 @@ import { bus, type EventMap } from './game/events';
 import { pauseState } from './game/pause';
 import {
   createHarvestOutcomeListener,
+  hivePositions,
+  placedTorchNearHive,
   setMoleEarthSense,
   stationPresence,
   stumpPositions,
@@ -1551,6 +1553,7 @@ import {
   resolveTrapHour,
 } from './systems/trap-catch';
 import type { TrapType } from './game/traps';
+import { harvestHoney } from './systems/honey';
 import { harvestState } from './game/harvestState';
 import { SOURCE_BY_ID, type ToolTier } from './game/objects';
 import type { FireType } from './game/fire';
@@ -4434,6 +4437,40 @@ export default function App() {
     sayAt(trap.x, trap.z, `Caught ${kind}!`, 'gain');
   };
 
+  // HIVE HARVEST (Adam, 2026-10-28): ONE harvest per
+  // press (hive coords — hives carry no ids). Too-hungry
+  // refuses at the interaction layer (Systems owns no
+  // hunger gate in harvestHoney): the honest error,
+  // not a silent no-op (the engine's own 'Harvest
+  // failed: too-hungry.' wording), and NO Systems call.
+  // Else Systems' harvestHoney decides: torch-first
+  // refusal verbatim, pack-full expanded trap-style,
+  // success grants + refreshes + saves. The hive stays
+  // in both refusal cases (no depletion, repeatable) —
+  // no hive state to re-read (world-gen, not state),
+  // so a repeat press re-tries.
+  const handleHarvestHive = (x: number, z: number) => {
+    if (hungerStage === 'too-hungry') {
+      sayAt(x, z, 'Harvest failed: too-hungry.', 'blocked');
+      return;
+    }
+    const outcome = harvestHoney(inventory, placedTorchNearHive(x, z));
+    if (outcome.granted === 1) {
+      refreshInventory();
+      saveNow();
+      sayAt(x, z, 'Harvested honey!', 'gain');
+      return;
+    }
+    sayAt(
+      x,
+      z,
+      outcome.reason === 'Pack full.'
+        ? `Pack full — no room for ${displayNameFor(ITEMS.honey)}.`
+        : (outcome.reason ?? 'Harvest failed.'),
+      'blocked',
+    );
+  };
+
   const handleWear = (garment: WornGarment) => {
     const def = GARMENTS.find((g) => g.backgroundId === garment);
     if (!def) return;
@@ -6386,6 +6423,49 @@ export default function App() {
     };
   })();
 
+  // HIVE ROW (Adam, 2026-10-28 — honey end-to-end):
+  // nearest wild hive in range, trap-row precedent —
+  // the caller owns gating (panels/modals/paused pass
+  // null, same list as trapRowTrap verbatim, including
+  // pendingTrapRecipe/pendingRemoveTarget — inherited,
+  // harmless). Hives carry no ids — coords ARE the
+  // identity (pile/stump precedent). Label is proposed,
+  // not pinned ('Harvest honey', static — no catch
+  // state to follow; torch state surfaces on press).
+  const hiveRowHive = (() => {
+    const player = playerRef.current;
+    if (!player) return null;
+    if (
+      inventoryOpen ||
+      craftingOpen ||
+      charmsOpen ||
+      placement !== null ||
+      selectedSiteId !== null ||
+      optionsOpen ||
+      introOpen ||
+      pendingTrapRecipe ||
+      pendingRemoveTarget !== null ||
+      paused
+    ) {
+      return null;
+    }
+    let nearest: { x: number; z: number } | null = null;
+    let nearestDistance = Infinity;
+    for (const hive of hivePositions(genRef.current, player.x, player.z)) {
+      const distance = Math.hypot(hive.x - player.x, hive.z - player.z);
+      if (distance <= HARVEST_RANGE && distance < nearestDistance) {
+        nearest = hive;
+        nearestDistance = distance;
+      }
+    }
+    if (!nearest) return null;
+    return {
+      x: nearest.x,
+      z: nearest.z,
+      label: 'Harvest honey',
+    };
+  })();
+
   // TOUCH CONTROLS (phone build — see the header): coarse-pointer
   // devices get the touch layer and the collapsible HUD; desktop
   // rendering is unchanged by construction (every touch branch
@@ -7350,6 +7430,8 @@ export default function App() {
           stationAnchor={stationAnchor}
           trap={trapRowTrap}
           onCollectTrap={handleCollectTrap}
+          hive={hiveRowHive}
+          onHarvestHive={handleHarvestHive}
           lookNode={
             !LOOK_PARKED && lookTarget ? (
               <div className="flex flex-col items-center gap-1">

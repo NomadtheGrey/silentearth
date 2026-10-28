@@ -102,17 +102,31 @@
  * caller (a pile may still hold items after a take).
  *
  * TRAP ROW (Adam, 2026-10-28): when the caller passes
- * trap, one trap button renders LAST in the column (after
- * all harvest buttons), with the caller's label and no
- * KindGlyph — plain text, same button look. Null trap =
- * no row (the caller owns gating: panels/modals/paused
- * pass null; legacy harvest rows stay ungated). A press
- * reports the trap id through onCollectTrap; the outcome
- * (grant, pack-full, nothing-caught) is the caller's job,
- * not this component's. The row renders even with zero
- * harvest targets (a trap nearby, no plants) — the
- * empty-targets null return yields only when there is
- * no trap either.
+ * trap, one trap button renders after all harvest
+ * buttons (before the hive row when one follows),
+ * with the caller's label and no KindGlyph — plain
+ * text, same button look. Null trap = no row (the
+ * caller owns gating: panels/modals/paused pass null;
+ * legacy harvest rows stay ungated). A press reports
+ * the trap id through onCollectTrap; the outcome
+ * (grant, pack-full, nothing-caught) is the caller's
+ * job, not this component's. The row renders even
+ * with zero harvest targets (a trap nearby, no
+ * plants) — the empty-targets null return yields only
+ * when there is no trap and no hive either.
+ *
+ * HIVE ROW (Adam, 2026-10-28): when the caller passes
+ * hive, one hive button renders LAST in the column
+ * (after the trap row), with the caller's label and
+ * no KindGlyph — plain text, same button look. Null
+ * hive = no row (the caller owns gating, trap-row
+ * list verbatim). A press reports the hive coords
+ * through onHarvestHive; the outcome (grant,
+ * torch-refusal, pack-full, too-hungry refusal) is
+ * the caller's job, not this component's. The row
+ * renders even with zero harvest targets (a hive
+ * nearby, no plants) — the empty-targets null return
+ * yields only when there is no trap and no hive.
  */
 
 import { Fragment, type ReactNode } from 'react';
@@ -155,12 +169,23 @@ export interface ProximityHarvestButtonsProps {
   stationAnchor?: { x: number; y: number } | null;
   /**
    * Nearest placed trap in range, caller-derived (null =
-   * no row — gated or none in range). Renders LAST in
-   * the column, even with zero harvest targets.
+   * no row — gated or none in range). Renders after all
+   * harvest buttons, before the hive row when one
+   * follows, even with zero harvest targets.
    */
   trap?: { id: string; label: string } | null;
   /** Called with the trap id for a trap-row press. */
   onCollectTrap?: (id: string) => void;
+  /**
+   * Nearest wild hive in range, caller-derived (null =
+   * no row — gated or none in range). Renders LAST in
+   * the column (after the trap row), even with zero
+   * harvest targets. Coords are the identity — hives
+   * carry no ids.
+   */
+  hive?: { x: number; z: number; label: string } | null;
+  /** Called with the hive coords for a hive-row press. */
+  onHarvestHive?: (x: number, z: number) => void;
   /** Look for the buttons. Default "mire" (the world outside). */
   theme?: UiThemeName;
 }
@@ -175,10 +200,12 @@ export function ProximityHarvestButtons({
   stationAnchor,
   trap,
   onCollectTrap,
+  hive,
+  onHarvestHive,
   theme = 'mire',
 }: ProximityHarvestButtonsProps) {
   const t = UI_THEMES[theme];
-  if (targets.length === 0 && !trap) {
+  if (targets.length === 0 && !trap && !hive) {
     return null;
   }
   // Dirt-row suppression (Adam, 2026-10-28): the ground row
@@ -264,6 +291,19 @@ export function ProximityHarvestButtons({
           }
         >
           <span className="font-medium">{trap.label}</span>
+        </button>
+      ) : null}
+      {hive && onHarvestHive ? (
+        <button
+          type="button"
+          onClick={() => onHarvestHive(hive.x, hive.z)}
+          aria-label={hive.label}
+          className={
+            'flex min-h-[44px] items-center gap-2 rounded-full px-3 py-1.5 text-sm shadow-lg transition-transform hover:scale-105 ' +
+            t.panel
+          }
+        >
+          <span className="font-medium">{hive.label}</span>
         </button>
       ) : null}
     </div>
