@@ -217,6 +217,10 @@ export const FIRST_CHARM_EFFECT: FirstCharmEffect = {
 export const SNAKE_EFFECT = { drainMultiplier: 0.9 };
 export const MOUSE_EFFECT = { storageBonus: 25 };
 export const BEAR_EFFECT = { capacityBonusLb: 10 };
+export const RABBIT_EFFECT = { fleeFactor: 0.8 };
+export const RACCOON_EFFECT = { bonusPoints: 25 };
+export const WOLF_EFFECT = { signRangeFactor: 2 };
+export const GROUNDHOG_EFFECT = { drainMultiplier: 0.9, wakeBonus: 10 };
 
 /** Snake drain factor: 0.9 when carried + awakened, else 1. */
 export function snakeDrainFactor(
@@ -245,6 +249,67 @@ export function bearCapacityBonusLb(
 ): number {
   return carried && charms.isAwakened('bear-claw')
     ? BEAR_EFFECT.capacityBonusLb
+    : 0;
+}
+
+/**
+ * Rabbit flee factor (remaining charms, 2026-10-28):
+ * 0.8 when carried + awakened, else 1. Helper only —
+ * no trapping system exists; trapping multiplies
+ * flee radius by it when trapping lands.
+ */
+export function rabbitFleeFactor(
+  carried: boolean,
+  charms: CharmState,
+): number {
+  return carried && charms.isAwakened('rabbit-jaw')
+    ? RABBIT_EFFECT.fleeFactor
+    : 1;
+}
+
+/**
+ * Raccoon loot bonus in percentage points (remaining
+ * charms, 2026-10-28): 25 when carried + awakened,
+ * else 0. Helper only — loot adds it when the loot
+ * system lands.
+ */
+export function raccoonBonusPoints(
+  carried: boolean,
+  charms: CharmState,
+): number {
+  return carried && charms.isAwakened('raccoon-tooth')
+    ? RACCOON_EFFECT.bonusPoints
+    : 0;
+}
+
+/**
+ * Wolf sign-range factor (remaining charms,
+ * 2026-10-28): 2 when carried + awakened, else 1.
+ * Helper only — signs multiply range by it when the
+ * signs system lands.
+ */
+export function wolfSignRangeFactor(
+  carried: boolean,
+  charms: CharmState,
+): number {
+  return carried && charms.isAwakened('wolf-tooth')
+    ? WOLF_EFFECT.signRangeFactor
+    : 1;
+}
+
+/**
+ * Groundhog waking-refresh bonus in hunger points
+ * (groundhog tier-1, 2026-10-28): 10 when carried +
+ * awakened, else 0. The shell applies it at wake via
+ * HungerState.restore (clamped at 100) — no new
+ * hunger method needed.
+ */
+export function groundhogWakeBonus(
+  carried: boolean,
+  charms: CharmState,
+): number {
+  return carried && charms.isAwakened('groundhog-tooth')
+    ? GROUNDHOG_EFFECT.wakeBonus
     : 0;
 }
 
@@ -422,6 +487,45 @@ export class WeatherWarning {
       return { active: false, fired: false };
     }
     return { active: true, fired: false };
+  }
+}
+
+/**
+ * Groundhog rested day (tier-1, 2026-10-28): session
+ * state in the warning-latch pattern. wake() sets
+ * rested iff carried + awakened at wake; sleepStart()
+ * clears it unconditionally, so the bonus lasts from
+ * one wake until the next sleep-start. The shell
+ * multiplies restedDrainFactor() into the drain
+ * product (shrew x snake x rested). No home check
+ * anywhere: rested applies on ANY sleep while
+ * carried (anywhere-as-home folds in — sleep
+ * anywhere counts as home). Session state like the
+ * warning latch: a save/load mid-rested-day resets
+ * it until next sleep; persistence rides a later
+ * change if Adam wants it, not this landing.
+ */
+export class GroundhogRest {
+  private rested = false;
+
+  /** Is the rested-day drain bonus currently active? */
+  isRested(): boolean {
+    return this.rested;
+  }
+
+  /** Wake: rested iff carried + awakened at wake. */
+  wake(carried: boolean, charms: CharmState): void {
+    this.rested = carried && charms.isAwakened('groundhog-tooth');
+  }
+
+  /** Sleep-start: the rested day ends. */
+  sleepStart(): void {
+    this.rested = false;
+  }
+
+  /** Rested drain factor: 0.9 while rested, else 1. */
+  restedDrainFactor(): number {
+    return this.rested ? GROUNDHOG_EFFECT.drainMultiplier : 1;
   }
 }
 

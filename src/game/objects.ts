@@ -916,7 +916,7 @@ export const SOURCES: HarvestSourceDef[] = [
     permitTier: null,
     secondaryYields: [],
     provenance: 'draft',
-    biomes: ['meadow', 'forest'],
+    biomes: ['meadow', 'forest', 'oldfieldRise', 'creekBottom'],
     mesh: { shape: 'flower', color: 0xe08aa8, baseY: 0.18 },
   },
   {
