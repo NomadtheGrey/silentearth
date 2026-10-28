@@ -274,6 +274,7 @@ export const ITEM_WEIGHT_LB: Readonly<Record<string, number>> = {
   [ITEMS.axeTrowel]: 2,
   [ITEMS.hoodedCloak]: 2,
   [ITEMS.bogBoots]: 2,
+  [ITEMS.sleepingBag]: 2, // camping: hooded-cloak precedent, flagged
   // 4 lb
   [ITEMS.spadeAxe]: 4,
   [ITEMS.clayBrick]: 4,
@@ -296,6 +297,7 @@ export const ITEM_WEIGHT_LB: Readonly<Record<string, number>> = {
   // homes / fires / stations — placed structures ride 4 lb
   // between craft and place).
   [ITEMS.altar]: 4,
+  [ITEMS.tent]: 4, // camping: carried-structure precedent, flagged
 };
 
 /**
@@ -506,6 +508,8 @@ export const ITEM_DISPLAY_NAMES: Readonly<Record<string, string>> = {
   'poison-mushroom': 'Poison Mushroom',
   apple: 'Apple',
   honey: 'Honey',
+  'sleeping-bag': 'Sleeping Bag',
+  tent: 'Tent',
 };
 
 /**

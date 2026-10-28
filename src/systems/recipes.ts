@@ -158,6 +158,9 @@ export const ITEMS = {
   // Beehive honey (2026-10-28 — Systems follow-up to Background's
   // wildHive landing; see honey.ts for the harvest rule).
   honey: 'honey',
+  // Camping (2026-10-28 — sleeping bag + tent; see camping.ts).
+  sleepingBag: 'sleeping-bag',
+  tent: 'tent',
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -1069,6 +1072,54 @@ const DRAFT_RECIPES: Recipe[] = [
       'dressing, flagged — do not add them). Upgrade tiers ' +
       'NOT built. RITUALS THEMSELVES NOT IN THIS ORDER — ' +
       'the altar is the SITE; rituals come later.',
+  },
+
+  // --- Camping (Adam, 2026-10-28: portable sleeping bag + tent;
+  // ingredients DELEGATED — existing materials only, all numbers
+  // DRAFT for Adam's pin pass; see camping.ts).
+  {
+    id: 'sleeping-bag',
+    name: 'Sleeping Bag',
+    status: 'draft',
+    output: { item: ITEMS.sleepingBag, quantity: 1 },
+    station: 'loom',
+    ingredients: [
+      i(ITEMS.twinedCordage, 4),
+      i(ITEMS.grass, 6),
+      i(ITEMS.tenderVines, 2),
+    ],
+    notes:
+      'DRAFT. Carried bedding, passive while carried (umbrella ' +
+      'precedent: no equip, no use-action, does NOT gate sleep — ' +
+      'sleep-anywhere already works). V1 effect is the marker + ' +
+      'the fiction (carriesSleepingBag, checked at sleep time); ' +
+      'no number today — no cold/exposure-during-sleep model to ' +
+      'attach one to, and a waking-refresh number would collide ' +
+      'with groundhog +10 (Adam\'s word needed, not baked). ' +
+      'Multiples by default (one-person-one-bag single is a ' +
+      'follow-up only if Adam wants it); not a no-recraft single.',
+  },
+  {
+    id: 'tent',
+    name: 'Tent',
+    status: 'draft',
+    output: { item: ITEMS.tent, quantity: 1 },
+    station: 'workstation',
+    ingredients: [
+      i(ITEMS.snapWood, 4),
+      i(ITEMS.twinedCordage, 6),
+      i(ITEMS.tenderVines, 4),
+    ],
+    notes:
+      'DRAFT. Placeable portable shelter (torch mirror: place ' +
+      'consumes 1, pickup grants 1, pack-full pickup leaves it ' +
+      'placed; multiples allowed). NOT a HouseType — no ' +
+      'HomeStorage/Store/Take, no upgrade pill, no FIND CAMP ' +
+      'camp, no home chip (all house-anchored). Shelter effect ' +
+      'PROPOSED draft 0.85 (lean-to 0.7, unsheltered 1.0) with ' +
+      'NO live benefit until Background\'s tent-aware ' +
+      'shelterQuery branch lands (their claim, DEV-routed). ' +
+      'Not a no-recraft single (multiples by design).',
   },
 ];
 

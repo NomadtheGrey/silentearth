@@ -79,6 +79,20 @@
  *   entity provides one. Order preserved; duplicate
  *   positions allowed (two altars at one spot are two
  *   entries).
+ * - placed tents (position, id optional — no game
+ *   import): same additive-field rule (old saves load
+ *   tents: []) and the same leniency as altars on read
+ *   (entries pass through, the placed-tent restore
+ *   validates + drops bad records, so a bad tent record
+ *   can never corrupt the whole document). Placed tents
+ *   carry no shelter state — the tent is the SITE; the
+ *   shelter effect rides Background's tent-aware
+ *   shelterQuery branch when it lands, so no shelter
+ *   field is stored. `id` is optional because
+ *   Background's placed-tent entity owns the id scheme
+ *   (torch precedent). Order preserved; duplicate
+ *   positions allowed (two tents at one spot are two
+ *   entries); multiples allowed by design.
  * - ritual stagings + awakenings (tier-1 Waking state):
  *   same additive-field rule (old saves load stagings:
  *   [] + awakenings: []) and the name-sight leniency on
@@ -313,6 +327,23 @@ export interface SavedAltar {
 }
 
 /**
+ * A placed tent, as saved. No shelter state is stored —
+ * the tent is the SITE; the shelter effect rides
+ * Background's tent-aware shelterQuery branch when it
+ * lands. `id` is optional: Background's placed-tent
+ * entity owns the id scheme (torch precedent); the save
+ * carries position always and the id when the entity
+ * provides one. Order preserved; duplicate positions
+ * allowed (two tents at one spot are two entries, not
+ * one merged record). Multiples allowed by design.
+ */
+export interface SavedTent {
+  x: number;
+  z: number;
+  id?: string;
+}
+
+/**
  * World harvest state, as saved. Structural mirror of the game
  * layer's HarvestStateSnapshot (harvestState.ts) by literal —
  * systems does not import game modules. The engine's restore()
@@ -433,6 +464,8 @@ export interface SaveData {
   torches: SavedTorch[];
   /** Placed altars (sites, no ritual state); [] for old saves. */
   altars: SavedAltar[];
+  /** Placed tents (portable shelters); [] for old saves. */
+  tents: SavedTent[];
   /** Partial-true-name look counts; [] for old saves. */
   nameSight: SavedNameLook[];
   /** Ritual stagings (site + kind + steps); [] for old saves. */
@@ -538,6 +571,18 @@ export interface SaveDraft {
    * (trap-save pattern: format now, wiring later).
    */
   altars?: ReadonlyArray<{
+    x: number;
+    z: number;
+    id?: string;
+  }>;
+  /**
+   * Placed tents from the placed-tent source
+   * (Background's entity snapshot, once it lands).
+   * OPTIONAL so existing saveNow call sites keep
+   * compiling unchanged until the App wiring lands
+   * (trap-save pattern: format now, wiring later).
+   */
+  tents?: ReadonlyArray<{
     x: number;
     z: number;
     id?: string;
@@ -745,6 +790,17 @@ export function serializeSave(draft: SaveDraft): SaveData {
       x: altar.x,
       z: altar.z,
       ...(altar.id !== undefined ? { id: altar.id } : {}),
+    })),
+    // Tents: written AS-IS (positions verbatim, id when
+    // the entity provides one — no filtering, no
+    // normalization). Invalid entries are restore()'s
+    // problem, not serialize's: the placed-tent restore
+    // validates (finite coords) and drops them. No shelter
+    // state is written — the tent is the SITE.
+    tents: (draft.tents ?? []).map((tent) => ({
+      x: tent.x,
+      z: tent.z,
+      ...(tent.id !== undefined ? { id: tent.id } : {}),
     })),
     // Name-sight: written AS-IS (key + looks verbatim, no
     // filtering, no normalization — keys are caller-defined
@@ -1150,6 +1206,29 @@ export function deserializeSave(value: unknown): SaveData | null {
         });
       }
     }
+    // Tents are optional on read, same leniency as
+    // altars: an old v1 save without them loads with
+    // tents: []. Entries pass through UNVALIDATED —
+    // the placed-tent restore validates (finite coords)
+    // and drops bad records, so a bad tent entry can
+    // never corrupt the whole document. A non-array
+    // tents field loads as [] — the section drops,
+    // the document survives. `id` passes through only
+    // when present as a string (the field is optional:
+    // Background's entity owns the id scheme).
+    const tents: SavedTent[] = [];
+    if (value.tents !== undefined && Array.isArray(value.tents)) {
+      for (const entry of value.tents) {
+        if (!isRecord(entry)) continue;
+        tents.push({
+          x: entry.x as number,
+          z: entry.z as number,
+          ...(typeof entry.id === 'string'
+            ? { id: entry.id as string }
+            : {}),
+        });
+      }
+    }
     // Name-sight is optional on read, same additive-field
     // rule: an old v1 save without it loads with
     // nameSight: []. A non-array field loads as [] — the
@@ -1273,6 +1352,7 @@ export function deserializeSave(value: unknown): SaveData | null {
       stumps,
       torches,
       altars,
+      tents,
       nameSight,
       stagings,
       awakenings,
