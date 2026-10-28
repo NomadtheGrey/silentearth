@@ -1592,6 +1592,7 @@ import { UmbrellaIcon } from './ui/UmbrellaIcon';
 import { FireState, type FireChipStatus } from './ui/FireState';
 import { PlacementPreview } from './ui/PlacementPreview';
 import { ContextMenu } from './ui/ContextMenu';
+import { PileInventoryModal } from './ui/PileInventoryModal';
 import { PileChip } from './ui/PileChip';
 import { TorchChip } from './ui/TorchChip';
 import { AltarChip } from './ui/AltarChip';
@@ -5958,10 +5959,6 @@ export default function App() {
     selectedPileId === null
       ? null
       : (piles.find((pile) => pile.id === selectedPileId) ?? null);
-  const selectedPileAnchor =
-    selectedPile === null
-      ? null
-      : (pileAnchors.find((a) => a.pile.id === selectedPile.id) ?? null);
 
   // TOUCH CONTROLS (phone build — see the header): coarse-pointer
   // devices get the touch layer and the collapsible HUD; desktop
@@ -5992,9 +5989,9 @@ export default function App() {
   // ESC TOGGLE (Adam, 2026-10-27 — Esc opens Options; extended
   // 2026-10-28 — Esc closes the topmost layer first): with
   // NO modal open, Esc closes the topmost open layer, one
-  // per press, in fixed order — placement panel, context
-  // menus (pile, torch, fire — reverse render order),
-  // ritual panel, panels (charms, crafting, inventory —
+  // per press, in fixed order — placement panel, pile
+  // modal, context menus (torch, fire — reverse render
+  // order), ritual panel, panels (charms, crafting, inventory —
   // reverse render order) — and only with nothing open does
   // it open the Options modal. With a modal open, that
   // modal's own Esc listener closes it (previous brief
@@ -6763,33 +6760,6 @@ export default function App() {
             </button>
           </WorldAnchor>
         ) : null}
-        {selectedPile && selectedPileAnchor ? (
-          <WorldAnchor
-            x={selectedPileAnchor.x}
-            y={selectedPileAnchor.y}
-            interactive
-          >
-            <ContextMenu
-              objectName={
-                selectedPile.stacks.length === 1
-                  ? `${displayNameFor(selectedPile.stacks[0].item)} × ${selectedPile.stacks[0].quantity}`
-                  : `Pile × ${selectedPile.stacks.reduce((sum, stack) => sum + stack.quantity, 0)} (${selectedPile.stacks.length} kinds)`
-              }
-              header={
-                <p className="text-xs text-stone-400">
-                  ↑ Pick up one · ↑↑ Pick up all · ↓ Drop one here · ↓↓ Drop
-                  all here
-                </p>
-              }
-              actions={pileMenuActions(selectedPile)}
-              onSelect={(id) => handlePileAction(selectedPile, id)}
-              onClose={() => {
-                selectedPileIdRef.current = null;
-                setSelectedPileId(null);
-              }}
-            />
-          </WorldAnchor>
-        ) : null}
         {homeMenuOpen && homeHouse !== undefined && homeChipAnchor ? (
           <WorldAnchor x={homeChipAnchor.x} y={homeChipAnchor.y} interactive>
             <ContextMenu
@@ -7264,6 +7234,21 @@ export default function App() {
             : 'pointer-events-auto absolute right-2 top-20 z-30 flex max-h-[calc(100vh-6rem)] w-80 max-w-[calc(100vw-1rem)] flex-col gap-2 overflow-y-auto'
         }
       >
+        {selectedPile ? (
+          <PileInventoryModal
+            title={
+              selectedPile.stacks.length === 1
+                ? `${displayNameFor(selectedPile.stacks[0].item)} × ${selectedPile.stacks[0].quantity}`
+                : `Pile × ${selectedPile.stacks.reduce((sum, stack) => sum + stack.quantity, 0)} (${selectedPile.stacks.length} kinds)`
+            }
+            actions={pileMenuActions(selectedPile)}
+            onSelect={(id) => handlePileAction(selectedPile, id)}
+            onClose={() => {
+              selectedPileIdRef.current = null;
+              setSelectedPileId(null);
+            }}
+          />
+        ) : null}
         {inventoryOpen ? (
           <InventoryPanel
             items={inventoryItems.filter(
