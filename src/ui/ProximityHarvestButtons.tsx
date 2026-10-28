@@ -157,6 +157,22 @@ export function ProximityHarvestButtons({
   if (targets.length === 0) {
     return null;
   }
+  // Dirt-row suppression (Adam, 2026-10-28): the ground row
+  // (Dirt/mud/grass) renders ONLY when no scatter target is in
+  // range — whenever a scatter row exists, the ground row is
+  // suppressed, so ground is the fallback, never a constant
+  // companion (the third-person fallback rule, extended to
+  // all modes at display). Filtered on KIND ('ground'), not
+  // the name 'Dirt', so dirt/mud/grass alike suppress. The
+  // tracker still emits ground by its own mode rules and the
+  // E path still reads unfiltered App state — this filter is
+  // display-only, and bare ground (no scatter) still shows
+  // the ground row. Order unchanged (tracker sorts scatter
+  // by distance; no re-sort), so the top row after
+  // suppression is the nearest scatter.
+  const visibleTargets = targets.some((target) => target.kind === 'scatter')
+    ? targets.filter((target) => target.kind !== 'ground')
+    : targets;
   return (
     // TOP EDGE: bottom-anchored at 52%, so top = 48vh - height.
     // Capping height at 48vh - T keeps the top edge at or below
@@ -186,7 +202,7 @@ export function ProximityHarvestButtons({
       }
     >
       {lookNode}
-      {targets.map((target) => (
+      {visibleTargets.map((target) => (
         <Fragment key={target.id}>
           {target.kind === 'scatter' && onRemove ? (
             <div className="flex flex-col items-center gap-1">
