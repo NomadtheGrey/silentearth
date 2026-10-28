@@ -255,6 +255,15 @@ export interface SavedTrap {
   type: string;
   x: number;
   z: number;
+  /**
+   * Caught kind on the trap (trap-catch.ts), absent =
+   * empty trap. Baited flag likewise. Both optional:
+   * old saves carry neither. trapState.restore()
+   * validates (Background owns the fields); this
+   * layer only carries them through.
+   */
+  catch?: string;
+  baited?: boolean;
 }
 
 /**
@@ -479,6 +488,8 @@ export interface SaveDraft {
     type: string;
     x: number;
     z: number;
+    catch?: string;
+    baited?: boolean;
   }>;
   /**
    * Placed torches from the placed-torch source
@@ -669,6 +680,10 @@ export function serializeSave(draft: SaveDraft): SaveData {
       type: trap.type,
       x: trap.x,
       z: trap.z,
+      // Catch + baited pass through when present
+      // (absent = empty / unbaited); restore validates.
+      ...(trap.catch !== undefined ? { catch: trap.catch } : {}),
+      ...(trap.baited !== undefined ? { baited: trap.baited } : {}),
     })),
     // Torches: written AS-IS (positions verbatim, id when
     // the entity provides one — no filtering, no
@@ -1009,6 +1024,16 @@ export function deserializeSave(value: unknown): SaveData | null {
           type: entry.type as string,
           x: entry.x as number,
           z: entry.z as number,
+          // Catch + baited pass through only when
+          // well-typed (string / boolean); otherwise
+          // dropped (empty / unbaited). restore()
+          // validates the rest.
+          ...(typeof entry.catch === 'string'
+            ? { catch: entry.catch as string }
+            : {}),
+          ...(typeof entry.baited === 'boolean'
+            ? { baited: entry.baited as boolean }
+            : {}),
         });
       }
     }
