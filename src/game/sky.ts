@@ -182,14 +182,92 @@ export function sunElevationAtCycle(cycleT: number, month: number): number {
   return -Math.sin(Math.PI * ((cycleT - f) / (1 - f))) * ((sunNoonAltitudeDeg(month) * Math.PI) / 180);
 }
 
-/** Cycle split: which half of the cycle t is in + progress within it. */
+/**
+ * DAWN / DUSK (Adam 2026-10-27 — "let's have dusk and dawn
+ * on the game, that should be nice"). A REAL twilight band,
+ * defined from sun elevation (the continuous elevation in
+ * sunElevationAtCycle, positive by day, mirrored negative
+ * at night): dawn/dusk = |elevation| within TWILIGHT_DEG,
+ * dawn while the sun is RISING (night→day side, straddling
+ * the t = 0 wrap) and dusk while it is SETTING (day→night
+ * side, straddling t = dayFraction). The band is the
+ * checkable API Systems' ritual data needs: a ritual's sky
+ * condition ('dawn' for deer, 'dusk' for fox, 'day'/'night'
+ * for the rest, 'full-moon' from the moon phase, 'none'
+ * needing no check) reads straight off cyclePhase /
+ * cycleSplit — no ritual code lives here, only the windows.
+ * BAND WIDTH (lane-decided, flagged for Adam's pin pass):
+ * TWILIGHT_DEG = 8° (civil twilight is 6°; 8° is slightly
+ * generous). At the 10-minute day that is roughly half a
+ * real minute per window (both sides of the horizon
+ * crossing together) — honest astronomy at this day
+ * length, and widening it later is a one-constant change.
+ * VISUAL: the rig's existing horizon sunset tint already
+ * ramps over ~20° of elevation; inside the checkable band
+ * it now strengthens to full at the horizon crossing, so
+ * the band READS as twilight, not just data. Outside the
+ * band the old ramp is untouched. isDay is UNCHANGED by
+ * the bands (dawn's day-side half is day, dusk's day-side
+ * half is day) — the sleep gate and the shell's isNight
+ * read exactly as before.
+ */
+export const TWILIGHT_DEG = 8;
+/** Extra horizon tint inside the checkable band (lane-decided, flagged). */
+export const TWILIGHT_TINT_BOOST = 0.3;
+
+/** Sky phase: day/night split by the twilight band (see above). */
+export type CyclePhase = 'dawn' | 'day' | 'dusk' | 'night';
+
+/** Sun elevation in degrees at any cycle position (continuous across the horizon). */
+export function sunElevationDeg(cycleT: number, month: number): number {
+  return (sunElevationAtCycle(cycleT, month) * 180) / Math.PI;
+}
+
+function phaseFor(
+  isDay: boolean,
+  dayProgress: number,
+  nightProgress: number,
+  elevDeg: number,
+): CyclePhase {
+  if (Math.abs(elevDeg) <= TWILIGHT_DEG) {
+    const rising = isDay ? dayProgress < 0.5 : nightProgress > 0.5;
+    return rising ? 'dawn' : 'dusk';
+  }
+  return isDay ? 'day' : 'night';
+}
+
+/** Checkable sky phase at any cycle position (the ritual sky-condition read). */
+export function cyclePhase(cycleT: number, month: number): CyclePhase {
+  const f = dayFraction(month);
+  const isDay = cycleT < f;
+  return phaseFor(
+    isDay,
+    isDay ? cycleT / f : 0,
+    isDay ? 0 : (cycleT - f) / (1 - f),
+    sunElevationDeg(cycleT, month),
+  );
+}
+
+/** Cycle split: which half of the cycle t is in + progress within it + phase. */
 export function cycleSplit(
   cycleT: number,
   month: number,
-): { isDay: boolean; dayProgress: number; nightProgress: number } {
+): {
+  isDay: boolean;
+  dayProgress: number;
+  nightProgress: number;
+  phase: CyclePhase;
+  sunElevDeg: number;
+  isDawn: boolean;
+  isDusk: boolean;
+} {
   const f = dayFraction(month);
-  if (cycleT < f) return { isDay: true, dayProgress: cycleT / f, nightProgress: 0 };
-  return { isDay: false, dayProgress: 0, nightProgress: (cycleT - f) / (1 - f) };
+  const isDay = cycleT < f;
+  const dayProgress = isDay ? cycleT / f : 0;
+  const nightProgress = isDay ? 0 : (cycleT - f) / (1 - f);
+  const sunElevDeg = sunElevationDeg(cycleT, month);
+  const phase = phaseFor(isDay, dayProgress, nightProgress, sunElevDeg);
+  return { isDay, dayProgress, nightProgress, phase, sunElevDeg, isDawn: phase === 'dawn', isDusk: phase === 'dusk' };
 }
 
 /** Sky clarity from rain: 1 below CLEAR_RAIN, 0 above OVERCAST_RAIN. */
@@ -554,7 +632,11 @@ export class SkyRig {
     const top = NIGHT_TOP.clone().lerp(DAY_TOP, dayFactor);
     const horizon = NIGHT_HORIZON.clone().lerp(DAY_HORIZON, dayFactor);
     const dusk = clamp01(1 - Math.abs(sunElev) / 0.35);
-    horizon.lerp(SUNSET_HORIZON, dusk * 0.7);
+    // Inside the checkable twilight band the tint strengthens
+    // to full at the horizon crossing, so dawn/dusk READ as
+    // twilight; outside the band this is the old 20° ramp.
+    const twilight = split.isDawn || split.isDusk ? 1 - Math.abs(split.sunElevDeg) / TWILIGHT_DEG : 0;
+    horizon.lerp(SUNSET_HORIZON, Math.min(1, dusk * 0.7 + twilight * TWILIGHT_TINT_BOOST));
     this.domeUniforms.topColor.value.copy(top);
     this.domeUniforms.horizonColor.value.copy(horizon);
 
