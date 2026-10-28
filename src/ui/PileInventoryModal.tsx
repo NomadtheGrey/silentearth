@@ -17,9 +17,13 @@
  * via the EXISTING refreshPilesFromState clear — no new
  * logic, no empty view.
  *
- * Rows are laid out name | counts | arrows as three
- * distinct cells, so the columnar landing reshapes them
- * into subgrid columns rather than rebuilding them.
+ * Rows ARE subgrid columns (columnar landing, 2026-10-28):
+ * name | counts | arrows as three distinct cells under
+ * one ul grid (minmax(0,1fr)/auto/auto), so counts align
+ * across rows and names wrap instead of truncating. Pile
+ * counts stack two lines (pile over carried) because four
+ * 44px arrows leave no room for one line at phone width.
+ * Notes stack under names, not inline.
  * Actions are the SAME ContextAction[] pileMenuActions
  * emits, dispatched through the SAME handlePileAction —
  * zero new handlers. Deposits go into THIS pile at its
@@ -74,47 +78,57 @@ export function PileInventoryModal({
       <p className={'mb-2 text-xs ' + t.muted}>
         ↑ Pick up one · ↑↑ Pick up all · ↓ Drop one here · ↓↓ Drop all here
       </p>
-      <ul className="flex flex-col gap-1">
+      <ul className="grid grid-cols-[minmax(0,1fr)_auto_auto] gap-x-2 gap-y-1">
         {actions.map((action) => {
           if (action.arrows) {
             return (
-              <li key={action.id} className="flex flex-col gap-0.5">
-                <div className="flex items-center gap-2">
-                  <span className="flex-1 text-sm">{action.label}</span>
-                  <span
-                    className={'whitespace-nowrap text-xs ' + t.muted}
-                  >
-                    {action.countsText
-                      ? action.countsText
-                      : action.counts
-                        ? `pile ×${action.counts.pile} · carried ×${action.counts.carried}`
-                        : null}
-                  </span>
-                  <span className="flex gap-1">
-                    {action.arrows.map((arrow) => (
-                      <button
-                        key={arrow.id}
-                        type="button"
-                        disabled={arrow.disabled}
-                        onClick={() => onSelect(arrow.id)}
-                        aria-label={arrow.ariaLabel}
-                        className="min-h-[44px] min-w-[44px] rounded text-base disabled:cursor-not-allowed disabled:opacity-40 hover:bg-stone-800"
-                      >
-                        <span aria-hidden="true">{arrow.glyph}</span>
-                      </button>
-                    ))}
-                  </span>
-                </div>
-                {action.disabledNote ? (
-                  <span className={'text-xs ' + t.muted}>
-                    {action.disabledNote}
-                  </span>
-                ) : null}
+              <li
+                key={action.id}
+                className="col-span-3 grid grid-cols-subgrid items-center"
+              >
+                <span className="flex min-w-0 flex-col">
+                  <span className="text-sm">{action.label}</span>
+                  {action.disabledNote ? (
+                    <span className={'text-xs ' + t.muted}>
+                      {action.disabledNote}
+                    </span>
+                  ) : null}
+                </span>
+                <span
+                  className={
+                    'whitespace-nowrap text-right text-sm tabular-nums ' +
+                    t.muted
+                  }
+                >
+                  {action.countsText ? (
+                    action.countsText
+                  ) : action.counts ? (
+                    <>
+                      pile ×{action.counts.pile}
+                      <br />
+                      carried ×{action.counts.carried}
+                    </>
+                  ) : null}
+                </span>
+                <span className="flex gap-1">
+                  {action.arrows.map((arrow) => (
+                    <button
+                      key={arrow.id}
+                      type="button"
+                      disabled={arrow.disabled}
+                      onClick={() => onSelect(arrow.id)}
+                      aria-label={arrow.ariaLabel}
+                      className="min-h-[44px] min-w-[44px] rounded text-base disabled:cursor-not-allowed disabled:opacity-40 hover:bg-stone-800"
+                    >
+                      <span aria-hidden="true">{arrow.glyph}</span>
+                    </button>
+                  ))}
+                </span>
               </li>
             );
           }
           return (
-            <li key={action.id}>
+            <li key={action.id} className="col-span-3">
               <button
                 type="button"
                 disabled={action.disabled}

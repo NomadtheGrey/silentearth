@@ -234,19 +234,22 @@ export function InventoryPanel({
       {items.length === 0 ? (
         <p className={'italic ' + t.muted}>Nothing carried yet.</p>
       ) : (
-        <ul className="flex flex-col gap-1">
+        <ul className="grid grid-cols-[minmax(0,1fr)_auto_auto] gap-x-2 gap-y-1">
           {items.map((item) => {
             const selected = item.id === selectedItemId;
             const placeable = placeableIds?.has(item.id) ?? false;
             const food = foodIds?.has(item.id) ?? false;
             return (
-              <li key={item.id} className="flex items-center gap-1">
+              <li
+                key={item.id}
+                className="col-span-3 grid grid-cols-subgrid items-center"
+              >
                 <button
                   type="button"
                   onClick={() => onSelectItem?.(item.id)}
                   aria-pressed={selected}
                   className={
-                    'flex flex-1 items-baseline justify-between gap-2 rounded px-2 py-1 text-left ' +
+                    'rounded px-2 py-1 text-left ' +
                     (selected ? t.selected : 'hover:bg-stone-800')
                   }
                 >
@@ -254,24 +257,23 @@ export function InventoryPanel({
                     {item.icon ? (
                       <span className="inline-flex shrink-0">{item.icon}</span>
                     ) : null}
-                    {item.name}
-                    {item.note ? (
-                      <span className={'ml-2 text-sm ' + t.muted}>
-                        {item.note}
-                      </span>
-                    ) : null}
+                    <span className="min-w-0">{item.name}</span>
                   </span>
-                  {item.quantityText || item.weightText ? (
-                    <span className="text-sm text-stone-300">
-                      {[item.quantityText, item.weightText]
-                        .filter(
-                          (part): part is string =>
-                            part !== undefined && part !== '',
-                        )
-                        .join(' · ')}
+                  {item.note ? (
+                    <span className={'block text-sm ' + t.muted}>
+                      {item.note}
                     </span>
                   ) : null}
                 </button>
+                <span className="whitespace-nowrap text-right text-sm tabular-nums text-stone-300">
+                  {[item.quantityText, item.weightText]
+                    .filter(
+                      (part): part is string =>
+                        part !== undefined && part !== '',
+                    )
+                    .join(' · ')}
+                </span>
+                <span className="flex gap-1">
                 {placeable && onPlaceItem ? (
                   <button
                     type="button"
@@ -332,6 +334,7 @@ export function InventoryPanel({
                     <span aria-hidden="true">↓↓</span>
                   </button>
                 ) : null}
+                </span>
               </li>
             );
           })}
@@ -344,16 +347,19 @@ export function InventoryPanel({
           <h3 className={'text-base font-semibold ' + t.heading}>
             Nearby pile
           </h3>
-          <ul className="flex flex-col gap-1">
+          <ul className="grid grid-cols-[minmax(0,1fr)_auto_auto] gap-x-2 gap-y-1">
             {nearbyPile.kinds.map((kind) => (
-              <li key={kind.id} className="flex items-center gap-1">
-                <span className="flex flex-1 items-baseline justify-between gap-2 rounded px-2 py-1 text-left">
-                  <span className="text-sm">{kind.name}</span>
-                  <span className="text-sm text-stone-300">
-                    pile ×{kind.pileQuantity} · carried ×
-                    {kind.carriedQuantity}
-                  </span>
+              <li
+                key={kind.id}
+                className="col-span-3 grid grid-cols-subgrid items-center"
+              >
+                <span className="rounded px-2 py-1 text-left text-sm">
+                  {kind.name}
                 </span>
+                <span className="whitespace-nowrap text-right text-sm tabular-nums text-stone-300">
+                  pile ×{kind.pileQuantity} · carried ×{kind.carriedQuantity}
+                </span>
+                <span className="flex gap-1">
                 {onTakeItem ? (
                   <button
                     type="button"
@@ -374,6 +380,7 @@ export function InventoryPanel({
                     <span aria-hidden="true">↑↑</span>
                   </button>
                 ) : null}
+                </span>
               </li>
             ))}
           </ul>
@@ -393,24 +400,24 @@ export function InventoryPanel({
           {storage.items.length === 0 ? (
             <p className={'italic ' + t.muted}>Nothing stored here yet.</p>
           ) : (
-            <ul className="flex flex-col gap-1">
+            <ul className="grid grid-cols-[minmax(0,1fr)_auto_auto] gap-x-2 gap-y-1">
               {storage.items.map((item) => (
-                <li key={item.id} className="flex items-center gap-1">
-                  <span className="flex flex-1 items-baseline justify-between gap-2 rounded px-2 py-1 text-left">
-                    <span className="flex items-center gap-1.5">
-                      {item.icon ? (
-                        <span className="inline-flex shrink-0">
-                          {item.icon}
-                        </span>
-                      ) : null}
-                      {item.name}
-                    </span>
-                    {item.quantityText ? (
-                      <span className="text-sm text-stone-300">
-                        {item.quantityText}
+                <li
+                  key={item.id}
+                  className="col-span-3 grid grid-cols-subgrid items-center"
+                >
+                  <span className="flex items-center gap-1.5 rounded px-2 py-1 text-left">
+                    {item.icon ? (
+                      <span className="inline-flex shrink-0">
+                        {item.icon}
                       </span>
                     ) : null}
+                    <span className="min-w-0">{item.name}</span>
                   </span>
+                  <span className="whitespace-nowrap text-right text-sm tabular-nums text-stone-300">
+                    {item.quantityText ?? null}
+                  </span>
+                  <span className="flex gap-1">
                   {storage.onWithdrawItem ? (
                     <button
                       type="button"
@@ -421,6 +428,7 @@ export function InventoryPanel({
                       Withdraw
                     </button>
                   ) : null}
+                  </span>
                 </li>
               ))}
             </ul>
