@@ -1608,6 +1608,7 @@ import {
   type FontId,
 } from './ui/OptionsModal';
 import { IntroModal } from './ui/IntroModal';
+import { RemoveConfirm } from './ui/RemoveConfirm';
 import { InventoryPanel } from './ui/InventoryPanel';
 import { CraftingMenu } from './ui/CraftingMenu';
 import { ProximityHarvestButtons } from './ui/ProximityHarvestButtons';
@@ -2299,7 +2300,7 @@ export default function App() {
   // In-range dropped piles (harvest overflow), nearest first per
   // the tracker. Drives the touch USE fallback, the touch
   // PICK UP label, the desktop pickup button, and the pile
-  // chips + menu (see handleTouchInteract + the pile
+  // chips + menu (see handleUseInteract + the pile
   // computations before return + pileMenuActions /
   // handlePileAction). Ref mirrors state so the
   // first-render recomputeAnchors closure sees piles fresh.
@@ -4076,6 +4077,12 @@ export default function App() {
   const pendingTrapRecipe = pendingTrapRecipeId
     ? RECIPES.find((candidate) => candidate.id === pendingTrapRecipeId)
     : undefined;
+  // PC-keys remove target (2026-10-28): the scatter target
+  // Shift+E armed for the confirm dialog; null = no dialog.
+  // The dialog owns its Enter/Esc; the App Esc listener
+  // yields while it is open (single Esc path).
+  const [pendingRemoveTarget, setPendingRemoveTarget] =
+    useState<HarvestTarget | null>(null);
 
   const executeCraftNow = (recipeId: string) => {
     const recipe = RECIPES.find((candidate) => candidate.id === recipeId);
@@ -5537,19 +5544,28 @@ export default function App() {
   // untouched. Panels (inventory/crafting) are not modals,
   // so they do not block the toggle — flagged, not carved
   // out: if Adam wants Esc to close panels first, that is
-  // a follow-up.
+  // a follow-up. It also yields while the remove-confirm
+  // dialog is open (PC keys, 2026-10-28) — that dialog owns
+  // its own Enter/Esc, the single Esc path.
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent): void => {
       if (e.key !== 'Escape') return;
       const target = e.target as HTMLElement | null;
       const tag = target?.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
-      if (optionsOpen || introOpen || pendingTrapRecipe) return;
+      if (
+        optionsOpen ||
+        introOpen ||
+        pendingTrapRecipe ||
+        pendingRemoveTarget !== null
+      ) {
+        return;
+      }
       setOptionsOpen(true);
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [optionsOpen, introOpen, pendingTrapRecipe]);
+  }, [optionsOpen, introOpen, pendingTrapRecipe, pendingRemoveTarget]);
   const handleFontChange = (next: FontId): void => {
     setFont(next);
     saveFontChoice(next);
@@ -5696,7 +5712,14 @@ export default function App() {
       Math.hypot(scatter.worldX - fromX, scatter.worldZ - fromZ);
     return pile.distance <= scatterDistance;
   };
-  const handleTouchInteract = (): void => {
+  // Shared USE path (PC keys, 2026-10-28): the touch USE
+  // button, the E key, and the pointer-locked click all call
+  // this one handler — scatter-first from harvestTargets +
+  // pileWouldWin pile fallback + ground fallback. Renamed
+  // from handleTouchInteract (same body); nothing here is
+  // touch-specific. The zero-arg player.pressUse() path is
+  // NOT used (its shell query has no callers).
+  const handleUseInteract = (): void => {
     const player = playerRef.current;
     if (!player) return;
     const scatter = harvestTargets.find(
@@ -5717,6 +5740,119 @@ export default function App() {
       z: target.worldZ,
     });
   };
+
+  // PC KEYS (Adam, 2026-10-28 — every frequent action without
+  // Esc): E harvests (the shared USE path, same as the touch
+  // USE button), Shift+E arms Remove (confirm dialog), I/K/L
+  // toggle Inventory/Crafting/Charms, P toggles pause.
+  // Guards: typing (text input/textarea/select focus) swallows
+  // everything; paused allows P only (resume); any modal open
+  // (Options, intro, trap confirm, remove confirm) blocks all
+  // keys; any menu open allows only that menu's own toggle key
+  // to close it (anything else is ignored); Ctrl/Meta/Alt
+  // combos are never hijacked; held-key repeats are ignored
+  // (one press = one action). Separate listener beside the
+  // Esc listener above, same typing yield. Phone unchanged
+  // (no keyboard).
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent): void => {
+      if (e.repeat) return;
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      const target = e.target as HTMLElement | null;
+      const tag = target?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+      if (pausedRef.current) {
+        if (e.key.toLowerCase() === 'p') {
+          pauseState.setPaused(!pausedRef.current);
+        }
+        return;
+      }
+      if (
+        optionsOpen ||
+        introOpen ||
+        pendingTrapRecipe ||
+        pendingRemoveTarget !== null
+      ) {
+        return;
+      }
+      const key = e.key.toLowerCase();
+      if (inventoryOpen || craftingOpen || charmsOpen) {
+        if (key === 'i' && inventoryOpen) setInventoryOpen(false);
+        else if (key === 'k' && craftingOpen) setCraftingOpen(false);
+        else if (key === 'l' && charmsOpen) setCharmsOpen(false);
+        return;
+      }
+      if (key === 'e' && !e.shiftKey) {
+        handleUseInteract();
+      } else if (key === 'e' && e.shiftKey) {
+        const scatter = harvestTargets.find(
+          (candidate) => candidate.kind === 'scatter',
+        );
+        if (scatter) setPendingRemoveTarget(scatter);
+      } else if (key === 'i') {
+        setInventoryOpen((open) => !open);
+      } else if (key === 'k') {
+        setCraftingOpen((open) => !open);
+      } else if (key === 'l') {
+        if (charmsOpen) setCharmsOpen(false);
+        else openCharmsPanel();
+      } else if (key === 'p') {
+        pauseState.setPaused(!pausedRef.current);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [
+    optionsOpen,
+    introOpen,
+    pendingTrapRecipe,
+    pendingRemoveTarget,
+    inventoryOpen,
+    craftingOpen,
+    charmsOpen,
+    handleUseInteract,
+    openCharmsPanel,
+  ]);
+  // PC-KEYS CLICK (Adam, 2026-10-28): click-to-harvest while
+  // pointer-locked — the same shared USE path as E. Gated on
+  // a captured pointer (the locking click itself fires while
+  // pointerLockElement is still null, so it never harvests),
+  // left button only, not paused, no modal/panel open (locked
+  // clicks can't reach HUD buttons, but a keyboard-opened
+  // Options while locked must still block harvest). No
+  // conflict with player.onCanvasClick (unlocked →
+  // requestPointerLock, locked → no-op there). Phone
+  // unchanged (no pointer lock).
+  useEffect(() => {
+    const onClick = (e: MouseEvent): void => {
+      if (e.button !== 0) return;
+      if (document.pointerLockElement === null) return;
+      if (pausedRef.current) return;
+      if (
+        optionsOpen ||
+        introOpen ||
+        pendingTrapRecipe ||
+        pendingRemoveTarget !== null ||
+        inventoryOpen ||
+        craftingOpen ||
+        charmsOpen
+      ) {
+        return;
+      }
+      handleUseInteract();
+    };
+    window.addEventListener('click', onClick);
+    return () => window.removeEventListener('click', onClick);
+  }, [
+    optionsOpen,
+    introOpen,
+    pendingTrapRecipe,
+    pendingRemoveTarget,
+    inventoryOpen,
+    craftingOpen,
+    charmsOpen,
+    handleUseInteract,
+  ]);
 
   // LOCATION CHIP (see the header): dominant biome from the
   // same ground weights the scaffold readout formats — the
@@ -6522,7 +6658,7 @@ export default function App() {
           onMove={applyTouchMove}
           onTurn={applyTurn}
           onLook={applyTouchLook}
-          onInteract={handleTouchInteract}
+          onInteract={handleUseInteract}
           interactLabel={touchPilePickup ? 'PICK UP' : undefined}
         />
       ) : null}
@@ -6543,6 +6679,23 @@ export default function App() {
           comfortable={isTouch}
         />
       ) : null}
+
+      {/* Remove confirm (PC keys, 2026-10-28): Shift+E arms
+        a scatter target; Enter/Remove confirms (same
+        handleRemove call as the button), Esc/backdrop/
+        Cancel aborts with nothing consumed. Standalone
+        dialog (not Popup) so its Enter/Esc is the single
+        path — the App Esc listener yields while it is open. */}
+      <RemoveConfirm
+        open={pendingRemoveTarget !== null}
+        targetName={pendingRemoveTarget?.name ?? ''}
+        onConfirm={() => {
+          const target = pendingRemoveTarget;
+          setPendingRemoveTarget(null);
+          if (target) handleRemove(target);
+        }}
+        onCancel={() => setPendingRemoveTarget(null)}
+      />
 
       {/* Intro modal: first run (no save at boot) + re-openable
         from Options. Same z-50 shell as OptionsModal; the two
