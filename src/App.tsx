@@ -6580,6 +6580,15 @@ export default function App() {
       ? null
       : (piles.find((pile) => pile.id === selectedPileId) ?? null);
 
+  const [optionsOpen, setOptionsOpen] = useState(false);
+  // Intro modal: open on first run — no save at boot (a corrupt
+  // save reads as null, so it reads as fresh too). Dismissing
+  // sets it false for the session; a player who never saves
+  // sees it again next launch, which is the trigger working
+  // as briefed, not a bug. Re-open any time from the
+  // Introduction section in Options (Settings tab).
+  const [introOpen, setIntroOpen] = useState(() => bootSave === null);
+
   // TRAP ROW (Adam, 2026-10-28): the nearest placed
   // trap within HARVEST_RANGE (2.5 m, the harvest
   // range — piles/chips range, no divergence),
@@ -6691,14 +6700,6 @@ export default function App() {
   // persisted in its own localStorage key — never the Systems
   // save file. No stored choice reads as IM Fell English.
   const [font, setFont] = useState<FontId>(loadFontChoice);
-  const [optionsOpen, setOptionsOpen] = useState(false);
-  // Intro modal: open on first run — no save at boot (a corrupt
-  // save reads as null, so it reads as fresh too). Dismissing
-  // sets it false for the session; a player who never saves
-  // sees it again next launch, which is the trigger working
-  // as briefed, not a bug. Re-open any time from the
-  // Introduction section in Options (Settings tab).
-  const [introOpen, setIntroOpen] = useState(() => bootSave === null);
 
   // ESC TOGGLE (Adam, 2026-10-27 — Esc opens Options; extended
   // 2026-10-28 — Esc closes the topmost layer first): with

@@ -43,6 +43,15 @@ export interface BuildRecord {
 
 const ALL_RECORDS: BuildRecord[] = [
   {
+    merge: 'Merge #18',
+    pr: 37,
+    // sha 'pending' until the follow-up merge records the real merge SHA (pre-merge it is unknowable).
+    sha: 'pending',
+    date: '2026-10-28',
+    what: 'Live TDZ fix (App.tsx only): optionsOpen + introOpen declarations moved above the trapRowTrap + hiveRowHive IIFEs that read them in their gating lists — no logic change, no other file.',
+    why: 'The game must boot: after merge #17 the live page went white because the trap/hive rows ran before the state they read was declared, so the declarations move above the rows that use them.',
+  },
+  {
     merge: 'Merge #17',
     pr: 35,
     sha: 'f0699c9',
