@@ -36,7 +36,11 @@
  * MECHANISM — no new sky machinery: success calls the injected
  * restoreDawn(), which the shell maps to
  * renderer.restoreSky({ cycleT: 0 }) (dawn = cycleT 0, sky.ts:
- * construction and setSeed both start at dawn). Next update()
+ * construction and setSeed both start at dawn). Before that jump,
+ * success calls trapState.sleepJump(cycleT) so the skipped night
+ * hours roll at dawn, one 'trap:hour' per skipped hour (Adam
+ * 2026-10-28) — the burst precedes the rig jump, so the next
+ * worldTick's checkHour(0) is a no-op. Next update()
  * continues the cycle from dawn. Month stays an input (default
  * SEASON_START_MONTH, the month the renderer feeds the rig);
  * the shell may pass another month if it ever tracks one.
@@ -63,6 +67,7 @@
 import { bus } from './events';
 import { shelterAt, shelterState } from './shelter';
 import { cycleSplit } from './sky';
+import { trapState } from './trapState';
 import { SEASON_START_MONTH } from './weather';
 
 /** Why a sleep press granted nothing. Fail-loud, one reason. */
@@ -109,6 +114,11 @@ export function createSleepListener(deps: SleepListenerDeps): () => void {
     // house lookup still runs so the payload names the house
     // when she sleeps near one, else null.
     const shelter = shelterAt(x, z, shelterState.snapshot());
+    // Overnight trap rolls (Adam 2026-10-28): the skipped night
+    // hours roll at dawn, one 'trap:hour' per skipped hour —
+    // burst BEFORE the rig jumps, so the next worldTick's
+    // checkHour(0) finds the index already at 0 (no double dawn).
+    trapState.sleepJump(cycleT);
     deps.restoreDawn();
     bus.emit('sleep:completed', { x, z, cycleT: 0, houseId: shelter.houseId });
   });

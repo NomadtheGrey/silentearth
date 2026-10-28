@@ -37,7 +37,9 @@
  * SCOPE: placement + catch state + hour trigger. setCatch is
  * the shell's write path; no bait setter yet (no baiting
  * mechanic exists — no dead API), no decay. checkHour is
- * the hour boundary (the shell rolls per trap on 'trap:hour').
+ * the hour boundary (the shell rolls per trap on 'trap:hour');
+ * sleepJump is the sleep-jump burst (one 'trap:hour' per
+ * skipped night hour, delivered at dawn — Adam 2026-10-28).
  * Traps are not harvest targets. setWorldGen clears traps
  * (new world = new traps, like fires/houses/looms/piles).
  */
@@ -106,10 +108,11 @@ class TrapState {
    * live cycleT: emits 'trap:hour' { hour } exactly when the game hour
    * changes (hour = floor(cycleT × 24)). First call establishes silently
    * (no emit on load/boot); 23 → 0 wrap emits (midnight is a change);
-   * same-hour repeats are no-ops. A sleep jump to dawn emits ONCE for
-   * the dawn hour — skipped hours get no rolls in v1 (Adam's variant
-   * question, not this claim). The shell rolls per trap on the emit;
-   * this method rolls nothing and knows no trap positions.
+   * same-hour repeats are no-ops. A sleep jump does NOT use this
+   * method for its skipped hours — see sleepJump below (Adam
+   * 2026-10-28: once per skipped hour, batched at dawn). The
+   * shell rolls per trap on the emit; this method rolls nothing
+   * and knows no trap positions.
    */
   checkHour(cycleT: number): void {
     const hour = Math.floor(cycleT * 24);
@@ -122,6 +125,36 @@ class TrapState {
     if (hour === this.lastHourIndex) return;
     this.lastHourIndex = hour;
     bus.emit('trap:hour', { hour });
+  }
+
+  /**
+   * Sleep-jump burst (Adam 2026-10-28: once per skipped hour,
+   * rolled all at once at dawn). Called by the sleep listener
+   * BEFORE restoreDawn, with the pre-sleep cycleT: emits one
+   * 'trap:hour' per skipped hour, in order — the hours strictly
+   * after the sleep hour through 23, plus dawn 0 (the wake
+   * hour's roll). Sleep at 20 → [21, 22, 23, 0]; sleep at 23 →
+   * [0] only (identical to the v1 dawn roll). The sleep hour
+   * itself never re-rolls (its roll already fired when the tick
+   * crossed into it). Ends lastHourIndex at 0, so the next
+   * worldTick's checkHour(0) is a no-op — dawn never
+   * double-rolls. Assumes the listener's night gate (the sleep
+   * hour is a night hour, so the coming dawn is the next one;
+   * a daytime press never reaches here). Non-finite input is
+   * a no-op (the listener already fails 'no-sky' first).
+   * The shell rolls per emit exactly as for a normal hour tick
+   * — the burst needs no shell change; uncaught-only skipping
+   * is the row's per-emit rule, not this method's.
+   */
+  sleepJump(fromCycleT: number): void {
+    if (!Number.isFinite(fromCycleT)) return;
+    const fromHour = Math.floor(fromCycleT * 24);
+    for (let h = fromHour + 1; h < 24; h++) {
+      this.lastHourIndex = h;
+      bus.emit('trap:hour', { hour: h });
+    }
+    this.lastHourIndex = 0;
+    bus.emit('trap:hour', { hour: 0 });
   }
 
   snapshot(): PlacedTrap[] {
