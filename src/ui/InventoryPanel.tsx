@@ -43,6 +43,14 @@ export interface InventoryStorageSection {
   onWithdrawItem?: (id: string) => void;
 }
 
+/** One worn-gear section in the portrait strip (caller-supplied display text). */
+export interface InventoryWornSection {
+  /** Section title: "Clothing", "Storage", or "Tools". */
+  title: string;
+  /** Display lines, e.g. "Cloak — worn, +6 lb". */
+  entries: string[];
+}
+
 export interface InventoryPanelProps {
   items: InventoryItem[];
   /** Id of the selected item, if any. Undefined = nothing selected. */
@@ -90,6 +98,16 @@ export interface InventoryPanelProps {
    * itself is the caller's job.
    */
   onDropItem?: (id: string) => void;
+  /**
+   * Worn-gear strip, shown directly under the portrait and
+   * above the Carrying line (Adam, 2026-10-28): the worn
+   * clothing, carried storage gear, and owned tool, as
+   * caller-composed display sections. These items are NOT
+   * in `items` (the caller filters them out), so they carry
+   * no Drop or Deposit button anywhere — display only.
+   * Omitted or empty = no strip.
+   */
+  worn?: InventoryWornSection[];
   /** Caller-supplied capacity line, e.g. a total the system provides. */
   capacityText?: string;
   /** Called when the panel is closed. Optional. */
@@ -113,6 +131,7 @@ export function InventoryPanel({
   storage,
   onDepositItem,
   onDropItem,
+  worn,
   capacityText,
   onClose,
   comfortable = false,
@@ -146,6 +165,22 @@ export function InventoryPanel({
       <div className="mb-2 flex justify-center">
         <WitchPortrait />
       </div>
+
+      {/* Worn gear, directly under the portrait: one wrapping
+          line per section, display only — no buttons here. */}
+      {worn !== undefined &&
+      worn.some((section) => section.entries.length > 0) ? (
+        <div className="mb-2 flex flex-col gap-0.5">
+          {worn
+            .filter((section) => section.entries.length > 0)
+            .map((section) => (
+              <p key={section.title} className="text-sm">
+                <span className={t.muted}>{section.title}: </span>
+                {section.entries.join(' · ')}
+              </p>
+            ))}
+        </div>
+      ) : null}
 
       {capacityText ? (
         <p className={'mb-2 text-sm ' + t.muted}>{capacityText}</p>

@@ -1575,7 +1575,7 @@ import {
   BEHIND_LOOK_HEIGHT,
 } from './constants';
 import type { CameraMode, BiomeWeights } from './types';
-import { Wardrobe, GARMENTS } from './systems/clothes';
+import { Wardrobe, GARMENTS, WORN_CAPACITY_BONUS } from './systems/clothes';
 import {
   carriesUmbrella,
   UMBRELLA_PRECIPITATION_PROTECTION,
@@ -5273,6 +5273,86 @@ export default function App() {
   // carried, and stays deposit-only when carried. Deposit
   // arrows always render, disabled iff carried is 0 (with
   // the "Needs carried" note under the arrows row).
+  // WORN GEAR (Adam, 2026-10-28): clothing, storage, and tools
+  // move up beside the avatar portrait, out of the droppable
+  // row list, and are NEVER droppable from the UI. The
+  // portrait section lists worn ∩ carried garments (slot
+  // order via wornItemIds), carried storage gear (apron,
+  // small basket, large basket), and the owned tool only
+  // (ownedToolItem; 'none' when no tool). Carried-but-unworn
+  // garments stay normal rows (loose until worn); the
+  // umbrella is not gear (counts 1 lb) and stays a normal
+  // row. Bonuses are the systems numbers: garments from
+  // WORN_CAPACITY_BONUS (mittens/boots 0 → worn mark only);
+  // apron +10, large basket +50, small basket +25 — except
+  // when large is also carried, small shows +0 ("large
+  // basket carries": large REPLACES small, pinned). The
+  // owned tool rides free; Trundle-Tool adds +50 lb.
+  // wornGear.ids (normalized) drives both the panel row
+  // filter (rows gone → Drop and home-Deposit gone with
+  // them) and the pile-menu deposit filter below (deposit
+  // arrows gone for worn-gear kinds; Take arrows stay as
+  // recovery, and home Withdraw stays). Functions are
+  // untouched (handleDropItem, handleDepositItem,
+  // handlePileAction stay for loose items).
+  const wornGear = (() => {
+    const ids: string[] = [];
+    const sections: { title: string; entries: string[] }[] = [];
+    const clothing: string[] = [];
+    for (const item of wardrobe.wornItemIds()) {
+      if (inventory.count(item) < 1) {
+        continue;
+      }
+      ids.push(item);
+      const bonus = WORN_CAPACITY_BONUS[item] ?? 0;
+      clothing.push(
+        bonus > 0
+          ? `${displayNameFor(item)} — worn, +${bonus} lb`
+          : `${displayNameFor(item)} — worn`,
+      );
+    }
+    if (clothing.length > 0) {
+      sections.push({ title: 'Clothing', entries: clothing });
+    }
+    const storage: string[] = [];
+    const largeCarried = inventory.count(ITEMS.largeBasket) >= 1;
+    if (inventory.count(ITEMS.apron) >= 1) {
+      ids.push(ITEMS.apron);
+      storage.push(`${displayNameFor(ITEMS.apron)} — +10 lb`);
+    }
+    if (inventory.count(ITEMS.smallBasket) >= 1) {
+      ids.push(ITEMS.smallBasket);
+      storage.push(
+        largeCarried
+          ? `${displayNameFor(ITEMS.smallBasket)} — +0 — large basket carries`
+          : `${displayNameFor(ITEMS.smallBasket)} — +25 lb`,
+      );
+    }
+    if (largeCarried) {
+      ids.push(ITEMS.largeBasket);
+      storage.push(`${displayNameFor(ITEMS.largeBasket)} — +50 lb`);
+    }
+    if (storage.length > 0) {
+      sections.push({ title: 'Storage', entries: storage });
+    }
+    const owned = ownedToolItem(inventory);
+    if (owned !== 'none') {
+      ids.push(owned);
+      sections.push({
+        title: 'Tools',
+        entries: [
+          owned === ITEMS.trundleTool
+            ? `${displayNameFor(owned)} — +50 lb`
+            : displayNameFor(owned),
+        ],
+      });
+    }
+    return {
+      sections,
+      ids: new Set(ids.map((item) => normalizeItemId(item as ItemId))),
+    };
+  })();
+
   const pileMenuActions = (pile: PileTarget): ContextAction[] => {
     const actions: ContextAction[] = [];
     const pileKinds = new Set(
@@ -5282,6 +5362,12 @@ export default function App() {
       const name = displayNameFor(stack.item);
       const carried = inventory.count(stack.item as ItemId);
       const noCarried = carried <= 0;
+      // Worn gear is never droppable: deposit arrows are
+      // GONE for worn-gear kinds (not disabled), while Take
+      // arrows stay as the recovery path.
+      const isWornGear = wornGear.ids.has(
+        normalizeItemId(stack.item as ItemId),
+      );
       actions.push({
         id: `kind:${stack.item}`,
         label: name,
@@ -5298,23 +5384,30 @@ export default function App() {
             glyph: '↑↑',
             ariaLabel: `Pick up all ${name}`,
           },
-          {
-            id: `deposit-one:${stack.item}`,
-            glyph: '↓',
-            ariaLabel: `Drop one ${name} here`,
-            disabled: noCarried,
-          },
-          {
-            id: `deposit-all:${stack.item}`,
-            glyph: '↓↓',
-            ariaLabel: `Drop all ${name} here`,
-            disabled: noCarried,
-          },
+          ...(isWornGear
+            ? []
+            : [
+                {
+                  id: `deposit-one:${stack.item}`,
+                  glyph: '↓',
+                  ariaLabel: `Drop one ${name} here`,
+                  disabled: noCarried,
+                },
+                {
+                  id: `deposit-all:${stack.item}`,
+                  glyph: '↓↓',
+                  ariaLabel: `Drop all ${name} here`,
+                  disabled: noCarried,
+                },
+              ]),
         ],
       });
     }
     for (const stack of inventory.stacksSnapshot()) {
       if (pileKinds.has(stack.item)) continue;
+      // Worn-gear kinds carried but not in this pile get no
+      // entry at all (no deposit path, nothing to take).
+      if (wornGear.ids.has(normalizeItemId(stack.item as ItemId))) continue;
       const name = displayNameFor(stack.item);
       actions.push({
         id: `kind:${stack.item}`,
@@ -6870,7 +6963,10 @@ export default function App() {
       >
         {inventoryOpen ? (
           <InventoryPanel
-            items={inventoryItems}
+            items={inventoryItems.filter(
+              (item) => !wornGear.ids.has(normalizeItemId(item.id as ItemId)),
+            )}
+            worn={wornGear.sections}
             selectedItemId={selectedItemId}
             onSelectItem={setSelectedItemId}
             placeableIds={PLACEABLE_IDS}
