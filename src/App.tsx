@@ -5261,6 +5261,18 @@ export default function App() {
   // Labels carry the kind (ContextMenu has no section
   // headers) so a long menu stays scannable. Action ids
   // encode verb + kind (ids never contain ':').
+  // Pile menu entries: ONE kind-entry per kind — pile kinds in
+  // stacks order, then carried kinds not in the pile — each
+  // carrying its arrow buttons under the SAME action ids the
+  // text rows used (take-one/take-all/deposit-one/
+  // deposit-all:kind), so handlePileAction below is untouched
+  // and every verb/quantity behaves exactly as today. Only
+  // the rendering changes (ContextMenu's kind-entry branch).
+  // Take arrows render iff the pile holds the kind: a kind
+  // taken to zero leaves the entry entirely when nothing is
+  // carried, and stays deposit-only when carried. Deposit
+  // arrows always render, disabled iff carried is 0 (with
+  // the "Needs carried" note under the arrows row).
   const pileMenuActions = (pile: PileTarget): ContextAction[] => {
     const actions: ContextAction[] = [];
     const pileKinds = new Set(
@@ -5268,44 +5280,59 @@ export default function App() {
     );
     for (const stack of pile.stacks) {
       const name = displayNameFor(stack.item);
-      actions.push(
-        { id: `take-one:${stack.item}`, label: `${name} — Take one` },
-        {
-          id: `take-all:${stack.item}`,
-          label: `${name} — Take all`,
-          hint: `× ${stack.quantity}`,
-        },
-      );
       const carried = inventory.count(stack.item as ItemId);
       const noCarried = carried <= 0;
-      const needNote = `Needs carried ${name}`;
-      actions.push(
-        {
-          id: `deposit-one:${stack.item}`,
-          label: `${name} — Deposit one`,
-          disabled: noCarried,
-          disabledNote: noCarried ? needNote : undefined,
-        },
-        {
-          id: `deposit-all:${stack.item}`,
-          label: `${name} — Deposit all`,
-          hint: noCarried ? undefined : `× ${carried}`,
-          disabled: noCarried,
-          disabledNote: noCarried ? needNote : undefined,
-        },
-      );
+      actions.push({
+        id: `kind:${stack.item}`,
+        label: name,
+        counts: { pile: stack.quantity, carried },
+        disabledNote: noCarried ? `Needs carried ${name}` : undefined,
+        arrows: [
+          {
+            id: `take-one:${stack.item}`,
+            glyph: '↑',
+            ariaLabel: `Pick up one ${name}`,
+          },
+          {
+            id: `take-all:${stack.item}`,
+            glyph: '↑↑',
+            ariaLabel: `Pick up all ${name}`,
+          },
+          {
+            id: `deposit-one:${stack.item}`,
+            glyph: '↓',
+            ariaLabel: `Drop one ${name} here`,
+            disabled: noCarried,
+          },
+          {
+            id: `deposit-all:${stack.item}`,
+            glyph: '↓↓',
+            ariaLabel: `Drop all ${name} here`,
+            disabled: noCarried,
+          },
+        ],
+      });
     }
     for (const stack of inventory.stacksSnapshot()) {
       if (pileKinds.has(stack.item)) continue;
       const name = displayNameFor(stack.item);
-      actions.push(
-        { id: `deposit-one:${stack.item}`, label: `${name} — Deposit one` },
-        {
-          id: `deposit-all:${stack.item}`,
-          label: `${name} — Deposit all`,
-          hint: `× ${stack.quantity}`,
-        },
-      );
+      actions.push({
+        id: `kind:${stack.item}`,
+        label: name,
+        counts: { pile: 0, carried: stack.quantity },
+        arrows: [
+          {
+            id: `deposit-one:${stack.item}`,
+            glyph: '↓',
+            ariaLabel: `Drop one ${name} here`,
+          },
+          {
+            id: `deposit-all:${stack.item}`,
+            glyph: '↓↓',
+            ariaLabel: `Drop all ${name} here`,
+          },
+        ],
+      });
     }
     actions.push({ id: 'close', label: 'Close' });
     return actions;
@@ -6321,6 +6348,12 @@ export default function App() {
                 selectedPile.stacks.length === 1
                   ? `${displayNameFor(selectedPile.stacks[0].item)} × ${selectedPile.stacks[0].quantity}`
                   : `Pile × ${selectedPile.stacks.reduce((sum, stack) => sum + stack.quantity, 0)} (${selectedPile.stacks.length} kinds)`
+              }
+              header={
+                <p className="text-xs text-stone-400">
+                  ↑ Pick up one · ↑↑ Pick up all · ↓ Drop one here · ↓↓ Drop
+                  all here
+                </p>
               }
               actions={pileMenuActions(selectedPile)}
               onSelect={(id) => handlePileAction(selectedPile, id)}

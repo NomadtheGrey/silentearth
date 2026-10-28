@@ -50,6 +50,11 @@ export interface InventoryItem {
 /**
  * One action in an in-place context menu. The label, hint, and
  * availability are caller-supplied; this type carries no logic.
+ *
+ * A kind-entry action (pile menu) carries arrows instead of
+ * acting as a single button: the label names the kind, counts
+ * carries its pile and carried quantities, and each arrow is
+ * its own pressable action under its own id.
  */
 export interface ContextAction {
   id: string;
@@ -60,6 +65,21 @@ export interface ContextAction {
   disabled?: boolean;
   /** Why an action is unavailable, in the caller's words. Optional. */
   disabledNote?: string;
+  /** Pile ×N · carried ×M counts for a kind-entry row, if any. */
+  counts?: { pile: number; carried: number };
+  /** Arrow buttons for a kind-entry row; when present the row renders arrows, not a text button. */
+  arrows?: ContextActionArrow[];
+}
+
+/** One arrow button inside a kind-entry row. */
+export interface ContextActionArrow {
+  id: string;
+  /** The glyph shown on the button (↑ ↑↑ ↓ ↓↓ for the pile menu). */
+  glyph: string;
+  /** Spoken label for the arrow; the glyph span itself is aria-hidden. */
+  ariaLabel: string;
+  /** Whether this arrow is currently unavailable, caller-decided. */
+  disabled?: boolean;
 }
 
 /** Tone for object feedback text. Colours the chip only. */

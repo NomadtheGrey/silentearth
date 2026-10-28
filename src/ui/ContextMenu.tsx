@@ -75,6 +75,42 @@ export function ContextMenu({
         <ul className="flex flex-col gap-0.5">
           {actions.map((action) => {
             const selected = action.id === selectedActionId;
+            if (action.arrows) {
+              return (
+                <li key={action.id}>
+                  <div>
+                    <span className="flex items-baseline justify-between gap-2">
+                      <span className="text-sm">{action.label}</span>
+                      {action.counts ? (
+                        <span className={'text-xs ' + t.muted}>
+                          pile ×{action.counts.pile} · carried ×
+                          {action.counts.carried}
+                        </span>
+                      ) : null}
+                    </span>
+                    <span className="mt-1 flex gap-1">
+                      {action.arrows.map((arrow) => (
+                        <button
+                          key={arrow.id}
+                          type="button"
+                          disabled={arrow.disabled}
+                          onClick={() => onSelect?.(arrow.id)}
+                          aria-label={arrow.ariaLabel}
+                          className="min-h-[44px] min-w-[44px] flex-1 rounded text-base disabled:cursor-not-allowed disabled:opacity-40 hover:bg-stone-800"
+                        >
+                          <span aria-hidden="true">{arrow.glyph}</span>
+                        </button>
+                      ))}
+                    </span>
+                    {action.disabledNote ? (
+                      <span className={'mt-0.5 block text-xs ' + t.muted}>
+                        {action.disabledNote}
+                      </span>
+                    ) : null}
+                  </div>
+                </li>
+              );
+            }
             return (
               <li key={action.id}>
                 <button
