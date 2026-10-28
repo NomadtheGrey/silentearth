@@ -128,6 +128,66 @@ export function isNearStillWater(
   return distanceToStillWater(px, pz, waters) <= SCRY_WATER_RANGE;
 }
 
+/**
+ * How far away still water counts as "findable" for
+ * the frog tier-1 effect, in meters from the water's
+ * edge. DRAFT, flagged for Adam's pin pass. Matches
+ * the stillWatersNear adapter range (50).
+ */
+export const FROG_WATER_RANGE = 50;
+
+/** Nearest still water's direction + edge distance, or null. */
+export interface NearestStillWater {
+  /** Unit vector toward the nearest water body's edge point. */
+  dx: number;
+  /** Unit vector toward the nearest water body's edge point. */
+  dz: number;
+  /** Edge distance in meters (0 excluded — see below). */
+  distance: number;
+}
+
+/**
+ * Frog tier-1 fact (Track B 2026-10-28): nearest still
+ * water within `range` (default FROG_WATER_RANGE) of
+ * (px, pz), as a unit vector + edge distance — the
+ * direction she should walk to reach water. Edge math
+ * + validation mirror distanceToStillWater. Returns
+ * null when no waters are supplied, when the nearest
+ * edge lies beyond range, or when already at/in water
+ * (edge distance 0 — no hint needed). Systems side is
+ * the fact/API only; UI's hint display follows.
+ */
+export function nearestStillWater(
+  px: number,
+  pz: number,
+  waters: ReadonlyArray<StillWaterBody>,
+  range: number = FROG_WATER_RANGE,
+): NearestStillWater | null {
+  let best = Infinity;
+  let bestDx = 0;
+  let bestDz = 0;
+  for (const water of waters) {
+    if (!Number.isFinite(water.x) || !Number.isFinite(water.z)) continue;
+    if (!Number.isFinite(water.radius) || water.radius < 0) continue;
+    const dx = water.x - px;
+    const dz = water.z - pz;
+    const centerDistance = Math.hypot(dx, dz);
+    const edgeDistance = Math.max(0, centerDistance - water.radius);
+    if (edgeDistance < best) {
+      best = edgeDistance;
+      if (centerDistance > 0) {
+        bestDx = dx / centerDistance;
+        bestDz = dz / centerDistance;
+      } else {
+        bestDx = 0;
+        bestDz = 0;
+      }
+    }
+  }
+  if (!Number.isFinite(best) || best === 0 || best > range) return null;
+  return { dx: bestDx, dz: bestDz, distance: best };
+}
+
 /** A camp, as revealed: position only (arrows point, not label). */
 export interface CampPosition {
   x: number;

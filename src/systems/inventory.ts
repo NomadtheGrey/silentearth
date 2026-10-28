@@ -528,6 +528,8 @@ export interface CapacityBreakdown {
   trundleTool: number;
   /** PINNED worn bonuses total (hat +1 lb, shawl +3 lb, cloak +6 lb). */
   worn: number;
+  /** Charm bonus in pounds (bear, Track B; 0 with no bear charm). */
+  charms: number;
   total: number;
   largeBasketMode: LargeBasketMode;
   /** PINNED 50 lb (Adam 2026-10-26) — the live Trundle-Tool bonus. */
@@ -575,6 +577,14 @@ export class PersonalInventory implements CraftingInventory {
   private readonly stacks = new Map<ItemId, number>();
   private readonly largeBasketMode: LargeBasketMode;
   private worn = new Set<ItemId>();
+
+  /**
+   * Charm capacity bonus in pounds (bear, Track B):
+   * session state, shell-synced (setCharmCapacityBonusLb
+   * on boot + list change) — never saved; derives from
+   * the awakening record, which IS saved. Default 0.
+   */
+  private charmBonusLb = 0;
 
   constructor(options: PersonalInventoryOptions) {
     this.largeBasketMode = options.largeBasketMode;
@@ -693,6 +703,25 @@ export class PersonalInventory implements CraftingInventory {
     }
   }
 
+  /**
+   * Set the charm capacity bonus in pounds (bear +10
+   * while carried + awakened, else 0 — see
+   * bearCapacityBonusLb in charms.ts). Must be finite
+   * and ≥ 0. Feeds capacity()/capacityLb() and, through
+   * them, addPartial/canCarry checks.
+   */
+  setCharmCapacityBonusLb(lb: number): void {
+    if (!Number.isFinite(lb) || lb < 0) {
+      throw new Error('Charm capacity bonus must be a finite non-negative number.');
+    }
+    this.charmBonusLb = lb;
+  }
+
+  /** Current charm capacity bonus in pounds. */
+  charmCapacityBonusLb(): number {
+    return this.charmBonusLb;
+  }
+
   // --- Capacity (pounds) ---
 
   /** Total carrying capacity right now, given owned gear, in pounds. */
@@ -738,6 +767,7 @@ export class PersonalInventory implements CraftingInventory {
       largeBasket: hasLargeBasket ? LARGE_BASKET_BONUS : 0,
       trundleTool: hasTrundleTool ? TRUNDLE_TOOL_BONUS : 0,
       worn,
+      charms: this.charmBonusLb,
       total: 0,
       largeBasketMode: this.largeBasketMode,
       trundleToolBonus: TRUNDLE_TOOL_BONUS,
@@ -748,7 +778,8 @@ export class PersonalInventory implements CraftingInventory {
       breakdown.smallBasket +
       breakdown.largeBasket +
       breakdown.trundleTool +
-      breakdown.worn;
+      breakdown.worn +
+      breakdown.charms;
     return breakdown;
   }
 

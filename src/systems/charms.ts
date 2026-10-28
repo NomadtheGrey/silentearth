@@ -203,6 +203,51 @@ export const FIRST_CHARM_EFFECT: FirstCharmEffect = {
   drainMultiplier: 0.9,
 };
 
+/**
+ * Tier-1 effect factors (Track B Systems-buildable,
+ * 2026-10-28). All DRAFT, flagged for Adam's pin pass.
+ * Every factor helper gates on CHARM-LIST MEMBERSHIP +
+ * awakened: `carried` is a SHELL-SUPPLIED boolean (list
+ * membership once the list lands) — never a main-
+ * inventory read (shrew lesson; shrewEffectActive's
+ * direct read stays unused for exactly this reason).
+ * The shell multiplies drain factors (shrew × snake);
+ * storage/capacity bonuses add to their own bases.
+ */
+export const SNAKE_EFFECT = { drainMultiplier: 0.9 };
+export const MOUSE_EFFECT = { storageBonus: 25 };
+export const BEAR_EFFECT = { capacityBonusLb: 10 };
+
+/** Snake drain factor: 0.9 when carried + awakened, else 1. */
+export function snakeDrainFactor(
+  carried: boolean,
+  charms: CharmState,
+): number {
+  return carried && charms.isAwakened('snake-vertebra')
+    ? SNAKE_EFFECT.drainMultiplier
+    : 1;
+}
+
+/** Mouse home-storage bonus in counts: 25 when carried + awakened, else 0. */
+export function mouseStorageBonus(
+  carried: boolean,
+  charms: CharmState,
+): number {
+  return carried && charms.isAwakened('mouse-spine')
+    ? MOUSE_EFFECT.storageBonus
+    : 0;
+}
+
+/** Bear pack-capacity bonus in pounds: 10 when carried + awakened, else 0. */
+export function bearCapacityBonusLb(
+  carried: boolean,
+  charms: CharmState,
+): number {
+  return carried && charms.isAwakened('bear-claw')
+    ? BEAR_EFFECT.capacityBonusLb
+    : 0;
+}
+
 /** One awakening's saved shape (see CharmState.snapshot). */
 export interface SavedAwakening {
   kind: string;
@@ -335,6 +380,52 @@ export class HungerWarning {
 }
 
 /**
+ * Storm-warning latch (deer tier-1 effect machinery,
+ * Track B 2026-10-28). Mirrors HungerWarning exactly:
+ * same entry-fire / hold / re-arm / not-carried-reset
+ * semantics, with a BOOLEAN fact in place of a meter
+ * threshold (no threshold param — the fact IS the
+ * signal). update(stormApproaching, carried): fires
+ * ONCE on entry into storm-approaching while carried;
+ * stays active while the signal holds; re-arms when
+ * it clears; not carried → inactive + reset. Returns
+ * { active, fired } (fired = entry edge for UI's
+ * display pulse; active = steady state). Session UI
+ * state only: nothing is saved. Fact input =
+ * Background's stormApproaching rising-front signal,
+ * shell-supplied — NOT a countdown (the 30-min draft
+ * window is Background's signal definition, not a
+ * Systems countdown).
+ */
+export class WeatherWarning {
+  private active = false;
+
+  /** Is the warning currently active (steady state for UI)? */
+  isActive(): boolean {
+    return this.active;
+  }
+
+  update(
+    stormApproaching: boolean,
+    carried: boolean,
+  ): { active: boolean; fired: boolean } {
+    if (!carried) {
+      this.active = false;
+      return { active: false, fired: false };
+    }
+    if (stormApproaching && !this.active) {
+      this.active = true;
+      return { active: true, fired: true };
+    }
+    if (!stormApproaching) {
+      this.active = false;
+      return { active: false, fired: false };
+    }
+    return { active: true, fired: false };
+  }
+}
+
+/**
  * UNUSED — pending a signature change to a shell-
  * supplied carried boolean (header note, charm-list
  * build 2026-10-28). Do NOT call: it reads main
@@ -343,9 +434,10 @@ export class HungerWarning {
  * shell path is correct and stays: UI syncShrewEffect
  * computes carried (interim main-inventory count,
  * list membership when the list lands) && awakened,
- * then setDrainMultiplier(0.9 or 1) — snake later
- * multiplies its factor into the same product (drain
- * multipliers combine multiplicatively). Switch /
+ * then setDrainMultiplier(0.9 or 1) — snake multiplies
+ * its factor into the same product (snakeDrainFactor
+ * below; drain multipliers combine multiplicatively).
+ * Switch /
  * retirement rides UI's panel landing (the carried
  * switch), not this one.
  * (Kept, not deleted: the formula lives here until
