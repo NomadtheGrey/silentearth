@@ -45,8 +45,7 @@ const ALL_RECORDS: BuildRecord[] = [
   {
     merge: 'Merge #19',
     pr: 39,
-    // Second merge replaces this with the real merge sha.
-    sha: 'pending',
+    sha: 'c020caf',
     date: '2026-10-28',
     what: 'Creature identifier tags (nearest animal pill, 32 m cap) + 13 new flowers with items and foods (kinds, models, weights, 12 kebab items, 3 foods) + tree-hung beehives (hives hang beside trunks at 1.8 m, torch beneath reads as "under" for safe honey harvest).',
     why: 'The world names what it shows: animals read by name at a glance, the flowered country is harvestable instead of scenery-only, and hives finally have an "under" so the torch-under-hive rule makes sense in the fiction.',
