@@ -29,16 +29,18 @@
 // - warnAt 45: the bone stirs (warning signal) when hunger
 //   falls to 45 — 5 points ABOVE the hungry threshold 40,
 //   i.e. "warning before the slowdown" (UI's draft note
-//   shape). The warning SIGNAL mechanism (latch, display)
-//   is NOT built here — numbers only.
+//   shape). The warning LATCH is built (HungerWarning
+//   below); the warning DISPLAY is UI's (built after
+//   the latch lands).
 // - drainMultiplier 0.9 while carried: hunger drains
 //   10% slower (1 point per ~33.3 s instead of 30 s) —
 //   the "small hunger bonus while carried" as an ongoing
-//   effect (not a one-shot). HungerState support for a
-//   multiplier is a FOLLOW-UP (not built here).
-// - Effect MACHINERY (warning latch/display, drain
-//   modification) rides a later charm-effects build.
-//   Nothing here wires effects into hunger or UI.
+//   effect (not a one-shot). HungerState multiplier
+//   support BUILT (Track A 2026-10-28); the shell sets
+//   it from shrewEffectActive (below).
+// - Effect WIRING into hunger/UI shells (shell calls
+//   update + setDrainMultiplier) is the shell's
+//   follow-up — nothing here calls it unprompted.
 //
 // SAVE (trap-save pattern: format now, App wiring later):
 // CharmState.snapshot() / restore() carry awakenings
@@ -165,8 +167,12 @@ export const FIRST_CHARM_KIND = 'shrew-skull';
 export const FIRST_CHARM_ITEM = ITEMS.primalBoneShrewSkull;
 
 /**
- * First charm's effect numbers (DRAFT, flagged — see
- * header: data only, machinery follows).
+ * First charm's effect numbers (DRAFT, flagged).
+ * MACHINERY STATUS (2026-10-28, Track A): the latch
+ * (HungerWarning below) + HungerState drain-multiplier
+ * support are BUILT; the warning DISPLAY is UI's
+ * (built after the latch lands — the latch exposes
+ * state/API only, no display invented here).
  */
 export interface FirstCharmEffect {
   /** Hunger value at/below which the bone stirs (warns). */
@@ -231,6 +237,79 @@ export class CharmState {
       this.tiers.set(entry.kind, entry.tier);
     }
   }
+}
+
+/**
+ * Hunger-warning latch (shrew tier-1 effect machinery,
+ * Track A 2026-10-28). Generic threshold param —
+ * construct with FIRST_CHARM_EFFECT.warnAt (45).
+ * update(hunger, carried): fires ONCE on entry into
+ * ≤ warnAt while carried (including starting below
+ * threshold on boot — she IS in the warning zone, so
+ * warn); stays active while ≤ warnAt; re-arms when
+ * hunger rises above warnAt; not carried → inactive +
+ * reset (carrying again while ≤ warnAt fires fresh).
+ * Returns { active, fired } (fired = the entry edge —
+ * UI's display pulses on it, reads active for the
+ * steady state). Session UI state only: nothing is
+ * saved — first update below threshold after boot
+ * fires fresh, which is the correct behavior.
+ */
+export class HungerWarning {
+  private active = false;
+
+  constructor(private readonly warnAt: number) {
+    if (!Number.isFinite(warnAt)) {
+      throw new Error('Warning threshold must be a finite number.');
+    }
+  }
+
+  /** Is the warning currently active (steady state for UI)? */
+  isActive(): boolean {
+    return this.active;
+  }
+
+  update(
+    hunger: number,
+    carried: boolean,
+  ): { active: boolean; fired: boolean } {
+    if (!Number.isFinite(hunger)) {
+      throw new Error('Hunger value must be a finite number.');
+    }
+    if (!carried) {
+      this.active = false;
+      return { active: false, fired: false };
+    }
+    if (hunger <= this.warnAt && !this.active) {
+      this.active = true;
+      return { active: true, fired: true };
+    }
+    if (hunger > this.warnAt) {
+      this.active = false;
+      return { active: false, fired: false };
+    }
+    return { active: true, fired: false };
+  }
+}
+
+/**
+ * Is the shrew tier-1 drain effect live? Carried +
+ * awakened (the granted first charm satisfies both;
+ * a merely carried unawakened bone does not — the
+ * effect follows awakening, not possession alone).
+ * Shell formula: setDrainMultiplier(shrewEffectActive
+ * ? FIRST_CHARM_EFFECT.drainMultiplier : 1) — snake
+ * later multiplies its factor into the same product
+ * (drain multipliers combine multiplicatively).
+ */
+export function shrewEffectActive(
+  inventory: PersonalInventory,
+  charms: CharmState,
+): boolean {
+  return (
+    inventory.count(FIRST_CHARM_ITEM) > 0 &&
+    charms.isAwakened(FIRST_CHARM_KIND)
+  );
 }
 
 /**
