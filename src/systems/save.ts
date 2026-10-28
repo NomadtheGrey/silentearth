@@ -153,6 +153,7 @@ import type { SavedNameLook } from './name-sight';
 import type { SavedRitualStaging } from './rituals';
 import { FIRST_CHARM_ITEM, FIRST_CHARM_KIND } from './charms';
 import type { SavedAwakening } from './charms';
+import type { SavedQuestFlags } from './quests';
 
 /** Storage key. The version rides inside the document too. */
 export const SAVE_KEY = 'silentearth-save-v1';
@@ -413,6 +414,8 @@ export interface SaveData {
   stagings: SavedRitualStaging[];
   /** Charm awakenings (kind + tier); [] for old saves. */
   awakenings: SavedAwakening[];
+  /** Quest event flags; absent for old saves (all false). */
+  quests?: SavedQuestFlags;
   /** World harvest state; empty snapshot for old saves. */
   harvestState: SavedHarvestState;
   /** Sky cycle position; dawn ({ cycleT: 0 }) for old saves. */
@@ -531,6 +534,13 @@ export interface SaveDraft {
     kind: string;
     tier: number;
   }>;
+  /**
+   * Quest event flags from the shell's QuestFlags.
+   * OPTIONAL so existing saveNow call sites keep
+   * compiling unchanged until the App wiring lands
+   * (trap-save pattern: format now, wiring later).
+   */
+  quests?: SavedQuestFlags;
 }
 
 /**
@@ -711,6 +721,10 @@ export function serializeSave(draft: SaveDraft): SaveData {
       kind: entry.kind,
       tier: entry.tier,
     })),
+    // Quest flags: written as-is (fresh copy) when the
+    // shell supplies them; omitted when absent (old
+    // saves / pre-wiring — absent reads as all false).
+    ...(draft.quests ? { quests: { ...draft.quests } } : {}),
     // Piles: multi-kind stacks, normalized ids, invalid
     // entries dropped (same filtering rule as
     // normalizeStacks — a stack with a bad item or
@@ -1111,6 +1125,29 @@ export function deserializeSave(value: unknown): SaveData | null {
         awakenings.push({ kind: entry.kind, tier: entry.tier as number });
       }
     }
+    // Quest flags are optional on read, same
+    // additive-field rule: old v1 saves without them
+    // load with quests absent (all false).
+    // Field-level leniency: boolean fields kept,
+    // anything else dropped; a record with no valid
+    // field loads as absent (all false).
+    let quests: SavedQuestFlags | undefined;
+    if (value.quests !== undefined && isRecord(value.quests)) {
+      const record = value.quests as Record<string, unknown>;
+      const parsed: SavedQuestFlags = {};
+      const questFields = [
+        'ateWhileHungry',
+        'slept',
+        'ritualCompleted',
+        'craftedAtStump',
+      ] as const;
+      for (const field of questFields) {
+        if (typeof record[field] === 'boolean') {
+          parsed[field] = record[field] as boolean;
+        }
+      }
+      if (Object.keys(parsed).length > 0) quests = parsed;
+    }
     // CHARM-LIST MIGRATION (2026-10-28, shrew-only):
     // an existing save holding the grant's shrew item
     // + its awakening moves the charm to the list: drop
@@ -1146,6 +1183,7 @@ export function deserializeSave(value: unknown): SaveData | null {
       nameSight,
       stagings,
       awakenings,
+      ...(quests !== undefined ? { quests } : {}),
       harvestState,
       sky,
       facing,
