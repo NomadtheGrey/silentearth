@@ -86,6 +86,10 @@
  *   Trap-save pattern: format now, App wiring later —
  *   serialize writes the snapshots as-is, restore()
  *   validates again. Version stays 1.
+ * - charm-list migration (2026-10-28, deserialize
+ *   only): a save holding the grant's shrew item +
+ *   its awakening drops the item (record kept) — see
+ *   the migration block in deserializeSave.
  * - world state (Background's persistence seams, a39f47f):
  *   fires[].lighting (LightingProcess shape; lit needs no
  *   field — fires[].lit already exists), harvestState
@@ -147,6 +151,7 @@ import type { SavedNameLook } from './name-sight';
 // charms.ts own them; save.ts imports them — no second
 // mirror to drift, the placed-torch id lesson).
 import type { SavedRitualStaging } from './rituals';
+import { FIRST_CHARM_ITEM, FIRST_CHARM_KIND } from './charms';
 import type { SavedAwakening } from './charms';
 
 /** Storage key. The version rides inside the document too. */
@@ -1105,6 +1110,22 @@ export function deserializeSave(value: unknown): SaveData | null {
         }
         awakenings.push({ kind: entry.kind, tier: entry.tier as number });
       }
+    }
+    // CHARM-LIST MIGRATION (2026-10-28, shrew-only):
+    // an existing save holding the grant's shrew item
+    // + its awakening moves the charm to the list: drop
+    // the item, keep the record (0.5 lb frees). Safe
+    // because the grant is the shrew's sole source
+    // (world excludes shrew) — no found bone is ever
+    // removed. Item-only saves keep the item (they
+    // self-heal: next boot's grant awakens, the
+    // following save migrates). Idempotent: re-save
+    // writes the cleaned inventory.
+    if (
+      awakenings.some((entry) => entry.kind === FIRST_CHARM_KIND) &&
+      inventory[FIRST_CHARM_ITEM] !== undefined
+    ) {
+      delete inventory[FIRST_CHARM_ITEM];
     }
     return {
       version: SAVE_VERSION,

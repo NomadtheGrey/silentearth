@@ -37,7 +37,10 @@
 //   the "small hunger bonus while carried" as an ongoing
 //   effect (not a one-shot). HungerState multiplier
 //   support BUILT (Track A 2026-10-28); the shell sets
-//   it from shrewEffectActive (below).
+//   it from its own carried boolean (UI syncShrewEffect
+//   — shell-supplied, list-ready). shrewEffectActive
+//   below is UNUSED pending its signature change (see
+//   its note) — do not wire from it.
 // - Effect WIRING into hunger/UI shells (shell calls
 //   update + setDrainMultiplier) is the shell's
 //   follow-up — nothing here calls it unprompted.
@@ -47,18 +50,32 @@
 // (boot-only, clears + rebuilds, bad entries dropped).
 // SaveData.awakenings (save.ts) carries the snapshot.
 //
+// CHARM LIST (2026-10-28, playable charm system):
+// The list is a VIEW over CharmState — awakened kinds
+// ARE the list (no separate container, no save-shape
+// change). listCharms(charms) is the examination
+// contract: { kind, tier, note }[] in awakening order.
+// Carried for effect purposes = list membership once
+// the list lands (Adam CONFIRMED: functional from the
+// list, no wearing gate); interim main-inventory
+// carried is shell-side (UI syncShrewEffect). The
+// first-charm grant records the awakening ONLY (no
+// inventory item — the shrew's 0.5 lb frees by
+// construction; list records weigh nothing).
+// Existing saves migrate in save.ts deserialize
+// (shrew item + awakening → item removed, record kept).
+//
 
 import { ITEMS } from './recipes';
 import type { PersonalInventory } from './inventory';
 import type { NameSight, LookResult } from './name-sight';
 
 /**
- * SOURCES (flagged, not this build): no world source
- * yields individual kinds yet — Bone Scatter yields
- * generic 'bone' (prototype, hand-pickable). Per-kind
- * sources, or a generic→individual mapping, are a
- * Background/content follow-up. This build registers
- * the ITEMS, not the sources.
+ * SOURCES (current 2026-10-28): world sources now yield
+ * individual kind items (Background boneKind — kind
+ * derives from position; shrew EXCLUDED, the grant is
+ * its sole source). Generic 'bone' survives only as a
+ * sinkless secondary fragment (silt/stone secondaries).
  *
  * Kind <-> item mapping (single source for the rule):
  * kind = shape slug as displayed after "Primal Bone - "
@@ -239,6 +256,31 @@ export class CharmState {
   }
 }
 
+/** One entry of the charm list (examination contract). */
+export interface ListedCharm {
+  /** Bone kind (shape slug, e.g. 'shrew-skull'). */
+  kind: string;
+  /** Tier held (≥ 1 — the list holds awakened kinds only). */
+  tier: number;
+  /** Display line: boneNote's awakened branch. */
+  note: string;
+}
+
+/**
+ * The charm list — a VIEW over CharmState, not a
+ * container: awakened kinds ARE the list, in awakening
+ * (snapshot insertion) order. UI's examination panel
+ * reads this; nothing here renders. Unawakened kinds
+ * never appear (snapshot holds awakened records only).
+ */
+export function listCharms(charms: CharmState): ListedCharm[] {
+  return charms.snapshot().map(({ kind, tier }) => ({
+    kind,
+    tier,
+    note: boneNote(kind, charms),
+  }));
+}
+
 /**
  * Hunger-warning latch (shrew tier-1 effect machinery,
  * Track A 2026-10-28). Generic threshold param —
@@ -293,14 +335,22 @@ export class HungerWarning {
 }
 
 /**
- * Is the shrew tier-1 drain effect live? Carried +
- * awakened (the granted first charm satisfies both;
- * a merely carried unawakened bone does not — the
- * effect follows awakening, not possession alone).
- * Shell formula: setDrainMultiplier(shrewEffectActive
- * ? FIRST_CHARM_EFFECT.drainMultiplier : 1) — snake
- * later multiplies its factor into the same product
- * (drain multipliers combine multiplicatively).
+ * UNUSED — pending a signature change to a shell-
+ * supplied carried boolean (header note, charm-list
+ * build 2026-10-28). Do NOT call: it reads main
+ * inventory directly, which goes wrong once the list
+ * lands (list charms are not inventory stacks). The
+ * shell path is correct and stays: UI syncShrewEffect
+ * computes carried (interim main-inventory count,
+ * list membership when the list lands) && awakened,
+ * then setDrainMultiplier(0.9 or 1) — snake later
+ * multiplies its factor into the same product (drain
+ * multipliers combine multiplicatively). Switch /
+ * retirement rides UI's panel landing (the carried
+ * switch), not this one.
+ * (Kept, not deleted: the formula lives here until
+ * the switch — deletion without a replacement reader
+ * would strand the reference.)
  */
 export function shrewEffectActive(
   inventory: PersonalInventory,
@@ -330,22 +380,28 @@ export function recordBonePickupLook(
 }
 
 /**
- * Outright first-charm grant (first-boot grant — see
- * header). Idempotent: an already-awakened shrew grants
- * nothing (no duplicate bone). A full pack grants
- * nothing AND awakens nothing (no bone, no charm —
- * defensive; a fresh save is never full).
+ * Outright first-charm grant — now GRANT-TO-LIST
+ * (charm-list build 2026-10-28): records the shrew
+ * awakening ONLY, no main-inventory item (the charm
+ * lives in the list — listCharms view — and its 0.5 lb
+ * frees by construction; list records weigh nothing).
+ * Idempotent: an already-awakened shrew grants
+ * nothing. No full-pack failure mode (no item
+ * involved — awakening always records; the old
+ * addPartial gate is gone with the item).
+ * `inventory` is a LEGACY param, IGNORED — kept so
+ * App's call site keeps compiling until UI's panel
+ * landing updates the call (panel + carried switch +
+ * call update + row adjustment in ONE UI landing);
+ * removal rides that landing, not this one.
  */
 export function grantFirstCharm(
   inventory: PersonalInventory,
   charms: CharmState,
 ): { granted: number; already: boolean } {
+  void inventory;
   if (charms.isAwakened(FIRST_CHARM_KIND)) {
     return { granted: 0, already: true };
-  }
-  const grant = inventory.addPartial(FIRST_CHARM_ITEM, 1);
-  if (grant.granted <= 0) {
-    return { granted: 0, already: false };
   }
   charms.awaken(FIRST_CHARM_KIND, 1);
   return { granted: 1, already: false };
