@@ -520,13 +520,19 @@ export function buildKindGeometry(spec: MeshSpec, kind: ScatterKind): THREE.Buff
         part(sphere(0.04, 6, 5), FLOWER_CENTER_COLOR, { p: [0, 0.09, 0] }),
       ]);
     case 'beehive': {
-      // Ground skep v1 (not tree-hung): cylindrical straw body
-      // + domed top + dark entrance slot. ~0.76 m wide, ~0.85 m
-      // tall — reads at phone scale without tree coupling.
+      // Tree-hung skep (beehive landing, 2026-10-28 — Adam:
+      // wild hives go ON TREES): cylindrical straw body +
+      // domed top + dark entrance slot, ~0.76 m wide, ~0.85 m
+      // tall, plus a 0.5 m rope from the dome top upward into
+      // the canopy. Worldgen hangs it beside a trunk at base
+      // height 1.8 m, so the geometry spans base..~1.35 m here.
+      // Small-tree artifact (accepted v1): on small trees the
+      // rope tip may rise above the canopy top.
       return merge([
         part(cyl(0.35, 0.38, 0.5, 10), c, { p: [0, 0.25, 0] }),
         part(new THREE.SphereGeometry(0.35, 10, 8, 0, Math.PI * 2, 0, Math.PI / 2), shade(c, 1.1), { p: [0, 0.5, 0] }),
         part(box(0.14, 0.09, 0.03), 0x1a1a12, { p: [0, 0.12, 0.38] }),
+        part(cyl(0.015, 0.015, 0.5, 4), shade(c, 0.6), { p: [0, 1.1, 0] }),
       ]);
     }
   }

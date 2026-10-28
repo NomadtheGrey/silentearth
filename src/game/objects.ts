@@ -1170,11 +1170,11 @@ export const SOURCES: HarvestSourceDef[] = [
     kind: 'beehive',
     name: 'Wild Hive',
     description:
-      'A wild beehive in the flowered country — SCENERY ONLY v1 ' +
-      '(beehive landing, 2026-10-28): it marks where honey will ' +
-      'come from, but yields nothing yet — the honey item and ' +
-      'the harvest rule ride Systems\' follow-up, and no item ' +
-      'is invented here.',
+      'A wild beehive hung beside a tree trunk in the flowered country ' +
+      '(tree-hung landing, 2026-10-28 — Adam: hives go ON TREES, so a torch ' +
+      'beneath one reads as "under" for the safe-harvest rule): honey comes ' +
+      'from it when a placed torch stands beneath; without a torch the harvest ' +
+      'is refused, and bees never sting (no damage model).',
     harvestable: false,
     permitTier: null,
     secondaryYields: [],

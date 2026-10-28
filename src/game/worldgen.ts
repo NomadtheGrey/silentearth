@@ -201,6 +201,55 @@ export function createWorldGen(seed: string): WorldGen {
       });
     }
 
+    // Tree-hung beehives (beehive landing, 2026-10-28 — Adam:
+    // wild hives go ON TREES, not on the ground, so a torch
+    // beneath one reads as "under" for the safe-harvest rule).
+    // Each hive picked by the mix moves to the nearest 'tree'
+    // in the SAME chunk, hanging beside its trunk: direction =
+    // slot-to-tree (fallback +x if coincident), offset =
+    // mid-trunk radius + skep radius, both scaled by their own
+    // scatter scales (the skep touches the trunk, never floats),
+    // base height 1.8 m (trunk top / canopy zone at scale 1).
+    // Host kind is 'tree' only v1 (tallTree/appleTree don't
+    // host). Pure rewrite — NO RNG consumed, so every other
+    // scatter is byte-identical. A hive in a chunk with no
+    // 'tree' is culled (no host): honey shifts toward
+    // oldfield/forest country, meadow + creek thinning
+    // accepted as this landing's cost of the ruling.
+    {
+      const trees = objects.filter((obj) => obj.kind === 'tree');
+      const hung: ScatterObject[] = [];
+      for (const obj of objects) {
+        if (obj.kind !== 'beehive') {
+          hung.push(obj);
+          continue;
+        }
+        let nearest: ScatterObject | null = null;
+        let nearestD2 = Infinity;
+        for (const tree of trees) {
+          const d2 = (tree.x - obj.x) ** 2 + (tree.z - obj.z) ** 2;
+          if (d2 < nearestD2) {
+            nearestD2 = d2;
+            nearest = tree;
+          }
+        }
+        if (!nearest) continue; // culled: no host tree in this chunk
+        const dx = nearest.x - obj.x;
+        const dz = nearest.z - obj.z;
+        const len = Math.hypot(dx, dz);
+        const ux = len > 0 ? dx / len : 1;
+        const uz = len > 0 ? dz / len : 0;
+        const offset = 0.25 * nearest.scale + 0.38 * obj.scale;
+        hung.push({
+          ...obj,
+          x: nearest.x + ux * offset,
+          z: nearest.z + uz * offset,
+          y: 1.8,
+        });
+      }
+      objects.splice(0, objects.length, ...hung);
+    }
+
     return { cx, cz, objects };
   }
 
