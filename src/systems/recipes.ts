@@ -108,6 +108,11 @@ export const ITEMS = {
   // Ritual altar (2026-10-27 — made ritual site, placeable
   // only; see altar.ts for the place grant + scope guard).
   altar: 'altar',
+  // First charm ONLY (2026-10-27 — tier-1 Waking build;
+  // see charms.ts). Other primal-bone ids land with the
+  // bone build, not here. Kind rule, documented:
+  // 'primal-bone-<shape-slug>' (e.g. shrew-skull).
+  primalBoneShrewSkull: 'primal-bone-shrew-skull',
   // Traps (brainstorm only — nothing picked; see their notes).
   snare: 'snare',
   fishWeirTrap: 'fish-weir-trap',

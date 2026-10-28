@@ -226,6 +226,8 @@ export const ITEM_WEIGHT_LB: Readonly<Record<string, number>> = {
   [ITEMS.tenderVines]: 0.5,
   [ITEMS.peatMoss]: 0.5,
   bone: 0.5,
+  // First charm: a bone's weight (lane judgment, flagged).
+  [ITEMS.primalBoneShrewSkull]: 0.5,
   [ITEMS.flint]: 0.5,
   // Lane judgment: stick + binding + tinder, light to carry.
   [ITEMS.torch]: 0.5,
@@ -440,6 +442,7 @@ export const ITEM_DISPLAY_NAMES: Readonly<Record<string, string>> = {
   pitfall: 'Pitfall',
   deadfall: 'Deadfall',
   bone: 'Bone',
+  'primal-bone-shrew-skull': 'Primal Bone - shrew skull',
   'salt-crystal': 'Salt Crystal',
   dirt: 'Dirt',
   mud: 'Mud',

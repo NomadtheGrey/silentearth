@@ -79,6 +79,13 @@
  *   entity provides one. Order preserved; duplicate
  *   positions allowed (two altars at one spot are two
  *   entries).
+ * - ritual stagings + awakenings (tier-1 Waking state):
+ *   same additive-field rule (old saves load stagings:
+ *   [] + awakenings: []) and the name-sight leniency on
+ *   read (bad entries dropped, the document survives).
+ *   Trap-save pattern: format now, App wiring later —
+ *   serialize writes the snapshots as-is, restore()
+ *   validates again. Version stays 1.
  * - world state (Background's persistence seams, a39f47f):
  *   fires[].lighting (LightingProcess shape; lit needs no
  *   field — fires[].lit already exists), harvestState
@@ -136,6 +143,11 @@ import { normalizeItemId } from './inventory';
 // owns it; save.ts imports it — no second mirror to drift,
 // the placed-torch id nuance taught us that lesson).
 import type { SavedNameLook } from './name-sight';
+// Single source for the ritual records (rituals.ts /
+// charms.ts own them; save.ts imports them — no second
+// mirror to drift, the placed-torch id lesson).
+import type { SavedRitualStaging } from './rituals';
+import type { SavedAwakening } from './charms';
 
 /** Storage key. The version rides inside the document too. */
 export const SAVE_KEY = 'silentearth-save-v1';
@@ -392,6 +404,10 @@ export interface SaveData {
   altars: SavedAltar[];
   /** Partial-true-name look counts; [] for old saves. */
   nameSight: SavedNameLook[];
+  /** Ritual stagings (site + kind + steps); [] for old saves. */
+  stagings: SavedRitualStaging[];
+  /** Charm awakenings (kind + tier); [] for old saves. */
+  awakenings: SavedAwakening[];
   /** World harvest state; empty snapshot for old saves. */
   harvestState: SavedHarvestState;
   /** Sky cycle position; dawn ({ cycleT: 0 }) for old saves. */
@@ -489,6 +505,26 @@ export interface SaveDraft {
   nameSight?: ReadonlyArray<{
     key: string;
     looks: number;
+  }>;
+  /**
+   * Ritual stagings from StagingBook.snapshot() +
+   * awakenings from CharmState.snapshot(). OPTIONAL so
+   * existing saveNow call sites keep compiling unchanged
+   * until the App wiring lands (trap-save pattern:
+   * format now, wiring later).
+   */
+  stagings?: ReadonlyArray<{
+    siteKey: string;
+    boneKind: string;
+    bonePlaced: boolean;
+    offeringGiven: boolean;
+    nameSpoken: boolean;
+    extrasDone: string[];
+    completed: boolean;
+  }>;
+  awakenings?: ReadonlyArray<{
+    kind: string;
+    tier: number;
   }>;
 }
 
@@ -650,6 +686,25 @@ export function serializeSave(draft: SaveDraft): SaveData {
     nameSight: (draft.nameSight ?? []).map((entry) => ({
       key: entry.key,
       looks: entry.looks,
+    })),
+    // Ritual stagings + awakenings: written AS-IS (records
+    // verbatim, no filtering, no normalization — site keys
+    // and bone kinds are caller-defined, not inventory
+    // ids). Invalid entries are restore()'s problem, not
+    // serialize's: StagingBook / CharmState restore()
+    // validate and drop them.
+    stagings: (draft.stagings ?? []).map((entry) => ({
+      siteKey: entry.siteKey,
+      boneKind: entry.boneKind,
+      bonePlaced: entry.bonePlaced,
+      offeringGiven: entry.offeringGiven,
+      nameSpoken: entry.nameSpoken,
+      extrasDone: [...entry.extrasDone],
+      completed: entry.completed,
+    })),
+    awakenings: (draft.awakenings ?? []).map((entry) => ({
+      kind: entry.kind,
+      tier: entry.tier,
     })),
     // Piles: multi-kind stacks, normalized ids, invalid
     // entries dropped (same filtering rule as
@@ -1002,6 +1057,55 @@ export function deserializeSave(value: unknown): SaveData | null {
         nameSight.push({ key: entry.key, looks: entry.looks as number });
       }
     }
+    // Ritual stagings + awakenings are optional on read,
+    // same additive-field rule: old v1 saves without them
+    // load with stagings: [] + awakenings: []. Non-array
+    // fields load as [] — the sections drop, the document
+    // survives. Bad entries drop here AND again in
+    // StagingBook / CharmState restore(), so a bad ritual
+    // record can never corrupt the whole document.
+    const stagings: SavedRitualStaging[] = [];
+    if (value.stagings !== undefined && Array.isArray(value.stagings)) {
+      for (const entry of value.stagings) {
+        if (!isRecord(entry)) continue;
+        if (typeof entry.siteKey !== 'string' || entry.siteKey === '') continue;
+        if (typeof entry.boneKind !== 'string' || entry.boneKind === '') continue;
+        if (
+          typeof entry.bonePlaced !== 'boolean' ||
+          typeof entry.offeringGiven !== 'boolean' ||
+          typeof entry.nameSpoken !== 'boolean' ||
+          typeof entry.completed !== 'boolean'
+        ) {
+          continue;
+        }
+        if (
+          !Array.isArray(entry.extrasDone) ||
+          (entry.extrasDone as unknown[]).some((e) => typeof e !== 'string')
+        ) {
+          continue;
+        }
+        stagings.push({
+          siteKey: entry.siteKey,
+          boneKind: entry.boneKind,
+          bonePlaced: entry.bonePlaced as boolean,
+          offeringGiven: entry.offeringGiven as boolean,
+          nameSpoken: entry.nameSpoken as boolean,
+          extrasDone: [...(entry.extrasDone as string[])],
+          completed: entry.completed as boolean,
+        });
+      }
+    }
+    const awakenings: SavedAwakening[] = [];
+    if (value.awakenings !== undefined && Array.isArray(value.awakenings)) {
+      for (const entry of value.awakenings) {
+        if (!isRecord(entry)) continue;
+        if (typeof entry.kind !== 'string' || entry.kind === '') continue;
+        if (!Number.isInteger(entry.tier) || (entry.tier as number) <= 0) {
+          continue;
+        }
+        awakenings.push({ kind: entry.kind, tier: entry.tier as number });
+      }
+    }
     return {
       version: SAVE_VERSION,
       savedAt: value.savedAt,
@@ -1019,6 +1123,8 @@ export function deserializeSave(value: unknown): SaveData | null {
       torches,
       altars,
       nameSight,
+      stagings,
+      awakenings,
       harvestState,
       sky,
       facing,
