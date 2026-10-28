@@ -45,7 +45,7 @@ const ALL_RECORDS: BuildRecord[] = [
   {
     merge: 'Merge #13',
     pr: 27,
-    sha: 'pending',
+    sha: '90118be',
     date: '2026-10-28',
     what: 'Ambient animals in the world — 26 kinds (bone kinds + trap set + shrew), wander/idle/flee behaviors, water + perched + night-fly shapes, simple low-poly models with bob/hop/swim-drift/wing-flutter animation, per-kind biome presence (salt flat empty, deep bog frog + muskrat only), ≤3 per chunk, deterministic seed respawn (no save changes).',
     why: 'The world stops being empty of life — animals she can watch, that wander, flee, and fly, in the biomes where they belong, without combat, hunting, or any tie to traps or bone scatters.',
