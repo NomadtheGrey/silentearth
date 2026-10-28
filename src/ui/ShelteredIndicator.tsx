@@ -13,35 +13,15 @@
  * name is optional caller-supplied text, shown only when
  * sheltered.
  *
- * WIRING — READ THIS: at the time this file was written, no
- * housing state exists in the repo (houses are craftable
- * inventory items, not placed world objects), and the weather
- * module's shelter hook explicitly defaults to unsheltered
- * until housing supplies positions. So App mounts this with
- * sheltered=false today — the engine's current truth, not a
- * guess — and the indicator reads "Unsheltered". The moment
- * housing lands and supplies placed-house positions, App
- * passes the real value through and the pill appears when she
- * is home. Home storage is a separate concern (see below) and
- * is not rendered here.
- *
- * HOME STORAGE — FLAGGED, NOT BUILT: no home inventory exists
- * yet, so there is nothing to surface. When one lands, it
- * surfaces through the EXISTING InventoryPanel pattern (items
- * + capacity text) — that panel already carries exactly what a
- * home inventory needs, so no separate storage panel is
- * invented here. If the existing panel cannot carry it, that
- * is a flag for the housing round, not a second panel built
- * in advance.
- *
- * SLEEP (Adam, 2026-10-27): when the caller passes onSleep,
- * a Sleep button renders under the sheltered pill — and
- * only there (never when unsheltered). The caller owns both
- * gates: sheltered is this component's own branch, and the
- * caller passes onSleep only at night, so daytime shows no
- * Sleep control. No panel, no invented text beyond the
- * caller's label; the press is the caller's emit, and the
- * engine's dawn jump is the visible effect.
+ * WIRING — READ THIS: App passes the real sheltered value
+ * through from placed-house state (shelterAt: within 6 m of
+ * a placed house center), plus the sheltering house's name,
+ * so the pill appears when she is home. Rest does NOT live
+ * here: it lives in the home menu (Adam, 2026-10-28 — the
+ * indicator button sat far left where it went unnoticed).
+ * Home storage surfaces through the InventoryPanel pattern
+ * (items + capacity text) and through the home menu; this
+ * indicator carries shelter text only.
  */
 
 export interface ShelteredIndicatorProps {
@@ -50,20 +30,12 @@ export interface ShelteredIndicatorProps {
   /** Placed house name, caller-supplied. Shown only when sheltered. */
   houseName?: string;
   className?: string;
-  /** When set, a Sleep button renders under the sheltered pill.
-    The caller passes this only when sleeping is allowed (night)
-    — daytime shows no Sleep control. */
-  onSleep?: () => void;
-  /** Label for the Sleep button, caller-supplied wording. */
-  sleepLabel?: string;
 }
 
 export function ShelteredIndicator({
   sheltered,
   houseName,
   className,
-  onSleep,
-  sleepLabel,
 }: ShelteredIndicatorProps) {
   if (!sheltered) {
     return (
@@ -85,16 +57,6 @@ export function ShelteredIndicator({
       >
         Sheltered{houseName ? ` at ${houseName}` : ''}
       </div>
-      {onSleep ? (
-        <button
-          type="button"
-          aria-label={sleepLabel ?? 'Sleep'}
-          onClick={onSleep}
-          className="mt-1 flex min-h-[44px] items-center justify-center rounded border-2 border-[#f0ead6]/80 bg-[#3a4436]/90 px-3 text-sm font-bold text-[#f0ead6]"
-        >
-          {sleepLabel ?? 'Sleep'}
-        </button>
-      ) : null}
     </div>
   );
 }

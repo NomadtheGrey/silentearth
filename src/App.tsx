@@ -2199,18 +2199,22 @@ export default function App() {
   // split says night at the world's fixed start month.
   const [isNight, setIsNight] = useState(false);
 
-  // SLEEP (Adam, 2026-10-27): the button renders only when
-  // sheltered AND night (see the ShelteredIndicator wiring
-  // below) — daytime shows no Sleep control. The press emits
-  // the sleep request { x, z } — her position at press time
-  // — that the engine's sleep listener acts on: it checks
-  // night, then shelter (from the position), and jumps the
-  // sky to dawn, time-only, no restore. The one listener
-  // lives in the boot effect below (createSleepListener);
+  // SLEEP (Adam, 2026-10-28 — moved): Rest lives in the
+  // home menu, not the shelter indicator (the indicator
+  // button sat far left where it went unnoticed; the menu
+  // is where Rest belongs). The menu's Rest row runs
+  // handleSleep unchanged: it emits the sleep request
+  // { x, z } — her position at press time — that the
+  // engine's sleep listener acts on: it checks night,
+  // then shelter (from the position), and jumps the sky
+  // to dawn, time-only, no restore. The one listener lives
+  // in the boot effect below (createSleepListener);
   // outcomes 'sleep:completed'/'sleep:failed' need no UI
-  // action — the dawn jump hides the button via the night
+  // action — the dawn jump disables the row via the night
   // gate, and failures show nothing per the brief's
-  // no-invented-text rule.
+  // no-invented-text rule. Daytime shows the row disabled
+  // with a "Night only" note; the menu stays open after
+  // a Rest press.
   const handleSleep = (): void => {
     const player = playerRef.current;
     if (!player) return;
@@ -2611,6 +2615,7 @@ export default function App() {
     { pile: PileTarget; x: number; y: number }[]
   >([]);
   const [selectedPileId, setSelectedPileId] = useState<string | null>(null);
+  const [homeMenuOpen, setHomeMenuOpen] = useState(false);
   const selectedPileIdRef = useRef<string | null>(null);
   const [placement, setPlacement] = useState<PlacementMode | null>(null);
   const [placementAnchor, setPlacementAnchor] = useState<{
@@ -5451,17 +5456,21 @@ export default function App() {
   // lands at those coords (drop creates when nothing
   // matches). Both paths refresh the chip straight from
   // pileState after acting (see refreshPilesFromState).
+  // Menu feedback (shared by the pile + home menus): the
+  // object's anchor when visible, else her feet (ground
+  // rule, always visible) — a menu action's result must
+  // never vanish silently. Hoisted from handlePileAction
+  // so the home handler shares it verbatim (moved, not
+  // re-authored — same body, same call sites).
+  const sayAt = (x: number, z: number, text: string, tone: FeedbackTone) => {
+    const player = playerRef.current;
+    const anchor =
+      projectAnchor(x, z, 'scatter') ??
+      (player ? projectAnchor(player.x, player.z, 'ground') : null);
+    if (anchor) showFeedback(text, tone, anchor.x, anchor.y);
+  };
+
   const handlePileAction = (pile: PileTarget, actionId: string) => {
-    // Menu feedback: the pile's anchor when visible, else
-    // her feet (ground rule, always visible) — a menu
-    // action's result must never vanish silently.
-    const sayAt = (x: number, z: number, text: string, tone: FeedbackTone) => {
-      const player = playerRef.current;
-      const anchor =
-        projectAnchor(x, z, 'scatter') ??
-        (player ? projectAnchor(player.x, player.z, 'ground') : null);
-      if (anchor) showFeedback(text, tone, anchor.x, anchor.y);
-    };
     if (actionId === 'close') {
       selectedPileIdRef.current = null;
       setSelectedPileId(null);
@@ -5553,6 +5562,114 @@ export default function App() {
     }
   };
 
+  // Home menu press (Adam, 2026-10-28): the home menu's
+  // Rest + Store + Take actions. Parse shape mirrors
+  // handlePileAction (verb:kind); the menu STAYS OPEN
+  // after every press except Close — entries re-render
+  // from live inventory + store, so counts update in
+  // place. Notes go through sayAt at the house (the
+  // panel's storageNote is the panel's surface, not the
+  // menu's). Single transfers mirror the panel's
+  // add-first atomicity per unit; all-transfers loop
+  // singles until the source is exhausted or the
+  // destination throws, and partial results stand. One
+  // refresh + one save at the end of each press, never
+  // per loop unit.
+  const handleHomeMenuAction = (actionId: string) => {
+    if (actionId === 'close') {
+      setHomeMenuOpen(false);
+      return;
+    }
+    if (actionId === 'rest') {
+      handleSleep();
+      refreshInventory();
+      saveNow();
+      return;
+    }
+    if (!shelterHouseId) return;
+    const store = getHomeStore(shelterHouseId);
+    const house = shelterState.snapshot().find((h) => h.id === shelterHouseId);
+    const player = playerRef.current;
+    const sayHouse = (text: string) =>
+      sayAt(
+        house?.x ?? player?.x ?? 0,
+        house?.z ?? player?.z ?? 0,
+        text,
+        'blocked',
+      );
+    if (!store) {
+      sayHouse('No home storage here.');
+      refreshInventory();
+      saveNow();
+      return;
+    }
+    const sep = actionId.indexOf(':');
+    if (sep < 0) return;
+    const verb = actionId.slice(0, sep);
+    const kind = actionId.slice(sep + 1);
+    const name = displayNameFor(kind);
+    const syncWorn = () => {
+      inventory.setWorn(wardrobe.wornItemIds());
+      setWornGarments(wardrobe.wornGarments());
+    };
+    const storeOne = (): boolean => {
+      try {
+        store.add(kind as ItemId, 1);
+        inventory.remove(kind as ItemId, 1);
+        homeStoreItemsRef.current.get(shelterHouseId)?.add(kind);
+        syncWorn();
+        return true;
+      } catch {
+        return false;
+      }
+    };
+    const takeOne = (): boolean => {
+      try {
+        inventory.add(kind as ItemId, 1);
+        store.remove(kind as ItemId, 1);
+        if (store.count(kind as ItemId) === 0) {
+          homeStoreItemsRef.current.get(shelterHouseId)?.delete(kind);
+        }
+        syncWorn();
+        return true;
+      } catch {
+        return false;
+      }
+    };
+    if (verb === 'store-one') {
+      if (!storeOne()) {
+        sayHouse(`Home storage full — no room for ${name}.`);
+      }
+    } else if (verb === 'store-all') {
+      const carried = inventory.count(kind as ItemId);
+      let stored = 0;
+      while (inventory.count(kind as ItemId) > 0) {
+        if (!storeOne()) break;
+        stored += 1;
+      }
+      if (stored < carried) {
+        sayHouse(
+          `Stored ${stored} of ${carried} ${name} — home storage full.`,
+        );
+      }
+    } else if (verb === 'take-one') {
+      if (!takeOne()) {
+        sayHouse(`Pack full — no room for ${name}.`);
+      }
+    } else if (verb === 'take-all') {
+      while (store.count(kind as ItemId) > 0) {
+        if (!takeOne()) {
+          sayHouse(`Pack full — no room for ${name}.`);
+          break;
+        }
+      }
+    } else {
+      return;
+    }
+    refreshInventory();
+    saveNow();
+  };
+
   const handleRemove = (target: HarvestTarget) => {
     // Same shape as a harvest press, action 'remove' (Background's
     // documented shape, 2003619): the outcome listener resolves
@@ -5624,6 +5741,89 @@ export default function App() {
           onWithdrawItem: handleWithdrawItem,
         }
       : undefined;
+
+  // Home menu actions (Adam, 2026-10-28): Rest + Store +
+  // Take kind-entries for the sheltering house. Entries
+  // derive per render from live inventory + store, so the
+  // menu re-renders in place after every press (pile
+  // precedent) and never auto-closes — not even when the
+  // store empties. Store entries skip worn-gear kinds
+  // (never droppable; the worn-gear landing's set); Take
+  // entries do not skip (recovery).
+  const homeMenuActions = (): ContextAction[] => {
+    if (!shelterHouseId) return [];
+    const store = openHomeStore;
+    const actions: ContextAction[] = [
+      {
+        id: 'rest',
+        label: 'Sleep until Sunrise',
+        disabled: !isNight,
+        disabledNote: isNight ? undefined : 'Night only',
+      },
+    ];
+    for (const stack of inventory.stacksSnapshot()) {
+      if (wornGear.ids.has(normalizeItemId(stack.item as ItemId))) continue;
+      const name = displayNameFor(stack.item);
+      const stored = store?.count(stack.item as ItemId) ?? 0;
+      actions.push({
+        id: `store-kind:${stack.item}`,
+        label: name,
+        countsText: `carried ×${stack.quantity} · stored ×${stored}`,
+        arrows: [
+          {
+            id: `store-one:${stack.item}`,
+            glyph: '↓',
+            ariaLabel: `Store one ${name}`,
+          },
+          {
+            id: `store-all:${stack.item}`,
+            glyph: '↓↓',
+            ariaLabel: `Store all ${name}`,
+          },
+        ],
+      });
+    }
+    for (const id of openHomeIds) {
+      const held = store?.count(id as ItemId) ?? 0;
+      if (held <= 0) continue;
+      const name = displayNameFor(id);
+      const carried = inventory.count(id as ItemId);
+      actions.push({
+        id: `take-kind:${id}`,
+        label: name,
+        countsText: `stored ×${held} · carried ×${carried}`,
+        arrows: [
+          {
+            id: `take-one:${id}`,
+            glyph: '↑',
+            ariaLabel: `Take one ${name}`,
+          },
+          {
+            id: `take-all:${id}`,
+            glyph: '↑↑',
+            ariaLabel: `Take all ${name}`,
+          },
+        ],
+      });
+    }
+    actions.push({ id: 'close', label: 'Close' });
+    return actions;
+  };
+
+  // Home chip anchor, derived per render (pile/fire
+  // precedent — stored anchors go stale on move): the
+  // sheltering house's position, projected as a scatter
+  // anchor. Null → no chip, no menu.
+  const homeHouse =
+    shelterHouseId !== null
+      ? shelterState.snapshot().find((h) => h.id === shelterHouseId)
+      : undefined;
+  const homeChipAnchor =
+    homeHouse !== undefined
+      ? projectAnchor(homeHouse.x, homeHouse.z, 'scatter')
+      : null;
+  const homeChipVisible =
+    sheltered && homeChipAnchor !== null && !paused;
 
   // The fire whose lighting menu is open, with its anchor.
   const selectedFire =
@@ -5760,6 +5960,10 @@ export default function App() {
         handlePlaceCancel();
         return;
       }
+      if (homeMenuOpen) {
+        setHomeMenuOpen(false);
+        return;
+      }
       if (selectedPileId !== null) {
         selectedPileIdRef.current = null;
         setSelectedPileId(null);
@@ -5800,6 +6004,7 @@ export default function App() {
     pendingTrapRecipe,
     pendingRemoveTarget,
     placement,
+    homeMenuOpen,
     selectedPileId,
     selectedTorchId,
     selectedFireId,
@@ -6480,6 +6685,18 @@ export default function App() {
             />
           </WorldAnchor>
         ) : null}
+        {homeChipVisible && homeChipAnchor ? (
+          <WorldAnchor x={homeChipAnchor.x} y={homeChipAnchor.y} interactive>
+            <button
+              type="button"
+              onClick={() => setHomeMenuOpen(true)}
+              aria-label={`Open ${shelterHouseName ?? 'Home'} menu`}
+              className="flex min-h-[44px] items-center rounded bg-black/50 px-2 py-1 text-sm text-stone-100"
+            >
+              {shelterHouseName ?? 'Home'}
+            </button>
+          </WorldAnchor>
+        ) : null}
         {selectedPile && selectedPileAnchor ? (
           <WorldAnchor
             x={selectedPileAnchor.x}
@@ -6504,6 +6721,28 @@ export default function App() {
                 selectedPileIdRef.current = null;
                 setSelectedPileId(null);
               }}
+            />
+          </WorldAnchor>
+        ) : null}
+        {homeMenuOpen && homeHouse !== undefined && homeChipAnchor ? (
+          <WorldAnchor x={homeChipAnchor.x} y={homeChipAnchor.y} interactive>
+            <ContextMenu
+              objectName={shelterHouseName ?? 'Home'}
+              header={
+                <>
+                  <p className="text-sm text-stone-300">
+                    {openHomeStore === null
+                      ? 'Home storage — empty until first deposit'
+                      : `Stored ${openHomeStore.used()} / ${openHomeStore.capacity()}`}
+                  </p>
+                  <p className="text-xs text-stone-400">
+                    ↑ Take one · ↑↑ Take all · ↓ Store one · ↓↓ Store all
+                  </p>
+                </>
+              }
+              actions={homeMenuActions()}
+              onSelect={(id) => handleHomeMenuAction(id)}
+              onClose={() => setHomeMenuOpen(false)}
             />
           </WorldAnchor>
         ) : null}
@@ -6828,8 +7067,6 @@ export default function App() {
             <ShelteredIndicator
               sheltered={sheltered}
               houseName={shelterHouseName}
-              onSleep={isNight ? handleSleep : undefined}
-              sleepLabel="Sleep until sunrise"
             />
           </div>
           {stationPresenceValue.workstation ? (

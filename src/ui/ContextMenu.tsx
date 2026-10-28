@@ -81,7 +81,11 @@ export function ContextMenu({
                   <div>
                     <span className="flex items-baseline justify-between gap-2">
                       <span className="text-sm">{action.label}</span>
-                      {action.counts ? (
+                      {action.countsText ? (
+                        <span className={'text-xs ' + t.muted}>
+                          {action.countsText}
+                        </span>
+                      ) : action.counts ? (
                         <span className={'text-xs ' + t.muted}>
                           pile ×{action.counts.pile} · carried ×
                           {action.counts.carried}

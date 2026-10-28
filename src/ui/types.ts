@@ -67,6 +67,13 @@ export interface ContextAction {
   disabledNote?: string;
   /** Pile ×N · carried ×M counts for a kind-entry row, if any. */
   counts?: { pile: number; carried: number };
+  /**
+   * Caller-composed counts line for a kind-entry row, rendered
+   * instead of the structured pile counts when present (home
+   * menu rows: "carried ×M · stored ×N" / "stored ×N ·
+   * carried ×M"). Pile entries keep structured counts.
+   */
+  countsText?: string;
   /** Arrow buttons for a kind-entry row; when present the row renders arrows, not a text button. */
   arrows?: ContextActionArrow[];
 }
