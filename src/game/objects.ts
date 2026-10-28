@@ -277,7 +277,7 @@ export type HarvestYieldOutcome =
  */
 export type HarvestableSource = Pick<
   HarvestSourceDef,
-  'harvestable' | 'permitTier' | 'permitFamily' | 'bonusChance' | 'anchor'
+  'harvestable' | 'permitTier' | 'permitFamily' | 'bonusChance' | 'anchor' | 'fixedYield'
 >;
 
 export function harvestYieldForTool(
@@ -310,6 +310,14 @@ export function harvestYieldForTool(
   // axe-family work (stage 1 permit) — a spade is not an axe.
   if (source.permitFamily === 'axe' && (tier === null || !AXE_FAMILY_TIERS.includes(tier))) {
     return { permitted: false, reason: 'below-permit' };
+  }
+  // Fixed yield (Adam 2026-10-28): bone, flint, and river-stone
+  // primaries grant exactly 1 at any tool — no tier scaling, no
+  // bonus roll. Both guards (bonus 0 AND chance 0) so every call
+  // site's base + (rng < chance ? bonus : 0) formula yields 1.
+  // Gates above are unchanged and still apply first.
+  if (source.fixedYield) {
+    return { permitted: true, base: 1, bonus: 0, bonusChance: 0 };
   }
   return {
     permitted: true,
@@ -415,6 +423,16 @@ export interface HarvestSourceDef {
    * may later be given its own number by Adam.
    */
   bonusChance?: number;
+  /**
+   * Fixed yield (Adam 2026-10-28, PINNED for bone/flint/river-stone):
+   * the primary grants exactly 1 at any tool — no tier scaling, no
+   * bonus roll. harvestYieldForTool returns { base 1, bonus 0,
+   * bonusChance 0 } for marked sources, after the permit/anchor/
+   * family gates (gates unchanged). OPTIONAL by design: the ground
+   * synthetic literal omits it. Silt is NOT marked (its primary +
+   * gated clay keep scaling); no other source carries this flag.
+   */
+  fixedYield?: boolean;
   /** Primary yield, when harvestable. */
   primaryYield?: ItemId;
   /** Prototype-carried secondary yields (empty when the prototype had none). */
@@ -704,6 +722,7 @@ export const SOURCES: HarvestSourceDef[] = [
     harvestable: true,
     permitTier: 'hand',
     primaryYield: 'RIVER_STONE',
+    fixedYield: true,
     secondaryYields: [
       {
         item: 'BONE',
@@ -740,6 +759,7 @@ export const SOURCES: HarvestSourceDef[] = [
     harvestable: true,
     permitTier: 'hand',
     primaryYield: 'FLINT',
+    fixedYield: true,
     secondaryYields: [],
     renewal: 'taken',
     provenance: 'draft',
@@ -759,6 +779,7 @@ export const SOURCES: HarvestSourceDef[] = [
     harvestable: true,
     permitTier: 'hand',
     primaryYield: 'BONE',
+    fixedYield: true,
     secondaryYields: [],
     provenance: 'prototype',
     biomes: ['saltFlat', 'deepBog', 'creekBottom', 'oldfieldRise', 'mirewood', 'tanglewood'],
