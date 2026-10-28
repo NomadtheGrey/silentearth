@@ -47,7 +47,7 @@ import { fireState } from './fireState';
 import { torchState } from './torchState';
 import { altarState } from './altarState';
 import { ritualSiteState } from './ritualSite';
-import type { PlacedHouse } from './shelter';
+import type { PlacedHouse, TentPosition } from './shelter';
 import { FIRE_DEFS } from './fire';
 import { shelterState, HOUSE_DEFS } from './shelter';
 import { loomState } from './loomState';
@@ -392,6 +392,8 @@ export class WorldRenderer {
   private campEdgeArrows: { mesh: THREE.Group; house: PlacedHouse }[] = [];
   /** True while a water scry has revealed the camp arrows (shell-driven setter). */
   private campArrowsVisible = false;
+  /** Tent positions for the placed group (shell-driven via setTents — no game tent state exists; camping state is systems-side). */
+  private tents: TentPosition[] = [];
   /** Pigeon wing bone — way-home sense (tier-1 charm): arrows show without water while carried + awakened. */
   private pigeonWayHome = false;
   /** Bat wing bone — night way-finding (tier-1 charm): fog thins at night while carried + awakened. */
@@ -488,7 +490,7 @@ export class WorldRenderer {
     // generator delegates fieldsAt/weightsAt untouched, so the
     // slow reads true world data, not harvest state.
     this.player.setTerrainSpeedQuery((x, z) => terrainSpeedAt(this.gen, x, z));
-    this.proximity = new ProximityTracker(this.gen);
+    this.proximity = new ProximityTracker(this.gen, true, () => this.tents);
     // Chunk reload on harvest completion: the harvested chunk is
     // rebuilt, so the object visibly shrinks (or leaves, on remove
     // or a taken log) instead of lingering until the player walks
@@ -687,6 +689,23 @@ export class WorldRenderer {
   }
 
   /**
+   * Set the tent list for the placed group (shell-driven: the
+   * shell maps Systems' tents to TentPosition {x, z} and calls
+   * this on place / pickup / boot restore). Rebuilds the placed
+   * group immediately, and nudges the proximity tracker so the
+   * shelter signal updates at once — placing a tent at her feet
+   * must shelter her without waiting for her next step (the
+   * house path's direct-recompute precedent). No bus event:
+   * pickup needs no event, the rebuild + recompute carry it.
+   * No heading: tents face +Z.
+   */
+  setTents(positions: TentPosition[]): void {
+    this.tents = [...positions];
+    this.rebuildPlacedGroup();
+    this.proximity.recompute();
+  }
+
+  /**
    * Camp arrows show while scry OR pigeon holds (pigeon wing
    * bone — way-home sense, tier-1 charm: the same arrows,
    * ungated by water, while carried + awakened). The shell
@@ -831,6 +850,9 @@ export class WorldRenderer {
     torchState.clear();
     // Placed altars belong to the old world's map too.
     altarState.clear();
+    // Placed tents belong to the old world's map too (the shell
+    // re-supplies them via setTents on boot restore).
+    this.tents = [];
     this.rebuildPlacedGroup();
     // Staged bones belong to the old world's sites too.
     ritualSiteState.clear();
@@ -1459,6 +1481,31 @@ export class WorldRenderer {
       wg.add(box(1.1, 0.08, 0.8, 0x7a5a38, 0, 0.66, 0));
       wg.add(box(0.25, 0.15, 0.2, 0x3a2818, 0.35, 0.775, 0));
       group.add(wg);
+    }
+    for (const tent of this.tents) {
+      // A-frame tent (camping branch): triangular prism
+      // (3-segment cylinder, axis rotated horizontal) in canvas,
+      // dark door triangle on the +Z end, ground sheet under.
+      // Prism radius 0.8 → 1.2 m tall (vertex-up after
+      // rotation.x = -PI/2), 2 m long, ~1.39 m wide; centre
+      // y 0.4 puts the flat side on the ground (triangle
+      // vertices span -0.4..+0.8 rel. centre). No heading:
+      // every tent faces +Z.
+      const tg = new THREE.Group();
+      tg.position.set(tent.x, 0, tent.z);
+      const prism = cyl(0.8, 0.8, 2, 0x8a7a5a, 0, 0.4, 0, 3);
+      prism.rotation.x = -Math.PI / 2;
+      tg.add(prism);
+      const doorShape = new THREE.Shape();
+      doorShape.moveTo(-0.45, 0);
+      doorShape.lineTo(0.45, 0);
+      doorShape.lineTo(0, 0.9);
+      doorShape.closePath();
+      const door = new THREE.Mesh(new THREE.ShapeGeometry(doorShape), lambert(0x2a2018));
+      door.position.set(0, 0.05, 1.01);
+      tg.add(door);
+      tg.add(box(1.6, 0.02, 2.2, 0x6a5a3a, 0, 0.01, 0));
+      group.add(tg);
     }
     this.scene.add(group);
     this.placedGroup = group;

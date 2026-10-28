@@ -84,7 +84,7 @@ import {
 import type { CameraMode } from '../types';
 import { harvestState, scatterTargetId } from './harvestState';
 import { weatherAt, type CurrentWeather } from './weather';
-import { shelterState, shelterAt } from './shelter';
+import { shelterState, shelterAt, type TentPosition } from './shelter';
 import { pileState } from './pileState';
 
 export { scatterTargetId };
@@ -239,12 +239,15 @@ export class ProximityTracker {
   private lastWeatherDominant: string | null = null;
   /** Shelter multiplier of the last emitted 'shelter:changed'. */
   private lastShelterMultiplier: number | null = null;
+  /** Tent positions supplier (shell-driven via the renderer; default none). */
+  private tents: () => TentPosition[];
   /** Keys (id:quantity) of the last emitted 'piles:inRange'. */
   private lastPileKeys = new Set<string>();
   private unsubscribes: (() => void)[] = [];
 
-  constructor(gen: WorldGen, subscribe = true) {
+  constructor(gen: WorldGen, subscribe = true, tents: () => TentPosition[] = () => []) {
     this.gen = gen;
+    this.tents = tents;
     if (subscribe) {
       this.unsubscribes = [
         bus.on('player:moved', (p) => this.update(p.x, p.z)),
@@ -318,7 +321,8 @@ export class ProximityTracker {
     }
   }
 
-  private recompute(): HarvestTarget[] {
+  /** Recompute now (public for the renderer's setTents nudge — see below). */
+  recompute(): HarvestTarget[] {
     if (this.lastX === null || this.lastZ === null) return [];
     // State filtering (shrink + regrow model, Adam 2026-10-26):
     // regrowing targets are NOT buttons — they show shrunk in the
@@ -413,7 +417,10 @@ export class ProximityTracker {
     // house's multiplier, else 1. houseId is the nearest
     // sheltering house, else null. Systems/UI read exposure from
     // exposureAtPosition; this event is the change signal.
-    const shelter = shelterAt(this.lastX, this.lastZ, shelterState.snapshot());
+    // Tents compose through the supplier (best-of; houseId null
+    // when the tent wins) — the renderer feeds it from its own
+    // tent list, refreshed by setTents.
+    const shelter = shelterAt(this.lastX, this.lastZ, shelterState.snapshot(), this.tents());
     if (shelter.multiplier !== this.lastShelterMultiplier) {
       this.lastShelterMultiplier = shelter.multiplier;
       bus.emit('shelter:changed', shelter);

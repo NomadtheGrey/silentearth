@@ -27,9 +27,12 @@
  * whose tier is higher than the faced house's upgrades it,
  * skipping intermediate tiers (lean-to + cottage skips thatch);
  * same-or-lower returns false and the shell falls back to feet
- * placement. The shell MUST call getHomeStore(id).setHouse
- * (newType) on upgrade (UI pill landing) — else capacity
- * stays the old tier. Multiplier/footprint/capacity all read
+ * placement. The shell updates the store ONLY if one exists
+ * (conditional setHouse on the existing store — the UI pill
+ * landing deliberately does NOT lazy-create one: a
+ * never-deposited house needs no store update, and a future
+ * first deposit creates its store from the new type).
+ * Multiplier/footprint/capacity all read
  * HOUSE_DEFS[type] at query/render time, so nothing else
  * needs updating on upgrade.
  *
@@ -112,6 +115,22 @@ export const HOUSE_DEFS: Record<HouseType, HouseDef> = {
 /** Standing within this of a house center counts as sheltered there. */
 export const SHELTER_RADIUS = 6;
 
+/**
+ * A placed tent position (structural — the shell maps Systems'
+ * SavedTent {x, z} to this; game never imports systems, so the
+ * tent type lives here, not in camping.ts). NOT a HouseType:
+ * no storage, chip, camp arrow, or pill.
+ */
+export interface TentPosition {
+  x: number;
+  z: number;
+}
+
+/** Fraction of harshness remaining near a tent (DRAFT for Adam's pin pass). */
+export const TENT_SHELTER_MULTIPLIER = 0.85;
+/** Standing within this of a tent center counts as tent-sheltered (DRAFT; matches HARVEST_RANGE). */
+export const TENT_SHELTER_RADIUS_M = 2.5;
+
 /** A placed house entity. */
 export interface PlacedHouse {
   id: string;
@@ -121,30 +140,49 @@ export interface PlacedHouse {
 }
 
 /**
- * Best shelter multiplier at (x, z) among a house list: the
- * lowest multiplier within radius, else 1. Pure helper, so the
- * query and probes share one rule.
+ * Best shelter multiplier at (x, z): the lowest multiplier
+ * within radius among houses AND tents (best-of), else 1.
+ * Tents read TENT_SHELTER_MULTIPLIER within
+ * TENT_SHELTER_RADIUS_M. Pure helper, so the query and
+ * probes share one rule. Tents default [] — no house
+ * regression for existing callers.
  */
-export function shelterMultiplierAt(x: number, z: number, houses: PlacedHouse[]): number {
+export function shelterMultiplierAt(
+  x: number,
+  z: number,
+  houses: PlacedHouse[],
+  tents: TentPosition[] = [],
+): number {
   let best = 1;
   for (const house of houses) {
     if (Math.hypot(house.x - x, house.z - z) <= SHELTER_RADIUS) {
       best = Math.min(best, HOUSE_DEFS[house.type].shelterMultiplier);
     }
   }
+  for (const tent of tents) {
+    if (Math.hypot(tent.x - x, tent.z - z) <= TENT_SHELTER_RADIUS_M) {
+      best = Math.min(best, TENT_SHELTER_MULTIPLIER);
+    }
+  }
   return best;
 }
 
 /**
- * Nearest sheltering house at (x, z): the multiplier from
+ * Sheltering entity at (x, z): the multiplier from
  * shelterMultiplierAt plus the id of the house that provides it
  * (nearest within radius on ties — first found wins). Null id
- * when unsheltered. The tracker's 'shelter:changed' payload.
+ * when unsheltered AND when a tent provides the shelter (tents
+ * are not houses — no home chip). Tents compose best-of on
+ * top of the house result: a tent within radius that beats
+ * the house multiplier wins with houseId null; otherwise the
+ * house result stands unchanged. The tracker's
+ * 'shelter:changed' payload.
  */
 export function shelterAt(
   x: number,
   z: number,
   houses: PlacedHouse[],
+  tents: TentPosition[] = [],
 ): { multiplier: number; houseId: string | null } {
   let best: PlacedHouse | null = null;
   let bestDist = Infinity;
@@ -155,10 +193,21 @@ export function shelterAt(
       bestDist = d;
     }
   }
-  return {
+  const houseResult = {
     multiplier: best ? HOUSE_DEFS[best.type].shelterMultiplier : 1,
     houseId: best ? best.id : null,
   };
+  let tentNear = false;
+  for (const tent of tents) {
+    if (Math.hypot(tent.x - x, tent.z - z) <= TENT_SHELTER_RADIUS_M) {
+      tentNear = true;
+      break;
+    }
+  }
+  if (tentNear && TENT_SHELTER_MULTIPLIER < houseResult.multiplier) {
+    return { multiplier: TENT_SHELTER_MULTIPLIER, houseId: null };
+  }
+  return houseResult;
 }
 
 class ShelterState {
@@ -187,9 +236,9 @@ class ShelterState {
    * (which would mint a new id and strand the old house).
    * Which house is "faced" is the caller's determination (the
    * UI pill defines facing); this primitive takes an id and
-   * enforces no position or proximity gate. The shell MUST
-   * follow a true return with getHomeStore(id).setHouse
-   * (newType) — capacity otherwise stays the old tier.
+   * enforces no position or proximity gate. The shell follows
+   * a true return with setHouse(newType) ONLY on an existing
+   * store (no lazy-create — see the header note).
    */
   upgradeHouse(id: string, newType: HouseType): boolean {
     const house = this.houses.get(id);
