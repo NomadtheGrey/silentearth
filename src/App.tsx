@@ -1560,6 +1560,8 @@ import {
   shelterState,
   shelterAt,
   HOUSE_DEFS,
+  HOUSE_LADDER,
+  SHELTER_RADIUS,
   type HouseType,
 } from './game/shelter';
 import {
@@ -4789,6 +4791,70 @@ export default function App() {
     setPlacementNote(null);
   };
 
+  // HOUSE-UPGRADE PRESS (Adam, 2026-10-28): mirrors
+  // handlePlaceConfirm (cost gate → act → consume →
+  // clear mode → refresh + save; catch → note, mode
+  // stays) with shelterState.upgradeHouse in place
+  // of placeHouse. setHouse ONLY if a store already
+  // exists (homeStoresRef.current.get — deliberately
+  // NOT getHomeStore, which lazy-creates: a
+  // never-deposited house needs no update, and a
+  // future first deposit creates its store from the
+  // new type — DEV-accepted refinement over the
+  // primitive doc's getHomeStore wording). Contents
+  // ride the preserved id (stores keyed by id;
+  // save/restore by id/order — nothing moves or
+  // drops). House visuals ride the primitive + the
+  // existing house render path (no new subscription
+  // — press-driven refresh covers it; the primitive
+  // emits 'shelter:upgraded', camp arrows are NOT
+  // subscribed). False from upgradeHouse (shouldn't
+  // happen — the pill shows only for upgradeable)
+  // → failure: note + mode stays.
+  const handleUpgradePress = (target: NonNullable<typeof upgradePill>) => {
+    const mode = placementRef.current;
+    if (!mode) return;
+    const player = playerRef.current;
+    if (!player) return;
+    if (inventory.count(mode.itemId) < 1) {
+      setPlacementNote(
+        'Nothing to place — that item is no longer carried.',
+      );
+      placementRef.current = null;
+      setPlacement(null);
+      setPlacementAnchor(null);
+      return;
+    }
+    try {
+      const upgraded = shelterState.upgradeHouse(
+        target.houseId,
+        target.carriedType,
+      );
+      if (!upgraded) {
+        setPlacementNote('That house cannot be upgraded.');
+        return;
+      }
+      homeStoresRef.current
+        .get(target.houseId)
+        ?.setHouse(HOUSE_TYPE_TO_ITEM[target.carriedType]);
+      inventory.remove(mode.itemId, 1);
+    } catch (error) {
+      setPlacementNote(
+        error instanceof Error ? error.message : 'Placement failed.',
+      );
+      return;
+    }
+    placementRef.current = null;
+    setPlacement(null);
+    setPlacementAnchor(null);
+    setPlacementNote(null);
+    if (shelterHouseId === target.houseId) {
+      applyShelterHouse(target.houseId);
+    }
+    refreshInventory();
+    saveNow();
+  };
+
   const handleEatItem = (itemId: string) => {
     // Raw cook-required food never reaches eat(): the press
     // surfaces the cook-first note honestly instead of a gain
@@ -5994,6 +6060,75 @@ export default function App() {
   const homeChipVisible =
     sheltered && homeChipAnchor !== null && !paused;
 
+  // HOUSE-UPGRADE PILL (Adam, 2026-10-28): while
+  // placing a house item, the faced upgradeable house
+  // gets an "Upgrade to {carried}" chip at the house
+  // (home-chip pattern, inline in the overlay).
+  // Candidates = placed houses with tier BELOW the
+  // carried tier (ANY-higher — woven over lean-to
+  // skips thatch; next-tier-only is a one-line
+  // narrowing, NOT built). RANGE = center distance
+  // ≤ SHELTER_RADIUS 6 m (footprints to 6.5 m wide,
+  // so HARVEST_RANGE 2.5 m would miss big houses).
+  // CONE = angle < 45° via dot product (forward =
+  // (sin facing, cos facing); dot > cos45° =
+  // Math.SQRT1_2); d = 0 counts as faced. NO
+  // hysteresis v1. Tie-break: nearest distance,
+  // exact tie → first in snapshot order. Same-or-
+  // higher → no pill, feet "Place here" stands. NO
+  // paused guard (buttons, not canvas taps —
+  // placement buttons work while paused today).
+  // Capacity: the pill shows NO capacity number —
+  // engine HOUSE_DEFS (woven 200 / smallWooden 400)
+  // vs Systems' table (175 / 250) diverges; pin
+  // pass reconciles the tables. Per-render derivation
+  // (home-chip precedent) — no new subscription.
+  const upgradePill = (() => {
+    const mode = placement;
+    const player = playerRef.current;
+    if (!mode?.houseType || !player) return null;
+    const carriedTier = HOUSE_LADDER.indexOf(mode.houseType);
+    if (carriedTier === -1) return null;
+    const facingX = Math.sin(player.facing);
+    const facingZ = Math.cos(player.facing);
+    let best: {
+      houseId: string;
+      carriedType: HouseType;
+      placedName: string;
+      carriedName: string;
+      x: number;
+      z: number;
+    } | null = null;
+    let bestDistance = Infinity;
+    for (const house of shelterState.snapshot()) {
+      const placedTier = HOUSE_LADDER.indexOf(house.type);
+      if (placedTier === -1 || placedTier >= carriedTier) continue;
+      const dx = house.x - player.x;
+      const dz = house.z - player.z;
+      const d = Math.hypot(dx, dz);
+      if (d > SHELTER_RADIUS) continue;
+      if (d > 0) {
+        const dot = (facingX * dx + facingZ * dz) / d;
+        if (dot <= Math.SQRT1_2) continue;
+      }
+      if (d < bestDistance) {
+        bestDistance = d;
+        best = {
+          houseId: house.id,
+          carriedType: mode.houseType,
+          placedName: HOUSE_DEFS[house.type].name,
+          carriedName: HOUSE_DEFS[mode.houseType].name,
+          x: house.x,
+          z: house.z,
+        };
+      }
+    }
+    return best;
+  })();
+  const upgradePillAnchor = upgradePill
+    ? projectAnchor(upgradePill.x, upgradePill.z, 'scatter')
+    : null;
+
   // Nearby pile for the Inventory modal's pickup section
   // (Adam, 2026-10-28): the NEAREST pile in range from
   // App's existing piles state — pilesInRange +
@@ -6945,6 +7080,22 @@ export default function App() {
             </button>
           </WorldAnchor>
         ) : null}
+        {upgradePill && upgradePillAnchor ? (
+          <WorldAnchor
+            x={upgradePillAnchor.x}
+            y={upgradePillAnchor.y}
+            interactive
+          >
+            <button
+              type="button"
+              onClick={() => handleUpgradePress(upgradePill)}
+              aria-label={`Upgrade ${upgradePill.placedName} to ${upgradePill.carriedName}`}
+              className="flex min-h-[44px] items-center rounded bg-black/50 px-2 py-1 text-sm text-stone-100"
+            >
+              Upgrade to {upgradePill.carriedName}
+            </button>
+          </WorldAnchor>
+        ) : null}
         {homeMenuOpen && homeHouse !== undefined && homeChipAnchor ? (
           <WorldAnchor x={homeChipAnchor.x} y={homeChipAnchor.y} interactive>
             <ContextMenu
@@ -7311,17 +7462,22 @@ export default function App() {
             <div className="mt-2 rounded bg-black/50 px-2 py-1 text-sm">
               <p>Placing {placement.label} at your feet.</p>
               <div className="mt-1 flex gap-2">
-                <button
-                  type="button"
-                  onClick={handlePlaceConfirm}
-                  className={
-                    isTouch
-                      ? 'rounded bg-[#3a4436] px-3 py-2 text-sm min-h-[44px] hover:bg-[#4a5546]'
-                      : 'rounded bg-[#3a4436] px-2 py-0.5 text-xs hover:bg-[#4a5546]'
-                  }
-                >
-                  Place here
-                </button>
+                {/* UPGRADE PILL: one confirm at a time —
+                    while the pill shows, feet placement
+                    hides (the pill IS the confirm). */}
+                {upgradePill ? null : (
+                  <button
+                    type="button"
+                    onClick={handlePlaceConfirm}
+                    className={
+                      isTouch
+                        ? 'rounded bg-[#3a4436] px-3 py-2 text-sm min-h-[44px] hover:bg-[#4a5546]'
+                        : 'rounded bg-[#3a4436] px-2 py-0.5 text-xs hover:bg-[#4a5546]'
+                    }
+                  >
+                    Place here
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={handlePlaceCancel}
