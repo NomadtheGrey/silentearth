@@ -267,6 +267,20 @@ export interface SavedTrap {
 }
 
 /**
+ * An upgraded stump, as saved. Additions ride as plain
+ * strings (the trap pattern: this layer carries, the
+ * engine validates) — stumpState.restore() drops
+ * non-member additions, so a bad record can never
+ * corrupt the document.
+ */
+export interface SavedStump {
+  siteId: string;
+  x: number;
+  z: number;
+  additions: string[];
+}
+
+/**
  * A placed torch, as saved. Placed torches are ALWAYS lit
  * (she places light, not sticks; no-burnout pin extended),
  * so no lit flag is stored — a saved torch is a lit torch.
@@ -413,6 +427,8 @@ export interface SaveData {
   piles: SavedPile[];
   /** Placed traps (craft-placed); [] for old saves. */
   traps: SavedTrap[];
+  /** Upgraded stumps (workbench additions); [] for old saves. */
+  stumps: SavedStump[];
   /** Placed torches (always lit); [] for old saves. */
   torches: SavedTorch[];
   /** Placed altars (sites, no ritual state); [] for old saves. */
@@ -490,6 +506,17 @@ export interface SaveDraft {
     z: number;
     catch?: string;
     baited?: boolean;
+  }>;
+  /**
+   * Upgraded stumps from stumpState.snapshot()
+   * (stumpy shell, 2026-10-28). OPTIONAL, same
+   * trap-save pattern: the App wiring passes it.
+   */
+  stumps?: ReadonlyArray<{
+    siteId: string;
+    x: number;
+    z: number;
+    additions: ReadonlyArray<string>;
   }>;
   /**
    * Placed torches from the placed-torch source
@@ -684,6 +711,18 @@ export function serializeSave(draft: SaveDraft): SaveData {
       // (absent = empty / unbaited); restore validates.
       ...(trap.catch !== undefined ? { catch: trap.catch } : {}),
       ...(trap.baited !== undefined ? { baited: trap.baited } : {}),
+    })),
+    // Stumps: written AS-IS (site ids + coords +
+    // additions verbatim, additions copied — never
+    // aliased). Invalid entries are restore()'s
+    // problem, not serialize's: stumpState.restore()
+    // validates (non-empty site id + finite coords +
+    // member additions) and drops them.
+    stumps: (draft.stumps ?? []).map((stump) => ({
+      siteId: stump.siteId,
+      x: stump.x,
+      z: stump.z,
+      additions: [...stump.additions],
     })),
     // Torches: written AS-IS (positions verbatim, id when
     // the entity provides one — no filtering, no
@@ -1037,6 +1076,34 @@ export function deserializeSave(value: unknown): SaveData | null {
         });
       }
     }
+    // Stumps are optional on read, same leniency as
+    // traps: an old save without them loads with
+    // stumps: []. Entries pass through UNVALIDATED —
+    // stumpState.restore() validates (non-empty site
+    // id + finite coords + member additions) and drops
+    // bad records, so a bad stump entry can never
+    // corrupt the whole document. A non-array stumps
+    // field loads as [] — the section drops, the
+    // document survives. Additions pass through as
+    // their string members only (non-strings dropped);
+    // restore() drops non-member strings.
+    const stumps: SavedStump[] = [];
+    if (value.stumps !== undefined && Array.isArray(value.stumps)) {
+      for (const entry of value.stumps) {
+        if (!isRecord(entry)) continue;
+        stumps.push({
+          siteId: entry.siteId as string,
+          x: entry.x as number,
+          z: entry.z as number,
+          additions: Array.isArray(entry.additions)
+            ? entry.additions.filter(
+                (addition): addition is string =>
+                  typeof addition === 'string',
+              )
+            : [],
+        });
+      }
+    }
     // Torches are optional on read, same leniency as
     // traps: an old v1 save without them loads with
     // torches: []. Entries pass through UNVALIDATED —
@@ -1203,6 +1270,7 @@ export function deserializeSave(value: unknown): SaveData | null {
       looms,
       piles,
       traps,
+      stumps,
       torches,
       altars,
       nameSight,

@@ -1541,6 +1541,7 @@ import { loomState } from './game/loomState';
 import { pileState, type PileTarget } from './game/pileState';
 import { HARVEST_RANGE } from './game/proximity';
 import { trapState, type PlacedTrap } from './game/trapState';
+import { stumpState, type StumpAddition } from './game/stumpState';
 import { TRAP_DEFS } from './game/traps';
 import { biomePresentKinds } from './game/animals';
 import {
@@ -2787,6 +2788,13 @@ export default function App() {
           // filtering; serializeSave writes them verbatim and
           // trapState.restore() validates on load).
           traps: trapState.snapshot(),
+          // STUMP SAVE WIRING (stumpy shell, 2026-10-28):
+          // the live stump-addition set rides every save
+          // (snapshot as-is — site ids + coords + additions
+          // verbatim; serializeSave writes them verbatim
+          // and stumpState.restore() validates on load).
+          // Without this, upgrades vanish on reload.
+          stumps: stumpState.snapshot(),
           // PLACED-TORCH SAVE WIRING: the live placed-torch
           // set rides every save as-is (ids + positions
           // verbatim; serialize writes ids when present,
@@ -3096,6 +3104,20 @@ export default function App() {
           (bootSaved.traps ?? []).map((trap) => ({
             ...trap,
             type: trap.type as TrapType,
+          })),
+        );
+        // STUMP SAVE WIRING (stumpy shell, 2026-10-28):
+        // same restore-before-first-build pattern as
+        // traps — stumpState.restore() is silent and
+        // validates (drops non-member additions), so a
+        // bad stump record can never corrupt the
+        // document. Old saves carry no stumps field and
+        // load [] (fresh state is already empty, so the
+        // clear inside restore() is a no-op there).
+        stumpState.restore(
+          (bootSaved.stumps ?? []).map((stump) => ({
+            ...stump,
+            additions: stump.additions as StumpAddition[],
           })),
         );
         // WORLD-STATE SAVE WIRING (fires + harvest, same
@@ -3989,6 +4011,31 @@ export default function App() {
     if (!nearest) return null;
     return projectAnchor(nearest.x, nearest.z, 'scatter');
   })();
+  // NEAREST STUMP (stumpy shell, 2026-10-28): the FACED
+  // stump for the workstation upgrade — nearest record
+  // from stumpPositions, UNPROJECTED, stump-only (no loom
+  // fallback: a loom cannot be upgraded). NEAREST-ONLY,
+  // no cone: the recipe gate is workstation PRESENCE,
+  // not facing — standing at a plain stump facing away
+  // must not refuse an upgrade the recipe allows. Shared
+  // by the executeCraftNow branch, the mapping guard,
+  // and the press-refuse backstop, so the three cannot
+  // disagree. stumpPositions returns in-range records
+  // (HARVEST_RANGE), so no extra range filter here.
+  // Ties → first in stumpPositions order (strict <),
+  // mirroring the stationAnchor loop above.
+  const nearestStump = (() => {
+    let nearest: { x: number; z: number } | null = null;
+    let nearestD = Infinity;
+    for (const s of stumpPositions(genRef.current, position.x, position.z)) {
+      const d = Math.hypot(s.x - position.x, s.z - position.z);
+      if (d < nearestD) {
+        nearestD = d;
+        nearest = s;
+      }
+    }
+    return nearest;
+  })();
   // Quest Log display (2026-10-28): derived on every render
   // from live state — no cached copy, no polling — so the tab
   // reads fresh on activation (the tab switch re-renders) and
@@ -4113,6 +4160,21 @@ export default function App() {
         amountText: `${inventory.count(requirement.item)} / ${requirement.quantity} (kept, not used up)`,
       });
     }
+    // STUMPY DOUBLE-UPGRADE GUARD (shell-side, Adam
+    // 2026-10-28 — Systems cannot read anchor state):
+    // an upgradesStump recipe whose faced stump already
+    // carries the workstation addition disables + labels,
+    // overriding Systems' mapping. The label replaces
+    // the availability note via the no-recraft render
+    // (disabledLabel set → note not rendered). No stump
+    // in range → the station gate above already failed;
+    // the override needs a target, so it does not fire.
+    // Systems' canCraft is UNCHANGED — this is a shell
+    // mapping override only.
+    const stumpAlreadyWorkbench =
+      recipe.upgradesStump === true &&
+      nearestStump !== null &&
+      stumpState.isWorkbench(nearestStump.x, nearestStump.z);
     return {
       id: recipe.id,
       name: recipe.name,
@@ -4128,7 +4190,9 @@ export default function App() {
         })),
         ...dependencyRows,
       ],
-      canCraft: check.ok && check.ownership === 'available',
+      canCraft: stumpAlreadyWorkbench
+        ? false
+        : check.ok && check.ownership === 'available',
       // NO-RECRAFT BINDING (Adam, 2026-10-28 — Systems owns
       // the rule, the shell renders it): Systems' check.ok
       // already folds ownership in (ok is false when
@@ -4142,8 +4206,9 @@ export default function App() {
       // stays available), so garden → sharp never lands
       // here — if it ever did, the STATUS would be wrong,
       // not this render.
-      disabledLabel:
-        check.ownership === 'available'
+      disabledLabel: stumpAlreadyWorkbench
+        ? 'Already a Workbench'
+        : check.ownership === 'available'
           ? undefined
           : CRAFT_OWNERSHIP_LABELS[check.ownership],
       availabilityNote,
@@ -4212,6 +4277,22 @@ export default function App() {
     const recipe = RECIPES.find((candidate) => candidate.id === recipeId);
     if (!recipe) return;
     const ownedBefore = ownedToolItem(inventory);
+    // STUMPY PRESS-REFUSE BACKSTOP (shell-side guard):
+    // an upgradesStump press at an already-workbench
+    // stump refuses BEFORE executeCraft — consumption
+    // lives inside executeCraft, so a branch-only guard
+    // would be too late (materials already gone).
+    // Nothing consumed, no refresh, no save: plain
+    // return. Shares nearestStump with the mapping
+    // guard, so the two cannot disagree.
+    if (
+      recipe.upgradesStump === true &&
+      nearestStump !== null &&
+      stumpState.isWorkbench(nearestStump.x, nearestStump.z)
+    ) {
+      setCraftNote('This stump is already a workbench.');
+      return;
+    }
     try {
       const result = executeCraft(
         recipe,
@@ -4234,11 +4315,32 @@ export default function App() {
           position.z,
         );
       }
+      // STUMPY BRANCH (same single-caller rule): Systems
+      // reports upgradedStump {type} and never transforms
+      // — the SHELL transforms, here, via Background's
+      // anchor primitive on the FACED stump (nearestStump,
+      // NOT the projected anchor, NOT the player position).
+      // The output item is NOT granted (feedback naming
+      // only). The renderer rebuilds on the
+      // 'stump:upgraded' emit, so no shell refresh call
+      // is needed. False = already a workbench (the
+      // backstop above makes this unreachable in practice;
+      // the note below stays honest if it ever fires).
+      let stumpUpgraded = false;
+      if (result.upgradedStump) {
+        stumpUpgraded =
+          nearestStump !== null &&
+          stumpState.upgradeStump(nearestStump.x, nearestStump.z);
+      }
       setOwnedItem(result.owned);
       setCraftNote(
         result.placedTrap
           ? `Placed ${displayNameFor(result.output.item)} here.`
-          : `Crafted ${result.output.item} × ${result.output.quantity}.` +
+          : result.upgradedStump
+            ? stumpUpgraded
+              ? 'This stump is now a workbench.'
+              : 'This stump is already a workbench.'
+            : `Crafted ${result.output.item} × ${result.output.quantity}.` +
               (result.owned !== ownedBefore
                 ? ` Owned tool is now ${result.owned}.`
                 : ''),
@@ -7469,8 +7571,20 @@ export default function App() {
           </div>
           {stationPresenceValue.workstation ? (
             <div className="mt-2">
+              {/* STATION TITLE FOLLOWS THE UPGRADE
+                  (stumpy shell, 2026-10-28): the panel
+                  names the station she stands at — a
+                  stump that already carries the
+                  workstation addition reads 'Workbench'
+                  (the panel's own 'workstation' kind),
+                  a plain stump reads 'Tree stump'. */}
               <StationPanel
-                stationKind="stump"
+                stationKind={
+                  nearestStump !== null &&
+                  stumpState.isWorkbench(nearestStump.x, nearestStump.z)
+                    ? 'workstation'
+                    : 'stump'
+                }
                 actions={[
                   {
                     id: 'craft',
