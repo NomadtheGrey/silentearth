@@ -506,11 +506,19 @@ export const SOURCES: HarvestSourceDef[] = [
     kind: 'vine',
     name: 'Vine Tangle',
     description:
-      'Thick hanging vines, scenery twin of the harvestable vine strands. ' +
-      'The harvestable form is tenderVines below; this tangle marks dense growth.',
-    harvestable: false,
-    permitTier: null,
-    secondaryYields: [],
+      'Thick hanging vines marking dense growth. Cut them free ' +
+      'by hand for vine fiber, the same as the tender strands.',
+    harvestable: true,
+    removable: true,
+    permitTier: 'hand',
+    primaryYield: 'TENDER_VINES',
+    secondaryYields: [SPORES_25],
+    multiStep: {
+      action: 'TUG',
+      step: 0.5,
+      struggleMessage: 'You tug against the stubborn fibers... They groan but hold.',
+      successMessage: 'The vines finally snap free.',
+    },
     provenance: 'draft',
     biomes: ['mirewood', 'tanglewood', 'creekBottom', 'oldfieldRise'],
     mesh: { shape: 'vine', color: 0x4a6b2f, baseY: 0.7 },
