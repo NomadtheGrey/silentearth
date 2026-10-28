@@ -1127,9 +1127,11 @@
  *   count drops, altarNote carries the result ('Placed
  *   an altar.'). One world-anchored AltarChip per
  *   placed altar (label 'Altar', torch-chip styling) —
- *   LABEL-ONLY, deliberately not a button: no menu
- *   (rituals are not in this order), no invented
- *   Pick-up (removal is Adam's word later). No hunger
+ *   LABEL-ONLY at landing (no menu — rituals were not
+ *   in that order); the RITUAL WAKING UI build below
+ *   makes the chip a button opening the ritual panel
+ *   (still no Pick-up — removal is Adam's word later).
+ *   No hunger
  *   gate (a move, like drop/pickup). Save: altars ride
  *   saveNow as-is + boot restore BEFORE construction
  *   (torch pattern; id-less dropped — real saved
@@ -1139,6 +1141,67 @@
  *   next event). New AltarChip.tsx + App wiring.
  *   Parity: shared row button + label chip, touch +
  *   desktop. Placeable candles still later, distinct.
+ * - RITUAL WAKING UI, LIVE (Adam, 2026-10-27 — DEV
+ *   signal, Systems 939e9b3 + Background 58537ef):
+ *   tier-1 Waking, altar sites only (see flags). The
+ *   altar chip is now a button opening a world-anchored
+ *   RitualPanel (new RitualPanel.tsx, props-driven, no
+ *   game/systems imports): unstaged site → kind list
+ *   (17 Waking kinds, shrew excluded — outright — each
+ *   hinted with its sky; awakened kinds filtered out,
+ *   re-awakening is pointless since awaken never
+ *   downgrades); staged site → required recipe as rows
+ *   (bone placed, offering given, name spoken, in the
+ *   crafting-row pattern) + TIME line ONLY when the
+ *   ritual requires one (sky 'none' → no line) with
+ *   window-open/closed state. Steps: Stage bone (shell
+ *   checks the site snapshot FIRST — an occupied site
+ *   REFUSES, flagged: no StagingBook entry-clear exists
+ *   for the replace branch, and silently dropping a
+ *   staged ritual is worse than refusing; no inventory
+ *   move — bone items do not exist yet, Systems'
+ *   contract), Give offering (one button per carried
+ *   food kind; shell consumes iff giveOffering accepts
+ *   — poison + raw acorns refused first), Speak name
+ *   (looks from NameSight, minLooks enforced). No
+ *   complete button: completion is state-based — the
+ *   shell checks after every step + on the 1 s timer
+ *   (window-arrival path), and a staged ritual whose
+ *   window is open completes at once (mid-window
+ *   staging completes immediately; missed → next
+ *   window; 'none' → immediate on all-offered). On
+ *   completion the shell records the awakening, frees
+ *   the site (unstage), says 'The {bone} awakens.'
+ *   ('gain') at the site, and saves. First-charm row:
+ *   boot grantFirstCharm AFTER the CharmState restore
+ *   (idempotent — fresh save gains the shrew charm,
+ *   loaded awakening gains nothing, full pack gains
+ *   nothing) + row note 'Tier 1 · Stirs at hunger 45;
+ *   drains 10% slower while carried.' computed from
+ *   Systems' DRAFT constants (machinery NOT built —
+ *   warning latch + drain multiplier are follow-ups).
+ *   Save: stagings + awakenings ride saveNow as-is +
+ *   boot restore BEFORE construction (ritualSite
+ *   restore derives site positions from altarState /
+ *   the stump key; boulders skipped — none exist).
+ *   Regenerate clears stagings (sites gone) + closes
+ *   the panel; awakenings persist (hers, like LOOK
+ *   counts). FLAGGED GAPS, not hidden: (1) speak-name
+ *   is currently UNREACHABLE — bone kinds have nothing
+ *   to LOOK at yet (no per-kind bone objects — the
+ *   bone build), so looksAt(kind) reads 0; the gate
+ *   renders honestly, nothing faked. (2) Stump staging
+ *   unreachable in UI (presence is booleans only — no
+ *   stump position reaches the shell; needs a
+ *   Background stump-position surface). (3) Awakened
+ *   charms beyond shrew have no inventory row yet
+ *   (other bone ids land with the bone build) — the
+ *   completion feedback names the awakening and claims
+ *   no item. Bone display 'Primal Bone - {shape}' with
+ *   spaces is UI's presentation call (slugs are the
+ *   shape names). Parity: shared panel + chip, touch +
+ *   desktop. New RitualPanel.tsx + AltarChip button +
+ *   App wiring.
  * POINTER DISCIPLINE: overlays are pointer-events-none except the
  * small interactive pieces (HUD buttons, panels, harvest buttons),
  * so world clicks — including the first-person mouse-capture click
@@ -1185,7 +1248,7 @@ import {
 import { stillWatersNear } from './game/waterProximity';
 import { NameSight } from './systems/name-sight';
 import { portionsForKind, lookKeyForTarget } from './ui/lookPortions';
-import { cycleSplit } from './game/sky';
+import { cycleSplit, cyclePhase, currentMoonPhase } from './game/sky';
 import { createSleepListener } from './game/sleep';
 import {
   DEFAULT_SEED,
@@ -1295,6 +1358,21 @@ import { torchState, type PlacedTorch as PlacedTorchEntity } from './game/torchS
 import { lightTorches, placeTorch as grantPlaceTorch, pickupTorch as grantPickupTorch } from './systems/torch';
 import { altarState, type PlacedAltar as PlacedAltarEntity } from './game/altarState';
 import { placeAltar as grantPlaceAltar } from './systems/altar';
+import { ritualSiteState } from './game/ritualSite';
+import {
+  RITUAL_RECIPES,
+  ritualRecipeFor,
+  windowOpen,
+  StagingBook,
+  type SkyFacts,
+} from './systems/rituals';
+import {
+  CharmState,
+  grantFirstCharm,
+  FIRST_CHARM_ITEM,
+  FIRST_CHARM_EFFECT,
+} from './systems/charms';
+import { RitualPanel } from './ui/RitualPanel';
 
 type BusHarvestTarget = EventMap['harvest:inRange']['targets'][number];
 
@@ -1617,6 +1695,15 @@ function toInventoryItem(
     quantityText: String(stack.quantity),
     weightText: weightTextFor(stack.item, stack.quantity, inventory),
     icon: stack.item === UMBRELLA_ITEM_ID ? <UmbrellaIcon /> : undefined,
+    // First-charm row (tier-1 Waking build): the carried
+    // pocket charm reads its tier + effect note. Numbers
+    // are Systems' DRAFT effect data (warnAt 45, drain
+    // ×0.9), computed from the constants so the note
+    // tracks the data — flagged for Adam's pin pass.
+    note:
+      stack.item === FIRST_CHARM_ITEM
+        ? `Tier 1 · Stirs at hunger ${FIRST_CHARM_EFFECT.warnAt}; drains ${Math.round((1 - FIRST_CHARM_EFFECT.drainMultiplier) * 100)}% slower while carried.`
+        : undefined,
   };
 }
 
@@ -1845,6 +1932,22 @@ export default function App() {
   const [altarAnchors, setAltarAnchors] = useState<
     { altar: PlacedAltarEntity; x: number; y: number }[]
   >([]);
+  // Ritual staging (tier-1 Waking build): the shell owns
+  // one StagingBook (site + kind keyed stagings) and one
+  // CharmState (awakening records). Both are refs — their
+  // mutations do not render by themselves, so every
+  // staging step + ritual event bumps ritualVersion to
+  // re-render the panel. The panel derives its staged
+  // display from ritualSiteState (the physical bone) +
+  // the book (the steps), never from a snapshot.
+  const stagingBookRef = useRef(new StagingBook());
+  const charmStateRef = useRef(new CharmState());
+  const [selectedAltarId, setSelectedAltarId] = useState<string | null>(null);
+  const [ritualNote, setRitualNote] = useState<string | null>(null);
+  const [, setRitualVersion] = useState(0);
+  const refreshRitual = () => {
+    setRitualVersion((version) => version + 1);
+  };
   // Scry button (Adam 2026-10-27 — DEV split, not a rewrite):
   // visibility = near still water on movement, reveal = press
   // only (Systems 9927ddab stands as the query). The shell
@@ -2039,6 +2142,14 @@ export default function App() {
           // restore validates on load and drops id-less
           // entries). Placed altars survive refresh.
           altars: altarState.snapshot(),
+          // RITUAL SAVE WIRING: stagings + awakenings ride
+          // every save as-is (StagingBook / CharmState
+          // snapshots; serialize writes them verbatim,
+          // restore validates on load and drops bad
+          // entries). Staged rituals + awakenings survive
+          // refresh.
+          stagings: stagingBookRef.current.snapshot(),
+          awakenings: charmStateRef.current.snapshot(),
           // LOOK SAVE WIRING: the live look counts ride
           // every save (snapshot as-is, first-look order;
           // serialize writes them verbatim, restore
@@ -2348,6 +2459,59 @@ export default function App() {
               z: altar.z,
             })),
         );
+        // RITUAL SAVE WIRING (same pre-construction pattern):
+        // StagingBook + CharmState restore (pure systems,
+        // boot-only, bad entries dropped). ritualSiteState
+        // restores the PHYSICAL staged bones: a staging
+        // with bonePlaced && !completed means a bone sits
+        // on the site — the site position comes from
+        // altarState (altar:<n>) or the stump key itself
+        // (stump:x,z); boulder stagings have no position
+        // source and are skipped (nothing stages on
+        // boulders yet). Altar restore above runs first,
+        // so altar positions are available here.
+        stagingBookRef.current.restore(bootSaved.stagings ?? []);
+        charmStateRef.current.restore(bootSaved.awakenings ?? []);
+        ritualSiteState.restore(
+          (bootSaved.stagings ?? []).flatMap((entry) => {
+            if (!entry.bonePlaced || entry.completed) return [];
+            if (entry.siteKey.startsWith('altar:')) {
+              const altar = altarState.get(entry.siteKey);
+              if (!altar) return [];
+              return [
+                {
+                  site: {
+                    kind: 'altar' as const,
+                    siteId: entry.siteKey,
+                    x: altar.x,
+                    z: altar.z,
+                  },
+                  bone: entry.boneKind,
+                },
+              ];
+            }
+            if (entry.siteKey.startsWith('stump:')) {
+              const coords = entry.siteKey
+                .slice('stump:'.length)
+                .split(',');
+              const x = Number(coords[0]);
+              const z = Number(coords[1]);
+              if (!Number.isFinite(x) || !Number.isFinite(z)) return [];
+              return [
+                {
+                  site: {
+                    kind: 'stump' as const,
+                    siteId: entry.siteKey,
+                    x,
+                    z,
+                  },
+                  bone: entry.boneKind,
+                },
+              ];
+            }
+            return [];
+          }),
+        );
         // LOOK SAVE WIRING (same pre-construction pattern):
         // nameSight.restore() is silent and replaces; the
         // shell's NameSight starts empty, so a second
@@ -2457,6 +2621,23 @@ export default function App() {
     setPlacedFires(fireState.snapshot());
     setPlacedTorches(torchState.snapshot());
     setPlacedAltars(altarState.snapshot());
+    // FIRST-CHARM BOOT GRANT (outright, tier 1): runs
+    // AFTER the CharmState restore above, so a loaded
+    // awakening is never double-granted. Idempotent — a
+    // fresh save gains the shrew charm; a loaded save
+    // with the awakening gains nothing (no duplicate
+    // bone, even if she dropped it); a full pack gains
+    // nothing and awakens nothing (defensive). A grant
+    // refreshes the panel + saves at once (a meaningful
+    // change, not a boot-time save of nothing).
+    const firstCharmGrant = grantFirstCharm(
+      inventory,
+      charmStateRef.current,
+    );
+    if (firstCharmGrant.granted > 0) {
+      refreshInventory();
+      saveNow();
+    }
     applyShelterHouse(
       shelterAt(player.x, player.z, shelterState.snapshot()).houseId,
     );
@@ -2605,6 +2786,14 @@ export default function App() {
       if (sky) {
         setIsNight(!cycleSplit(sky.cycleT, SEASON_START_MONTH).isDay);
       }
+      // RITUAL WINDOWS (window-arrival path): a staged
+      // ritual completes when its sky window arrives —
+      // the timer is the arrival clock; step handlers
+      // check immediately too (mid-window staging
+      // completes at once). Pause-gated like the rest of
+      // this timer (the sky does not advance while
+      // paused, so no window can arrive then either).
+      checkRitualCompletions();
     }, 1000);
     // Placed-fire + shelter subscriptions: fires re-read from
     // the engine singleton on every fire event; shelter applies
@@ -2642,6 +2831,12 @@ export default function App() {
     const offTorchRemoved = bus.on('torch:removed', refreshTorches);
     const offAltarPlaced = bus.on('altar:placed', refreshAltars);
     const offAltarRemoved = bus.on('altar:removed', refreshAltars);
+    // Ritual subscriptions: the panel re-renders on every
+    // stage/unstage (the book + site state mutate without
+    // rendering by themselves — ritualVersion is the
+    // render signal, torch pattern minus anchors).
+    const offRitualStaged = bus.on('ritual:staged', refreshRitual);
+    const offRitualUnstaged = bus.on('ritual:unstaged', refreshRitual);
     const offShelterPlaced = bus.on('shelter:placed', () => {
       const p = playerRef.current;
       if (!p) return;
@@ -2768,6 +2963,8 @@ export default function App() {
       offTorchRemoved();
       offAltarPlaced();
       offAltarRemoved();
+      offRitualStaged();
+      offRitualUnstaged();
       offShelterPlaced();
       offShelterChanged();
       offSleep();
@@ -2833,6 +3030,14 @@ export default function App() {
     // gone); the NameSight counts persist — knowledge is
     // hers, not the world's.
     setLookResult(null);
+    // A new world clears ritual stagings (their sites are
+    // gone — setWorldGen already cleared the physical
+    // staged bones) and closes the ritual panel; the
+    // AWAKENINGS persist — what she has awakened is hers,
+    // not the world's (same rule as NameSight counts).
+    stagingBookRef.current.restore([]);
+    setSelectedAltarId(null);
+    setRitualNote(null);
     setBiomeText(formatWeights(gen.weightsAt(spawn.x, spawn.z)));
     bus.emit('world:seedSet', { seed: nextSeed });
     recomputeAnchors();
@@ -3152,6 +3357,197 @@ export default function App() {
     refreshInventory();
     saveNow();
     setAltarNote('Placed an altar.');
+  };
+
+  // RITUAL SKY FACTS (shell supplies, systems never imports
+  // game): phase from cyclePhase at the world's fixed start
+  // month (the renderer feeds the sky SEASON_START_MONTH,
+  // so this matches the rendered sky exactly) + moonPhase
+  // from currentMoonPhase at the live daysElapsed. Null
+  // when no live sky exists (pre-boot) — the completion
+  // check skips then; a full-moon window on an unknown sky
+  // reads closed (Systems' safe default, null moonPhase).
+  const skyFacts = (): SkyFacts | null => {
+    const sky = rendererRef.current?.snapshotSky();
+    if (!sky) return null;
+    return {
+      phase: cyclePhase(sky.cycleT, SEASON_START_MONTH),
+      moonPhase: currentMoonPhase(genRef.current.seed, sky.daysElapsed ?? 0),
+    };
+  };
+
+  // Bone display spelling: kind keys are shape slugs as
+  // displayed after 'Primal Bone - ' (charms.ts rule) —
+  // the slug with spaces is the display name, not a new
+  // id (flagged presentation call, UI's).
+  const boneDisplayFor = (kind: string): string =>
+    `Primal Bone - ${kind.replace(/-/g, ' ')}`;
+
+  const skyLabelFor = (sky: string): string => {
+    switch (sky) {
+      case 'day':
+        return 'Daylight';
+      case 'night':
+        return 'Night';
+      case 'dawn':
+        return 'Dawn';
+      case 'dusk':
+        return 'Dusk';
+      case 'full-moon':
+        return 'Full moon';
+      default:
+        return '';
+    }
+  };
+
+  // RITUAL COMPLETION CHECK (state-based, idempotent):
+  // every uncompleted staging whose window is open
+  // completes at once — staged mid-window completes
+  // immediately, a missed window waits for the next one,
+  // sky 'none' completes the moment all is offered.
+  // Runs after every staging step (immediate path) and on
+  // the 1 s timer (window-arrival path). On completion
+  // the shell records the awakening, frees the site
+  // (unstage — the bone awakens and leaves the site),
+  // says so at the site, and saves. The awakened charm
+  // has no inventory item yet (other bone ids land with
+  // the bone build), so the feedback names the awakening
+  // and claims no item (flagged, not hidden).
+  const checkRitualCompletions = () => {
+    const facts = skyFacts();
+    if (!facts) return;
+    let changed = false;
+    for (const entry of stagingBookRef.current.snapshot()) {
+      if (entry.completed) continue;
+      const staging = stagingBookRef.current.get(
+        entry.siteKey,
+        entry.boneKind,
+      );
+      const recipe = ritualRecipeFor(entry.boneKind);
+      if (!staging || !recipe) continue;
+      const result = staging.complete(recipe, facts);
+      if (!result) continue;
+      charmStateRef.current.awaken(result.kind, result.tier);
+      ritualSiteState.unstageBone(entry.siteKey);
+      const site = altarState.get(entry.siteKey);
+      const anchor = site
+        ? projectAnchor(site.x, site.z, 'scatter')
+        : null;
+      const player = playerRef.current;
+      const fallback = player
+        ? projectAnchor(player.x, player.z, 'ground')
+        : null;
+      const at = anchor ?? fallback;
+      if (at) {
+        showFeedback(
+          `The ${boneDisplayFor(result.kind)} awakens.`,
+          'gain',
+          at.x,
+          at.y,
+        );
+      }
+      changed = true;
+    }
+    if (changed) {
+      saveNow();
+      refreshRitual();
+    }
+  };
+
+  // RITUAL STAGING, ALTAR SITES ONLY (this build): made
+  // altars carry ids + chips + positions, so the shell can
+  // target them. Stump sites have no UI surface (presence
+  // is booleans only — no stump position reaches the
+  // shell), so staging onto a stump is a flagged
+  // follow-up needing a Background stump-position
+  // surface, not built here. Boulders do not exist yet.
+  const handleStageBone = (siteId: string, kind: string) => {
+    const site = altarState.get(siteId);
+    if (!site) {
+      setRitualNote('No site there.');
+      return;
+    }
+    // Composition contract (DEV): the shell checks the
+    // ritualSite snapshot FIRST. One bone per site — an
+    // occupied site REFUSES (the replace branch would
+    // need a StagingBook entry-clear that does not exist,
+    // and silently dropping a staged ritual is worse
+    // than refusing). Flagged choice, stated plainly.
+    if (ritualSiteState.getStaged(siteId)) {
+      setRitualNote('This site already holds a bone.');
+      return;
+    }
+    const staging = stagingBookRef.current.getOrCreate(siteId, kind);
+    const placed = staging.placeBone();
+    if (!placed.ok) {
+      setRitualNote(placed.reason ?? 'Could not stage that bone.');
+      return;
+    }
+    // No inventory move here: bone items do not exist yet
+    // (Systems' shell contract — the possession check
+    // lands with the bone build). placeBone records; the
+    // site graphic stages. Flagged, not hidden.
+    ritualSiteState.stageBone(
+      { kind: 'altar', siteId, x: site.x, z: site.z },
+      kind,
+    );
+    setRitualNote(null);
+    saveNow();
+    refreshRitual();
+    checkRitualCompletions();
+  };
+
+  const handleGiveOffering = (
+    siteId: string,
+    kind: string,
+    foodItem: string,
+  ) => {
+    const staging = stagingBookRef.current.get(siteId, kind);
+    if (!staging) {
+      setRitualNote('No staging here.');
+      return;
+    }
+    const offered = staging.giveOffering(foodItem);
+    if (!offered.ok) {
+      setRitualNote(offered.reason ?? 'Could not give that offering.');
+      return;
+    }
+    // Shell consumes iff the step accepts (Systems'
+    // contract) — poison + raw acorns never reach here
+    // (giveOffering refuses non-foods first).
+    inventory.remove(foodItem, 1);
+    refreshInventory();
+    setRitualNote(null);
+    saveNow();
+    refreshRitual();
+    checkRitualCompletions();
+  };
+
+  const handleSpeakName = (siteId: string, kind: string) => {
+    const staging = stagingBookRef.current.get(siteId, kind);
+    const recipe = ritualRecipeFor(kind);
+    if (!staging || !recipe) {
+      setRitualNote('No staging here.');
+      return;
+    }
+    // Looks arrive as INPUT from NameSight (Systems'
+    // contract); speakName enforces minLooks itself.
+    // FLAGGED GAP: bone kinds have nothing to LOOK at
+    // yet (no per-kind bone objects — the bone build),
+    // so looksAt(kind) reads 0 and this step stays
+    // locked until the bone build lands (or DEV rules a
+    // looks source). The gate renders honestly; nothing
+    // is faked (no generic-bone-look counting invented).
+    const looks = nameSightRef.current.looksAt(kind);
+    const spoken = staging.speakName(looks, recipe.spokenName.minLooks);
+    if (!spoken.ok) {
+      setRitualNote(spoken.reason ?? 'Could not speak its name.');
+      return;
+    }
+    setRitualNote(null);
+    saveNow();
+    refreshRitual();
+    checkRitualCompletions();
   };
 
   const handlePlaceItem = (itemId: string) => {
@@ -4001,6 +4397,37 @@ export default function App() {
       ? null
       : (torchAnchors.find((a) => a.torch.id === selectedTorch.id) ?? null);
 
+  // The altar whose ritual panel is open, with its anchor —
+  // the torch pattern, live: the panel renders from
+  // placedAltars, so a vanished altar leaves the panel
+  // with nothing. The staged bone + staging + recipe all
+  // derive live from the site singletons + book (never a
+  // tap-time snapshot), so step presses re-render the
+  // panel through ritualVersion.
+  const selectedAltar =
+    selectedAltarId === null
+      ? undefined
+      : placedAltars.find((a) => a.id === selectedAltarId);
+  const selectedAltarAnchor =
+    selectedAltar === undefined
+      ? null
+      : (altarAnchors.find((a) => a.altar.id === selectedAltar.id) ?? null);
+  const selectedAltarStaged =
+    selectedAltar === undefined
+      ? null
+      : (ritualSiteState.getStaged(selectedAltar.id) ?? null);
+  const selectedAltarStaging =
+    selectedAltarStaged === null
+      ? null
+      : (stagingBookRef.current.get(
+          selectedAltar.id,
+          selectedAltarStaged.bone,
+        ) ?? null);
+  const selectedAltarRecipe =
+    selectedAltarStaged === null
+      ? null
+      : (ritualRecipeFor(selectedAltarStaged.bone) ?? null);
+
   // The pile whose menu is open, with its anchor.
   // Live menu pile: the menu renders from piles state, not a
   // tap-time snapshot (see the state comment above).
@@ -4379,8 +4806,8 @@ export default function App() {
         ))}
         {altarAnchors.map(({ altar, x, y }) => (
           <Fragment key={altar.id}>
-            <WorldAnchor x={x} y={y}>
-              <AltarChip />
+            <WorldAnchor x={x} y={y} interactive>
+              <AltarChip onSelect={() => setSelectedAltarId(altar.id)} />
             </WorldAnchor>
           </Fragment>
         ))}
@@ -4453,6 +4880,89 @@ export default function App() {
               onClose={() => {
                 selectedPileIdRef.current = null;
                 setSelectedPileId(null);
+              }}
+            />
+          </WorldAnchor>
+        ) : null}
+        {selectedAltar && selectedAltarAnchor ? (
+          <WorldAnchor
+            x={selectedAltarAnchor.x}
+            y={selectedAltarAnchor.y}
+            interactive
+          >
+            <RitualPanel
+              siteLabel="Altar"
+              staged={
+                selectedAltarStaged !== null &&
+                selectedAltarStaging !== null &&
+                selectedAltarRecipe !== null
+                  ? (() => {
+                      const facts = skyFacts();
+                      return {
+                        boneDisplay: boneDisplayFor(
+                          selectedAltarStaged.bone,
+                        ),
+                        bonePlaced: selectedAltarStaging.bonePlaced,
+                        offeringGiven: selectedAltarStaging.offeringGiven,
+                        nameSpoken: selectedAltarStaging.nameSpoken,
+                        looks: nameSightRef.current.looksAt(
+                          selectedAltarStaged.bone,
+                        ),
+                        minLooks: selectedAltarRecipe.spokenName.minLooks,
+                        sky: selectedAltarRecipe.sky,
+                        skyLabel: skyLabelFor(selectedAltarRecipe.sky),
+                        windowOpen:
+                          facts !== null &&
+                          windowOpen(selectedAltarRecipe.sky, facts),
+                        completed: selectedAltarStaging.completed,
+                      };
+                    })()
+                  : null
+              }
+              kindOptions={RITUAL_RECIPES.filter(
+                (recipe) =>
+                  charmStateRef.current.tierOf(recipe.boneKind) === 0,
+              ).map((recipe) => ({
+                kind: recipe.boneKind,
+                display: boneDisplayFor(recipe.boneKind),
+                skyLabel:
+                  recipe.sky === 'none'
+                    ? 'Any sky'
+                    : skyLabelFor(recipe.sky),
+              }))}
+              foodOptions={(() => {
+                const byItem = new Map<string, number>();
+                for (const stack of inventory.stacksSnapshot()) {
+                  const id = normalizeItemId(stack.item);
+                  if ((FOOD_ITEMS as readonly string[]).includes(id)) {
+                    byItem.set(id, (byItem.get(id) ?? 0) + stack.quantity);
+                  }
+                }
+                return [...byItem.entries()].map(([id, count]) => ({
+                  item: id,
+                  display: displayNameFor(id),
+                  count,
+                }));
+              })()}
+              note={ritualNote}
+              onStageBone={(kind) =>
+                handleStageBone(selectedAltar.id, kind)
+              }
+              onGiveOffering={(item) =>
+                selectedAltarStaged !== null &&
+                handleGiveOffering(
+                  selectedAltar.id,
+                  selectedAltarStaged.bone,
+                  item,
+                )
+              }
+              onSpeakName={() =>
+                selectedAltarStaged !== null &&
+                handleSpeakName(selectedAltar.id, selectedAltarStaged.bone)
+              }
+              onClose={() => {
+                setSelectedAltarId(null);
+                setRitualNote(null);
               }}
             />
           </WorldAnchor>
