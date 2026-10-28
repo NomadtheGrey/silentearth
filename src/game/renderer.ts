@@ -1100,6 +1100,12 @@ export class WorldRenderer {
     // Friction lighting display: waits that elapsed become 'ready'
     // (the rub itself checks the clock, so this is display only).
     fireState.advanceLighting(now);
+    // Trap hour trigger: the 2 s tick is the boundary clock —
+    // checkHour emits 'trap:hour' only when the game hour changes
+    // (null sky = rig gone, skip; unchanged hour = no-op, so this
+    // is pause-safe by construction).
+    const sky = this.snapshotSky();
+    if (sky) trapState.checkHour(sky.cycleT);
   }
 
   /**

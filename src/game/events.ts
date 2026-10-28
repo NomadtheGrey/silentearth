@@ -315,6 +315,13 @@ export interface EventMap {
    */
   'trap:catch': { id: string; kind: string | null };
   /**
+   * The game hour rolled (trapState.checkHour, called from the
+   * renderer's 2 s worldTick). The shell rolls per placed trap on
+   * this (biomePresent → eligibleKindsFor → resolveTrapHour →
+   * setCatch on caught); the emit itself carries only the hour.
+   */
+  'trap:hour': { hour: number };
+  /**
    * Shelter state at her position changed (tracker, change-only,
    * like weather:changed): multiplier from real placed houses
    * (1 = unsheltered), houseId of the nearest sheltering house

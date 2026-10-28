@@ -303,6 +303,31 @@ export function spawnAnimalsForChunk(input: SpawnAnimalsInput): AnimalInstance[]
   return out;
 }
 
+/**
+ * Trap presence at ONE point (the trap's position): kinds whose
+ * ANIMAL_DEFS biomes appear at ≥ BIOME_WEIGHT_MIN (0.15, the decided
+ * threshold — one presence rule everywhere) in weightsAt(x, z).
+ * Single-point variant of the spawn rule above (which samples 5
+ * points per chunk); NO water-point refinement in v1 (trap sets
+ * already encode water plausibility) and no shrew special-casing
+ * (shrew is in no trap set, so the shell's intersection drops it).
+ * The shell feeds this list to Systems' eligibleKindsFor.
+ */
+export function biomePresentKinds(
+  weightsAt: (x: number, z: number) => { weights: Record<BiomeId, number> },
+  x: number,
+  z: number,
+): string[] {
+  const { weights } = weightsAt(x, z);
+  const present = new Set<BiomeId>();
+  for (const id of Object.keys(weights) as BiomeId[]) {
+    if (weights[id] >= BIOME_WEIGHT_MIN) present.add(id);
+  }
+  return ANIMAL_KINDS.filter((kind) =>
+    ANIMAL_DEFS[kind].biomes.some((b) => present.has(b)),
+  );
+}
+
 export interface AnimalUpdateInput {
   playerX: number;
   playerZ: number;

@@ -34,12 +34,12 @@
  * (no per-trap emit; the caller rebuilds once) and drops
  * invalid records, the way save filters them.
  *
- * SCOPE: placement + catch state. setCatch is the shell's
- * write path; no bait setter yet (no baiting mechanic
- * exists — no dead API), no decay, no hour-check behavior
- * here (the hour trigger is the follow-up claim). Traps
- * are not harvest targets. setWorldGen clears traps (new
- * world = new traps, like fires/houses/looms/piles).
+ * SCOPE: placement + catch state + hour trigger. setCatch is
+ * the shell's write path; no bait setter yet (no baiting
+ * mechanic exists — no dead API), no decay. checkHour is
+ * the hour boundary (the shell rolls per trap on 'trap:hour').
+ * Traps are not harvest targets. setWorldGen clears traps
+ * (new world = new traps, like fires/houses/looms/piles).
  */
 
 import { bus } from './events';
@@ -71,6 +71,8 @@ export interface RestorableTrap {
 class TrapState {
   private traps = new Map<string, PlacedTrap>();
   private counter = 0;
+  /** Game-hour index last seen by checkHour (-1 = never checked). */
+  private lastHourIndex = -1;
 
   placeTrap(type: TrapType, x: number, z: number): PlacedTrap {
     const id = `trap:${type}:${++this.counter}`;
@@ -97,6 +99,29 @@ class TrapState {
     trap.catch = kind;
     bus.emit('trap:catch', { id, kind });
     return true;
+  }
+
+  /**
+   * Pure hour boundary, called from the renderer's 2 s worldTick with the
+   * live cycleT: emits 'trap:hour' { hour } exactly when the game hour
+   * changes (hour = floor(cycleT × 24)). First call establishes silently
+   * (no emit on load/boot); 23 → 0 wrap emits (midnight is a change);
+   * same-hour repeats are no-ops. A sleep jump to dawn emits ONCE for
+   * the dawn hour — skipped hours get no rolls in v1 (Adam's variant
+   * question, not this claim). The shell rolls per trap on the emit;
+   * this method rolls nothing and knows no trap positions.
+   */
+  checkHour(cycleT: number): void {
+    const hour = Math.floor(cycleT * 24);
+    if (this.lastHourIndex === -1) {
+      // First call establishes the baseline silently (load/boot must
+      // not trigger a roll for the hour the player loaded into).
+      this.lastHourIndex = hour;
+      return;
+    }
+    if (hour === this.lastHourIndex) return;
+    this.lastHourIndex = hour;
+    bus.emit('trap:hour', { hour });
   }
 
   snapshot(): PlacedTrap[] {
@@ -127,6 +152,7 @@ class TrapState {
   clear(): void {
     this.traps.clear();
     this.counter = 0;
+    this.lastHourIndex = -1;
   }
 }
 
