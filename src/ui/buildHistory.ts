@@ -43,6 +43,14 @@ export interface BuildRecord {
 
 const ALL_RECORDS: BuildRecord[] = [
   {
+    merge: 'Merge #16',
+    pr: 33,
+    sha: 'pending',
+    date: '2026-10-28',
+    what: 'Trap catch layer (kind sets + hourly resolve + collect) + trap catch state (catch/baited + trap:catch event) + wild beehives in flowered biomes + key letters on HUD (I/K/L/P) + Dirt-row suppression when a scatter is present + nearest-scatter identifier tag + vine/tender merge (vine def deleted, weights folded into tender) + campfire chip "click to light" + touch tap-near-fire + lighting progress bar + campfire flame seated in the tipi + multi-kind pile dialog arrows + Esc closes panels topmost-first.',
+    why: 'Traps get the state their trigger and row will complete, beehives arrive where the flowers are, the HUD stops shouting Dirt over what she is looking at, campfires read and light plainly, piles handle by kind, and Esc closes what is open before it opens Options.',
+  },
+  {
     merge: 'Merge #15',
     pr: 31,
     sha: 'd4aecc4',
