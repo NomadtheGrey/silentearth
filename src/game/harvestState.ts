@@ -387,6 +387,15 @@ export class HarvestState {
     return false;
   }
 
+  /** Felled stump positions within range of (x, z) (UI gap #4: positions, not just presence). */
+  felledStumpPositionsInRange(x: number, z: number, range: number): Array<{ x: number; z: number }> {
+    const out: Array<{ x: number; z: number }> = [];
+    for (const entry of this.felled.values()) {
+      if (Math.hypot(entry.x - x, entry.z - z) <= range) out.push({ x: entry.x, z: entry.z });
+    }
+    return out;
+  }
+
   spawnedTree(id: string): Sapling | undefined {
     return this.saplings.get(id);
   }
