@@ -272,6 +272,10 @@ export const ITEM_WEIGHT_LB: Readonly<Record<string, number>> = {
   [ITEMS.craftedWorkstation]: 4,
   [ITEMS.pottersWheel]: 4,
   [ITEMS.loom]: 4,
+  // Ritual altar while carried (same flagged interval as
+  // homes / fires / stations — placed structures ride 4 lb
+  // between craft and place).
+  [ITEMS.altar]: 4,
 };
 
 /**
@@ -412,6 +416,7 @@ export const ITEM_DISPLAY_NAMES: Readonly<Record<string, string>> = {
   'crafted-workstation': 'Crafted Workstation',
   'potters-wheel': "Potter's Wheel",
   loom: 'Loom',
+  altar: 'Altar',
   'clay-pot': 'Clay Pot',
   'clay-brick': 'Clay Brick',
   'small-basket': 'Small Basket',

@@ -65,6 +65,20 @@
  *   Trap-save pattern: format now, App wiring later —
  *   serialize writes the snapshot as-is, restore()
  *   validates again. Version stays 1.
+ * - placed altars (position, id optional — no game
+ *   import): same additive-field rule (old saves load
+ *   altars: []) and the same leniency as torches on read
+ *   (entries pass through, the placed-altar restore
+ *   validates + drops bad records, so a bad altar record
+ *   can never corrupt the whole document). Placed altars
+ *   carry no ritual state — the altar is the SITE;
+ *   rituals come later, so no ritual field is stored.
+ *   `id` is optional because Background's placed-altar
+ *   entity owns the id scheme (torch precedent) — the
+ *   save carries position always and the id when the
+ *   entity provides one. Order preserved; duplicate
+ *   positions allowed (two altars at one spot are two
+ *   entries).
  * - world state (Background's persistence seams, a39f47f):
  *   fires[].lighting (LightingProcess shape; lit needs no
  *   field — fires[].lit already exists), harvestState
@@ -243,6 +257,21 @@ export interface SavedTorch {
 }
 
 /**
+ * A placed altar, as saved. No ritual state is stored —
+ * the altar is the SITE; rituals come later. `id` is
+ * optional: Background's placed-altar entity owns the id
+ * scheme (torch precedent); the save carries position
+ * always and the id when the entity provides one. Order
+ * preserved; duplicate positions allowed (two altars at
+ * one spot are two entries, not one merged record).
+ */
+export interface SavedAltar {
+  x: number;
+  z: number;
+  id?: string;
+}
+
+/**
  * World harvest state, as saved. Structural mirror of the game
  * layer's HarvestStateSnapshot (harvestState.ts) by literal —
  * systems does not import game modules. The engine's restore()
@@ -359,6 +388,8 @@ export interface SaveData {
   traps: SavedTrap[];
   /** Placed torches (always lit); [] for old saves. */
   torches: SavedTorch[];
+  /** Placed altars (sites, no ritual state); [] for old saves. */
+  altars: SavedAltar[];
   /** Partial-true-name look counts; [] for old saves. */
   nameSight: SavedNameLook[];
   /** World harvest state; empty snapshot for old saves. */
@@ -433,6 +464,18 @@ export interface SaveDraft {
    * (trap-save pattern: format now, wiring later).
    */
   torches?: ReadonlyArray<{
+    x: number;
+    z: number;
+    id?: string;
+  }>;
+  /**
+   * Placed altars from the placed-altar source
+   * (Background's entity snapshot, once it lands).
+   * OPTIONAL so existing saveNow call sites keep
+   * compiling unchanged until the App wiring lands
+   * (trap-save pattern: format now, wiring later).
+   */
+  altars?: ReadonlyArray<{
     x: number;
     z: number;
     id?: string;
@@ -586,6 +629,17 @@ export function serializeSave(draft: SaveDraft): SaveData {
       x: torch.x,
       z: torch.z,
       ...(torch.id !== undefined ? { id: torch.id } : {}),
+    })),
+    // Altars: written AS-IS (positions verbatim, id when
+    // the entity provides one — no filtering, no
+    // normalization). Invalid entries are restore()'s
+    // problem, not serialize's: the placed-altar restore
+    // validates (finite coords) and drops them. No ritual
+    // state is written — the altar is the SITE.
+    altars: (draft.altars ?? []).map((altar) => ({
+      x: altar.x,
+      z: altar.z,
+      ...(altar.id !== undefined ? { id: altar.id } : {}),
     })),
     // Name-sight: written AS-IS (key + looks verbatim, no
     // filtering, no normalization — keys are caller-defined
@@ -907,6 +961,29 @@ export function deserializeSave(value: unknown): SaveData | null {
         });
       }
     }
+    // Altars are optional on read, same leniency as
+    // torches: an old v1 save without them loads with
+    // altars: []. Entries pass through UNVALIDATED —
+    // the placed-altar restore validates (finite coords)
+    // and drops bad records, so a bad altar entry can
+    // never corrupt the whole document. A non-array
+    // altars field loads as [] — the section drops,
+    // the document survives. `id` passes through only
+    // when present as a string (the field is optional:
+    // Background's entity owns the id scheme).
+    const altars: SavedAltar[] = [];
+    if (value.altars !== undefined && Array.isArray(value.altars)) {
+      for (const entry of value.altars) {
+        if (!isRecord(entry)) continue;
+        altars.push({
+          x: entry.x as number,
+          z: entry.z as number,
+          ...(typeof entry.id === 'string'
+            ? { id: entry.id as string }
+            : {}),
+        });
+      }
+    }
     // Name-sight is optional on read, same additive-field
     // rule: an old v1 save without it loads with
     // nameSight: []. A non-array field loads as [] — the
@@ -940,6 +1017,7 @@ export function deserializeSave(value: unknown): SaveData | null {
       piles,
       traps,
       torches,
+      altars,
       nameSight,
       harvestState,
       sky,

@@ -105,6 +105,9 @@ export const ITEMS = {
   pressedSheets: 'pressed-sheets',
   paper: 'paper',
   grimoire: 'grimoire',
+  // Ritual altar (2026-10-27 — made ritual site, placeable
+  // only; see altar.ts for the place grant + scope guard).
+  altar: 'altar',
   // Traps (brainstorm only — nothing picked; see their notes).
   snare: 'snare',
   fishWeirTrap: 'fish-weir-trap',
@@ -971,6 +974,29 @@ const DRAFT_RECIPES: Recipe[] = [
       'DRAFT — BRAINSTORM, NOTHING PICKED. River stone is the ' +
       'weight. Craftable by hand anywhere — no workstation ' +
       'needed (Adam\'s ruling, 2026-10-26: traps are hand-crafted).',
+  },
+  {
+    id: 'altar',
+    name: 'Altar',
+    status: 'draft',
+    output: { item: ITEMS.altar, quantity: 1 },
+    ingredients: [
+      i(ITEMS.riverStone, 4),
+      i(ITEMS.snapWood, 2),
+      i(ITEMS.clay, 2),
+      i(ITEMS.twinedCordage, 2),
+    ],
+    station: 'hand',
+    notes:
+      'DRAFT quantities for Adam\'s pin pass (DEV brief ' +
+      '2026-10-27). Ritual altar, PLACEABLE ONLY: she builds ' +
+      'it where she stands (station hand — flagged), crafts ' +
+      'to a carried altar item, and a Place step consumes it ' +
+      '(houses/fires pattern; see altar.ts). Moss / salt / ' +
+      'bone dressing + focus are NOT in this recipe (later ' +
+      'dressing, flagged — do not add them). Upgrade tiers ' +
+      'NOT built. RITUALS THEMSELVES NOT IN THIS ORDER — ' +
+      'the altar is the SITE; rituals come later.',
   },
 ];
 
