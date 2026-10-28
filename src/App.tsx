@@ -1326,7 +1326,9 @@
  *   path AND the loaded-save boot, since the
  *   multiplier is session state, never saved). The
  *   sync calls latch update(hunger, carried) +
- *   setDrainMultiplier(carried ? 0.9 : 1). Carried
+ *   setDrainMultiplier(shrew × snake × rested —
+ *   the drain product, groundhog wiring below).
+ *   Carried
  *   is SHELL-SUPPLIED — LIST MEMBERSHIP since the
  *   charm-list build below (Systems 9e9a9dd): the
  *   list IS the awakened kinds, so carried =
@@ -1427,6 +1429,33 @@
  *   also showing, the hint lifts above it so the two
  *   never stack on one seat. Parity: shared, touch +
  *   desktop alike.
+ * - GROUNDHOG WIRING + SNAKE FACTOR, LIVE (Systems
+ *   6d67cf6 groundhog + snake factor): rested day +
+ *   waking refresh, shell-side. WAKE: a new
+ *   bus.on('sleep:completed') listener in the boot
+ *   effect (beside the sleep listener) does
+ *   sleepStart → wake in order (sleep is
+ *   instantaneous — dawn jump, then completed — so
+ *   there is no separate start event); a failed
+ *   press gets no calls (no sleep happened). The
+ *   wake bonus (+10 iff carried + awakened) rides
+ *   existing HungerState.restore (clamped at 100,
+ *   no hunger.ts change), then HUD hunger refresh +
+ *   drain re-sync + saveNow when the bonus applied
+ *   (rested itself is session-only, never saved).
+ *   DRAIN PRODUCT: syncShrewEffect's multiplier is
+ *   now shrew × snake × rested (0.729 with all three
+ *   — snake joins here, DEV-approved batching: its
+ *   factor existed unwired, and the product is now
+ *   true in one push). All gates list membership +
+ *   awakened via isAwakened per kind (groundhog:
+ *   'groundhog-tooth'; snake: 'snake-vertebra'),
+ *   never main-inventory count. No rested indicator
+ *   invented — the effect shows through slower drain
+ *   + the wake bump. NOT here (separate follow-ups):
+ *   mouse/bear shell wiring, deer warning display.
+ *   Parity: nothing visible changes except the wake
+ *   bump on the shared meter, touch + desktop alike.
  * POINTER DISCIPLINE: overlays are pointer-events-none except the
  * small interactive pieces (HUD buttons, panels, harvest buttons),
  * so world clicks — including the first-person mouse-capture click
@@ -1600,8 +1629,11 @@ import {
 } from './systems/rituals';
 import {
   CharmState,
+  GroundhogRest,
   grantFirstCharm,
+  groundhogWakeBonus,
   listCharms,
+  snakeDrainFactor,
   boneNote,
   boneKindFor,
   isBoneItem,
@@ -2225,6 +2257,10 @@ export default function App() {
   // boot effect's first-render closure stays correct
   // (saveNow pattern).
   const warningRef = useRef(new HungerWarning(FIRST_CHARM_EFFECT.warnAt));
+  // Groundhog rested-day flag (groundhog wiring): session
+  // state like the warning latch — never saved (a load
+  // mid-rested-day resets it until the next sleep).
+  const groundhogRestRef = useRef(new GroundhogRest());
   const [hungerWarningActive, setHungerWarningActive] = useState(false);
   const [hungerWarningFlash, setHungerWarningFlash] = useState(false);
   const warningFlashTimerRef = useRef<number | undefined>(undefined);
@@ -2259,8 +2295,24 @@ export default function App() {
         setHungerWarningFlash(false);
       }, 2000);
     }
+    // Drain product (groundhog wiring + snake joining):
+    // shrew × snake × rested, multiplicative — 0.729 with
+    // all three (0.9 each). Snake joins here (DEV-approved
+    // batching: its factor existed unwired; the product is
+    // now true in one push instead of 0.81 with snake
+    // still missing). Every factor gates on list
+    // membership + awakened via isAwakened per kind,
+    // never main-inventory count; every factor is 0.9 or
+    // 1, so the product stays > 0 (never trips the
+    // clamp's throw). Rested reads the session flag —
+    // the completed-listener below is what moves it.
     hunger.setDrainMultiplier(
-      shrewCarried ? FIRST_CHARM_EFFECT.drainMultiplier : 1,
+      (shrewCarried ? FIRST_CHARM_EFFECT.drainMultiplier : 1) *
+        snakeDrainFactor(
+          charmStateRef.current.isAwakened('snake-vertebra'),
+          charmStateRef.current,
+        ) *
+        groundhogRestRef.current.restedDrainFactor(),
     );
   };
   // CHARM-HOOK SYNC (zone + hooks build, Background G1/G2/G3):
@@ -3276,6 +3328,33 @@ export default function App() {
       getCycleT: () => rendererRef.current?.snapshotSky()?.cycleT ?? null,
       restoreDawn: () => rendererRef.current?.restoreSky({ cycleT: 0 }),
     });
+    // GROUNDHOG WAKE (groundhog wiring): sleep is
+    // instantaneous (dawn jump, then 'sleep:completed') —
+    // there is no separate start event, so the completed
+    // handler does sleepStart → wake in order: the old
+    // rested day ends, the new one sets iff carried +
+    // awakened at wake. A failed press gets NO calls
+    // (no sleep happened — it must not clear a rested
+    // day). The wake bonus rides existing restore
+    // (clamped at 100, no hunger.ts change); the HUD
+    // refresh + drain re-sync follow the restore, and
+    // saveNow runs only when the bonus applied (hunger
+    // changed — rested itself is session-only, never
+    // saved). Unsubscribed with offSleep below.
+    const offGroundhogWake = bus.on('sleep:completed', () => {
+      const charms = charmStateRef.current;
+      const carried = charms.isAwakened('groundhog-tooth');
+      groundhogRestRef.current.sleepStart();
+      groundhogRestRef.current.wake(carried, charms);
+      const bonus = groundhogWakeBonus(carried, charms);
+      if (bonus > 0) {
+        hunger.restore(bonus);
+        setHungerValue(hunger.value());
+        setHungerStage(hunger.stage());
+        saveNow();
+      }
+      syncShrewEffect();
+    });
     // Autosave on pagehide: the last-chance write when she leaves
     // or refreshes. saveNow reads only refs + singletons (see its
     // note), so this first-render closure stays correct for the
@@ -3422,6 +3501,7 @@ export default function App() {
       offShelterPlaced();
       offShelterChanged();
       offSleep();
+      offGroundhogWake();
       unsubHarvestOutcome();
       offLoaded();
       offUnloaded();
