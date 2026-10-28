@@ -1553,6 +1553,7 @@ import {
   resolveTrapHour,
 } from './systems/trap-catch';
 import type { TrapType } from './game/traps';
+import { placeTent, pickupTent } from './systems/camping';
 import { harvestHoney } from './systems/honey';
 import { harvestState } from './game/harvestState';
 import { SOURCE_BY_ID, type ToolTier } from './game/objects';
@@ -1607,6 +1608,7 @@ import { ContextMenu } from './ui/ContextMenu';
 import { PileInventoryModal } from './ui/PileInventoryModal';
 import { PileChip } from './ui/PileChip';
 import { TorchChip } from './ui/TorchChip';
+import { TentChip } from './ui/TentChip';
 import { AltarChip } from './ui/AltarChip';
 import type { ContextAction } from './ui/types';
 import { TouchControls } from './ui/TouchControls';
@@ -1830,6 +1832,7 @@ const PLACEABLE_IDS: ReadonlySet<string> = new Set([
   ITEMS.loom,
   ITEMS.litTorch,
   ITEMS.altar,
+  ITEMS.tent,
 ]);
 
 const FIRE_NAME: Record<FireType, string> = {
@@ -2096,7 +2099,17 @@ function toInventoryItem(
     // Phrases are DRAFT (bone-charms doc, not pins),
     // flagged for Adam's pin pass. Non-bone stacks
     // keep no note.
+    //
+    // BAG ROW (tent shell, 2026-10-28): the sleeping
+    // bag's row carries its category as its note —
+    // 'Bedding' (PROPOSED copy). The bag is carried
+    // passive bedding (umbrella precedent: no equip,
+    // no use-action), and this note is its V1 marker —
+    // the fiction that she carries bedding, visible
+    // wherever the inventory shows. No number attaches
+    // (no cold/exposure-during-sleep model exists yet).
     note: (() => {
+      if (stack.item === ITEMS.sleepingBag) return 'Bedding';
       const kind = boneKindFor(normalizeItemId(stack.item));
       return kind === null ? undefined : boneNote(kind, charms);
     })(),
@@ -2249,6 +2262,7 @@ export default function App() {
   const homeStoreItemsRef = useRef(new Map<string, Set<string>>());
   const [eatNote, setEatNote] = useState<string | null>(null);
   const [torchNote, setTorchNote] = useState<string | null>(null);
+  const [tentNote, setTentNote] = useState<string | null>(null);
   const [altarNote, setAltarNote] = useState<string | null>(null);
   const [fireNote, setFireNote] = useState<string | null>(null);
   const [dropNote, setDropNote] = useState<string | null>(null);
@@ -2377,6 +2391,45 @@ export default function App() {
     { torch: PlacedTorchEntity; x: number; y: number }[]
   >([]);
   const [selectedTorchId, setSelectedTorchId] = useState<string | null>(null);
+  // PLACED TENTS (tent shell, 2026-10-28 — interim
+  // shell store, NOT Background's entity: Background's
+  // placed-tent entity + renderer.setTents setter have
+  // not landed yet, so the shell holds placed tents
+  // itself until the follow-up wiring hands them over.
+  // Records carry shell ids (tent:<n> scheme, trap
+  // precedent: new places take max suffix + 1; restored
+  // id-less entries take tent:boot-<index>, which
+  // cannot collide with tent:<n>). Multiples allowed,
+  // two tents at one spot are two entries (save.ts
+  // rule). Lazy init from bootSave (finite coords
+  // only); the ref mirror keeps recomputeAnchors fresh
+  // (pilesRef pattern) — every mutation goes through
+  // updatePlacedTents, never setPlacedTents alone.
+  // NOT a HouseType: no storage, no upgrade pill, no
+  // home chip, no FIND CAMP camp (camps = houses).
+  // Shelter effect is NOT live here (0.85 DRAFT rides
+  // Background's tent-aware shelter branch, still to
+  // land) — the chip claims no shelter state.
+  const [placedTents, setPlacedTents] = useState<
+    { id: string; x: number; z: number }[]
+  >(() =>
+    (bootSave?.tents ?? [])
+      .filter((tent) => Number.isFinite(tent.x) && Number.isFinite(tent.z))
+      .map((tent, index) => ({
+        id: tent.id ?? `tent:boot-${index}`,
+        x: tent.x,
+        z: tent.z,
+      })),
+  );
+  const placedTentsRef = useRef(placedTents);
+  const updatePlacedTents = (next: { id: string; x: number; z: number }[]) => {
+    placedTentsRef.current = next;
+    setPlacedTents(next);
+  };
+  const [tentAnchors, setTentAnchors] = useState<
+    { tent: { id: string; x: number; z: number }; x: number; y: number }[]
+  >([]);
+  const [selectedTentId, setSelectedTentId] = useState<string | null>(null);
   // Placed altars (Background singleton, read fresh on every
   // event) and their projected anchors — the torch pattern
   // minus the menu: the altar chip is label-only (no ritual
@@ -2791,6 +2844,18 @@ export default function App() {
           // filtering; serializeSave writes them verbatim and
           // trapState.restore() validates on load).
           traps: trapState.snapshot(),
+          // TENT SAVE WIRING (tent shell, 2026-10-28):
+          // the shell's placed-tent set rides every save
+          // (x + z + shell id verbatim; serializeSave
+          // writes them verbatim and deserialize passes
+          // them through — the shell validates finite
+          // coords at boot). Without this, placed tents
+          // vanish on reload.
+          tents: placedTentsRef.current.map((tent) => ({
+            x: tent.x,
+            z: tent.z,
+            id: tent.id,
+          })),
           // STUMP SAVE WIRING (stumpy shell, 2026-10-28):
           // the live stump-addition set rides every save
           // (snapshot as-is — site ids + coords + additions
@@ -2940,6 +3005,20 @@ export default function App() {
       torches.push({ torch, x: anchor.x, y: anchor.y });
     }
     setTorchAnchors(torches);
+    // Placed tents (tent shell): the shell store, not
+    // an entity — read from the ref mirror (fresh),
+    // same skip-null rule as torches.
+    const tents: {
+      tent: { id: string; x: number; z: number };
+      x: number;
+      y: number;
+    }[] = [];
+    for (const tent of placedTentsRef.current) {
+      const anchor = projectAnchor(tent.x, tent.z, 'scatter');
+      if (!anchor) continue;
+      tents.push({ tent, x: anchor.x, y: anchor.y });
+    }
+    setTentAnchors(tents);
     const altars: { altar: PlacedAltarEntity; x: number; y: number }[] = [];
     for (const altar of altarState.snapshot()) {
       const anchor = projectAnchor(altar.x, altar.z, 'scatter');
@@ -4528,6 +4607,47 @@ export default function App() {
     setTorchNote('Placed a lit torch.');
   };
 
+  // PLACED TENT (tent shell, 2026-10-28 — torch
+  // mirror: one press places one tent at her feet,
+  // no placement mode, no ghost). Grant FIRST
+  // (Systems placeTent consumes one carried tent;
+  // failure touches nothing), then the shell record
+  // (Background's placed-tent entity has not landed
+  // yet — the record lives in the shell store until
+  // the follow-up setTents wiring hands it over).
+  // Panel action, not a world action: the panel stays
+  // open, the count drops, the note carries the
+  // result — the torch Place shape. No hunger gate
+  // (a move, like drop/pickup). No paused guard
+  // (torch place has none either).
+  const handlePlaceTent = () => {
+    const player = playerRef.current;
+    if (!player) return;
+    const outcome = placeTent(inventory, player.x, player.z);
+    // Equality check, not truthiness: non-strict tsc does
+    // not narrow this union's boolean discriminant on
+    // truthiness (see the torch Light button handler).
+    if (outcome.placed === false) {
+      setTentNote(outcome.reason);
+      return;
+    }
+    // Shell id: max tent:<n> suffix + 1 (trap
+    // precedent — recomputed, never a stored counter,
+    // so restores cannot collide it).
+    const maxSuffix = placedTentsRef.current.reduce((max, tent) => {
+      const match = /^tent:(\d+)$/.exec(tent.id);
+      return match ? Math.max(max, Number(match[1])) : max;
+    }, 0);
+    updatePlacedTents([
+      ...placedTentsRef.current,
+      { id: `tent:${maxSuffix + 1}`, x: outcome.tent.x, z: outcome.tent.z },
+    ]);
+    refreshInventory();
+    saveNow();
+    recomputeAnchors();
+    setTentNote('Placed a tent.');
+  };
+
   // PLACED ALTAR (settled lean — instant at her feet, the
   // torch precedent; the preview ghost is the house/fire
   // pattern, heavy for a site placed where she stands).
@@ -4827,6 +4947,16 @@ export default function App() {
     // the branch above places instantly at her feet.
     if (itemId === ITEMS.altar) {
       handlePlaceAltar();
+      return;
+    }
+    // Placed tents never enter the preview flow either —
+    // the torch mirror: one press places one tent at her
+    // feet (camping.ts: "one press places one tent").
+    // No placement mode (the preview ghost is the
+    // house/fire pattern, heavy for a site placed where
+    // she stands).
+    if (itemId === ITEMS.tent) {
+      handlePlaceTent();
       return;
     }
     // Single-tap campfire (Adam, 2026-10-28): Place places at
@@ -5530,6 +5660,45 @@ export default function App() {
       saveNow();
     }
     setPlacedTorches(torchState.snapshot());
+    recomputeAnchors();
+  };
+
+  // TENT MENU ACTIONS (tent shell): Take down + Close —
+  // the torch menu's shape, over the shell store.
+  const tentMenuActions = (): ContextAction[] => [
+    { id: 'take-down', label: 'Take down' },
+    { id: 'close', label: 'Close' },
+  ];
+
+  const handleTentAction = (tentId: string, actionId: string) => {
+    const tent = placedTentsRef.current.find((t) => t.id === tentId);
+    if (!tent) return;
+    const anchor = tentAnchors.find((a) => a.tent.id === tentId) ?? null;
+    const say = (text: string, tone: FeedbackTone) => {
+      if (anchor) showFeedback(text, tone, anchor.x, anchor.y);
+    };
+    if (actionId === 'close') {
+      setSelectedTentId(null);
+      return;
+    }
+    if (actionId === 'take-down') {
+      // Grant FIRST, then the record removal — the
+      // pile-pickup rule (take granted only): a full
+      // pack grants 0, the tent stays placed, the menu
+      // stays open; a grant of 1 removes the record
+      // and the menu closes explicitly. No hunger gate
+      // (a move, like drop/pickup, not a build).
+      const grant = pickupTent(inventory);
+      if (grant.granted === 0) {
+        say('Pack full — no room.', 'blocked');
+        return;
+      }
+      updatePlacedTents(placedTentsRef.current.filter((t) => t.id !== tentId));
+      setSelectedTentId(null);
+      say('Took down the tent.', 'gain');
+      refreshInventory();
+      saveNow();
+    }
     recomputeAnchors();
   };
 
@@ -6325,6 +6494,16 @@ export default function App() {
     selectedTorch === undefined
       ? null
       : (torchAnchors.find((a) => a.torch.id === selectedTorch.id) ?? null);
+  // The selected tent + its anchor — the torch pattern,
+  // over the shell store (no entity yet).
+  const selectedTent =
+    selectedTentId === null
+      ? undefined
+      : placedTents.find((t) => t.id === selectedTentId);
+  const selectedTentAnchor =
+    selectedTent === undefined
+      ? null
+      : (tentAnchors.find((a) => a.tent.id === selectedTent.id) ?? null);
 
   // The ritual site whose panel is open, with its anchor —
   // the torch pattern, live: the panel renders from the
@@ -6496,7 +6675,7 @@ export default function App() {
   // 2026-10-28 — Esc closes the topmost layer first): with
   // NO modal open, Esc closes the topmost open layer, one
   // per press, in fixed order — placement panel, pile
-  // modal, context menus (torch, fire — reverse render
+  // modal, context menus (torch, tent, fire — reverse render
   // order), ritual panel, panels (charms, crafting, inventory —
   // reverse render order) — and only with nothing open does
   // it open the Options modal. With a modal open, that
@@ -6542,6 +6721,10 @@ export default function App() {
         setSelectedTorchId(null);
         return;
       }
+      if (selectedTentId !== null) {
+        setSelectedTentId(null);
+        return;
+      }
       if (selectedFireId !== null) {
         setSelectedFireId(null);
         return;
@@ -6576,6 +6759,7 @@ export default function App() {
     homeMenuOpen,
     selectedPileId,
     selectedTorchId,
+    selectedTentId,
     selectedFireId,
     selectedSiteId,
     charmsOpen,
@@ -7184,6 +7368,13 @@ export default function App() {
             </WorldAnchor>
           </Fragment>
         ))}
+        {tentAnchors.map(({ tent, x, y }) => (
+          <Fragment key={tent.id}>
+            <WorldAnchor x={x} y={y} interactive>
+              <TentChip onSelect={() => setSelectedTentId(tent.id)} />
+            </WorldAnchor>
+          </Fragment>
+        ))}
         {altarAnchors.map(({ altar, x, y }) => (
           <Fragment key={altar.id}>
             <WorldAnchor x={x} y={y} interactive>
@@ -7251,6 +7442,20 @@ export default function App() {
               actions={torchMenuActions()}
               onSelect={(id) => handleTorchAction(selectedTorch.id, id)}
               onClose={() => setSelectedTorchId(null)}
+            />
+          </WorldAnchor>
+        ) : null}
+        {selectedTent && selectedTentAnchor ? (
+          <WorldAnchor
+            x={selectedTentAnchor.x}
+            y={selectedTentAnchor.y}
+            interactive
+          >
+            <ContextMenu
+              objectName="Tent"
+              actions={tentMenuActions()}
+              onSelect={(id) => handleTentAction(selectedTent.id, id)}
+              onClose={() => setSelectedTentId(null)}
             />
           </WorldAnchor>
         ) : null}
@@ -7886,6 +8091,11 @@ export default function App() {
         {torchNote ? (
           <p className="rounded bg-black/50 px-2 py-1 text-xs text-stone-200">
             {torchNote}
+          </p>
+        ) : null}
+        {tentNote ? (
+          <p className="rounded bg-black/50 px-2 py-1 text-xs text-stone-200">
+            {tentNote}
           </p>
         ) : null}
         {altarNote ? (
