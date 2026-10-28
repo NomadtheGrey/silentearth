@@ -273,6 +273,15 @@ export function fireLightFlicker(flameTime: number, phase: number): number {
 export const CAMP_ARROW_CENTER_Y = 7.5;
 export const CAMP_ARROW_BOB = 0.5;
 export const CAMP_EDGE_DEPTH = 8;
+/** Base exponential fog density (the woods' murk, lane-decided). */
+export const FOG_DENSITY = 0.008;
+/**
+ * Bat wing bone — night way-finding (tier-1 charm, DRAFT
+ * flagged): fog density factor at full night while carried
+ * + awakened (0.008 → 0.0056). Scaled by nightFactor in
+ * the loop, so twilight thins partially, full night fully.
+ */
+export const BAT_FOG_FACTOR = 0.7;
 export const CAMP_EDGE_CLAMP = 0.88;
 
 /**
@@ -376,6 +385,10 @@ export class WorldRenderer {
   private campEdgeArrows: { mesh: THREE.Group; house: PlacedHouse }[] = [];
   /** True while a water scry has revealed the camp arrows (shell-driven setter). */
   private campArrowsVisible = false;
+  /** Pigeon wing bone — way-home sense (tier-1 charm): arrows show without water while carried + awakened. */
+  private pigeonWayHome = false;
+  /** Bat wing bone — night way-finding (tier-1 charm): fog thins at night while carried + awakened. */
+  private batNightWayfinding = false;
   /** Scratch vectors for the per-frame edge-arrow update (no per-frame allocation). */
   private edgeAnchor = new THREE.Vector3();
   private edgeToCamp = new THREE.Vector3();
@@ -539,7 +552,7 @@ export class WorldRenderer {
     this.scene.add(this.camera);
 
     // Dim October light: the woods are watching, not sunbathing.
-    this.scene.fog = new THREE.FogExp2(0x1a2018, 0.008);
+    this.scene.fog = new THREE.FogExp2(0x1a2018, FOG_DENSITY);
     this.scene.background = new THREE.Color(0x1a2018);
     this.hemiLight = new THREE.HemisphereLight(0x9aa88a, 0x2a2018, 0.9);
     this.scene.add(this.hemiLight);
@@ -659,8 +672,56 @@ export class WorldRenderer {
    */
   setCampArrowsVisible(visible: boolean): void {
     this.campArrowsVisible = visible;
-    if (this.campArrowGroup) this.campArrowGroup.visible = visible;
-    if (!visible) for (const edge of this.campEdgeArrows) edge.mesh.visible = false;
+    this.refreshArrowVisibility();
+  }
+
+  /**
+   * Camp arrows show while scry OR pigeon holds (pigeon wing
+   * bone — way-home sense, tier-1 charm: the same arrows,
+   * ungated by water, while carried + awakened). The shell
+   * drives both setters; either one showing keeps the
+   * arrows up — so a scry dismiss (arrival) does NOT hide
+   * pigeon arrows. Whether arrival should dismiss pigeon
+   * arrows too is the shell/UI's call (always-on vs
+   * dismiss-on-arrival), not this condition's.
+   */
+  private arrowsVisible(): boolean {
+    return this.campArrowsVisible || this.pigeonWayHome;
+  }
+
+  /** Refresh world + edge arrow visibility from the OR condition above. */
+  private refreshArrowVisibility(): void {
+    const show = this.arrowsVisible();
+    if (this.campArrowGroup) this.campArrowGroup.visible = show;
+    if (!show) for (const edge of this.campEdgeArrows) edge.mesh.visible = false;
+  }
+
+  /**
+   * Pigeon wing bone — way-home sense (tier-1 charm):
+   * shell-supplied carried + awakened boolean. Arrows show
+   * without water while true (UI wiring follows separately).
+   */
+  setPigeonWayHome(active: boolean): void {
+    this.pigeonWayHome = active;
+    this.refreshArrowVisibility();
+  }
+
+  /**
+   * Bat wing bone — night way-finding (tier-1 charm):
+   * shell-supplied carried + awakened boolean. Fog thins
+   * at night while true (applied per frame in the loop).
+   */
+  setBatNightWayfinding(active: boolean): void {
+    this.batNightWayfinding = active;
+  }
+
+  /**
+   * Owl talon — night sight (tier-1 charm): pass-through
+   * to the sky rig (shell-supplied carried + awakened
+   * boolean).
+   */
+  setOwlNightSight(active: boolean): void {
+    this.sky?.setOwlNightSight(active);
   }
 
   /**
@@ -1331,7 +1392,7 @@ export class WorldRenderer {
       this.camera.add(edge);
       this.campEdgeArrows.push({ mesh: edge, house });
     }
-    group.visible = this.campArrowsVisible;
+    group.visible = this.arrowsVisible();
     this.scene.add(group);
     this.campArrowGroup = group;
   }
@@ -1669,13 +1730,26 @@ export class WorldRenderer {
       playerZ: this.player.z,
     });
 
+    // Bat wing bone — night way-finding (tier-1 charm,
+    // DRAFT factor): fog thins at night while carried +
+    // awakened, scaled by the sky's night factor (full
+    // night −30%, twilight partial, day untouched).
+    // Distinct from owl by construction: owl is light,
+    // bat is fog.
+    const fog = this.scene.fog;
+    if (fog instanceof THREE.FogExp2) {
+      const night = this.sky?.nightFactor ?? 0;
+      fog.density = this.batNightWayfinding
+        ? FOG_DENSITY * (1 - (1 - BAT_FOG_FACTOR) * night)
+        : FOG_DENSITY;
+    }
+
     // Camp arrows, after this frame's camera transform is set:
-    // world arrows bob (visible only while the scry setter is
-    // on); edge arrows track off-screen camps per frame
+    // world arrows bob (visible while scry or pigeon is on); edge arrows track off-screen camps per frame
     // (camera children, so they ride every view). updateMatrix
     // World first — project() needs this frame's matrices, not
     // last frame's (render would refresh them too late).
-    if (this.campArrowsVisible && this.campArrowGroup) {
+    if (this.arrowsVisible() && this.campArrowGroup) {
       for (const arrow of this.campArrowGroup.children) {
         arrow.position.y =
           (arrow.userData.baseY as number) +

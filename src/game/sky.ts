@@ -105,6 +105,14 @@ export const SYNODIC_DAYS = 29.5;
  * the torch still dominates everywhere near her).
  */
 export const MOONLIGHT_FULL = 0.25;
+/**
+ * Owl talon night-sight floor (tier-1 charm, Adam 2026-10-28,
+ * DRAFT flagged): +0.20 on the night ambient floor while
+ * carried + awakened — night 0.45 → 0.65, day untouched.
+ * Below the torch rung of the light ladder by construction
+ * (a hemisphere 0.65 against a torch point 80/decay-2).
+ */
+export const OWL_NIGHT_SIGHT_FLOOR = 0.2;
 /** Dark-side earthshine as a fraction of moon color (faintly visible new moon). */
 export const MOON_EARTHSHINE = 0.08;
 /** Terminator softness in disc units (penumbra band, lane-decided). */
@@ -402,6 +410,10 @@ export class SkyRig {
   private clouds: THREE.Mesh[] = [];
   private cloudGeometry: THREE.BufferGeometry;
   private seed: string;
+  /** Owl talon night sight, shell-supplied carried + awakened boolean. */
+  private owlNightSight = false;
+  /** Last computed night factor (1 = night, 0 = day), for the bat fog hook. */
+  private lastNightFactor = 0;
 
   constructor(
     scene: THREE.Scene,
@@ -584,6 +596,19 @@ export class SkyRig {
   }
 
   /**
+   * Owl talon night sight (tier-1 charm): shell-supplied
+   * carried + awakened boolean (renderer pass-through).
+   */
+  setOwlNightSight(active: boolean): void {
+    this.owlNightSight = active;
+  }
+
+  /** Last computed night factor (1 = night, 0 = day) — the bat fog hook reads it. */
+  get nightFactor(): number {
+    return this.lastNightFactor;
+  }
+
+  /**
    * Save-boot restore: cycle position + dawn count. Wraps
    * into [0,1); call AFTER setSeed (setSeed resets to dawn).
    * The next update() recomputes sun/moon/lights from the
@@ -622,6 +647,7 @@ export class SkyRig {
     const sunElev = sunElevationAtCycle(this.cycleT, month);
     const dayFactor = clamp01((sunElev + 0.05) / 0.3);
     const nightFactor = 1 - dayFactor;
+    this.lastNightFactor = nightFactor;
     const clarity = clarityFromRain(input.weather.rain);
     const cover = cloudCoverFromRain(input.weather.rain);
 
@@ -683,6 +709,11 @@ export class SkyRig {
         MOONLIGHT_FULL * terms.illumination * altFactor * (0.35 + 0.65 * clarity);
     }
     this.hemiLight.intensity = 0.45 + 0.45 * dayFactor;
+    // Owl talon — night sight (tier-1 charm, DRAFT floor):
+    // the night ambient floor rises while carried + awakened.
+    // Scaled by nightFactor (full at night, zero by day) —
+    // smoother than a binary night switch; day untouched.
+    if (this.owlNightSight) this.hemiLight.intensity += OWL_NIGHT_SIGHT_FLOOR * nightFactor;
 
     // Stars: night only, and only when clear enough.
     this.starMaterial.opacity = nightFactor * clarity * 0.9;
