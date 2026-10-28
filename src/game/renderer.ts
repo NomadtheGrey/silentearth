@@ -53,6 +53,7 @@ import { shelterState, HOUSE_DEFS } from './shelter';
 import { loomState } from './loomState';
 import { pileState } from './pileState';
 import { trapState } from './trapState';
+import { stumpState } from './stumpState';
 import type { TrapType } from './traps';
 import { pauseState } from './pause';
 import { SkyRig } from './sky';
@@ -514,6 +515,7 @@ export class WorldRenderer {
       bus.on('torch:removed', rebuild),
       bus.on('altar:placed', rebuild),
       bus.on('altar:removed', rebuild),
+      bus.on('stump:upgraded', rebuild),
     );
     // Staged bones rebuild on staging events only (separate
     // group, separate lifecycle — see the field comment).
@@ -1437,6 +1439,26 @@ export class WorldRenderer {
       ag.position.set(altar.x, 0, altar.z);
       ag.add(buildAltarGroup());
       group.add(ag);
+    }
+    for (const record of stumpState.snapshot()) {
+      // Workbench overlay (Adam 2026-10-28 — stumpy
+      // workstation upgrade): the stump base is RETAINED
+      // (it stays in the instanced scatter, untouched —
+      // one InstancedMesh per kind cannot carry a
+      // per-stump overlay), and the workbench addition
+      // draws ON TOP of it in the placed group: bench
+      // slab + vise block, wood tones from the existing
+      // palette. Slab bottom 0.62 clears the stump-top
+      // disc (world 0.61) with no coplanar face. Only
+      // the workstation addition draws here — the altar
+      // addition rides the ritual system and draws
+      // nothing in this loop, so the two coexist.
+      if (!record.additions.includes('workstation')) continue;
+      const wg = new THREE.Group();
+      wg.position.set(record.x, 0, record.z);
+      wg.add(box(1.1, 0.08, 0.8, 0x7a5a38, 0, 0.66, 0));
+      wg.add(box(0.25, 0.15, 0.2, 0x3a2818, 0.35, 0.775, 0));
+      group.add(wg);
     }
     this.scene.add(group);
     this.placedGroup = group;

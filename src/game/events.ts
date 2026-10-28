@@ -289,6 +289,16 @@ export interface EventMap {
    */
   'altar:removed': { id: string };
   /**
+   * A stump anchor gained the workstation addition
+   * (stumpState.upgradeStump, Adam 2026-10-28 — stumpy
+   * workstation upgrade). Same stumpSiteId, same
+   * position — transformation, not consumption, and
+   * NOT a new entity. Renderer rebuilds the placed
+   * group (workbench overlay appears on the stump);
+   * the shell follows it with its branch (UI follow-up).
+   */
+  'stump:upgraded': { siteId: string; x: number; z: number };
+  /**
    * A bone was staged on a ritual site (ritualSiteState
    * .stageBone, Adam 2026-10-27 — tier-1 Waking, site
    * side). Site is the full site ref (kind + siteId + x/z);
