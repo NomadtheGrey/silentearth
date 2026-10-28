@@ -1708,9 +1708,12 @@ import {
   isBoneItem,
   recordBonePickupLook,
   HungerWarning,
+  crowGlowTier,
   FIRST_CHARM_KIND,
   FIRST_CHARM_EFFECT,
 } from './systems/charms';
+import { crowPileArrow, type CrowTier } from './game/crow';
+import { CrowArrows } from './ui/CrowArrows';
 import { RitualPanel } from './ui/RitualPanel';
 import { CharmsPanel } from './ui/CharmsPanel';
 import { StormWarning } from './ui/StormWarning';
@@ -2539,6 +2542,22 @@ export default function App() {
     playerRef.current?.setSwiftStep(charms.isAwakened('fox-femur'));
     setMoleEarthSense(charms.isAwakened('mole-paw'));
   };
+  // Crow tier (glow landing, 2026-10-28): shell wiring
+  // setCrowTier ← crowGlowTier, beside syncCharmHooks (boot
+  // + ritual completion, same two call sites). Carried =
+  // list membership per the pseudo-inventory ruling
+  // (effects functional from the list). Clamped to the
+  // setter's 0..3 domain at the call site only — a
+  // type-domain clamp, not tier logic (the Systems fact
+  // stays unclamped). The glow itself is Background's;
+  // this setter only feeds it the tier.
+  const syncCrowTier = () => {
+    const charms = charmStateRef.current;
+    const tier = crowGlowTier(charms.isAwakened('crow-beak'), charms);
+    rendererRef.current?.setCrowTier(
+      Math.min(3, Math.max(0, tier)) as CrowTier,
+    );
+  };
   const [ritualNote, setRitualNote] = useState<string | null>(null);
   const [, setRitualVersion] = useState(0);
   const refreshRitual = () => {
@@ -3317,6 +3336,7 @@ export default function App() {
     // setters are session state, never saved) — same
     // reason as the shrew sync above.
     syncCharmHooks();
+    syncCrowTier();
     syncCharmBonuses();
     syncDeerWarning();
     applyShelterHouse(
@@ -4373,6 +4393,7 @@ export default function App() {
       // hooks at once (the newly listed kind's effect
       // starts now, not on the next boot).
       syncCharmHooks();
+      syncCrowTier();
       syncCharmBonuses();
       syncDeerWarning();
       // Anchor BEFORE unstaging: the staged site record
@@ -5898,6 +5919,64 @@ export default function App() {
       )
     : null;
 
+  // Crow pile arrows (glow landing, 2026-10-28): derived per
+  // render from live state, like frogHint — no cache. Tier
+  // from the same Systems fact as syncCrowTier (UI never
+  // computes tiers); visibility strictly via Background's
+  // crowPileArrow per pile (tier 2 ≤ 64 m inclusive, tier 3
+  // any distance, tier 0/1 never); distance recomputed fresh
+  // from coords (the pile snapshot's distance field is
+  // stale by the time it renders). Glyph rotation is
+  // mode-aware, verified against the engine (not invented):
+  // first/behind cameras look along facing, so the glyph
+  // rotates by pile bearing minus facing bearing (facing
+  // vector (sin facing, cos facing), player.ts); third
+  // overhead sits at a fixed south offset (constants
+  // THIRD_PERSON_OFFSET z +10), so screen-up is north and
+  // the glyph rotates by compass bearing alone. Tier-2 rows
+  // show direction only; tier-3 rows add range + compass.
+  const crowArrows = (() => {
+    const charms = charmStateRef.current;
+    const rawTier = crowGlowTier(charms.isAwakened('crow-beak'), charms);
+    const tier = Math.min(3, Math.max(0, rawTier)) as CrowTier;
+    if (tier < 2) return [];
+    const player = playerRef.current;
+    const facing = player?.facing ?? 0;
+    const facingAngle = Math.atan2(-Math.cos(facing), Math.sin(facing));
+    const facingBearing =
+      (90 - (facingAngle * 180) / Math.PI + 360) % 360;
+    const mode = player?.mode ?? 'first';
+    const rows = [];
+    for (const pile of piles) {
+      const { visible, distanceM } = crowPileArrow(
+        tier,
+        pile.x,
+        pile.z,
+        position.x,
+        position.z,
+      );
+      if (!visible) continue;
+      const dx = pile.x - position.x;
+      const dz = pile.z - position.z;
+      const len = Math.hypot(dx, dz) || 1;
+      const angle = Math.atan2(-dz, dx);
+      const bearing = (90 - (angle * 180) / Math.PI + 360) % 360;
+      const rotation =
+        mode === 'third'
+          ? bearing
+          : (bearing - facingBearing + 360) % 360;
+      rows.push({
+        id: pile.id,
+        dx: dx / len,
+        dz: dz / len,
+        distanceM,
+        rotationDeg: rotation,
+        showRange: tier >= 3,
+      });
+    }
+    return rows;
+  })();
+
   // FPS, shell-side (see the header): a requestAnimationFrame
   // sampler, not a renderer instrument — the renderer is
   // untouched. State updates about once a second, never per
@@ -6813,6 +6892,28 @@ export default function App() {
           dz={frogHint.dz}
           distanceMeters={frogHint.distance}
           aboveScry={scryVisible}
+        />
+      ) : null}
+
+      {/* Crow pile arrows (glow landing, 2026-10-28): same
+        panel/modal/paused hiding as the frog hint seat, plus
+        the remove-confirm dialog (a modal the frog guard
+        predates — frog's own guard is untouched here, its
+        gap flagged not fixed). Seat stacks above the frog
+        hint when it shows (lifted), else above the scry
+        button or the LocationChip like the frog seat. */}
+      {crowArrows.length > 0 &&
+      !inventoryOpen &&
+      !craftingOpen &&
+      !charmsOpen &&
+      !optionsOpen &&
+      !introOpen &&
+      !pendingTrapRecipe &&
+      pendingRemoveTarget === null &&
+      !paused ? (
+        <CrowArrows
+          arrows={crowArrows}
+          lifted={frogHint !== null || scryVisible}
         />
       ) : null}
 
