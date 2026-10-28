@@ -398,12 +398,15 @@ export class HungerState {
 
   /**
    * Set the drain-rate multiplier (charm effects — see
-   * field comment). Must be finite and ≥ 0 (0 = drain
-   * paused — a general tool, not a charm value today).
+   * field comment). Must be finite and > 0 (approved
+   * claim: clamped > 0 — 0 is NOT a pause mechanism;
+   * sleep's pinned hunger-pause rule, when built, gets
+   * its own mechanism, not a 0 multiplier conflated
+   * with rate).
    */
   setDrainMultiplier(m: number): void {
-    if (!Number.isFinite(m) || m < 0) {
-      throw new Error('Drain multiplier must be a finite non-negative number.');
+    if (!Number.isFinite(m) || m <= 0) {
+      throw new Error('Drain multiplier must be a finite positive number.');
     }
     this.drainMult = m;
   }
