@@ -1223,6 +1223,29 @@ export class WorldRenderer {
       mesh.position.set(px, py, pz);
       return mesh;
     };
+    // House meshes are DOUBLE-SIDED (Adam 2026-10-28 — inside
+    // a hut the FrontSide walls/roof culled to nothing, leaving
+    // the flat ground plane + outside world showing through):
+    // lambert() mints a fresh material per mesh, so setting
+    // .side here touches only house meshes. Shared box()/cyl()
+    // stay FrontSide — scatter, fires, looms read unchanged —
+    // and DoubleSide renders outward faces identically, so
+    // exteriors read exactly as before.
+    const houseBox = (...args: Parameters<typeof box>): THREE.Mesh => {
+      const mesh = box(...args);
+      (mesh.material as THREE.MeshLambertMaterial).side = THREE.DoubleSide;
+      return mesh;
+    };
+    const houseCyl = (...args: Parameters<typeof cyl>): THREE.Mesh => {
+      const mesh = cyl(...args);
+      (mesh.material as THREE.MeshLambertMaterial).side = THREE.DoubleSide;
+      return mesh;
+    };
+    const houseRoof = (geo: THREE.BufferGeometry, color: number): THREE.Mesh => {
+      const mat = lambert(color);
+      mat.side = THREE.DoubleSide;
+      return new THREE.Mesh(geo, mat);
+    };
     for (const fire of fireState.snapshot()) {
       const fg = new THREE.Group();
       fg.position.set(fire.x, 0, fire.z);
@@ -1281,49 +1304,57 @@ export class WorldRenderer {
       const hg = new THREE.Group();
       hg.position.set(house.x, 0, house.z);
       if (house.type === 'leanTo') {
-        hg.add(cyl(0.07, 0.07, 2.2, 0x6b4a2f, -f / 2, 1.1, 0));
-        hg.add(cyl(0.07, 0.07, 2.2, 0x6b4a2f, f / 2, 1.1, 0));
-        hg.add(box(f + 0.4, 0.12, 1.6, 0x8a7a4a, 0, 1.9, 0, 0, -0.5));
+        hg.add(houseCyl(0.07, 0.07, 2.2, 0x6b4a2f, -f / 2, 1.1, 0));
+        hg.add(houseCyl(0.07, 0.07, 2.2, 0x6b4a2f, f / 2, 1.1, 0));
+        // Roof underside only — open shelter, NO floor: the
+        // ground IS the floor (stated exclusion, approved).
+        hg.add(houseBox(f + 0.4, 0.12, 1.6, 0x8a7a4a, 0, 1.9, 0, 0, -0.5));
         // Bedroll under the roof + stick back wall.
-        const bed = cyl(0.14, 0.14, 1.2, 0x6a5a3a, 0, 0.14, 0.3);
+        const bed = houseCyl(0.14, 0.14, 1.2, 0x6a5a3a, 0, 0.14, 0.3);
         bed.rotation.z = Math.PI / 2;
         hg.add(bed);
         for (let i = -1; i <= 1; i++) {
-          hg.add(cyl(0.04, 0.04, 1.7, 0x6b4a2f, i * (f / 3), 0.85, -0.7));
+          hg.add(houseCyl(0.04, 0.04, 1.7, 0x6b4a2f, i * (f / 3), 0.85, -0.7));
         }
       } else if (house.type === 'thatchHut') {
-        hg.add(cyl(f / 2, f / 2, 1.6, 0xcbb59a, 0, 0.8, 0, 12));
-        const roof = new THREE.Mesh(new THREE.ConeGeometry(f / 2 + 0.3, 1.5, 12), lambert(0x8a7a4a));
+        hg.add(houseCyl(f / 2, f / 2, 1.6, 0xcbb59a, 0, 0.8, 0, 12));
+        const roof = houseRoof(new THREE.ConeGeometry(f / 2 + 0.3, 1.5, 12), 0x8a7a4a);
         roof.position.y = 2.35;
         hg.add(roof);
-        hg.add(box(0.7, 1.3, 0.1, 0x3a2812, 0, 0.65, f / 2 + 0.01));
-        hg.add(box(0.9, 0.1, 0.5, 0x8a8a86, 0, 0.05, f / 2 + 0.25));
-        hg.add(cyl(0.09, 0.09, 0.3, 0x1a1a1a, 0, 3.1, 0));
+        hg.add(houseBox(0.7, 1.3, 0.1, 0x3a2812, 0, 0.65, f / 2 + 0.01));
+        hg.add(houseBox(0.9, 0.1, 0.5, 0x8a8a86, 0, 0.05, f / 2 + 0.25));
+        hg.add(houseCyl(0.09, 0.09, 0.3, 0x1a1a1a, 0, 3.1, 0));
+        // Floor disc, inset within the round wall.
+        hg.add(houseCyl(f / 2 - 0.1, f / 2 - 0.1, 0.04, 0x9a8a6a, 0, 0.02, 0, 12));
       } else if (house.type === 'wovenCottage') {
-        hg.add(box(f, 2.2, f * 0.8, 0xd8c9a8, 0, 1.1, 0));
-        const roof = new THREE.Mesh(new THREE.ConeGeometry(f * 0.75, 1.4, 4), lambert(0x8a7a4a));
+        hg.add(houseBox(f, 2.2, f * 0.8, 0xd8c9a8, 0, 1.1, 0));
+        const roof = houseRoof(new THREE.ConeGeometry(f * 0.75, 1.4, 4), 0x8a7a4a);
         roof.position.y = 2.9;
         roof.rotation.y = Math.PI / 4;
         hg.add(roof);
-        hg.add(box(0.8, 1.6, 0.1, 0x4a3220, 0, 0.8, (f * 0.8) / 2 + 0.01));
+        hg.add(houseBox(0.8, 1.6, 0.1, 0x4a3220, 0, 0.8, (f * 0.8) / 2 + 0.01));
         // Windows + wattle bands around the wall.
-        hg.add(box(0.5, 0.5, 0.06, 0x2a2018, -f / 4, 1.3, (f * 0.8) / 2 + 0.01));
-        hg.add(box(0.5, 0.5, 0.06, 0x2a2018, f / 4, 1.3, (f * 0.8) / 2 + 0.01));
-        hg.add(box(f + 0.06, 0.08, f * 0.8 + 0.06, 0xb09a6a, 0, 0.6, 0));
-        hg.add(box(f + 0.06, 0.08, f * 0.8 + 0.06, 0xb09a6a, 0, 1.7, 0));
+        hg.add(houseBox(0.5, 0.5, 0.06, 0x2a2018, -f / 4, 1.3, (f * 0.8) / 2 + 0.01));
+        hg.add(houseBox(0.5, 0.5, 0.06, 0x2a2018, f / 4, 1.3, (f * 0.8) / 2 + 0.01));
+        hg.add(houseBox(f + 0.06, 0.08, f * 0.8 + 0.06, 0xb09a6a, 0, 0.6, 0));
+        hg.add(houseBox(f + 0.06, 0.08, f * 0.8 + 0.06, 0xb09a6a, 0, 1.7, 0));
+        // Floor plane, inset within the wall footprint.
+        hg.add(houseBox(f - 0.2, 0.04, f * 0.8 - 0.2, 0x8a7a5a, 0, 0.02, 0));
       } else {
-        hg.add(box(f, 2.6, f * 0.85, 0x7a5a38, 0, 1.3, 0));
-        const roof = new THREE.Mesh(new THREE.ConeGeometry(f * 0.72, 1.6, 4), lambert(0x5a3d24));
+        hg.add(houseBox(f, 2.6, f * 0.85, 0x7a5a38, 0, 1.3, 0));
+        const roof = houseRoof(new THREE.ConeGeometry(f * 0.72, 1.6, 4), 0x5a3d24);
         roof.position.y = 3.4;
         roof.rotation.y = Math.PI / 4;
         hg.add(roof);
-        hg.add(box(0.9, 1.8, 0.1, 0x3a2812, 0, 0.9, (f * 0.85) / 2 + 0.01));
+        hg.add(houseBox(0.9, 1.8, 0.1, 0x3a2812, 0, 0.9, (f * 0.85) / 2 + 0.01));
         // Windows, porch posts, chimney.
-        hg.add(box(0.5, 0.5, 0.06, 0x2a2018, -f / 4, 1.5, (f * 0.85) / 2 + 0.01));
-        hg.add(box(0.5, 0.5, 0.06, 0x2a2018, f / 4, 1.5, (f * 0.85) / 2 + 0.01));
-        hg.add(cyl(0.07, 0.07, 2.2, 0x6b4a2f, -f / 3, 1.1, (f * 0.85) / 2 + 0.4));
-        hg.add(cyl(0.07, 0.07, 2.2, 0x6b4a2f, f / 3, 1.1, (f * 0.85) / 2 + 0.4));
-        hg.add(box(0.5, 1.0, 0.5, 0x8a8a86, f / 3, 3.6, -f / 4));
+        hg.add(houseBox(0.5, 0.5, 0.06, 0x2a2018, -f / 4, 1.5, (f * 0.85) / 2 + 0.01));
+        hg.add(houseBox(0.5, 0.5, 0.06, 0x2a2018, f / 4, 1.5, (f * 0.85) / 2 + 0.01));
+        hg.add(houseCyl(0.07, 0.07, 2.2, 0x6b4a2f, -f / 3, 1.1, (f * 0.85) / 2 + 0.4));
+        hg.add(houseCyl(0.07, 0.07, 2.2, 0x6b4a2f, f / 3, 1.1, (f * 0.85) / 2 + 0.4));
+        hg.add(houseBox(0.5, 1.0, 0.5, 0x8a8a86, f / 3, 3.6, -f / 4));
+        // Floor plane, inset within the wall footprint.
+        hg.add(houseBox(f - 0.2, 0.04, f * 0.85 - 0.2, 0x5a4028, 0, 0.02, 0));
       }
       group.add(hg);
     }
