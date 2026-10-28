@@ -6071,7 +6071,13 @@ export default function App() {
           capacityText:
             openHomeStore === null
               ? 'Home storage — empty until first deposit'
-              : `Stored ${openHomeStore.used()} / ${openHomeStore.capacity()}`,
+              : // POUNDS (Adam, 2026-10-28 — "pounds here
+                // and going forward"): used()/capacity()
+                // return pounds since Systems' rework, so
+                // the header names the unit. Null-store
+                // text unchanged; per-kind counts below
+                // are item quantities, not pounds.
+                `Stored ${openHomeStore.used()} lb / ${openHomeStore.capacity()} lb`,
           note: storageNote,
           onWithdrawItem: handleWithdrawItem,
         }
@@ -7205,7 +7211,9 @@ export default function App() {
                   <p className="text-sm text-stone-300">
                     {openHomeStore === null
                       ? 'Home storage — empty until first deposit'
-                      : `Stored ${openHomeStore.used()} / ${openHomeStore.capacity()}`}
+                      : // POUNDS (Adam, 2026-10-28): same
+                        // unit as the panel header above.
+                        `Stored ${openHomeStore.used()} lb / ${openHomeStore.capacity()} lb`}
                   </p>
                   <p className="text-xs text-stone-400">
                     ↑ Take one · ↑↑ Take all · ↓ Store one · ↓↓ Store all
