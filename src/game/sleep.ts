@@ -10,14 +10,15 @@
  * into a headless-safe module and invert the renderer's
  * ownership of the rig).
  *
- * ADAM'S RULES, AS BRIEFED:
- * (a) LOCATION — sheltered by her placed house. The lean-to is
- *     the house she has, so lean-to first; DEV's reading is
- *     houses GENERALLY (a later house sleeps the same way).
- *     Implemented as: shelterAt(x, z, live houses) returns a
- *     houseId, i.e. within SHELTER_RADIUS (6 m, shelter.ts) of
- *     a placed house center. FLAG for Adam's word: if he meant
- *     lean-to-ONLY literally, this narrows to one type check.
+ * ADAM'S RULES, AS BRIEFED (broadened 2026-10-28):
+ * (a) LOCATION — ANYWHERE (Adam 2026-10-28: sleep anyplace
+ *     regardless of weather, home, etc.). The 2026-10-27
+ *     house-gated reading is SUPERSEDED — no shelter gate
+ *     remains. The lean-to-ONLY flag from that reading is
+ *     MOOT (no place gate exists to narrow). shelterAt still
+ *     runs so the completed payload names the house when she
+ *     sleeps within SHELTER_RADIUS (6 m, shelter.ts) of one —
+ *     otherwise houseId is null.
  * (b) TIME-ONLY, interim — sleep moves time only. NO hunger or
  *     health restore rides this landing; restore stays with
  *     the future regen mechanic. This module touches neither
@@ -40,8 +41,9 @@
  * SEASON_START_MONTH, the month the renderer feeds the rig);
  * the shell may pass another month if it ever tracks one.
  *
- * CHECK ORDER (documented, UI feedback depends on it): night
- * first, then shelter. A daytime press fails 'not-night' even
+ * CHECK ORDER (documented, UI feedback depends on it): sky,
+ * then night — no shelter step (anywhere sleep, Adam
+ * 2026-10-28). A daytime press fails 'not-night' even
  * unsheltered — "until sunrise" presupposes night. A null or
  * non-finite cycleT (no live rig, e.g. disposed renderer) fails
  * 'no-sky' rather than mislabeling as 'not-night'.
@@ -64,7 +66,7 @@ import { cycleSplit } from './sky';
 import { SEASON_START_MONTH } from './weather';
 
 /** Why a sleep press granted nothing. Fail-loud, one reason. */
-export type SleepFailedReason = 'not-night' | 'not-sheltered' | 'no-sky';
+export type SleepFailedReason = 'not-night' | 'no-sky';
 
 export interface SleepListenerDeps {
   /**
@@ -84,6 +86,8 @@ export interface SleepListenerDeps {
 /**
  * Subscribe the sleep outcome listener. Returns unsubscribe.
  * Emits 'sleep:completed' { x, z, cycleT: 0, houseId } on success
+ * (houseId is the nearby house, or null when she sleeps away
+ * from any house — anywhere sleep, Adam 2026-10-28)
  * or 'sleep:failed' { x, z, reason } on any gate failure. The
  * listener itself moves nothing else: no position change, no
  * meter change, no state other than the rig's cycleT (via the
@@ -101,11 +105,10 @@ export function createSleepListener(deps: SleepListenerDeps): () => void {
       bus.emit('sleep:failed', { x, z, reason: 'not-night' });
       return;
     }
+    // Anywhere sleep (Adam 2026-10-28): no shelter gate. The
+    // house lookup still runs so the payload names the house
+    // when she sleeps near one, else null.
     const shelter = shelterAt(x, z, shelterState.snapshot());
-    if (shelter.houseId === null) {
-      bus.emit('sleep:failed', { x, z, reason: 'not-sheltered' });
-      return;
-    }
     deps.restoreDawn();
     bus.emit('sleep:completed', { x, z, cycleT: 0, houseId: shelter.houseId });
   });
