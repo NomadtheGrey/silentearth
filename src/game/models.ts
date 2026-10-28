@@ -45,6 +45,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { ScatterKind } from '../types';
 import type { MeshSpec } from './objects';
+import type { AnimalKind } from './animals';
 import { hashSeed, mulberry32 } from './seed';
 
 /** Ground-cover disc radii per kind (disc-shaped sources only). */
@@ -792,5 +793,133 @@ export function buildStagedBone(): THREE.Group {
     knob.position.set(sx * 0.2, 0, 0);
     g.add(knob);
   }
+  return g;
+}
+
+/**
+ * One low-poly model per animal kind (Adam 2026-10-28 — ambient
+ * animals, simple-geometry style, no rigs). Visual drafts for
+ * Adam's pin pass: body length/height + a single color per
+ * kind, head at the front (+z), optional tail, optional wing
+ * planes for flying kinds. Group-local coords, front = +z,
+ * feet at y = 0 — the renderer positions/rotates the group
+ * from animals.ts instance state.
+ *
+ * Geometries + materials are cached per kind and SHARED
+ * across instances (like the scatter kind materials) — chunk
+ * unload disposes nothing for animals. Wings (flying kinds)
+ * are flat side planes whose inner edge sits at the body, so
+ * rotation.z flaps them around the body edge; the two wing
+ * meshes are stored in group.userData.wings as [left, right]
+ * for the renderer's flutter pose (left = -x, right = +x).
+ */
+interface AnimalModelParams {
+  length: number;
+  height: number;
+  color: number;
+  long?: boolean;
+  head?: boolean;
+  wings?: boolean;
+  tail?: boolean;
+}
+
+const ANIMAL_MODEL_PARAMS: Record<AnimalKind, AnimalModelParams> = {
+  owl: { length: 0.45, height: 0.3, color: 0x8a7a5a, head: true, wings: true, tail: true },
+  bat: { length: 0.3, height: 0.18, color: 0x3a2a3a, head: true, wings: true },
+  pigeon: { length: 0.35, height: 0.22, color: 0x7a7a8a, head: true, wings: true, tail: true },
+  beaver: { length: 0.7, height: 0.35, color: 0x6a4a2a, head: true, tail: true },
+  turtle: { length: 0.4, height: 0.2, color: 0x4a5a3a, head: true },
+  deer: { length: 1.1, height: 0.7, color: 0x8a6a4a, head: true, tail: true },
+  fox: { length: 0.7, height: 0.4, color: 0xa05a2a, head: true, tail: true },
+  mole: { length: 0.25, height: 0.15, color: 0x4a3a3a, head: true },
+  snake: { length: 0.8, height: 0.1, color: 0x3a5a2a, long: true, head: true },
+  mouse: { length: 0.2, height: 0.12, color: 0x8a7a6a, head: true, tail: true },
+  bear: { length: 1.2, height: 0.8, color: 0x4a3520, head: true, tail: true },
+  rabbit: { length: 0.4, height: 0.25, color: 0x9a8a7a, head: true, tail: true },
+  raccoon: { length: 0.6, height: 0.35, color: 0x6a6a6a, head: true, tail: true },
+  wolf: { length: 1.0, height: 0.65, color: 0x7a7a7a, head: true, tail: true },
+  crow: { length: 0.4, height: 0.25, color: 0x1a1a1a, head: true, wings: true, tail: true },
+  frog: { length: 0.25, height: 0.15, color: 0x4a7a3a, head: true },
+  groundhog: { length: 0.5, height: 0.3, color: 0x7a6a4a, head: true, tail: true },
+  squirrel: { length: 0.35, height: 0.2, color: 0x8a5a3a, head: true, tail: true },
+  crayfish: { length: 0.3, height: 0.15, color: 0xa04a2a, head: true, tail: true },
+  muskrat: { length: 0.5, height: 0.3, color: 0x5a4632, head: true, tail: true },
+  mice: { length: 0.2, height: 0.12, color: 0x8a7a6a, head: true, tail: true },
+  voles: { length: 0.2, height: 0.12, color: 0x6a5a4a, head: true, tail: true },
+  fish: { length: 0.4, height: 0.2, color: 0x6a8a9a, head: true, tail: true },
+  eels: { length: 0.6, height: 0.12, color: 0x4a4a3a, long: true, head: true },
+  opossum: { length: 0.6, height: 0.35, color: 0x9a9a9a, head: true, tail: true },
+  shrew: { length: 0.15, height: 0.09, color: 0x5a4a3a, head: true, tail: true },
+};
+
+interface AnimalModelParts {
+  body: THREE.BufferGeometry;
+  head?: THREE.BufferGeometry;
+  wingL?: THREE.BufferGeometry;
+  wingR?: THREE.BufferGeometry;
+  tail?: THREE.BufferGeometry;
+}
+
+const animalPartsCache = new Map<AnimalKind, AnimalModelParts>();
+const animalMatCache = new Map<AnimalKind, THREE.MeshLambertMaterial>();
+
+export function buildAnimal(kind: AnimalKind): THREE.Group {
+  const p = ANIMAL_MODEL_PARAMS[kind];
+  let parts = animalPartsCache.get(kind);
+  if (!parts) {
+    const width = p.length * 0.55;
+    let body: THREE.BufferGeometry;
+    if (p.long) {
+      body = new THREE.CylinderGeometry(p.height / 2, p.height / 2, p.length, 6);
+      body.rotateX(Math.PI / 2);
+    } else {
+      body = new THREE.BoxGeometry(width, p.height, p.length);
+    }
+    const head = p.head ? new THREE.SphereGeometry(p.height * 0.45, 8, 8) : undefined;
+    let wingL: THREE.BufferGeometry | undefined;
+    let wingR: THREE.BufferGeometry | undefined;
+    if (p.wings) {
+      wingL = new THREE.BoxGeometry(p.length * 0.6, 0.03, p.length * 0.4);
+      wingL.translate(-p.length * 0.3, 0, 0);
+      wingR = new THREE.BoxGeometry(p.length * 0.6, 0.03, p.length * 0.4);
+      wingR.translate(p.length * 0.3, 0, 0);
+    }
+    const tail = p.tail
+      ? new THREE.BoxGeometry(width * 0.5, p.height * 0.4, p.length * 0.25)
+      : undefined;
+    parts = { body, head, wingL, wingR, tail };
+    animalPartsCache.set(kind, parts);
+  }
+  let mat = animalMatCache.get(kind);
+  if (!mat) {
+    mat = meshMat(p.color);
+    animalMatCache.set(kind, mat);
+  }
+  const g = new THREE.Group();
+  const width = p.length * 0.55;
+  const body = new THREE.Mesh(parts.body, mat);
+  body.position.set(0, p.height / 2, 0);
+  g.add(body);
+  if (parts.head) {
+    const head = new THREE.Mesh(parts.head, mat);
+    head.position.set(0, p.height * 0.7, p.length / 2);
+    g.add(head);
+  }
+  const wings: THREE.Mesh[] = [];
+  if (parts.wingL && parts.wingR) {
+    const wingL = new THREE.Mesh(parts.wingL, mat);
+    wingL.position.set(-width / 2, p.height * 0.7, 0);
+    g.add(wingL);
+    const wingR = new THREE.Mesh(parts.wingR, mat);
+    wingR.position.set(width / 2, p.height * 0.7, 0);
+    g.add(wingR);
+    wings.push(wingL, wingR);
+  }
+  if (parts.tail) {
+    const tail = new THREE.Mesh(parts.tail, mat);
+    tail.position.set(0, p.height * 0.5, -p.length / 2 - p.length * 0.1);
+    g.add(tail);
+  }
+  if (wings.length === 2) g.userData.wings = wings;
   return g;
 }

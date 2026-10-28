@@ -27,7 +27,9 @@ import type { WorldGen } from './worldgen';
 import { PlayerController } from './player';
 import { marshWeight } from './biomes';
 import { SOURCE_FOR_KIND } from './objects';
-import { buildAltarGroup, buildCampArrow, buildCandle, buildEdgeArrow, buildKindGeometry, buildStagedBone, buildTorch, buildUmbrella, buildWitch, CANDLE_FLAME_Y, TORCH_FLAME_Y, vertexLambert } from './models';
+import { buildAltarGroup, buildAnimal, buildCampArrow, buildCandle, buildEdgeArrow, buildKindGeometry, buildStagedBone, buildTorch, buildUmbrella, buildWitch, CANDLE_FLAME_Y, TORCH_FLAME_Y, vertexLambert } from './models';
+import { spawnAnimalsForChunk, updateAnimal } from './animals';
+import type { AnimalInstance } from './animals';
 import { ProximityTracker } from './proximity';
 import {
   harvestState,
@@ -193,6 +195,8 @@ interface LoadedChunk {
   meshes: THREE.InstancedMesh[];
   ground: THREE.Mesh;
   river: THREE.Mesh | null;
+  /** Ambient animals: instance state (animals.ts) + its group. */
+  animals: { instance: AnimalInstance; group: THREE.Group }[];
 }
 
 /**
@@ -960,8 +964,47 @@ export class WorldRenderer {
       }
     }
 
+    // Animals: ambient creatures, seeded per chunk (animals.ts).
+    // Water anchors come from this chunk's own water (river ribbon
+    // vertices + pond objects); perch anchors from its trees. The
+    // animal groups join the chunk group, so chunk unload and
+    // setWorldGen remove them with it; their geometries and
+    // materials are shared per kind (models.ts) and are NOT
+    // disposed here, like the scatter kind materials.
+    const pondPoints = data.objects
+      .filter((o) => o.kind === 'pond')
+      .map((o) => ({ x: o.x, z: o.z }));
+    const treePoints = data.objects
+      .filter((o) => o.kind === 'tree')
+      .map((o) => ({ x: o.x, z: o.z }));
+    const riverPoints: { x: number; z: number }[] = [];
+    if (this.riverParams) {
+      const ribbon = riverRibbonForChunk(this.riverParams, cx, cz);
+      if (ribbon) {
+        for (let i = 0; i < ribbon.positions.length; i += 3) {
+          riverPoints.push({ x: ribbon.positions[i], z: ribbon.positions[i + 2] });
+        }
+      }
+    }
+    const animals: { instance: AnimalInstance; group: THREE.Group }[] = [];
+    for (const instance of spawnAnimalsForChunk({
+      seed: String(this.gen.seed),
+      cx,
+      cz,
+      weightsAt: (x, z) => this.gen.weightsAt(x, z),
+      riverPoints,
+      pondPoints,
+      treePoints,
+    })) {
+      const animalGroup = buildAnimal(instance.kind);
+      animalGroup.position.set(instance.x, instance.y, instance.z);
+      animalGroup.rotation.set(0, instance.heading, 0);
+      group.add(animalGroup);
+      animals.push({ instance, group: animalGroup });
+    }
+
     this.scene.add(group);
-    this.chunks.set(key, { group, meshes, ground, river });
+    this.chunks.set(key, { group, meshes, ground, river, animals });
     bus.emit('world:chunkLoaded', { cx, cz, objectCount: data.objects.length });
   }
 
@@ -1569,6 +1612,24 @@ export class WorldRenderer {
     this.spawnedGroup = group;
   }
 
+  /**
+   * Pose an animal group from its instance state (animals.ts):
+   * position + bob height + facing, wings fluttering while
+   * flying and folded while perched (userData.wings = [left,
+   * right], inner edge at the body, so rotation.z flaps them
+   * around the body edge — left negative, right positive).
+   */
+  private poseAnimal(instance: AnimalInstance, group: THREE.Group): void {
+    group.position.set(instance.x, instance.y + instance.bob, instance.z);
+    group.rotation.set(0, instance.heading, 0);
+    const wings = group.userData.wings as THREE.Mesh[] | undefined;
+    if (wings && wings.length === 2) {
+      const flutter = instance.flying ? 0.15 + 0.6 * Math.sin(instance.wingPhase) : 0;
+      wings[0].rotation.z = -flutter;
+      wings[1].rotation.z = flutter;
+    }
+  }
+
   private loop = (): void => {
     if (this.disposed) return;
     this.raf = requestAnimationFrame(this.loop);
@@ -1584,6 +1645,22 @@ export class WorldRenderer {
     // pauseState.setPaused + the 'game:pause-changed' event.
     if (pauseState.isPaused()) return;
     this.player.update(dt);
+    // Animals: behavior step + pose, right after the player
+    // moves (flee reads the fresh player position). Pause-safe:
+    // the pause gate above already returns before this line.
+    // Night reads last frame's sky factor (sky updates later in
+    // this loop) — a one-frame lag, invisible in practice.
+    const night = (this.sky?.nightFactor ?? 0) >= 0.5;
+    for (const loaded of this.chunks.values()) {
+      for (const pair of loaded.animals) {
+        updateAnimal(pair.instance, dt, {
+          playerX: this.player.x,
+          playerZ: this.player.z,
+          night,
+        });
+        this.poseAnimal(pair.instance, pair.group);
+      }
+    }
     this.stream();
     this.worldTickAcc += dt;
     if (this.worldTickAcc >= 2) {
