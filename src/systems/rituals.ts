@@ -80,21 +80,18 @@
 //   ritual condition).
 // - Looks arrive as INPUT from NameSight (shell queries
 //   looksAt(kind)); speakName enforces minLooks itself.
-// - PICKUP vs LOOK (FLAG SHAPING, 2026-10-28 — Adam
-//   pins, NOT silently decided): RECOMMEND inventory-
-//   LOOK path — pickup identifies SHAPE (mundane, see
-//   charms.boneNote) but does NOT count toward looks;
-//   speakName needs ≥1 LOOK at the kind via world LOOK
-//   (before pickup) OR inventory LOOK (after pickup —
-//   UI follow-up, REQUIRED for the post-pickup path
-//   since world LOOK is impossible once carried).
-//   Alternative (A) pickup counts as a look: simplest,
-//   but makes speakName vacuous + LOOK pointless for
-//   rituals. (B) world-LOOK-only: REJECTED in shaping
-//   — soft-locks rituals when she picks up first (bone
-//   gone from the world, no LOOK possible, speakName
-//   unreachable). Shape ≠ true name: pickup tells her
-//   WHAT it is, LOOK tells her its name.
+// - PICKUP vs LOOK (RULED, Adam 2026-10-28: "picking
+//   it up is sufficient, counts as a look" — SUPERSEDES
+//   the 2026-10-28 shaping, which recommended
+//   inventory-LOOK and is NOT the rule): a bone pickup
+//   records 1 LOOK at the kind (charms.
+//   recordBonePickupLook — shell calls it after every
+//   successful bone pickup grant); pickup ALONE
+//   satisfies speakName's minLooks 1. No separate world
+//   LOOK required before speaking; no inventory LOOK
+//   required either (world/inventory LOOKs still deepen
+//   name portions as before — they are no longer a
+//   gate for speaking).
 // - Site keys are caller-defined (altar ids 'altar:N' or
 //   the stump's key — Background's call); staging keys on
 //   (siteKey, boneKind).

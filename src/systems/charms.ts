@@ -48,6 +48,7 @@
 
 import { ITEMS } from './recipes';
 import type { PersonalInventory } from './inventory';
+import type { NameSight, LookResult } from './name-sight';
 
 /**
  * SOURCES (flagged, not this build): no world source
@@ -110,6 +111,31 @@ export const BONE_EFFECT_NOTES: Readonly<Record<string, string>> = {
 };
 
 /**
+ * PICKUP COUNTS AS A LOOK (Adam, DEV chat 2026-10-28,
+ * RULED: "picking it up is sufficient, counts as a
+ * look" — closes the pickup-vs-LOOK flag): a bone pickup
+ * records 1 LOOK at that bone kind in NameSight, so
+ * pickup ALONE satisfies speakName's minLooks 1 (family
+ * known) — no separate world LOOK required before
+ * speaking. recordBonePickupLook is the shell path:
+ * the shell calls it AFTER every successful bone pickup
+ * grant (harvest grant, pile pickup/take, any grant
+ * path; granted > 0 only — a failed/full-pack grant
+ * records no look); per granted kind on multi-kind
+ * grants. Portions come from UI's bone portions table
+ * (shell supplies per kind; passed through — no portion
+ * content invented here). SIDE EFFECT (flagged,
+ * honest): the pickup look increments like any look
+ * (looks +1, practice +1) — NameSight has no set-to-1
+ * and look() is the only mutating query; re-pickups
+ * (a dropped bone picked up again) record another look,
+ * harmlessly (looks only grow; minLooks already
+ * satisfied). Shape ≠ true name is SUPERSEDED by this
+ * ruling for the minLooks gate (pickup now counts) —
+ * the shape/name distinction survives only as: pickup
+ * identifies shape in the row note (below), LOOK
+ * deepens name portions.
+ *
  * PICKUP IDENTIFICATION (Adam, DEV chat 2026-10-28:
  * "the description can change once picked up" — world
  * description is partial (LOOK portions), a picked-up
@@ -205,6 +231,23 @@ export class CharmState {
       this.tiers.set(entry.kind, entry.tier);
     }
   }
+}
+
+/**
+ * Record a bone pickup as a LOOK (Adam's ruling — see
+ * header). Returns the look result, or null when the
+ * item is not a primal bone (no look recorded).
+ * Portions are the shell's (UI's bone portions table
+ * for this kind); the helper passes them through.
+ */
+export function recordBonePickupLook(
+  item: string,
+  nameSight: NameSight,
+  portions: readonly string[],
+): LookResult | null {
+  const kind = boneKindFor(item);
+  if (kind === null) return null;
+  return nameSight.look(kind, portions);
 }
 
 /**
