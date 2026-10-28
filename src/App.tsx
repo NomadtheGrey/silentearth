@@ -155,6 +155,26 @@
  *   the avatar / portrait candle is untouched, and nothing
  *   here assumes the candle lights fires — that relation
  *   is flagged open for Adam's call.
+ * - TORCH, LIVE (Adam, 2026-10-27 — DEV brief, all three
+ *   lanes): torch item + hand recipe (snap-wood 1 +
+ *   twined cordage 1 + dry kindling 1, DRAFT quantities
+ *   for the pin pass) + Systems batch lighting
+ *   (systems/torch.ts lightTorches: ONE press lights
+ *   EVERY carried unlit torch — at a lit fire, or with
+ *   carried flint + river-stone, both kept; no burnout,
+ *   no duration, no chain-lighting, all Adam-pinned).
+ *   Inventory torch rows gain a Light button (the FLINT
+ *   route only — no invented "nearby fire" range; the
+ *   fire route is UI's lit-fire 'light torches' pill
+ *   (TORCH PILL bullet below), whose host menu already
+ *   opens in every state since UI's lit-menu fix fe7b304). Carried torch light
+ *   itself is Background's (Adam: well-lit to 6 m, dim to
+ *   at least 12 m, torch stays brighter than the candle —
+ *   exact values theirs, above the candle's new 30/22
+ *   from Fill-in 2766045; the starting candle already
+ *   went brighter, tuned together). Placeable candles NOT
+ *   in this order. App + InventoryPanel + systems only;
+ *   no game edits.
  * - SHELTER UI, LIVE (Adam, 2026-10-26): house recipes
  *   (lean-to, thatch hut, woven cottage, small wooden hut)
  *   are craftable through CraftingMenu, and a carried house
@@ -286,7 +306,8 @@
  *   centred card on desktop, per the phone-HUD rules.
  * - LOCATION CHIP, LIVE (Adam, 2026-10-26): a small
  *   translucent bottom-centre pill — dominant biome + percent,
- *   player position, and FPS — rendered outside the
+ *   player position, zone coords (2026-10-28, below),
+ *   and FPS — rendered outside the
  *   collapsible HUD stack, so it stays visible with the HUD
  *   collapsed on touch (collapse hides panels, never this
  *   chip). It hides only while a panel or the modal is open,
@@ -312,7 +333,7 @@
  *   touch state (desktop keeps max-w-sm); (2) Hide HUD —
  *   already a fixed top-right control outside the stack and
  *   the sheets (z-40, visible in every expanded state) — now
- *   also closes both panels, so one tap fully reclaims the
+ *   also closes all panels, so one tap fully reclaims the
  *   look field. Panel taps and scrolling are untouched
  *   (pointer-events-auto + overflow-y throughout, 44 px
  *   targets kept). Per-state look geometry: collapsed, no
@@ -748,6 +769,167 @@
  *   what every world tap near a fire does, so it waits
  *   on DEV/Adam approval rather than shipping silently.
  *   FireState.tsx + this bullet only.
+ * - LIT-FIRE MENU FIX, LIVE (Adam, 2026-10-27 — DEV brief,
+ *   torch build: a lit fire's chip must actually OPEN its
+ *   menu): the chip onSelect used to show "{name} lit."
+ *   feedback for a lit fire and never open the menu, so
+ *   the lit menu's cook actions were unreachable — the
+ *   menu only opened while unlit or lighting. FIX: the
+ *   chip now opens the menu in every state (unlit,
+ *   lighting, lit); the lit menu itself already existed
+ *   (Cook acorns stick/buried, disabled without carried
+ *   acorns, + Close). The lit menu is also the torch
+ *   pill's host: the additional "light torches" pill
+ *   (ONLY when she carries >=1 unlit torch, one press
+ *   lights ALL carried unlit torches) is BUILT in the
+ *   TORCH PILL bullet below (API landed + DEV signal
+ *   received — the hold is lifted, no guessed API).
+ *   App.tsx only (chip onSelect + this bullet).
+ * - TORCH PILL, LIVE (Adam, 2026-10-27 — DEV brief,
+ *   hold lifted on Systems' batch API 3dd6999 + DEV
+ *   signal): any lit fire's menu gains an additional
+ *   "Light torches" pill (Adam's text; casing follows
+ *   the menu convention — "Light with flint", "Cook
+ *   acorns" — flagged, correct to lowercase if Adam
+ *   wants it verbatim). The pill appears ONLY when she
+ *   carries >=1 unlit torch (inventory.count(ITEMS.
+ *   torch)) — no torches, no pill, no dead button — and
+ *   sits FIRST in the lit menu (lane's pick). One press
+ *   calls lightTorches(inventory, { litFirePresent:
+ *   true }) — ALL carried unlit torches light in one
+ *   batch, nothing consumed, fire wins when both routes
+ *   are available; feedback names the count lit ("Lit N
+ *   torch(es)."), failure shows the API's reason; the
+ *   menu stays open and the pill is gone on re-render
+ *   (count 0), leaving cook. The flint + river-stone
+ *   route is NOT rebuilt here — the inventory torch
+ *   rows' Light button already covers it (flint route
+ *   only). App.tsx only.
+ * - ESC OPENS OPTIONS + INDICATOR, LIVE (Adam, 2026-10-27
+ *   — DEV brief, joining the Esc + [X] brief): one rule —
+ *   topmost-close, else open-Options. With NO modal open,
+ *   Esc opens the Options modal (one App-level listener);
+ *   with a modal open, that modal's own Esc listener
+ *   closes it and this handler stands aside (it returns
+ *   early on optionsOpen/introOpen/pendingTrapRecipe) —
+ *   so Esc on open Options closes Options, and a second
+ *   Esc with nothing open re-opens it. The handler yields
+ *   when focus sits in a text input, textarea, or select
+ *   (the seed field): typing Esc there must not yank the
+ *   player into Options — flagged. It acts on Escape
+ *   alone and swallows nothing, so V/C and WASD are
+ *   untouched. Panels (inventory/crafting) are not modals,
+ *   so they do not block the toggle — flagged, not carved
+ *   out (Esc-to-close-panels-first is a follow-up if Adam
+ *   wants it). INDICATOR: "Esc — Options" (wording draft
+ *   for Adam's pin pass), bottom-right — seed controls
+ *   own bottom-left, the LocationChip owns bottom-centre,
+ *   bottom-right is free. Desktop only (hidden on touch:
+ *   no Esc key there, the visible Options control is
+ *   already the touch path); hidden while any modal is
+ *   open (then Esc closes, and the hint would read
+ *   wrong); pointer-events-none, a label only, not a
+ *   button. App.tsx only.
+ * - ESC + [X] OUT OF ANY MODAL, LIVE (Adam, 2026-10-27 —
+ *   DEV brief): AUDITED every dialog surface (role="dialog"
+ *   grep — exactly three true modals, no others): Options
+ *   modal (already X + backdrop + Escape — untouched),
+ *   intro modal (already X + backdrop + Escape — untouched),
+ *   Popup (the trap-craft confirm, the ONLY Popup use) —
+ *   which had only a "Close" text button: it gains a
+ *   visible [X] beside Close (kept, not replaced) plus
+ *   Escape while open. Popup's Escape listener mounts
+ *   only while open (effect no-ops when closed), acts on
+ *   Escape alone, and swallows nothing — V/C cycling and
+ *   WASD untouched, and Esc never fires with no modal up.
+ *   Topmost-only by construction: each modal's backdrop
+ *   covers the screen, so a second modal cannot be
+ *   user-opened beneath an open one, and Intro/Options
+ *   are mutually exclusive by wiring — one Esc closes
+ *   the one open modal. [X] is thumb-sized on touch
+ *   (new comfortable prop, passed isTouch by the trap
+ *   confirm), so phone is never left without a close
+ *   path. AUDITED BUT NOT MODALS, unchanged: ContextMenu
+ *   (world-anchored menus — Close action on every menu,
+ *   no backdrop, no aria-modal; Esc-on-menus is a
+ *   separate question if Adam wants it), InventoryPanel
+ *   + CraftingMenu (panels/sheets with onClose buttons),
+ *   placement banner (Cancel), PausedIndicator (a
+ *   button). Popup.tsx + App wiring (comfortable pass).
+ * - PLACED TORCHES, LIVE (Adam, 2026-10-27 — DEV brief,
+ *   hold lifted on Background 57028f1 + Systems e80f848):
+ *   a carried lit torch places and picks back up. PLACE:
+ *   the lit-torch inventory row gains Place (same
+ *   row-button pattern as house/fire Place + Eat + Light)
+ *   and places INSTANTLY AT HER FEET — the settled lean,
+ *   decided at build (the preview ghost is the house/fire
+ *   pattern, heavy for a torch); the panel stays open,
+ *   the count drops, the note carries the result. Grant
+ *   FIRST (Systems placeTorch consumes one lit-torch;
+ *   failure touches nothing), then the entity place
+ *   (Background primitive, emits torch:placed). CHIP:
+ *   each placed torch gets a world-anchored TorchChip
+ *   ("Lit Torch", fire-chip pattern, 44 px + touch
+ *   stopPropagation), tap opens a ContextMenu with Pick
+ *   up + Close. PICKUP: grant FIRST (Systems pickupTorch
+ *   returns lit-torch; 0 = pack full, the torch stays
+ *   placed and the menu stays open), then the entity
+ *   removal (emits torch:removed); the menu closes
+ *   explicitly on a grant. Placed torches stay lit
+ *   (no-burnout pin extended) and PERSIST: saveNow rides
+ *   torchState.snapshot() as-is, boot restores via
+ *   torchState.restore() BEFORE renderer construction
+ *   (fire pattern; id-less entries dropped — real saved
+ *   torches always carry an id). No hunger gate on
+ *   place/pickup (moves, like drop/pickup). Placeable
+ *   candles still later, distinct. New TorchChip.tsx +
+ *   App wiring (state, anchors, subscriptions, menu,
+ *   save wiring).
+ * - INTRO MODAL, LIVE (Adam, 2026-10-27 — DEV brief):
+ *   a first-run modal that explains the game briefly, says
+ *   who you're playing, then gives bullet points. Opens
+ *   when no save exists at boot (a corrupt save reads as
+ *   null, so it reads as fresh too); dismissing sets it
+ *   false for the session, and a player who never saves
+ *   sees it again next launch — the trigger working as
+ *   briefed, not a bug. Re-openable any time from the new
+ *   Introduction section in Options (Settings tab, after
+ *   Perspective): "Show introduction" closes Options and
+ *   opens the intro (Adam's re-open pin). Copy is DRAFT
+ *   for Adam's pin pass: game in two sentences (sixty
+ *   years on, Great Lakes wilds growing back wet and
+ *   strange), who (a witch, alone in the wilds — NO
+ *   invented name or origin story, none pinned), then
+ *   bullets: Adam's five in his words (Harvest; Find
+ *   food; Hunger is real; Discover your true abilities;
+ *   Discover what happened) plus the other core loops
+ *   ONLY as built (Build shelter; Craft tools; Light
+ *   fires; Explore) — no promised unbuilt system, and
+ *   ruins NOT listed as playable ("discover what
+ *   happened" is a direction, not a built feature).
+ *   Dismissal is X + backdrop tap + Escape, the same
+ *   trio as OptionsModal, so the Esc/[X]-out-of-any-
+ *   modal brief is met by construction here; the footer
+ *   line teaches the Options re-open path. No pause
+ *   wiring: the modal is read-and-dismiss, and the world
+ *   ticking behind it on a first run is trivial
+ *   (nothing placed, hunger 1 point per 30 seconds).
+ *   The LocationChip hides while the intro is open, like
+ *   any other modal. New IntroModal.tsx + OptionsModal
+ *   section + App wiring.
+ * - TORCH DRIVING, LIVE (Adam, 2026-10-27 — DEV brief,
+ *   umbrella precedent): the shell calls renderer.
+ *   setCarriesLitTorch(inventory.count(ITEMS.litTorch)
+ *   > 0) in refreshInventory (every inventory change
+ *   flows through it) plus a boot call after the
+ *   renderer exists for a restored lit torch — one
+ *   boolean, not per-platform (the renderer half is
+ *   shared by construction). Background's torch model +
+ *   light (44ead3d) stayed hidden by default until this
+ *   call; with it, the torch piece is functionally
+ *   complete (item + hand recipe + batch API + pill +
+ *   driving; the light values themselves stay
+ *   Background's). App.tsx only.
  * - WEIGHT DISPLAY, LIVE (Adam, 2026-10-27 — DEV brief,
  *   unheld on Systems' tool-exclusion fix 8d0aff2):
  *   personal capacity is pounds now. Panel header reads
@@ -844,6 +1026,402 @@
  *   cameraMode, fixing the boot that left the engine in
  *   'third' for a saved first/behind game). Regenerate
  *   clears all four via the existing paths. App.tsx only.
+ * - SCRY BUTTON, LIVE (Adam, 2026-10-27 — DEV brief,
+ *   supersedes the no-button amendment: "We can have a
+ *   scry button when she approaches water. This let's
+ *   the player know there is magic."): approach still
+ *   water and a Scry button appears; press reveals the
+ *   camp arrows. SPLIT, NOT REWRITE (DEV): visibility =
+ *   isNearStillWater on player:moved (Systems 9927ddab
+ *   stands as the query, no rebuild); reveal = press
+ *   calls evaluateCampReveal directly (no wrapper).
+ *   The button shows only when near water AND at least
+ *   one camp exists AND nothing is revealed (UI's call,
+ *   flagged — no dead presses, no invented copy); it
+ *   hides while revealed and reappears on arrival
+ *   (dismiss) if she is still at water; re-press
+ *   re-reveals. WATERS (shell-side derivation, flagged
+ *   TEMPORARY + replaceable — deleted in CAMP ARROWS
+ *   WIRING below, Background's adapter having landed
+ *   08bd0d5): river centerline samples at
+ *   RIVER_STEP, radius RIVER_WIDTH/2 (Systems'
+ *   prescribed shape), sampled ±64 m around her
+ *   along-course projection; ponds scanned from
+ *   generateChunk scatter in the 3x3 chunks around her,
+ *   radius 4.5 × scale (mirrors the renderer's pond
+ *   disc). Placement: bottom-centre above the
+ *   LocationChip, the PausedIndicator's seat — the two
+ *   never show together (Scry hides while paused);
+ *   hidden with any panel/modal open, like the
+ *   LocationChip. 44 px, same family as the pile
+ *   button; touch + desktop identical (parity). The
+ *   button IS the magic signal — no tutorial popup.
+ *   ARROWS GATE (plain at landing): press set the
+ *   CampDivination reveal state only — NO renderer arrow
+ *   API existed yet; wired in CAMP ARROWS WIRING below.
+ *   New ScryButton.tsx + App wiring (state, moved
+ *   evaluation, press, regenerate dismiss).
+ * - CAMP ARROWS WIRING, LIVE (Adam, 2026-10-27 — DEV
+ *   signal, Background's arrows + adapter 08bd0d5):
+ *   the Scry button's press now SHOWS the arrows, and
+ *   arrival-dismiss + regenerate HIDE them again.
+ *   handleScry calls renderer.setCampArrowsVisible(true)
+ *   on a shown reveal; the moved handler calls it with
+ *   false on arrival-dismiss; regenerate calls it with
+ *   false alongside the reveal dismiss. The renderer
+ *   rebuilds the arrows itself from placed houses
+ *   (shelter:placed + setWorldGen) — the shell only
+ *   toggles visibility, default hidden. The TEMPORARY
+ *   shell-side waters derivation is DELETED on this pass
+ *   (Background's game/waterProximity adapter is the
+ *   keeper: ponds-as-circles + river samples, 2.5-edge
+ *   aligned); visibility still evaluates on player:moved
+ *   via isNearStillWater over the adapter's list.
+ *   Off-screen camps get edge arrows from the renderer
+ *   (no shell work). Feature testable now: approach
+ *   water with a camp placed, press Scry, follow the
+ *   arrows home; arriving hides them. App.tsx only.
+ *   nearCreek wiring from the adapter is a follow-up,
+ *   not this pass.
+ * - LOOK ACTION, LIVE (Adam, 2026-10-27 — DEV-approved
+ *   claim + target + content, Systems NameSight
+ *   ccab7ff): a Look button beside the harvest actions
+ *   (first row of the harvest column, above the nearest
+ *   target's button) + a result line under it. Press
+ *   looks closely at the NEAREST SCATTER target
+ *   (kind-keyed; ground dirt/mud/grass is not a thing
+ *   to look at — flagged: the brief's ground-first order
+ *   is a harvest rule, and ground has no portions in
+ *   DEV's table, so LOOK skips it rather than showing
+ *   dead dirt names; DEV can redirect to verbatim
+ *   ground-first in one line). The shell owns one
+ *   NameSight; press records look(key, portions) and
+ *   shows display (known prefix joined ' - ') or the
+ *   plain name when nothing is known (unlisted kinds
+ *   record an empty look and show the plain name, per
+ *   DEV's null rule — flagged: empty looks count toward
+ *   practice). Result hides when the target leaves
+ *   range; regenerate clears the line (knowledge itself
+ *   persists — it is hers, not the world's). Portions
+ *   live in UI-owned src/ui/lookPortions.ts, DEV's
+ *   DRAFT table verbatim (17 kinds × 3 portions,
+ *   flagged draft for Adam's pin pass) — nothing
+ *   beyond the table is invented. Owl hook: boot calls
+ *   setOwlOwned(false) — the charm is later, its id
+ *   not decided, never invented. Save: nameSight rides
+ *   saveNow + boot restore (check-not-set block).
+ *   No hunger gate (looking is observation). New
+ *   LookButton.tsx + lookPortions.ts + App wiring +
+ *   one optional lookNode prop on
+ *   ProximityHarvestButtons (UI-owned file; claim
+ *   surface grew by that prop — stated plainly).
+ *   PARKED 2026-10-28 (Adam's word — see the PARK
+ *   bullet below): the button hides behind
+ *   LOOK_PARKED; the rest of this bullet still
+ *   describes the dormant code, which stays.
+ * - ALTAR PLACE + MARKER, LIVE (Adam, 2026-10-27 —
+ *   DEV signal, Systems 508fcb7 + Background 8302cdc):
+ *   the altar's inventory row gains Place (ITEMS.altar
+ *   joins PLACEABLE_IDS for the BUTTON only) placing
+ *   INSTANTLY AT HER FEET — torch precedent, not the
+ *   house/fire preview flow. Grant FIRST (Systems
+ *   placeAltar consumes one carried altar; failure
+ *   touches nothing + shows the reason), then the
+ *   entity place (Background primitive, emits
+ *   altar:placed → refreshAltars). Panel stays open,
+ *   count drops, altarNote carries the result ('Placed
+ *   an altar.'). One world-anchored AltarChip per
+ *   placed altar (label 'Altar', torch-chip styling) —
+ *   LABEL-ONLY at landing (no menu — rituals were not
+ *   in that order); the RITUAL WAKING UI build below
+ *   makes the chip a button opening the ritual panel
+ *   (still no Pick-up — removal is Adam's word later).
+ *   No hunger
+ *   gate (a move, like drop/pickup). Save: altars ride
+ *   saveNow as-is + boot restore BEFORE construction
+ *   (torch pattern; id-less dropped — real saved
+ *   altars always carry an id). Regenerate staleness
+ *   matches the fire/torch precedent (setWorldGen
+ *   clears the entity; shell state re-reads on the
+ *   next event). New AltarChip.tsx + App wiring.
+ *   Parity: shared row button + label chip, touch +
+ *   desktop. Placeable candles still later, distinct.
+ * - RITUAL WAKING UI, LIVE (Adam, 2026-10-27 — DEV
+ *   signal, Systems 939e9b3 + Background 58537ef):
+ *   tier-1 Waking, altar sites only (see flags). The
+ *   altar chip is now a button opening a world-anchored
+ *   RitualPanel (new RitualPanel.tsx, props-driven, no
+ *   game/systems imports): unstaged site → kind list
+ *   (17 Waking kinds, shrew excluded — outright — each
+ *   hinted with its sky; awakened kinds filtered out,
+ *   re-awakening is pointless since awaken never
+ *   downgrades); staged site → required recipe as rows
+ *   (bone placed, offering given, name spoken, in the
+ *   crafting-row pattern) + TIME line ONLY when the
+ *   ritual requires one (sky 'none' → no line) with
+ *   window-open/closed state. Steps: Stage bone (shell
+ *   checks the site snapshot FIRST — an occupied site
+ *   REFUSES, flagged: no StagingBook entry-clear exists
+ *   for the replace branch, and silently dropping a
+ *   staged ritual is worse than refusing; no inventory
+ *   move — bone items do not exist yet, Systems'
+ *   contract), Give offering (one button per carried
+ *   food kind; shell consumes iff giveOffering accepts
+ *   — poison + raw acorns refused first), Speak name
+ *   (looks from NameSight, minLooks enforced). No
+ *   complete button: completion is state-based — the
+ *   shell checks after every step + on the 1 s timer
+ *   (window-arrival path), and a staged ritual whose
+ *   window is open completes at once (mid-window
+ *   staging completes immediately; missed → next
+ *   window; 'none' → immediate on all-offered). On
+ *   completion the shell records the awakening, frees
+ *   the site (unstage), says 'The {bone} awakens.'
+ *   ('gain') at the site, and saves. First-charm row:
+ *   boot grantFirstCharm AFTER the CharmState restore
+ *   (idempotent — fresh save gains the shrew charm
+ *   in the LIST, loaded awakening gains nothing, no
+ *   full-pack failure since Systems 9e9a9dd — the
+ *   grant records no item) + row note from Systems'
+ *   boneNote in the
+ *   bone build below (SUPERSEDES the numbers note
+ *   'Stirs at hunger 45; drains 10% slower' computed
+ *   from the DRAFT constants — shrew's row now reads
+ *   Systems' phrase; machinery BUILT in the
+ *   shrew-effect bullet below (latch + multiplier
+ *   wired, display live).
+ *   Save: stagings + awakenings ride saveNow as-is +
+ *   boot restore BEFORE construction (ritualSite
+ *   restore derives site positions from altarState /
+ *   the stump key; boulders skipped — none exist).
+ *   Regenerate clears stagings (sites gone) + closes
+ *   the panel; awakenings persist (hers, like LOOK
+ *   counts). FLAGGED GAPS, not hidden — ALL THREE
+ *   CLOSED by the individual-bone build below (kept
+ *   here as history): (1) speak-name was unreachable
+ *   (bone kinds had nothing to LOOK at) — now a bone
+ *   PICKUP records 1 LOOK at its kind (Adam's ruling),
+ *   and world bone LOOK portions exist, so the gate
+ *   reads satisfied at looks ≥ 1. (2) Stump staging
+ *   was unreachable (presence booleans only) — now
+ *   Background's stumpPositions surface feeds stump
+ *   chips + panels. (3) Awakened charms beyond shrew
+ *   had no inventory row — now every bone kind reads
+ *   its note from Systems' boneNote. The completion
+ *   feedback still names the awakening and claims no
+ *   item (the bone was consumed at staging; the
+ *   awakening record IS the charm). Bone display
+ *   'Primal Bone - {shape}' with spaces is UI's
+ *   presentation call (slugs are the
+ *   shape names). Parity: shared panel + chip, touch +
+ *   desktop. New RitualPanel.tsx + AltarChip button +
+ *   App wiring.
+ * - INDIVIDUAL BONE DISPLAY + PICKUP, LIVE (Adam,
+ *   2026-10-28 — DEV signal, Systems 7402376 +
+ *   Background 9bf91e4): the ritual build's three
+ *   flagged gaps close here, plus the pickup ruling.
+ *   (1) INVENTORY ROWS: every carried primal bone
+ *   reads its note from Systems' boneNote — raw:
+ *   'Needs a ritual site'; awakened: 'Tier <n> ·
+ *   <effect phrase>' (tier from the awakening record;
+ *   phrase fallback 'Awakened'). Bone graphic reuses
+ *   the world bone look (Adam's direction — no
+ *   per-kind inventory art; kind via name). The shrew
+ *   row's numbers note is superseded by boneNote's
+ *   phrase (Systems-canonical; phrases DRAFT from the
+ *   bone-charms doc, flagged for Adam's pin pass).
+ *   (2) WORLD BONE LOOK: bone scatter targets gain
+ *   LOOK portions in lookPortions.ts — DEV-approved
+ *   triple ['Bone', 'pale bone', 'long pale bone'],
+ *   IDENTICAL for all 17 kinds (flagged: shape is
+ *   pickup's gift, not LOOK's). The shell resolves
+ *   the kind from the TARGET position (id-encoded
+ *   x,z via boneKindAt) and looks under the KIND key;
+ *   a malformed position looks at nothing. World
+ *   description stays PARTIAL (family first); the
+ *   picked-up description is the IDENTIFIED change
+ *   (world partial → inventory identified).
+ *   (3) PLACE-BONE CONSUMES: handleStageBone now
+ *   stages via stageBoneFromInventory (possession
+ *   check + consume 1 + record; refusals consume
+ *   nothing) — raw placeBone is no longer called
+ *   (it would leave the bone both carried and
+ *   staged). The panel MUST switch: until this
+ *   landing, staging left bones duplicated.
+ *   (4) STUMP STAGING: stumpPositions at her feet
+ *   feeds world-anchored 'Stump' chips (AltarChip
+ *   with a label prop — one chip family, label
+ *   naming the site) opening the same RitualPanel
+ *   (siteLabel 'Stump', site id 'stump:x,z'); the
+ *   selection + derivation generalized from altar
+ *   ids to site ids. A stump now has two doors
+ *   (Craft StationPanel + ritual chip) — flagged,
+ *   same object, two interactions. Completion
+ *   feedback anchors at the staged site's recorded
+ *   position (both kinds; the old altarState-only
+ *   lookup stranded stump completions at her feet).
+ *   PICKUP COUNTS AS A LOOK (Adam's ruling,
+ *   Systems 70f20b5): every successful bone pickup
+ *   grant records 1 NameSight look at its kind via
+ *   Systems' recordBonePickupLook (THE shell path —
+ *   kind from the granted item id, portions from
+ *   UI's bone table, one look per granted kind).
+ *   Three grant paths wired: harvest:completed
+ *   ('harvest' + 'remove' — a remove takes the bone
+ *   too; carried yields only, overflow-dropped piles
+ *   excluded), menu take-one/take-all, and whole-pile
+ *   pickup (touch USE + desktop button). A
+ *   failed/full-pack grant records nothing. The
+ *   panel gate already reads looksAt and shows
+ *   satisfied at ≥ 1 — no panel change. NOTE: an
+ *   earlier DEV signal instructed position-derived
+ *   kind resolution for pickups; Systems' helper
+ *   (landed after that signal) derives kind from
+ *   the item instead, and agrees with the position
+ *   derivation by construction — the helper is the
+ *   path used. Position derivation survives only
+ *   for WORLD LOOK (no item yet). The old
+ *   shaping-note divergence is RESOLVED by 70f20b5
+ *   (rituals.ts header now records the ruling).
+ *   LOOK NOTE: Adam's 'for now' became a PARK
+ *   (2026-10-28, see the PARK bullet below) —
+ *   portions built as approved, button hidden,
+ *   LOOK not removed. Parity: shared panel +
+ *   chips + rows, touch + desktop. New: lookPortions
+ *   bone entries + AltarChip label + App wiring.
+ * - LOOK PARKED, LIVE (Adam, 2026-10-28: "We'll
+ *   park the look notion for now" — DEV signal):
+ *   the world-LOOK button/entry hides behind a
+ *   LOOK_PARKED flag (one line to unpark) — LOOK
+ *   is dormant, NOT deleted. NameSight state +
+ *   save wiring, the lookPortions table (incl. bone
+ *   entries), handleLook, and the pickup-look wiring
+ *   ALL STAY. The pickup-look helper stays ACTIVE
+ *   (it is the tier-1 gate path, not the button);
+ *   the speak-name gate stays pickup-look — parking
+ *   drops no gate. The parked render still references
+ *   lookTarget, so unparking restores the exact prior
+ *   surface (button + result line). No other file
+ *   touched. Parity: nothing visible changes except
+ *   the hidden button, touch + desktop alike.
+ * - SHREW EFFECT DISPLAY + WIRING, LIVE (DEV
+ *   signal, Systems 5e0af26 — latch + multiplier):
+ *   the tier-1 shrew effect is now LIVE end to end.
+ *   DISPLAY: HungerIndicator gains an optional
+ *   warning line — 'The shrew bone stirs.' under the
+ *   bar while the latch is active (steady state),
+ *   pulsing (animate-pulse) for a 2 s flash window
+ *   on the entry edge (fired), then standing steady.
+ *   The indicator holds no timers; the shell owns
+ *   the flash window. WIRING: one shell sync,
+ *   syncShrewEffect, called on every hunger change
+ *   (1 s timer, eat via refreshInventory), every
+ *   inventory change (refreshInventory), and boot
+ *   (after restore + grant — covers the boot-grant
+ *   path AND the loaded-save boot, since the
+ *   multiplier is session state, never saved). The
+ *   sync calls latch update(hunger, carried) +
+ *   setDrainMultiplier(carried ? 0.9 : 1). Carried
+ *   is SHELL-SUPPLIED — LIST MEMBERSHIP since the
+ *   charm-list build below (Systems 9e9a9dd): the
+ *   list IS the awakened kinds, so carried =
+ *   isAwakened, and the old carried && awakened
+ *   formula collapses to it. The interim main-
+ *   inventory count is gone (the shrew item no
+ *   longer sits in main inventory). DEVIATION
+ *   BLESSED (DEV 2026-10-28): the landed
+ *   shrewEffectActive(inventory, charms) reads the
+ *   main inventory directly and is NOT used — the
+ *   shell path is the list-ready one and stays;
+ *   Systems noted the helper UNUSED pending a
+ *   signature change to a shell-supplied boolean.
+ *   Latch edges honored: fires once on entry into
+ *   ≤ 45 while listed (including a below-threshold
+ *   boot), re-arms above 45, resets when not
+ *   listed. Tier 1 only; LOOK parked. Parity: the
+ *   meter + line are shared, touch + desktop alike.
+ * - CHARM LIST PANEL, LIVE (DEV signal, Systems
+ *   9e9a9dd — listCharms view, grant-to-list,
+ *   shrew-only save migration): the playable charm
+ *   system completes on the UI side. PANEL: new
+ *   CharmsPanel (props-driven, InventoryPanel
+ *   pattern) — list in awakening order (kind +
+ *   tier, from listCharms) + detail per charm
+ *   (display name, tier, Systems' note — no
+ *   invented effect text). DOOR: a Charms button
+ *   beside Inventory/Crafting in BOTH rows (HUD
+ *   stack row + touch slim bar); opening selects
+ *   the first charm when the current selection is
+ *   not listed. The panel hides the LocationChip +
+ *   Scry button like every other panel, closes via
+ *   its X + the Hide HUD button, and reads the list
+ *   live each render (no refresh plumbing — a
+ *   ritual completion re-renders through the
+ *   ritual version bump, and the panel opens fresh
+ *   on the current list). SWITCH: syncShrewEffect's
+ *   carried line moves to list membership (above)
+ *   — this RESUMES the shrew effect, closing the
+ *   interim window (no visible row + carried false
+ *   since the list landed). CALL: the boot grant
+ *   call updates to grant-to-list semantics (no
+ *   item → no refreshInventory on grant; a grant
+ *   saves the awakening; the legacy inventory
+ *   param is still passed — its removal rides a
+ *   Systems change, flagged to DEV). ROWS: no
+ *   duplicate rows — the shrew item is gone from
+ *   main inventory by migration (loaded saves) or
+ *   never granted (fresh saves), and the charm
+ *   shows in the list panel only; raw bones still
+ *   show in main inventory via boneNote ('Needs a
+ *   ritual site' / 'Tier n · phrase' for a second
+ *   copy of an awakened kind). Parity: panel +
+ *   door shared, touch + desktop alike.
+ * - ZONE COORDS + CHARM-HOOK WIRING, LIVE (Adam,
+ *   2026-10-28 — "squeeze in next build"; Background
+ *   zones.ts 9dd1b36 + G1/G2/G3 hooks): two items,
+ *   one push. ZONES: the LocationChip gains the zone
+ *   readout — App calls zoneCoords(position) (the
+ *   helper is the single source of truth: 32 m chunk
+ *   zones, world origin, east +x, north-positive
+ *   second axis, floor) and passes the NUMBERS; the
+ *   chip formats [+10, 0] style ('+' on positives
+ *   both axes, plain zero/negatives) beside the
+ *   position, ticking as she walks. No size/sign/
+ *   origin invented here. HOOKS: syncCharmHooks
+ *   mirrors syncShrewEffect — five landed setters
+ *   on list-membership + awakened booleans (never
+ *   main-inventory count): renderer pigeon (arrows
+ *   without water while listed), owl (night sight),
+ *   bat (night way-finding); player fox (swift
+ *   step); module mole (clay bonus). Call sites are
+ *   the only list-change paths — boot (after
+ *   restore + grant) + ritual completion (after
+ *   awaken) — no timer. Pigeon always-on: the
+ *   arrival-dismiss path is untouched (it clears
+ *   only the scry flag; the OR keeps pigeon arrows
+ *   up while listed). Scry stays the early
+ *   water-gated path; frog hint display excluded
+ *   (waits for Systems' frog fact). Parity: chip +
+ *   hooks shared, touch + desktop alike.
+ * - FROG WATER HINT, LIVE (Systems 126c9aa —
+ *   nearestStillWater fact): the queue's last display
+ *   piece. App derives the fact per render from
+ *   position (waters via stillWatersNear, both ranges
+ *   default — adapter 50 + fact 50 draft — no range
+ *   or math invented); gate = frog listed (isAwakened
+ *   'frog-pelvis') AND fact non-null; null = no hint
+ *   (no waters, beyond range, already at water).
+ *   New FrogHint (props-driven, text-only,
+ *   pointer-events-none): "Still water 23 m NE" —
+ *   8-point compass from the fact's unit vector
+ *   under the compass pin (East +x, North −z),
+ *   whole meters rounded for display only (the
+ *   fact's float is the truth). Seat: bottom-centre
+ *   above the LocationChip, hidden with any panel/
+ *   modal open or paused; when the scry button is
+ *   also showing, the hint lifts above it so the two
+ *   never stack on one seat. Parity: shared, touch +
+ *   desktop alike.
  * POINTER DISCIPLINE: overlays are pointer-events-none except the
  * small interactive pieces (HUD buttons, panels, harvest buttons),
  * so world clicks — including the first-person mouse-capture click
@@ -859,8 +1437,12 @@ import { bus, type EventMap } from './game/events';
 import { pauseState } from './game/pause';
 import {
   createHarvestOutcomeListener,
+  setMoleEarthSense,
   stationPresence,
+  stumpPositions,
 } from './game/harvest';
+import { zoneCoords } from './game/zones';
+import { FrogHint } from './ui/FrogHint';
 import { BIOME_BY_ID } from './game/biomes';
 import {
   fireState,
@@ -881,7 +1463,17 @@ import {
   HOUSE_DEFS,
   type HouseType,
 } from './game/shelter';
-import { cycleSplit } from './game/sky';
+import {
+  evaluateCampReveal,
+  isNearStillWater,
+  nearestStillWater,
+  findCamps,
+  CampDivination,
+} from './systems/divination';
+import { stillWatersNear } from './game/waterProximity';
+import { NameSight } from './systems/name-sight';
+import { portionsForKind, lookKeyForTarget } from './ui/lookPortions';
+import { cycleSplit, cyclePhase, currentMoonPhase } from './game/sky';
 import { createSleepListener } from './game/sleep';
 import {
   DEFAULT_SEED,
@@ -910,9 +1502,13 @@ import { FireState, type FireChipStatus } from './ui/FireState';
 import { PlacementPreview } from './ui/PlacementPreview';
 import { ContextMenu } from './ui/ContextMenu';
 import { PileChip } from './ui/PileChip';
+import { TorchChip } from './ui/TorchChip';
+import { AltarChip } from './ui/AltarChip';
 import type { ContextAction } from './ui/types';
 import { TouchControls } from './ui/TouchControls';
 import { LocationChip } from './ui/LocationChip';
+import { ScryButton } from './ui/ScryButton';
+import { LookButton } from './ui/LookButton';
 import { PausedIndicator } from './ui/PausedIndicator';
 import { Popup } from './ui/Popup';
 import {
@@ -922,6 +1518,7 @@ import {
   saveFontChoice,
   type FontId,
 } from './ui/OptionsModal';
+import { IntroModal } from './ui/IntroModal';
 import { InventoryPanel } from './ui/InventoryPanel';
 import { CraftingMenu } from './ui/CraftingMenu';
 import { ProximityHarvestButtons } from './ui/ProximityHarvestButtons';
@@ -982,6 +1579,34 @@ import {
   type CraftingStation,
   type ItemId,
 } from './systems/recipes';
+import { torchState, type PlacedTorch as PlacedTorchEntity } from './game/torchState';
+import { lightTorches, placeTorch as grantPlaceTorch, pickupTorch as grantPickupTorch } from './systems/torch';
+import { altarState, type PlacedAltar as PlacedAltarEntity } from './game/altarState';
+import { placeAltar as grantPlaceAltar } from './systems/altar';
+import { ritualSiteState, stumpSiteId } from './game/ritualSite';
+import { boneKindAt } from './game/boneKind';
+import {
+  RITUAL_RECIPES,
+  ritualRecipeFor,
+  windowOpen,
+  stageBoneFromInventory,
+  StagingBook,
+  type SkyFacts,
+} from './systems/rituals';
+import {
+  CharmState,
+  grantFirstCharm,
+  listCharms,
+  boneNote,
+  boneKindFor,
+  isBoneItem,
+  recordBonePickupLook,
+  HungerWarning,
+  FIRST_CHARM_KIND,
+  FIRST_CHARM_EFFECT,
+} from './systems/charms';
+import { RitualPanel } from './ui/RitualPanel';
+import { CharmsPanel } from './ui/CharmsPanel';
 
 type BusHarvestTarget = EventMap['harvest:inRange']['targets'][number];
 
@@ -1068,11 +1693,17 @@ const HOUSE_ITEM_TO_TYPE: Record<string, HouseType> = {
   [ITEMS.smallWoodenHut]: 'smallWoodenHut',
 };
 
-/** Item ids the inventory panel offers a Place button for. */
+/** Item ids the inventory panel offers a Place button for.
+ * Lit torches and altars ride this set for the BUTTON only —
+ * their handlers branch to instant-at-feet (see
+ * handlePlaceItem), never the preview-ghost flow the other
+ * ids use. */
 const PLACEABLE_IDS: ReadonlySet<string> = new Set([
   ...Object.keys(FIRE_ITEM_TO_TYPE),
   ...Object.keys(HOUSE_ITEM_TO_TYPE),
   ITEMS.loom,
+  ITEMS.litTorch,
+  ITEMS.altar,
 ]);
 
 const FIRE_NAME: Record<FireType, string> = {
@@ -1221,6 +1852,17 @@ const FOOD_IDS: ReadonlySet<string> = new Set([
   ...COOK_REQUIRED_ITEMS,
 ]);
 
+/**
+ * Items that gain a Light button in the inventory panel:
+ * unlit torches only (a lit torch is already lit — no dead
+ * button on it). The press is the FLINT route of Systems'
+ * batch lighting (flint + river-stone carried, both kept);
+ * the fire route arrives with UI's lit-fire 'light torches'
+ * pill, whose host menu opens in every state since UI's
+ * lit-menu fix fe7b304.
+ */
+const TORCH_IDS: ReadonlySet<string> = new Set([ITEMS.torch]);
+
 /** Engine house type → Systems house item (for HomeStorage). */
 const HOUSE_TYPE_TO_ITEM: Record<HouseType, string> = {
   leanTo: ITEMS.primitiveLeanTo,
@@ -1277,6 +1919,7 @@ function toInventoryItem(
     quantity: number;
   },
   inventory: PersonalInventory,
+  charms: CharmState,
 ): InventoryItem {
   return {
     id: stack.item,
@@ -1287,8 +1930,31 @@ function toInventoryItem(
     quantityText: String(stack.quantity),
     weightText: weightTextFor(stack.item, stack.quantity, inventory),
     icon: stack.item === UMBRELLA_ITEM_ID ? <UmbrellaIcon /> : undefined,
+    // Bone rows (individual-bone build, 2026-10-28):
+    // every carried primal bone reads its note from
+    // Systems' boneNote — raw: 'Needs a ritual site';
+    // awakened: 'Tier <n> · <effect phrase>' (tier from
+    // the awakening record, so tier-ups flow through;
+    // phrase fallback 'Awakened' for a kind without a
+    // drafted phrase). This SUPERSEDES the tier-1
+    // Waking build's first-charm note (which computed
+    // 'Stirs at hunger 45; drains 10% slower' from the
+    // DRAFT constants): Systems' boneNote is now the
+    // canonical note, and shrew's phrase ('Stirs when
+    // hunger falls, warning before the slowdown; small
+    // hunger bonus while carried') is Systems' adopted
+    // draft shape — the numbers no longer render.
+    // Phrases are DRAFT (bone-charms doc, not pins),
+    // flagged for Adam's pin pass. Non-bone stacks
+    // keep no note.
+    note: (() => {
+      const kind = boneKindFor(normalizeItemId(stack.item));
+      return kind === null ? undefined : boneNote(kind, charms);
+    })(),
   };
 }
+
+
 
 export default function App() {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -1429,6 +2095,8 @@ export default function App() {
   const homeStoresRef = useRef(new Map<string, HomeStorage>());
   const homeStoreItemsRef = useRef(new Map<string, Set<string>>());
   const [eatNote, setEatNote] = useState<string | null>(null);
+  const [torchNote, setTorchNote] = useState<string | null>(null);
+  const [altarNote, setAltarNote] = useState<string | null>(null);
   const [dropNote, setDropNote] = useState<string | null>(null);
   const [storageNote, setStorageNote] = useState<string | null>(null);
 
@@ -1448,6 +2116,10 @@ export default function App() {
   const [switching, setSwitching] = useState(false);
   const [inventoryOpen, setInventoryOpen] = useState(false);
   const [craftingOpen, setCraftingOpen] = useState(false);
+  const [charmsOpen, setCharmsOpen] = useState(false);
+  const [selectedCharmKind, setSelectedCharmKind] = useState<string | null>(
+    null,
+  );
   const [selectedItemId, setSelectedItemId] = useState<string | undefined>(
     undefined,
   );
@@ -1486,6 +2158,166 @@ export default function App() {
     { fire: PlacedFire; x: number; y: number }[]
   >([]);
   const [selectedFireId, setSelectedFireId] = useState<string | null>(null);
+  // Placed torches (Background singleton, read fresh on every
+  // event), their projected anchors, and the torch whose menu
+  // is open — the fire-chip pattern, one torch per chip. The
+  // menu is LIVE like the fire menu: selectedTorchId names
+  // the torch, and the menu renders from the live torch in
+  // placedTorches; a picked-up torch closes it (the find
+  // returns undefined, and the handler closes explicitly).
+  const [placedTorches, setPlacedTorches] = useState<PlacedTorchEntity[]>(
+    () => torchState.snapshot(),
+  );
+  const [torchAnchors, setTorchAnchors] = useState<
+    { torch: PlacedTorchEntity; x: number; y: number }[]
+  >([]);
+  const [selectedTorchId, setSelectedTorchId] = useState<string | null>(null);
+  // Placed altars (Background singleton, read fresh on every
+  // event) and their projected anchors — the torch pattern
+  // minus the menu: the altar chip is label-only (no ritual
+  // actions exist yet, no Pick-up invented), so there is no
+  // selected-altar state at all.
+  const [placedAltars, setPlacedAltars] = useState<PlacedAltarEntity[]>(
+    () => altarState.snapshot(),
+  );
+  const [altarAnchors, setAltarAnchors] = useState<
+    { altar: PlacedAltarEntity; x: number; y: number }[]
+  >([]);
+  // Ritual staging (tier-1 Waking build): the shell owns
+  // one StagingBook (site + kind keyed stagings) and one
+  // CharmState (awakening records). Both are refs — their
+  // mutations do not render by themselves, so every
+  // staging step + ritual event bumps ritualVersion to
+  // re-render the panel. The panel derives its staged
+  // display from ritualSiteState (the physical bone) +
+  // the book (the steps), never from a snapshot.
+  const stagingBookRef = useRef(new StagingBook());
+  const charmStateRef = useRef(new CharmState());
+  // The ritual site whose panel is open, by SITE ID
+  // ('altar:<n>' or 'stump:x,z' — one selection for
+  // both site kinds since the bone build; the panel +
+  // derivation are site-kind-agnostic, only the label
+  // and anchor source differ). Renamed from
+  // selectedAltarId when stump sites gained panels.
+  const [selectedSiteId, setSelectedSiteId] = useState<string | null>(null);
+  // Stump ritual anchors (bone build): stumpPositions
+  // at her feet, projected like altar anchors. State,
+  // not memo — projection needs the live container +
+  // camera, so it rides recomputeAnchors with the rest.
+  const [stumpAnchors, setStumpAnchors] = useState<
+    { siteId: string; x: number; y: number }[]
+  >([]);
+  // SHREW EFFECT SHELL (Systems 5e0af26 — latch +
+  // drain multiplier built; display + wiring are UI's):
+  // one latch, session-only (nothing saved — first
+  // update below threshold after boot fires fresh,
+  // which is the correct behavior per the latch
+  // contract). syncShrewEffect is THE shell sync, called
+  // on every hunger change (1 s timer, eat), every
+  // inventory change (refreshInventory), and boot
+  // (after restore + grant). It reads only refs + the
+  // two stable singletons (inventory, hunger), so the
+  // boot effect's first-render closure stays correct
+  // (saveNow pattern).
+  const warningRef = useRef(new HungerWarning(FIRST_CHARM_EFFECT.warnAt));
+  const [hungerWarningActive, setHungerWarningActive] = useState(false);
+  const [hungerWarningFlash, setHungerWarningFlash] = useState(false);
+  const warningFlashTimerRef = useRef<number | undefined>(undefined);
+  const syncShrewEffect = () => {
+    // Carried source, SHELL-SIDE (DEV instruction):
+    // LIST MEMBERSHIP since the charm-list landing
+    // (Systems 9e9a9dd) — the list IS the awakened
+    // kinds, so carried = isAwakened, and the drain
+    // formula's carried && awakened collapses to it.
+    // This is the switch the shrew build staged: the
+    // interim main-inventory count is gone (the shrew
+    // item no longer sits in main inventory — the
+    // save migration drops it on load, and the grant
+    // records no item). Deliberately NOT
+    // shrewEffectActive(inventory, charms): the landed
+    // helper reads the main inventory directly, which
+    // goes wrong once the list lands (list charms are
+    // not inventory stacks) — DEV blessed leaving it
+    // unused, and Systems noted it UNUSED pending a
+    // signature change to a shell-supplied boolean.
+    const shrewCarried = charmStateRef.current.isAwakened(FIRST_CHARM_KIND);
+    const result = warningRef.current.update(hunger.value(), shrewCarried);
+    // Boolean setState bails out when unchanged, so
+    // the steady state costs no re-render; fired is an
+    // edge by construction (entry only), so the flash
+    // needs no prev comparison either.
+    setHungerWarningActive(result.active);
+    if (result.fired) {
+      setHungerWarningFlash(true);
+      window.clearTimeout(warningFlashTimerRef.current);
+      warningFlashTimerRef.current = window.setTimeout(() => {
+        setHungerWarningFlash(false);
+      }, 2000);
+    }
+    hunger.setDrainMultiplier(
+      shrewCarried ? FIRST_CHARM_EFFECT.drainMultiplier : 1,
+    );
+  };
+  // CHARM-HOOK SYNC (zone + hooks build, Background G1/G2/G3):
+  // the five landed charm hooks take shell-supplied
+  // carried + awakened booleans — list membership via
+  // isAwakened per kind, NEVER main-inventory count
+  // (list charms are not inventory stacks, same rule
+  // as syncShrewEffect). The setters are idempotent
+  // booleans, so re-syncing is harmless. Call sites are
+  // the ONLY list-change paths — boot (after restore +
+  // grant) and ritual completion (after awaken) — no
+  // timer: hook booleans change only on awakening.
+  // Pigeon always-on: the renderer ORs scry + pigeon
+  // (arrowsVisible), so the arrival-dismiss path clears
+  // only the scry flag — pigeon arrows stay while the
+  // charm is listed, by design (effects are always on).
+  // Fox reaches the player controller (nullable ref);
+  // mole is a module-level setter; the three vision
+  // hooks reach the renderer (nullable ref).
+  const syncCharmHooks = () => {
+    const charms = charmStateRef.current;
+    rendererRef.current?.setPigeonWayHome(
+      charms.isAwakened('pigeon-wing-bone'),
+    );
+    rendererRef.current?.setOwlNightSight(charms.isAwakened('owl-talon'));
+    rendererRef.current?.setBatNightWayfinding(
+      charms.isAwakened('bat-wing-bone'),
+    );
+    playerRef.current?.setSwiftStep(charms.isAwakened('fox-femur'));
+    setMoleEarthSense(charms.isAwakened('mole-paw'));
+  };
+  const [ritualNote, setRitualNote] = useState<string | null>(null);
+  const [, setRitualVersion] = useState(0);
+  const refreshRitual = () => {
+    setRitualVersion((version) => version + 1);
+  };
+  // Scry button (Adam 2026-10-27 — DEV split, not a rewrite):
+  // visibility = near still water on movement, reveal = press
+  // only (Systems 9927ddab stands as the query). The shell
+  // owns one CampDivination: press reveals, arrival dismisses
+  // (persist-until-arrival, Systems' rule). The button shows
+  // only when near water AND at least one camp exists AND
+  // nothing is revealed (UI's call, flagged — no dead presses,
+  // no invented copy); it hides while revealed and reappears
+  // on arrival-dismiss if she is still at water. Waters come
+  // from Background's adapter (game/waterProximity); arrows
+  // show/hide through renderer.setCampArrowsVisible.
+  const divinationRef = useRef(new CampDivination());
+  const [scryVisible, setScryVisible] = useState(false);
+  // LOOK action (Adam 2026-10-27 — DEV-approved claim +
+  // target + content, Systems NameSight ccab7ff): the shell
+  // owns one NameSight; a press looks closely at the
+  // nearest SCATTER target (kind-keyed) and shows what is
+  // known (or the plain name). Owl hook: boot sets
+  // not-owned (the charm is later, its id not decided,
+  // never invented). The result line belongs to one
+  // target id and hides when that target leaves range.
+  const nameSightRef = useRef(new NameSight());
+  const [lookResult, setLookResult] = useState<{
+    targetId: string;
+    text: string;
+  } | null>(null);
   // Pile chips (projected anchors, fire-chip pattern) and the
   // pile whose menu is open. The menu is LIVE, not a tap-time
   // snapshot: selectedPileId names the pile, and the menu
@@ -1510,7 +2342,9 @@ export default function App() {
   const placementRef = useRef<PlacementMode | null>(null);
 
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>(() =>
-    inventory.stacksSnapshot().map((stack) => toInventoryItem(stack, inventory)),
+    inventory.stacksSnapshot().map((stack) =>
+      toInventoryItem(stack, inventory, charmStateRef.current),
+    ),
   );
   const [capacityText, setCapacityText] = useState(
     () =>
@@ -1534,8 +2368,15 @@ export default function App() {
 
   const refreshInventory = () => {
     setInventoryItems(
-      inventory.stacksSnapshot().map((stack) => toInventoryItem(stack, inventory)),
+      inventory.stacksSnapshot().map((stack) =>
+        toInventoryItem(stack, inventory, charmStateRef.current),
+      ),
     );
+    // Every inventory change re-syncs the shrew effect
+    // (carried may have flipped — grant, consume, take,
+    // drop, eat). The 1 s timer below is the backstop
+    // for any mutation path that skips this refresh.
+    syncShrewEffect();
     setCapacityText(
       `Carrying ${formatLb(inventory.usedLb())} lb / ${formatLb(inventory.capacityLb())} lb`,
     );
@@ -1547,6 +2388,14 @@ export default function App() {
     // refreshInventory is never called before boot, but the
     // ?. keeps an early call from crashing.
     rendererRef.current?.setCarriesUmbrella(carriesUmbrella(inventory));
+    // TORCH DRIVING (same pattern): the carried lit-torch
+    // model + light tracks the live inventory — one
+    // boolean, lit torch carried or not. The renderer owns
+    // the model + light (left hand, supersedes the candle);
+    // the shell only drives the boolean.
+    rendererRef.current?.setCarriesLitTorch(
+      inventory.count(ITEMS.litTorch) > 0,
+    );
   };
 
   // Save meta mirror: seed / camera / position as of the latest
@@ -1634,6 +2483,31 @@ export default function App() {
           // filtering; serializeSave writes them verbatim and
           // trapState.restore() validates on load).
           traps: trapState.snapshot(),
+          // PLACED-TORCH SAVE WIRING: the live placed-torch
+          // set rides every save as-is (ids + positions
+          // verbatim; serialize writes ids when present,
+          // restore validates on load and drops id-less
+          // entries). A path of torches survives refresh.
+          torches: torchState.snapshot(),
+          // PLACED-ALTAR SAVE WIRING: the live placed-altar
+          // set rides every save as-is (ids + positions
+          // verbatim; serialize writes ids when present,
+          // restore validates on load and drops id-less
+          // entries). Placed altars survive refresh.
+          altars: altarState.snapshot(),
+          // RITUAL SAVE WIRING: stagings + awakenings ride
+          // every save as-is (StagingBook / CharmState
+          // snapshots; serialize writes them verbatim,
+          // restore validates on load and drops bad
+          // entries). Staged rituals + awakenings survive
+          // refresh.
+          stagings: stagingBookRef.current.snapshot(),
+          awakenings: charmStateRef.current.snapshot(),
+          // LOOK SAVE WIRING: the live look counts ride
+          // every save (snapshot as-is, first-look order;
+          // serialize writes them verbatim, restore
+          // validates on load). Knowledge survives refresh.
+          nameSight: nameSightRef.current.snapshot(),
           // WORLD-STATE SAVE WIRING: harvest state, sky
           // cycle, and facing ride every save (all three
           // draft fields optional — serialize defaults
@@ -1728,6 +2602,42 @@ export default function App() {
       fires.push({ fire, x: anchor.x, y: anchor.y });
     }
     setFireAnchors(fires);
+    const torches: { torch: PlacedTorchEntity; x: number; y: number }[] = [];
+    for (const torch of torchState.snapshot()) {
+      const anchor = projectAnchor(torch.x, torch.z, 'scatter');
+      if (!anchor) continue;
+      torches.push({ torch, x: anchor.x, y: anchor.y });
+    }
+    setTorchAnchors(torches);
+    const altars: { altar: PlacedAltarEntity; x: number; y: number }[] = [];
+    for (const altar of altarState.snapshot()) {
+      const anchor = projectAnchor(altar.x, altar.z, 'scatter');
+      if (!anchor) continue;
+      altars.push({ altar, x: anchor.x, y: anchor.y });
+    }
+    setAltarAnchors(altars);
+    // Stump ritual anchors (bone build): stumps in
+    // range at her feet (Background's stumpPositions —
+    // felled + grown, deduped), projected 'scatter'
+    // like altars. Same tick/event cadence as the rest
+    // of this function (not per-frame); the scan cost
+    // matches stationPresence's chunk scan on move.
+    // A stump that leaves range drops its anchor, and
+    // the live panel derivation closes its panel.
+    const stumps: { siteId: string; x: number; y: number }[] = [];
+    const player = playerRef.current;
+    if (player) {
+      for (const s of stumpPositions(genRef.current, player.x, player.z)) {
+        const anchor = projectAnchor(s.x, s.z, 'scatter');
+        if (!anchor) continue;
+        stumps.push({
+          siteId: stumpSiteId(s.x, s.z),
+          x: anchor.x,
+          y: anchor.y,
+        });
+      }
+    }
+    setStumpAnchors(stumps);
     const pileAnchorsNext: { pile: PileTarget; x: number; y: number }[] = [];
     for (const pile of pilesRef.current) {
       const anchor = projectAnchor(pile.x, pile.z, 'scatter');
@@ -1882,12 +2792,116 @@ export default function App() {
             type: fire.type as FireType,
           })),
         );
+        // PLACED-TORCH SAVE WIRING (same restore-before-
+        // first-build pattern): torchState.restore() is
+        // silent and the constructor's initial placed-group
+        // build picks restored torches up. SavedTorch.id is
+        // optional (Systems' shape) while PlacedTorch.id is
+        // required — real saved torches always carry an id
+        // (snapshot always has one); an id-less entry is
+        // dropped here (restore drops it too), so nothing
+        // real is lost.
+        torchState.restore(
+          bootSaved.torches
+            .filter(
+              (torch) => typeof torch.id === 'string' && torch.id !== '',
+            )
+            .map((torch) => ({
+              id: torch.id as string,
+              x: torch.x,
+              z: torch.z,
+            })),
+        );
         harvestState.restore(bootSaved.harvestState);
+        // PLACED-ALTAR SAVE WIRING (same restore-before-
+        // first-build pattern): altarState.restore() is
+        // silent and the constructor's initial placed-group
+        // build picks restored altars up. SavedAltar.id is
+        // optional (Systems' shape) while PlacedAltar.id is
+        // required — real saved altars always carry an id
+        // (snapshot always has one); an id-less entry is
+        // dropped here (restore drops it too), so nothing
+        // real is lost. Torch pattern, id nuance closed
+        // the torch way (zero behavioral difference).
+        altarState.restore(
+          (bootSaved.altars ?? [])
+            .filter(
+              (altar) => typeof altar.id === 'string' && altar.id !== '',
+            )
+            .map((altar) => ({
+              id: altar.id as string,
+              x: altar.x,
+              z: altar.z,
+            })),
+        );
+        // RITUAL SAVE WIRING (same pre-construction pattern):
+        // StagingBook + CharmState restore (pure systems,
+        // boot-only, bad entries dropped). ritualSiteState
+        // restores the PHYSICAL staged bones: a staging
+        // with bonePlaced && !completed means a bone sits
+        // on the site — the site position comes from
+        // altarState (altar:<n>) or the stump key itself
+        // (stump:x,z); boulder stagings have no position
+        // source and are skipped (nothing stages on
+        // boulders yet). Altar restore above runs first,
+        // so altar positions are available here.
+        stagingBookRef.current.restore(bootSaved.stagings ?? []);
+        charmStateRef.current.restore(bootSaved.awakenings ?? []);
+        ritualSiteState.restore(
+          (bootSaved.stagings ?? []).flatMap((entry) => {
+            if (!entry.bonePlaced || entry.completed) return [];
+            if (entry.siteKey.startsWith('altar:')) {
+              const altar = altarState.get(entry.siteKey);
+              if (!altar) return [];
+              return [
+                {
+                  site: {
+                    kind: 'altar' as const,
+                    siteId: entry.siteKey,
+                    x: altar.x,
+                    z: altar.z,
+                  },
+                  bone: entry.boneKind,
+                },
+              ];
+            }
+            if (entry.siteKey.startsWith('stump:')) {
+              const coords = entry.siteKey
+                .slice('stump:'.length)
+                .split(',');
+              const x = Number(coords[0]);
+              const z = Number(coords[1]);
+              if (!Number.isFinite(x) || !Number.isFinite(z)) return [];
+              return [
+                {
+                  site: {
+                    kind: 'stump' as const,
+                    siteId: entry.siteKey,
+                    x,
+                    z,
+                  },
+                  bone: entry.boneKind,
+                },
+              ];
+            }
+            return [];
+          }),
+        );
+        // LOOK SAVE WIRING (same pre-construction pattern):
+        // nameSight.restore() is silent and replaces; the
+        // shell's NameSight starts empty, so a second
+        // boot-effect run cannot re-restore over gameplay
+        // looks (guarded by the same check as traps).
+        nameSightRef.current.restore(bootSaved.nameSight ?? []);
       }
     }
     const renderer = new WorldRenderer(container, gen, player);
     player.attach(renderer.domElement);
     rendererRef.current = renderer;
+    // LOOK owl hook (hook only): the owl charm is a later
+    // charm (fashioned/enchanted, id not decided), so the
+    // shell wires not-owned until charm ownership lands.
+    nameSightRef.current.setOwlOwned(false);
     playerRef.current = player;
     if (!saveRestoredRef.current) {
       saveRestoredRef.current = true;
@@ -1967,6 +2981,10 @@ export default function App() {
     // leaves the renderer's default hidden standing. Later
     // inventory changes drive it via refreshInventory above.
     renderer.setCarriesUmbrella(carriesUmbrella(inventory));
+    // TORCH DRIVING: initial visibility from the boot
+    // inventory — a restored lit torch shows, no lit torch
+    // leaves the renderer's default hidden standing.
+    renderer.setCarriesLitTorch(inventory.count(ITEMS.litTorch) > 0);
     // Hunger wiring (see the header): the engine reads the stage
     // through this query — movement slowdown + harvest lockout.
     player.setHungerStageQuery(() => hunger.stage());
@@ -1976,6 +2994,46 @@ export default function App() {
     // HUD re-read after a restore (the placedFires initial state
     // was snapshotted before this effect re-placed anything).
     setPlacedFires(fireState.snapshot());
+    setPlacedTorches(torchState.snapshot());
+    setPlacedAltars(altarState.snapshot());
+    // FIRST-CHARM BOOT GRANT (outright, tier 1,
+    // GRANT-TO-LIST since Systems 9e9a9dd): runs
+    // AFTER the CharmState restore above, so a loaded
+    // awakening is never double-granted. Idempotent — a
+    // fresh save gains the shrew charm IN THE LIST; a
+    // loaded save with the awakening gains nothing.
+    // NO item is granted (no full-pack failure mode —
+    // the old addPartial gate is gone with the item),
+    // so a grant refreshes nothing in main inventory:
+    // it saves at once (the awakening is save data)
+    // and the panel reads the list live on open. The
+    // inventory param is LEGACY, IGNORED by Systems
+    // (void inventory) — still passed because the
+    // signature keeps it; its removal rides a Systems
+    // change, flagged to DEV (UI does not edit
+    // Systems files unclaimed).
+    const firstCharmGrant = grantFirstCharm(
+      inventory,
+      charmStateRef.current,
+    );
+    if (firstCharmGrant.granted > 0) {
+      saveNow();
+    }
+    // Shrew effect boot sync (follow-up call path):
+    // runs whether or not the grant fired — a loaded
+    // save with the shrew in its list needs its 0.9
+    // multiplier from boot (multiplier is session
+    // state, never saved), and a boot hunger below 45
+    // while listed fires the latch fresh (she IS in
+    // the warning zone). No refreshInventory runs on
+    // the grant path anymore (grant-to-list grants no
+    // item) — this call is the sync, not a duplicate.
+    syncShrewEffect();
+    // Charm-hook boot sync: a loaded save's listed
+    // charms need their hooks from boot (all five
+    // setters are session state, never saved) — same
+    // reason as the shrew sync above.
+    syncCharmHooks();
     applyShelterHouse(
       shelterAt(player.x, player.z, shelterState.snapshot()).houseId,
     );
@@ -1995,6 +3053,28 @@ export default function App() {
       setPosition({ x, z });
       setBiomeText(formatWeights(genRef.current.weightsAt(x, z)));
       recomputeAnchors();
+      // SCRY VISIBILITY (DEV split): near still water, on
+      // movement — the button, not the reveal. While revealed,
+      // arrival dismisses (the buttonless off-switch) and the
+      // set refreshes (new houses count); otherwise the button
+      // shows exactly when a press could reveal something.
+      const gen = genRef.current;
+      const waters = stillWatersNear(gen, x, z);
+      const div = divinationRef.current;
+      const houses = shelterState.snapshot();
+      if (div.isRevealed) {
+        if (div.arrivedAt(x, z)) {
+          div.dismiss();
+          rendererRef.current?.setCampArrowsVisible(false);
+        } else {
+          div.reveal(findCamps(houses));
+        }
+      }
+      setScryVisible(
+        !div.isRevealed &&
+          houses.length > 0 &&
+          isNearStillWater(x, z, waters),
+      );
     });
     const offLooked = bus.on('player:looked', () => {
       recomputeAnchors();
@@ -2044,6 +3124,20 @@ export default function App() {
           }
           return;
         }
+        // PICKUP COUNTS AS A LOOK (same ruling):
+        // whole-pile pickup grants per kind (taken is
+        // one entry per granted kind) — a granted bone
+        // kind records 1 LOOK, before saveNow. Kinds
+        // that granted 0 never reach `taken`.
+        for (const t of outcome.taken) {
+          const kind = isBoneItem(t.item) ? boneKindFor(t.item) : null;
+          if (kind === null) continue;
+          recordBonePickupLook(
+            t.item,
+            nameSightRef.current,
+            portionsForKind(kind) ?? [],
+          );
+        }
         refreshInventory();
         saveNow();
         if (anchor) {
@@ -2084,6 +3178,10 @@ export default function App() {
       hunger.tick(1);
       setHungerStage(hunger.stage());
       setHungerValue(hunger.value());
+      // Hunger changed: latch update + drain multiplier
+      // re-sync (the drain rate for the NEXT tick
+      // follows the current carried/awakened state).
+      syncShrewEffect();
       fireState.advanceLighting(Date.now());
       // Drive every tracked Systems fire's lighting clock
       // alongside the engine's (the bridge's tick half).
@@ -2102,6 +3200,14 @@ export default function App() {
       if (sky) {
         setIsNight(!cycleSplit(sky.cycleT, SEASON_START_MONTH).isDay);
       }
+      // RITUAL WINDOWS (window-arrival path): a staged
+      // ritual completes when its sky window arrives —
+      // the timer is the arrival clock; step handlers
+      // check immediately too (mid-window staging
+      // completes at once). Pause-gated like the rest of
+      // this timer (the sky does not advance while
+      // paused, so no window can arrive then either).
+      checkRitualCompletions();
     }, 1000);
     // Placed-fire + shelter subscriptions: fires re-read from
     // the engine singleton on every fire event; shelter applies
@@ -2110,6 +3216,18 @@ export default function App() {
     // movement-driven tracker would not fire on its own).
     const refreshFires = () => {
       setPlacedFires(fireState.snapshot());
+      recomputeAnchors();
+    };
+    // Placed-torch subscriptions: torches re-read from the
+    // Background singleton on every torch event, fire pattern.
+    const refreshTorches = () => {
+      setPlacedTorches(torchState.snapshot());
+      recomputeAnchors();
+    };
+    // Placed-altar subscriptions: altars re-read from the
+    // Background singleton on every altar event, torch pattern.
+    const refreshAltars = () => {
+      setPlacedAltars(altarState.snapshot());
       recomputeAnchors();
     };
     // PAUSE SUBSCRIPTION (core 54e525c): the shell's half of the
@@ -2123,6 +3241,16 @@ export default function App() {
     const offFirePlaced = bus.on('fire:placed', refreshFires);
     const offFireLighting = bus.on('fire:lighting', refreshFires);
     const offFireLit = bus.on('fire:lit', refreshFires);
+    const offTorchPlaced = bus.on('torch:placed', refreshTorches);
+    const offTorchRemoved = bus.on('torch:removed', refreshTorches);
+    const offAltarPlaced = bus.on('altar:placed', refreshAltars);
+    const offAltarRemoved = bus.on('altar:removed', refreshAltars);
+    // Ritual subscriptions: the panel re-renders on every
+    // stage/unstage (the book + site state mutate without
+    // rendering by themselves — ritualVersion is the
+    // render signal, torch pattern minus anchors).
+    const offRitualStaged = bus.on('ritual:staged', refreshRitual);
+    const offRitualUnstaged = bus.on('ritual:unstaged', refreshRitual);
     const offShelterPlaced = bus.on('shelter:placed', () => {
       const p = playerRef.current;
       if (!p) return;
@@ -2152,6 +3280,40 @@ export default function App() {
     };
     window.addEventListener('pagehide', onPageHide);
     const offCompleted = bus.on('harvest:completed', (p) => {
+      // PICKUP COUNTS AS A LOOK (Adam, 2026-10-28,
+      // RULED — Systems 70f20b5 records it in rituals.ts
+      // + supplies charms.recordBonePickupLook as THE
+      // shell path): a bone pickup records 1 LOOK at
+      // that bone kind in NameSight — pickup ALONE
+      // satisfies speakName's minLooks 1. The helper
+      // derives the kind from the GRANTED ITEM id (what
+      // she actually carries — agrees with the payload
+      // position derivation by construction, since
+      // harvest yields the kind item from the target
+      // position; the helper is preferred because it
+      // also covers pile takes uniformly, where no
+      // harvest position exists). Yields are already
+      // merged by item, so one call per bone yield
+      // entry = one look per granted kind. Carried
+      // yields only (overflow dropped as piles was not
+      // picked up — a failed/full-pack grant records no
+      // look, per the helper's contract). Both 'harvest'
+      // and 'remove' completions count — a remove takes
+      // the bone too (flagged reading of 'picking it
+      // up'). Recorded BEFORE saveNow so the look
+      // persists; the panel gate reads looksAt(kind)
+      // and shows satisfied at ≥ 1.
+      for (const y of p.yields) {
+        const item = normalizeItemId(y.item);
+        if (!isBoneItem(item)) continue;
+        const kind = boneKindFor(item);
+        if (kind === null) continue;
+        recordBonePickupLook(
+          item,
+          nameSightRef.current,
+          portionsForKind(kind) ?? [],
+        );
+      }
       refreshInventory();
       saveNow();
       setProgressItems((current) =>
@@ -2225,6 +3387,7 @@ export default function App() {
     return () => {
       window.clearTimeout(timer);
       window.clearInterval(hungerTimer);
+      window.clearTimeout(warningFlashTimerRef.current);
       window.clearTimeout(transitionTimerRef.current);
       for (const timeout of feedbackTimersRef.current.values()) {
         window.clearTimeout(timeout);
@@ -2245,6 +3408,12 @@ export default function App() {
       offFirePlaced();
       offFireLighting();
       offFireLit();
+      offTorchPlaced();
+      offTorchRemoved();
+      offAltarPlaced();
+      offAltarRemoved();
+      offRitualStaged();
+      offRitualUnstaged();
       offShelterPlaced();
       offShelterChanged();
       offSleep();
@@ -2302,6 +3471,22 @@ export default function App() {
     renderer.setWorldGen(gen);
     setSeed(nextSeed);
     setPosition({ x: spawn.x, z: spawn.z });
+    // A new world clears the scry reveal (new camps, new water).
+    divinationRef.current.dismiss();
+    renderer.setCampArrowsVisible(false);
+    setScryVisible(false);
+    // A new world clears the shown LOOK line (its target is
+    // gone); the NameSight counts persist — knowledge is
+    // hers, not the world's.
+    setLookResult(null);
+    // A new world clears ritual stagings (their sites are
+    // gone — setWorldGen already cleared the physical
+    // staged bones) and closes the ritual panel; the
+    // AWAKENINGS persist — what she has awakened is hers,
+    // not the world's (same rule as NameSight counts).
+    stagingBookRef.current.restore([]);
+    setSelectedSiteId(null);
+    setRitualNote(null);
     setBiomeText(formatWeights(gen.weightsAt(spawn.x, spawn.z)));
     bus.emit('world:seedSet', { seed: nextSeed });
     recomputeAnchors();
@@ -2566,7 +3751,327 @@ export default function App() {
     saveNow();
   };
 
+  /**
+   * Inventory Place press on a lit-torch row: INSTANT AT
+   * HER FEET (settled design — the preview ghost is the
+   * house/fire pattern, heavy for a torch). Grant FIRST
+   * (Systems placeTorch consumes one carried lit-torch;
+   * failure touches nothing), then the entity place
+   * (Background primitive, emits torch:placed →
+   * refreshTorches). Panel action, not a world action:
+   * the panel stays open, the count drops, the note
+   * carries the result — the Light button's shape, not
+   * the preview flow's.
+   */
+  const handlePlaceLitTorch = () => {
+    const player = playerRef.current;
+    if (!player) return;
+    const outcome = grantPlaceTorch(inventory, player.x, player.z);
+    // Equality check, not truthiness: non-strict tsc does
+    // not narrow this union's boolean discriminant on
+    // truthiness (see the torch Light button handler).
+    if (outcome.placed === false) {
+      setTorchNote(outcome.reason);
+      return;
+    }
+    torchState.placeTorch(outcome.torch.x, outcome.torch.z);
+    refreshInventory();
+    saveNow();
+    setTorchNote('Placed a lit torch.');
+  };
+
+  // PLACED ALTAR (settled lean — instant at her feet, the
+  // torch precedent; the preview ghost is the house/fire
+  // pattern, heavy for a site placed where she stands).
+  // Grant FIRST (Systems placeAltar consumes one carried
+  // altar; failure touches nothing), then the entity place
+  // (Background primitive, emits altar:placed →
+  // refreshAltars). Panel action, not a world action:
+  // the panel stays open, the count drops, the note
+  // carries the result — the torch Place shape. No
+  // hunger gate (a move, like drop/pickup). No menu
+  // behind the chip: rituals are not in this order.
+  const handlePlaceAltar = () => {
+    const player = playerRef.current;
+    if (!player) return;
+    const outcome = grantPlaceAltar(inventory, player.x, player.z);
+    // Equality check, not truthiness: non-strict tsc does
+    // not narrow this union's boolean discriminant on
+    // truthiness (see the torch Light button handler).
+    if (outcome.placed === false) {
+      setAltarNote(outcome.reason);
+      return;
+    }
+    altarState.placeAltar(outcome.altar.x, outcome.altar.z);
+    refreshInventory();
+    saveNow();
+    setAltarNote('Placed an altar.');
+  };
+
+  // RITUAL SKY FACTS (shell supplies, systems never imports
+  // game): phase from cyclePhase at the world's fixed start
+  // month (the renderer feeds the sky SEASON_START_MONTH,
+  // so this matches the rendered sky exactly) + moonPhase
+  // from currentMoonPhase at the live daysElapsed. Null
+  // when no live sky exists (pre-boot) — the completion
+  // check skips then; a full-moon window on an unknown sky
+  // reads closed (Systems' safe default, null moonPhase).
+  const skyFacts = (): SkyFacts | null => {
+    const sky = rendererRef.current?.snapshotSky();
+    if (!sky) return null;
+    return {
+      phase: cyclePhase(sky.cycleT, SEASON_START_MONTH),
+      moonPhase: currentMoonPhase(genRef.current.seed, sky.daysElapsed ?? 0),
+    };
+  };
+
+  // Bone display spelling: kind keys are shape slugs as
+  // displayed after 'Primal Bone - ' (charms.ts rule) —
+  // the slug with spaces is the display name, not a new
+  // id (flagged presentation call, UI's).
+  const boneDisplayFor = (kind: string): string =>
+    `Primal Bone - ${kind.replace(/-/g, ' ')}`;
+
+  // Charm-list rows for the examination panel (charm-list
+  // build, Systems 9e9a9dd): listCharms is the examination
+  // contract — kind + tier + note in awakening order;
+  // App maps kind to its display name. Derived live each
+  // render, so the panel always opens on the current list.
+  const charmEntries = listCharms(charmStateRef.current).map((charm) => ({
+    ...charm,
+    display: boneDisplayFor(charm.kind),
+  }));
+
+  // Open the charms panel with a valid selection: keep
+  // the current one if it is still listed (awakenings
+  // never drop), else fall to the first charm.
+  const openCharmsPanel = () => {
+    setCharmsOpen(true);
+    setSelectedCharmKind((current) =>
+      charmEntries.some((charm) => charm.kind === current)
+        ? current
+        : (charmEntries[0]?.kind ?? null),
+    );
+  };
+
+  const skyLabelFor = (sky: string): string => {
+    switch (sky) {
+      case 'day':
+        return 'Daylight';
+      case 'night':
+        return 'Night';
+      case 'dawn':
+        return 'Dawn';
+      case 'dusk':
+        return 'Dusk';
+      case 'full-moon':
+        return 'Full moon';
+      default:
+        return '';
+    }
+  };
+
+  // RITUAL SITE POSITION (both site kinds): made
+  // altars resolve through altarState; stumps resolve
+  // from their own key ('stump:x,z' — the key IS the
+  // position, Background's stumpSiteId format). Null
+  // for anything else (boulders do not exist yet).
+  const sitePositionFor = (
+    siteId: string,
+  ): { kind: 'altar' | 'stump'; x: number; z: number } | null => {
+    if (siteId.startsWith('altar:')) {
+      const altar = altarState.get(siteId);
+      return altar ? { kind: 'altar', x: altar.x, z: altar.z } : null;
+    }
+    if (siteId.startsWith('stump:')) {
+      const coords = siteId.slice('stump:'.length).split(',');
+      const x = Number(coords[0]);
+      const z = Number(coords[1]);
+      if (!Number.isFinite(x) || !Number.isFinite(z)) return null;
+      return { kind: 'stump', x, z };
+    }
+    return null;
+  };
+
+  // RITUAL COMPLETION CHECK (state-based, idempotent):
+  // every uncompleted staging whose window is open
+  // completes at once — staged mid-window completes
+  // immediately, a missed window waits for the next one,
+  // sky 'none' completes the moment all is offered.
+  // Runs after every staging step (immediate path) and on
+  // the 1 s timer (window-arrival path). On completion
+  // the shell records the awakening, frees the site
+  // (unstage — the bone awakens and leaves the site),
+  // says so at the site, and saves. The bone was
+  // CONSUMED at staging, so completion grants no item:
+  // the awakening record IS the charm, and the feedback
+  // names the awakening and claims no item. (A second
+  // bone of the kind, carried, shows its awakened note
+  // in the inventory — that is how a charm is carried.)
+  const checkRitualCompletions = () => {
+    const facts = skyFacts();
+    if (!facts) return;
+    let changed = false;
+    for (const entry of stagingBookRef.current.snapshot()) {
+      if (entry.completed) continue;
+      const staging = stagingBookRef.current.get(
+        entry.siteKey,
+        entry.boneKind,
+      );
+      const recipe = ritualRecipeFor(entry.boneKind);
+      if (!staging || !recipe) continue;
+      const result = staging.complete(recipe, facts);
+      if (!result) continue;
+      charmStateRef.current.awaken(result.kind, result.tier);
+      // Awakening is a list change: re-sync the charm
+      // hooks at once (the newly listed kind's effect
+      // starts now, not on the next boot).
+      syncCharmHooks();
+      // Anchor BEFORE unstaging: the staged site record
+      // carries the site's true position for BOTH kinds
+      // (altar + stump) — the old altarState-only lookup
+      // stranded stump completions at her feet.
+      const staged = ritualSiteState.getStaged(entry.siteKey);
+      ritualSiteState.unstageBone(entry.siteKey);
+      const anchor = staged
+        ? projectAnchor(staged.site.x, staged.site.z, 'scatter')
+        : null;
+      const player = playerRef.current;
+      const fallback = player
+        ? projectAnchor(player.x, player.z, 'ground')
+        : null;
+      const at = anchor ?? fallback;
+      if (at) {
+        showFeedback(
+          `The ${boneDisplayFor(result.kind)} awakens.`,
+          'gain',
+          at.x,
+          at.y,
+        );
+      }
+      changed = true;
+    }
+    if (changed) {
+      saveNow();
+      refreshRitual();
+    }
+  };
+
+  // RITUAL STAGING, ALTAR + STUMP SITES (bone build):
+  // made altars carry ids + chips + positions; stumps
+  // carry chips from Background's stumpPositions
+  // surface. Boulders do not exist yet.
+  const handleStageBone = (siteId: string, kind: string) => {
+    const site = sitePositionFor(siteId);
+    if (!site) {
+      setRitualNote('No site there.');
+      return;
+    }
+    // Composition contract (DEV): the shell checks the
+    // ritualSite snapshot FIRST. One bone per site — an
+    // occupied site REFUSES (the replace branch would
+    // need a StagingBook entry-clear that does not exist,
+    // and silently dropping a staged ritual is worse
+    // than refusing). Flagged choice, stated plainly.
+    if (ritualSiteState.getStaged(siteId)) {
+      setRitualNote('This site already holds a bone.');
+      return;
+    }
+    // PLACE-BONE CONSUMES (bone build — gap #3 CLOSED):
+    // stageBoneFromInventory is THE shell path now —
+    // possession check + consume 1 + record, refusals
+    // consume nothing. Raw placeBone is a record-only
+    // primitive; calling it here would leave the bone
+    // both carried and staged (a shell bug, Systems'
+    // words). No-recipe kinds refuse (shrew: no Waking
+    // — found-bone stacking stays open, flagged).
+    const staged = stageBoneFromInventory(
+      inventory,
+      stagingBookRef.current,
+      siteId,
+      kind,
+    );
+    if (!staged.staged) {
+      setRitualNote(staged.reason ?? 'Could not stage that bone.');
+      return;
+    }
+    ritualSiteState.stageBone(
+      { kind: site.kind, siteId, x: site.x, z: site.z },
+      kind,
+    );
+    refreshInventory();
+    setRitualNote(null);
+    saveNow();
+    refreshRitual();
+    checkRitualCompletions();
+  };
+
+  const handleGiveOffering = (
+    siteId: string,
+    kind: string,
+    foodItem: string,
+  ) => {
+    const staging = stagingBookRef.current.get(siteId, kind);
+    if (!staging) {
+      setRitualNote('No staging here.');
+      return;
+    }
+    const offered = staging.giveOffering(foodItem);
+    if (!offered.ok) {
+      setRitualNote(offered.reason ?? 'Could not give that offering.');
+      return;
+    }
+    // Shell consumes iff the step accepts (Systems'
+    // contract) — poison + raw acorns never reach here
+    // (giveOffering refuses non-foods first).
+    inventory.remove(foodItem, 1);
+    refreshInventory();
+    setRitualNote(null);
+    saveNow();
+    refreshRitual();
+    checkRitualCompletions();
+  };
+
+  const handleSpeakName = (siteId: string, kind: string) => {
+    const staging = stagingBookRef.current.get(siteId, kind);
+    const recipe = ritualRecipeFor(kind);
+    if (!staging || !recipe) {
+      setRitualNote('No staging here.');
+      return;
+    }
+    // Looks arrive as INPUT from NameSight (Systems'
+    // contract); speakName enforces minLooks itself.
+    // FLAGGED GAP: bone kinds have nothing to LOOK at
+    // yet (no per-kind bone objects — the bone build),
+    // so looksAt(kind) reads 0 and this step stays
+    // locked until the bone build lands (or DEV rules a
+    // looks source). The gate renders honestly; nothing
+    // is faked (no generic-bone-look counting invented).
+    const looks = nameSightRef.current.looksAt(kind);
+    const spoken = staging.speakName(looks, recipe.spokenName.minLooks);
+    if (!spoken.ok) {
+      setRitualNote(spoken.reason ?? 'Could not speak its name.');
+      return;
+    }
+    setRitualNote(null);
+    saveNow();
+    refreshRitual();
+    checkRitualCompletions();
+  };
+
   const handlePlaceItem = (itemId: string) => {
+    // Placed torches never enter the preview flow — the
+    // branch above places instantly at her feet.
+    if (itemId === ITEMS.litTorch) {
+      handlePlaceLitTorch();
+      return;
+    }
+    // Placed altars never enter the preview flow either —
+    // the branch above places instantly at her feet.
+    if (itemId === ITEMS.altar) {
+      handlePlaceAltar();
+      return;
+    }
     const fireType = FIRE_ITEM_TO_TYPE[itemId];
     const houseType = HOUSE_ITEM_TO_TYPE[itemId];
     const loom = itemId === ITEMS.loom;
@@ -2652,6 +4157,35 @@ export default function App() {
     } catch (error) {
       setEatNote(
         error instanceof Error ? error.message : 'Could not eat that.',
+      );
+    }
+    refreshInventory();
+    saveNow();
+  };
+
+  /**
+   * Inventory Light press (unlit torch rows only): the FLINT
+   * route of Systems' batch lighting — flint + river-stone
+   * carried, both kept, every carried unlit torch lit in
+   * one press. litFirePresent is false here on purpose:
+   * the fire route arrives with UI's lit-fire 'light
+   * torches' pill (selected fire = present by definition),
+   * and inventing a "nearby fire" range for this button
+   * would be a new mechanic. Same refresh + save shape
+   * as eating (panel action, not world action).
+   */
+  const handleLightTorchItem = (_itemId: string) => {
+    const outcome = lightTorches(inventory, { litFirePresent: false });
+    // Equality check, not truthiness: this repo runs tsc
+    // without strict mode, and truthiness narrowing on
+    // this union's boolean discriminant does not narrow
+    // (verified: `if (outcome.lit)` else-branch keeps the
+    // lit member, TS2339 on .reason; `=== false` narrows).
+    if (outcome.lit === false) {
+      setTorchNote(outcome.reason);
+    } else {
+      setTorchNote(
+        `Lit ${outcome.count} torch${outcome.count === 1 ? '' : 'es'} with flint and stone.`,
       );
     }
     refreshInventory();
@@ -2833,7 +4367,17 @@ export default function App() {
   const fireMenuActions = (fire: PlacedFire): ContextAction[] => {
     if (fire.lit) {
       const hasAcorns = inventory.count(FOOD_ACORNS) > 0;
+      const unlitTorches = inventory.count(ITEMS.torch);
       return [
+        ...(unlitTorches >= 1
+          ? [
+              {
+                id: 'light-torches',
+                label: 'Light torches',
+                hint: `×${unlitTorches}`,
+              },
+            ]
+          : []),
         {
           id: 'cook-stick',
           label: 'Cook acorns (stick)',
@@ -2931,6 +4475,27 @@ export default function App() {
       }
       mirrorLightingStart(fireId, 'friction');
       say('Rubbing… wait, then rub again.', 'info');
+    } else if (actionId === 'light-torches') {
+      // Fire route: this menu only opens on a lit fire's
+      // chip, so litFirePresent is true — nothing
+      // consumed, fire wins when both routes are
+      // available. Batch: ALL carried unlit torches in
+      // one press. The menu stays open; the pill itself
+      // is gone on re-render (count is 0), leaving cook.
+      // Equality check, not truthiness: non-strict tsc
+      // does not narrow this union's boolean discriminant
+      // on truthiness (see the torch Light button handler).
+      const outcome = lightTorches(inventory, { litFirePresent: true });
+      if (outcome.lit === false) {
+        say(outcome.reason, 'blocked');
+      } else {
+        say(
+          `Lit ${outcome.count} torch${outcome.count === 1 ? '' : 'es'}.`,
+          'gain',
+        );
+      }
+      refreshInventory();
+      saveNow();
     } else if (actionId === 'cook-stick' || actionId === 'cook-buried') {
       // Open-fire only: stick or fire-buried, never pot
       // cooking (cook() takes no pot method). One acorn per
@@ -2975,6 +4540,138 @@ export default function App() {
     setPlacedFires(fireState.snapshot());
     recomputeAnchors();
   };
+
+  // Placed-torch menu actions (chip menu, Adam's placed-
+  // torch order): one torch, one action — Pick up returns
+  // it lit. Close only closes; the menu stays open after
+  // a failed pickup (the torch is still there).
+  const torchMenuActions = (): ContextAction[] => [
+    { id: 'pick-up', label: 'Pick up' },
+    { id: 'close', label: 'Close' },
+  ];
+
+  const handleTorchAction = (torchId: string, actionId: string) => {
+    const torch = torchState.get(torchId);
+    if (!torch) return;
+    const anchor = torchAnchors.find((a) => a.torch.id === torchId) ?? null;
+    const say = (text: string, tone: FeedbackTone) => {
+      if (anchor) showFeedback(text, tone, anchor.x, anchor.y);
+    };
+    if (actionId === 'close') {
+      setSelectedTorchId(null);
+      return;
+    }
+    if (actionId === 'pick-up') {
+      // Grant FIRST, then the entity removal — the
+      // pile-pickup rule (take granted only): a full pack
+      // grants 0, the torch stays placed, the menu stays
+      // open; a grant of 1 removes the entity (emits
+      // torch:removed → refreshTorches) and the menu
+      // closes explicitly. Pickup returns 'lit-torch',
+      // lit not unlit; no hunger gate (a move, like
+      // drop/pickup, not a build).
+      const grant = grantPickupTorch(inventory);
+      if (grant.granted === 0) {
+        say('Pack full — no room.', 'blocked');
+        return;
+      }
+      torchState.removeTorch(torchId);
+      setSelectedTorchId(null);
+      say('Picked up a lit torch.', 'gain');
+      refreshInventory();
+      saveNow();
+    }
+    setPlacedTorches(torchState.snapshot());
+    recomputeAnchors();
+  };
+
+  // Scry press (DEV split): the press IS the reveal — call
+  // Systems' evaluation directly (no wrapper, DEV declined
+  // the trivial alias per no-rebuild). Shown + camps: reveal
+  // the set, show the renderer arrows, and hide the button
+  // (it reappears on arrival-dismiss if she is still at
+  // water). Not shown (raced a move away from the water):
+  // just hide the button — Systems' evaluation is silent by
+  // design, no reasons, no popups. Arrows: the renderer
+  // rebuilds them from placed houses itself (shelter:placed
+  // + setWorldGen); the shell only toggles visibility.
+  const handleScry = () => {
+    const player = playerRef.current;
+    if (!player) return;
+    const gen = genRef.current;
+    const waters = stillWatersNear(gen, player.x, player.z);
+    const result = evaluateCampReveal(
+      { x: player.x, z: player.z },
+      waters,
+      shelterState.snapshot(),
+    );
+    if (result.shown) {
+      divinationRef.current.reveal(result.camps);
+      rendererRef.current?.setCampArrowsVisible(true);
+    }
+    setScryVisible(false);
+  };
+
+  // LOOK press (DEV-approved target: nearest in-range
+  // harvest target, kind-keyed): the button targets the
+  // nearest SCATTER target only. Ground (dirt/mud/grass)
+  // is skipped by design, flagged: ground-first order is
+  // a harvest rule, ground is not a thing to look closely
+  // at, and DEV's table holds no ground portions — a
+  // ground LOOK would only ever show a dead plain name
+  // while counting toward practice. DEV can redirect to
+  // verbatim ground-first in one line (drop the scatter
+  // filter). Unlisted scatter kinds record an empty look
+  // and show the plain name, per DEV's null rule (flagged:
+  // empty looks count toward practice). No hunger gate:
+  // looking is observation, not action.
+  // LOOK PARKED (Adam, 2026-10-28: "We'll park the
+  // look notion for now"): the world-LOOK button is
+  // HIDDEN, not deleted — LOOK is dormant and
+  // reversible. Everything behind it STAYS: NameSight
+  // state + save wiring, the lookPortions table,
+  // handleLook itself, and the pickup-look wiring
+  // (recordBonePickupLook) — the pickup-look helper
+  // is the tier-1 gate path, not the LOOK button, and
+  // it stays ACTIVE; the speak-name gate stays
+  // pickup-look. Unpark = set this false (one line).
+  const LOOK_PARKED = true;
+
+  const handleLook = () => {
+    const target = harvestTargets.find((t) => t.kind === 'scatter');
+    if (!target) return;
+    const key = lookKeyForTarget(target);
+    if (!key) return;
+    // Bone scatter targets (bone build): the scatter
+    // kind is generic 'bone', but knowledge is KIND
+    // keyed — the kind resolves from the TARGET
+    // position encoded in the id ('scatter:chunk:kind:
+    // x,z', same rule as harvest yields), never the
+    // player's. A malformed position looks at nothing
+    // (no look recorded, no invented kind). Portions
+    // come from the kind's table entry (DEV-approved
+    // triple); first look shows 'Bone' (family), shape
+    // arrives via pickup identification, not LOOK.
+    let lookKey = key;
+    if (key === 'bone') {
+      const position = target.id.split(':')[3];
+      const coords = position ? position.split(',') : [];
+      const x = Number(coords[0]);
+      const z = Number(coords[1]);
+      if (!Number.isFinite(x) || !Number.isFinite(z)) return;
+      lookKey = boneKindAt(genRef.current.seed, x, z);
+    }
+    const result = nameSightRef.current.look(
+      lookKey,
+      portionsForKind(lookKey) ?? [],
+    );
+    setLookResult({ targetId: target.id, text: result.display ?? target.name });
+    saveNow();
+  };
+
+  // The LOOK button's target, derived for the overlay: the
+  // nearest scatter target (first scatter in tracker order).
+  const lookTarget = harvestTargets.find((t) => t.kind === 'scatter');
 
   // Pile menu actions (chip menu, Adam's full pile ruling):
   // selective take + deposit, scoped to the pile's item.
@@ -3104,6 +4801,22 @@ export default function App() {
         );
         return;
       }
+      // PICKUP COUNTS AS A LOOK (same ruling as the
+      // harvest path): a menu take that grants a bone
+      // records 1 LOOK at its kind, before saveNow.
+      // A failed/full-pack take (granted 0) records
+      // nothing — the return above already left.
+      {
+        const item = normalizeItemId(outcome.item);
+        const kind = isBoneItem(item) ? boneKindFor(item) : null;
+        if (kind !== null) {
+          recordBonePickupLook(
+            item,
+            nameSightRef.current,
+            portionsForKind(kind) ?? [],
+          );
+        }
+      }
       refreshInventory();
       saveNow();
       refreshPilesFromState();
@@ -3231,6 +4944,56 @@ export default function App() {
       ? null
       : (fireAnchors.find((a) => a.fire.id === selectedFire.id) ?? null);
 
+  // The torch whose menu is open, with its anchor — the
+  // fire pattern, live: the menu renders from placedTorches,
+  // so a picked-up torch leaves the menu with nothing.
+  const selectedTorch =
+    selectedTorchId === null
+      ? undefined
+      : placedTorches.find((t) => t.id === selectedTorchId);
+  const selectedTorchAnchor =
+    selectedTorch === undefined
+      ? null
+      : (torchAnchors.find((a) => a.torch.id === selectedTorch.id) ?? null);
+
+  // The ritual site whose panel is open, with its anchor —
+  // the torch pattern, live: the panel renders from the
+  // live site (placedAltars or stumpAnchors), so a
+  // vanished site leaves the panel with nothing. The
+  // staged bone + staging + recipe all derive live from
+  // the site singletons + book (never a tap-time
+  // snapshot), so step presses re-render the panel
+  // through ritualVersion. Site-kind-agnostic: the
+  // selection is a site id, the label follows its
+  // prefix, and only the anchor source differs.
+  const selectedSiteLabel =
+    selectedSiteId === null
+      ? null
+      : selectedSiteId.startsWith('stump:')
+        ? 'Stump'
+        : 'Altar';
+  const selectedSiteAnchor =
+    selectedSiteId === null
+      ? null
+      : selectedSiteId.startsWith('stump:')
+        ? (stumpAnchors.find((a) => a.siteId === selectedSiteId) ?? null)
+        : (altarAnchors.find((a) => a.altar.id === selectedSiteId) ?? null);
+  const selectedSiteStaged =
+    selectedSiteId === null
+      ? null
+      : (ritualSiteState.getStaged(selectedSiteId) ?? null);
+  const selectedSiteStaging =
+    selectedSiteStaged === null || selectedSiteId === null
+      ? null
+      : (stagingBookRef.current.get(
+          selectedSiteId,
+          selectedSiteStaged.bone,
+        ) ?? null);
+  const selectedSiteRecipe =
+    selectedSiteStaged === null
+      ? null
+      : (ritualRecipeFor(selectedSiteStaged.bone) ?? null);
+
   // The pile whose menu is open, with its anchor.
   // Live menu pile: the menu renders from piles state, not a
   // tap-time snapshot (see the state comment above).
@@ -3261,6 +5024,40 @@ export default function App() {
   // save file. No stored choice reads as IM Fell English.
   const [font, setFont] = useState<FontId>(loadFontChoice);
   const [optionsOpen, setOptionsOpen] = useState(false);
+  // Intro modal: open on first run — no save at boot (a corrupt
+  // save reads as null, so it reads as fresh too). Dismissing
+  // sets it false for the session; a player who never saves
+  // sees it again next launch, which is the trigger working
+  // as briefed, not a bug. Re-open any time from the
+  // Introduction section in Options (Settings tab).
+  const [introOpen, setIntroOpen] = useState(() => bootSave === null);
+
+  // ESC TOGGLE (Adam, 2026-10-27 — Esc opens Options): with
+  // NO modal open, Esc opens the Options modal; with a modal
+  // open, that modal's own Esc listener closes it (previous
+  // brief stands) and this handler stands aside — one rule,
+  // topmost-close else open-Options. Esc on open Options
+  // closes Options; a second Esc with nothing open re-opens
+  // it. The handler yields when focus sits in a text input,
+  // textarea, or select (the seed field): typing Esc there
+  // must not yank the player into Options. It acts on
+  // Escape alone and swallows nothing, so V/C and WASD are
+  // untouched. Panels (inventory/crafting) are not modals,
+  // so they do not block the toggle — flagged, not carved
+  // out: if Adam wants Esc to close panels first, that is
+  // a follow-up.
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent): void => {
+      if (e.key !== 'Escape') return;
+      const target = e.target as HTMLElement | null;
+      const tag = target?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+      if (optionsOpen || introOpen || pendingTrapRecipe) return;
+      setOptionsOpen(true);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [optionsOpen, introOpen, pendingTrapRecipe]);
   const handleFontChange = (next: FontId): void => {
     setFont(next);
     saveFontChoice(next);
@@ -3446,6 +5243,33 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [position.x, position.z, seed]);
 
+  // Zone coords for the chip (zone display build):
+  // zoneCoords is the single source of truth (Background
+  // zones.ts — 32 m chunk zones, world origin, east +x,
+  // north-positive second axis, floor). App passes the
+  // NUMBERS; the chip formats them. Derived per render
+  // from position, so the display ticks as she walks
+  // (~6.4 s per zone at walk speed).
+  const [zoneX, zoneZ] = zoneCoords(position.x, position.z);
+
+  // Frog water hint (frog-hint build, Systems 126c9aa):
+  // Systems' nearestStillWater fact, derived per render
+  // from position so the hint follows her as she walks.
+  // Waters come from App's existing stillWatersNear call
+  // (waterProximity adapter); both ranges stay default
+  // (adapter 50 + fact FROG_WATER_RANGE 50, draft) —
+  // no range or math invented here. Gate: frog listed
+  // (list membership + awakened) AND fact non-null;
+  // null = no hint, exactly per the API (no waters, or
+  // beyond range, or already at/in water).
+  const frogHint = charmStateRef.current.isAwakened('frog-pelvis')
+    ? nearestStillWater(
+        position.x,
+        position.z,
+        stillWatersNear(genRef.current, position.x, position.z),
+      )
+    : null;
+
   // FPS, shell-side (see the header): a requestAnimationFrame
   // sampler, not a renderer instrument — the renderer is
   // untouched. State updates about once a second, never per
@@ -3560,18 +5384,36 @@ export default function App() {
                   kind={fire.type}
                   status={status}
                   lightingDetail={detail}
-                  onSelect={() => {
-                    if (fire.lit) {
-                      showFeedback(`${FIRE_NAME[fire.type]} lit.`, 'info', x, y);
-                    } else {
-                      setSelectedFireId(fire.id);
-                    }
-                  }}
+                  onSelect={() => setSelectedFireId(fire.id)}
                 />
               </WorldAnchor>
             </Fragment>
           );
         })}
+        {torchAnchors.map(({ torch, x, y }) => (
+          <Fragment key={torch.id}>
+            <WorldAnchor x={x} y={y} interactive>
+              <TorchChip onSelect={() => setSelectedTorchId(torch.id)} />
+            </WorldAnchor>
+          </Fragment>
+        ))}
+        {altarAnchors.map(({ altar, x, y }) => (
+          <Fragment key={altar.id}>
+            <WorldAnchor x={x} y={y} interactive>
+              <AltarChip onSelect={() => setSelectedSiteId(altar.id)} />
+            </WorldAnchor>
+          </Fragment>
+        ))}
+        {stumpAnchors.map(({ siteId, x, y }) => (
+          <Fragment key={siteId}>
+            <WorldAnchor x={x} y={y} interactive>
+              <AltarChip
+                label="Stump"
+                onSelect={() => setSelectedSiteId(siteId)}
+              />
+            </WorldAnchor>
+          </Fragment>
+        ))}
         {pileAnchors.map(({ pile, x, y }) => {
           const total = pile.stacks.reduce(
             (sum, stack) => sum + stack.quantity,
@@ -3610,6 +5452,20 @@ export default function App() {
             />
           </WorldAnchor>
         ) : null}
+        {selectedTorch && selectedTorchAnchor ? (
+          <WorldAnchor
+            x={selectedTorchAnchor.x}
+            y={selectedTorchAnchor.y}
+            interactive
+          >
+            <ContextMenu
+              objectName="Lit Torch"
+              actions={torchMenuActions()}
+              onSelect={(id) => handleTorchAction(selectedTorch.id, id)}
+              onClose={() => setSelectedTorchId(null)}
+            />
+          </WorldAnchor>
+        ) : null}
         {selectedPile && selectedPileAnchor ? (
           <WorldAnchor
             x={selectedPileAnchor.x}
@@ -3627,6 +5483,94 @@ export default function App() {
               onClose={() => {
                 selectedPileIdRef.current = null;
                 setSelectedPileId(null);
+              }}
+            />
+          </WorldAnchor>
+        ) : null}
+        {selectedSiteId !== null &&
+        selectedSiteLabel !== null &&
+        selectedSiteAnchor ? (
+          <WorldAnchor
+            x={selectedSiteAnchor.x}
+            y={selectedSiteAnchor.y}
+            interactive
+          >
+            <RitualPanel
+              siteLabel={selectedSiteLabel}
+              staged={
+                selectedSiteStaged !== null &&
+                selectedSiteStaging !== null &&
+                selectedSiteRecipe !== null
+                  ? (() => {
+                      const facts = skyFacts();
+                      return {
+                        boneDisplay: boneDisplayFor(
+                          selectedSiteStaged.bone,
+                        ),
+                        bonePlaced: selectedSiteStaging.bonePlaced,
+                        offeringGiven: selectedSiteStaging.offeringGiven,
+                        nameSpoken: selectedSiteStaging.nameSpoken,
+                        looks: nameSightRef.current.looksAt(
+                          selectedSiteStaged.bone,
+                        ),
+                        minLooks: selectedSiteRecipe.spokenName.minLooks,
+                        sky: selectedSiteRecipe.sky,
+                        skyLabel: skyLabelFor(selectedSiteRecipe.sky),
+                        windowOpen:
+                          facts !== null &&
+                          windowOpen(selectedSiteRecipe.sky, facts),
+                        completed: selectedSiteStaging.completed,
+                      };
+                    })()
+                  : null
+              }
+              kindOptions={RITUAL_RECIPES.filter(
+                (recipe) =>
+                  charmStateRef.current.tierOf(recipe.boneKind) === 0,
+              ).map((recipe) => ({
+                kind: recipe.boneKind,
+                display: boneDisplayFor(recipe.boneKind),
+                skyLabel:
+                  recipe.sky === 'none'
+                    ? 'Any sky'
+                    : skyLabelFor(recipe.sky),
+              }))}
+              foodOptions={(() => {
+                const byItem = new Map<string, number>();
+                for (const stack of inventory.stacksSnapshot()) {
+                  const id = normalizeItemId(stack.item);
+                  if ((FOOD_ITEMS as readonly string[]).includes(id)) {
+                    byItem.set(id, (byItem.get(id) ?? 0) + stack.quantity);
+                  }
+                }
+                return [...byItem.entries()].map(([id, count]) => ({
+                  item: id,
+                  display: displayNameFor(id),
+                  count,
+                }));
+              })()}
+              note={ritualNote}
+              onStageBone={(kind) =>
+                selectedSiteId !== null &&
+                handleStageBone(selectedSiteId, kind)
+              }
+              onGiveOffering={(item) =>
+                selectedSiteId !== null &&
+                selectedSiteStaged !== null &&
+                handleGiveOffering(
+                  selectedSiteId,
+                  selectedSiteStaged.bone,
+                  item,
+                )
+              }
+              onSpeakName={() =>
+                selectedSiteId !== null &&
+                selectedSiteStaged !== null &&
+                handleSpeakName(selectedSiteId, selectedSiteStaged.bone)
+              }
+              onClose={() => {
+                setSelectedSiteId(null);
+                setRitualNote(null);
               }}
             />
           </WorldAnchor>
@@ -3669,6 +5613,18 @@ export default function App() {
           targets={harvestTargets}
           onHarvest={handleHarvest}
           onRemove={handleRemove}
+          lookNode={
+            !LOOK_PARKED && lookTarget ? (
+              <div className="flex flex-col items-center gap-1">
+                <LookButton onPress={handleLook} />
+                {lookResult && lookResult.targetId === lookTarget.id ? (
+                  <p className="max-w-[calc(100vw-1rem)] rounded-full bg-black/60 px-4 py-2 text-center text-sm font-medium text-[#f0ead6]">
+                    {lookResult.text}
+                  </p>
+                ) : null}
+              </div>
+            ) : undefined
+          }
         />
         {desktopPilePickup ? (
           <button
@@ -3760,6 +5716,18 @@ export default function App() {
             </button>
             <button
               type="button"
+              onClick={openCharmsPanel}
+              aria-pressed={charmsOpen}
+              className={
+                isTouch
+                  ? 'rounded bg-[#3a4436] px-3 py-2 text-sm min-h-[44px] hover:bg-[#4a5546]'
+                  : 'rounded bg-[#3a4436] px-3 py-1 text-xs hover:bg-[#4a5546]'
+              }
+            >
+              Charms
+            </button>
+            <button
+              type="button"
               onClick={() => setOptionsOpen(true)}
               className={
                 isTouch
@@ -3774,7 +5742,12 @@ export default function App() {
             <WitchHealth />
           </div>
           <div className="mt-2">
-            <HungerIndicator stage={hungerStage} value={hungerValue} />
+            <HungerIndicator
+              stage={hungerStage}
+              value={hungerValue}
+              warningActive={hungerWarningActive}
+              warningFlash={hungerWarningFlash}
+            />
           </div>
           <ForageHint stage={hungerStage} />
           <div className="mt-2">
@@ -3881,6 +5854,14 @@ export default function App() {
             </button>
             <button
               type="button"
+              onClick={openCharmsPanel}
+              aria-pressed={charmsOpen}
+              className="min-h-[44px] rounded bg-[#3a4436] px-3 py-2 text-sm hover:bg-[#4a5546]"
+            >
+              Charms
+            </button>
+            <button
+              type="button"
               onClick={() => setOptionsOpen(true)}
               className="min-h-[44px] rounded bg-[#3a4436] px-3 py-2 text-sm hover:bg-[#4a5546]"
             >
@@ -3893,13 +5874,14 @@ export default function App() {
             // One tap reclaims the look field: collapsing the
             // stack alone would leave an open bottom sheet
             // (60vh) covering the look field's lower half,
-            // so Hide also closes both panels. Panel state is
+            // so Hide also closes all panels. Panel state is
             // view-only — inventory, crafting, and wardrobe
             // state live on, reopening restores the same rows.
             onClick={() => {
               setHudCollapsed(true);
               setInventoryOpen(false);
               setCraftingOpen(false);
+              setCharmsOpen(false);
             }}
             aria-label="Hide HUD panels to reveal the game"
             className="pointer-events-auto absolute right-2 top-2 z-40 min-h-[44px] rounded bg-black/50 px-3 py-2 text-sm"
@@ -3927,6 +5909,8 @@ export default function App() {
             onPlaceItem={handlePlaceItem}
             foodIds={FOOD_IDS}
             onEatItem={handleEatItem}
+            lightableIds={TORCH_IDS}
+            onLightItem={handleLightTorchItem}
             storage={storageSection}
             onDepositItem={handleDepositItem}
             onDropItem={handleDropItem}
@@ -3947,6 +5931,15 @@ export default function App() {
             onClose={() => setCraftingOpen(false)}
           />
         ) : null}
+        {charmsOpen ? (
+          <CharmsPanel
+            charms={charmEntries}
+            selectedKind={selectedCharmKind}
+            onSelectKind={setSelectedCharmKind}
+            onClose={() => setCharmsOpen(false)}
+            comfortable={isTouch}
+          />
+        ) : null}
         {craftNote ? (
           <p className="rounded bg-black/50 px-2 py-1 text-xs text-stone-200">
             {craftNote}
@@ -3955,6 +5948,16 @@ export default function App() {
         {eatNote ? (
           <p className="rounded bg-black/50 px-2 py-1 text-xs text-stone-200">
             {eatNote}
+          </p>
+        ) : null}
+        {torchNote ? (
+          <p className="rounded bg-black/50 px-2 py-1 text-xs text-stone-200">
+            {torchNote}
+          </p>
+        ) : null}
+        {altarNote ? (
+          <p className="rounded bg-black/50 px-2 py-1 text-xs text-stone-200">
+            {altarNote}
           </p>
         ) : null}
         {dropNote ? (
@@ -4017,7 +6020,21 @@ export default function App() {
           onFontChange={handleFontChange}
           perspective={cameraMode}
           onPerspectiveChange={(picked) => cycleToCamera(picked)}
+          onShowIntro={() => {
+            setOptionsOpen(false);
+            setIntroOpen(true);
+          }}
           onClose={() => setOptionsOpen(false)}
+          comfortable={isTouch}
+        />
+      ) : null}
+
+      {/* Intro modal: first run (no save at boot) + re-openable
+        from Options. Same z-50 shell as OptionsModal; the two
+        never stack (opening the intro closes Options). */}
+      {introOpen ? (
+        <IntroModal
+          onClose={() => setIntroOpen(false)}
           comfortable={isTouch}
         />
       ) : null}
@@ -4032,6 +6049,7 @@ export default function App() {
           open={true}
           title="PLACE TRAP HERE?"
           onClose={handleTrapConfirmNo}
+          comfortable={isTouch}
         >
           <p className="text-sm text-stone-200">
             Place {pendingTrapRecipe.name} here?
@@ -4067,14 +6085,80 @@ export default function App() {
         collapsed on touch (it lives outside the collapsible
         stack). It hides only while a panel or the modal is
         open, where it would sit on top of the bottom sheet. */}
-      {!inventoryOpen && !craftingOpen && !optionsOpen ? (
+      {!inventoryOpen &&
+      !craftingOpen &&
+      !charmsOpen &&
+      !optionsOpen &&
+      !introOpen ? (
         <LocationChip
           x={position.x}
           z={position.z}
           biomeName={dominantBiome.name}
           biomePercent={dominantBiome.percent}
           fps={fps}
+          zoneX={zoneX}
+          zoneZ={zoneZ}
         />
+      ) : null}
+
+      {/* Scry button: appears at still water (DEV split —
+        visibility on movement, reveal on press). Bottom-
+        centre above the LocationChip, the PausedIndicator's
+        seat — the two never show together (Scry hides while
+        paused), so the seat is shared, not stacked. Hidden
+        with any panel/modal open, like the LocationChip,
+        so it never sits on a bottom sheet. Label "Scry"
+        (Adam's verb); the button IS the magic signal — no
+        tutorial popup. Press shows the renderer arrows
+        (Background's API, wired in CAMP ARROWS WIRING);
+        arrival-dismiss and regenerate hide them again. */}
+      {scryVisible &&
+      !inventoryOpen &&
+      !craftingOpen &&
+      !charmsOpen &&
+      !optionsOpen &&
+      !introOpen &&
+      !pendingTrapRecipe &&
+      !paused ? (
+        <div className="pointer-events-none absolute bottom-12 left-1/2 z-40 -translate-x-1/2">
+          <ScryButton onPress={handleScry} />
+        </div>
+      ) : null}
+
+      {/* Frog water hint: bottom-centre above the
+        LocationChip, the scry / pause seat family. Hidden
+        with any panel/modal open or paused (the scry hide
+        set minus the water/camp conditions — the fact
+        itself is the gate). When the scry button is also
+        showing, the hint lifts above it (aboveScry) so
+        the two never stack on one seat. */}
+      {frogHint !== null &&
+      !inventoryOpen &&
+      !craftingOpen &&
+      !charmsOpen &&
+      !optionsOpen &&
+      !introOpen &&
+      !pendingTrapRecipe &&
+      !paused ? (
+        <FrogHint
+          dx={frogHint.dx}
+          dz={frogHint.dz}
+          distanceMeters={frogHint.distance}
+          aboveScry={scryVisible}
+        />
+      ) : null}
+
+      {/* Esc hint: desktop only, and only while no modal is
+        open (while a modal is open, Esc closes it instead —
+        the hint would read wrong). Bottom-right: seed
+        controls own bottom-left, the LocationChip owns
+        bottom-centre, bottom-right is free. A label only,
+        not a button — the Options control + Esc are the
+        doors. Wording draft for Adam's pin pass. */}
+      {!isTouch && !optionsOpen && !introOpen && !pendingTrapRecipe ? (
+        <p className="pointer-events-none absolute bottom-2 right-2 z-30 rounded bg-black/50 px-2 py-1 text-xs text-stone-300">
+          Esc — Options
+        </p>
       ) : null}
 
       {/* Paused control: only while the engine flag is set. It

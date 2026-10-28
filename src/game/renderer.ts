@@ -27,7 +27,7 @@ import type { WorldGen } from './worldgen';
 import { PlayerController } from './player';
 import { marshWeight } from './biomes';
 import { SOURCE_FOR_KIND } from './objects';
-import { buildCandle, buildKindGeometry, buildUmbrella, buildWitch, CANDLE_FLAME_Y, vertexLambert } from './models';
+import { buildAltarGroup, buildCampArrow, buildCandle, buildEdgeArrow, buildKindGeometry, buildStagedBone, buildTorch, buildUmbrella, buildWitch, CANDLE_FLAME_Y, TORCH_FLAME_Y, vertexLambert } from './models';
 import { ProximityTracker } from './proximity';
 import {
   harvestState,
@@ -40,6 +40,10 @@ import { terrainSpeedAt } from './movement';
 import { riverParamsFor, riverRibbonForChunk } from './river';
 import type { RiverParams } from './river';
 import { fireState } from './fireState';
+import { torchState } from './torchState';
+import { altarState } from './altarState';
+import { ritualSiteState } from './ritualSite';
+import type { PlacedHouse } from './shelter';
 import { FIRE_DEFS } from './fire';
 import { shelterState, HOUSE_DEFS } from './shelter';
 import { loomState } from './loomState';
@@ -194,16 +198,36 @@ interface LoadedChunk {
 /**
  * Carried-candle light tunables (Adam 2026-10-26 — lane-decided
  * starting values for his pin pass; three 0.186 uses physical
- * point-light units, so intensity reads in candela with decay 2:
- * ~2.5 at 2 m, ~0.6 at 4 m, ~0.16 at 8 m — a warm pool around
- * her, not a floodlight. Err toward useful: night foraging is
- * near-impossible without this. Always lit, both views.
+ * point-light units, so intensity reads in candela with decay 2.
+ * RAISED 2026-10-27 (Adam: "fairly useless now" — the starting
+ * light goes up until genuinely useful): ~7.5 at 2 m, ~1.9 at
+ * 4 m, ~0.8 at 6 m — a real working pool around her, not a hint.
+ * Headroom reserved for the torch (Adam 2026-10-27: torch stays
+ * brighter — well-lit at 6 m, dim to ≥12 m — so the candle stops
+ * here; the torch profile is tuned above these numbers when its
+ * item lands). Always lit, both views.
  */
 export const CANDLE_LIGHT_COLOR = 0xffb45e;
-export const CANDLE_LIGHT_INTENSITY = 10;
-export const CANDLE_LIGHT_DISTANCE = 16;
+export const CANDLE_LIGHT_INTENSITY = 30;
+export const CANDLE_LIGHT_DISTANCE = 22;
 export const CANDLE_LIGHT_DECAY = 2;
 export const CANDLE_FLICKER_AMPLITUDE = 0.12;
+/**
+ * Carried-torch light tunables (Adam 2026-10-27 — Systems torch
+ * item + batch lighting landed first; torch profile pinned:
+ * well-lit at 6 m, dim to ≥12 m, brighter than the candle
+ * overall — against the MOVED candle bar 30/22, not the old
+ * 10/16). Intensity 80, distance 30, decay 2: ~2.2 at 6 m (vs
+ * candle ~0.8 — well-lit, ~2.7×), ~0.6 at 12 m (dim but
+ * present), cutoff 30 > candle 22. Flicker ±15%: a torch
+ * flame dances more than a candle's ±12%, less than a
+ * campfire's ±22%. Flagged for pin pass.
+ */
+export const TORCH_LIGHT_COLOR = 0xffa050;
+export const TORCH_LIGHT_INTENSITY = 80;
+export const TORCH_LIGHT_DISTANCE = 30;
+export const TORCH_LIGHT_DECAY = 2;
+export const TORCH_FLICKER_AMPLITUDE = 0.15;
 /**
  * Placed-fire light tunables (Adam 2026-10-26 — lane-decided
  * starting values for his pin pass; same physical units as the
@@ -239,12 +263,83 @@ export function flamePhase(x: number, z: number): number {
 export function fireLightFlicker(flameTime: number, phase: number): number {
   return (Math.sin(flameTime * 10 + phase) + Math.sin(flameTime * 23 + phase + 1.7)) / 2;
 }
+/**
+ * Camp-arrow center height above a house: tip at 4.1 m (clears
+ * every house roof) and top at 9.1 m — BIG, as Adam ordered.
+ * Bob amplitude (metres, on flameTime — catches the eye).
+ * Screen-edge arrow depth in front of the camera (camera
+ * space) + NDC clamp (arrows sit just inside the frame).
+ */
+export const CAMP_ARROW_CENTER_Y = 7.5;
+export const CAMP_ARROW_BOB = 0.5;
+export const CAMP_EDGE_DEPTH = 8;
+/** Base exponential fog density (the woods' murk, lane-decided). */
+export const FOG_DENSITY = 0.008;
+/**
+ * Bat wing bone — night way-finding (tier-1 charm, DRAFT
+ * flagged): fog density factor at full night while carried
+ * + awakened (0.008 → 0.0056). Scaled by nightFactor in
+ * the loop, so twilight thins partially, full night fully.
+ */
+export const BAT_FOG_FACTOR = 0.7;
+export const CAMP_EDGE_CLAMP = 0.88;
+
+/**
+ * Screen-edge arrow placement for an off-screen camp (pure,
+ * probed). Input: the camp anchor's NDC (x, y) + whether it
+ * is behind the camera. Behind camps flip (project() mirrors
+ * behind-camera points) and are forced off-screen: a behind
+ * camp is never "in view", and its flipped NDC is pushed past
+ * the edge so the arrow lands on the frame pointing the turn
+ * direction instead of mid-screen. Returns the clamped edge
+ * position + the screen-space angle the arrow must point
+ * (rotation.z for a +Y arrow) + whether the camp is off-screen.
+ */
+export function edgeArrowTransform(ndcX: number, ndcY: number, behind: boolean): { x: number; y: number; angle: number; offScreen: boolean } {
+  let x = ndcX;
+  let y = ndcY;
+  if (behind) {
+    x = -x;
+    y = -y;
+    const m = Math.max(Math.abs(x), Math.abs(y));
+    if (m > 0 && m < 1.2) { x = (x / m) * 1.2; y = (y / m) * 1.2; }
+    else if (m === 0) { x = 0; y = 1.2; }
+  }
+  const offScreen = behind || Math.abs(x) > 1 || Math.abs(y) > 1;
+  const cx = Math.max(-CAMP_EDGE_CLAMP, Math.min(CAMP_EDGE_CLAMP, x));
+  const cy = Math.max(-CAMP_EDGE_CLAMP, Math.min(CAMP_EDGE_CLAMP, y));
+  const dx = x - cx;
+  const dy = y - cy;
+  const angle = dx === 0 && dy === 0 ? 0 : Math.atan2(-dx, dy);
+  return { x: cx, y: cy, angle, offScreen };
+}
+
 /** Witch-local hand position of the candle group (left hand). */
 export const CANDLE_HAND: Readonly<{ x: number; y: number; z: number }> = {
   x: -0.55,
   y: 1.02,
   z: 0.05,
 };
+/**
+ * Witch-local hand position of the torch group — the SAME left
+ * hand as the candle, by design: one light hand, and the torch
+ * supersedes the candle in it while a lit torch is carried
+ * (light replaces light, not rain-cover — the umbrella keeps
+ * the right hand throughout).
+ */
+export const TORCH_HAND: Readonly<{ x: number; y: number; z: number }> = {
+  x: -0.55,
+  y: 1.02,
+  z: 0.05,
+};
+/**
+ * How far a placed torch's stick sinks into the ground (the
+ * planting look, my call, flagged): the stick base sits 5 cm
+ * under the surface, so a placed torch reads as stuck in the
+ * ground, not floating on it. The placed light sits at
+ * TORCH_FLAME_Y - PLACED_TORCH_SINK.
+ */
+export const PLACED_TORCH_SINK = 0.05;
 
 /**
  * Rotate a witch-local (x, z) offset by a Y-rotation (facing)
@@ -270,10 +365,34 @@ export class WorldRenderer {
   private witch: THREE.Group;
   /** Carried umbrella graphic (models.ts), attached to the witch. */
   private umbrella: THREE.Group;
+  /** Carried-candle graphic (models.ts), attached to the witch. */
+  private candle: THREE.Group;
   /** Carried-candle point light (scene-level — see below). */
   private candleLight: THREE.PointLight;
+  /** Carried-torch graphic (models.ts), attached to the witch. */
+  private torch: THREE.Group;
+  /** Carried-torch point light (scene-level, like the candle's). */
+  private torchLight: THREE.PointLight;
+  /** True while a lit torch is carried (shell-driven setter). */
+  private carriesLitTorch = false;
   /** Placed-fire point lights (scene-level, rebuilt with the placed group). */
   private fireLights: THREE.PointLight[] = [];
+  /** Placed-torch point lights (scene-level, rebuilt with the placed group). */
+  private torchLights: THREE.PointLight[] = [];
+  /** Camp-arrow world group (one downward arrow per placed house). */
+  private campArrowGroup: THREE.Group | null = null;
+  /** Camp-arrow screen-edge arrows (camera children, one per placed house). */
+  private campEdgeArrows: { mesh: THREE.Group; house: PlacedHouse }[] = [];
+  /** True while a water scry has revealed the camp arrows (shell-driven setter). */
+  private campArrowsVisible = false;
+  /** Pigeon wing bone — way-home sense (tier-1 charm): arrows show without water while carried + awakened. */
+  private pigeonWayHome = false;
+  /** Bat wing bone — night way-finding (tier-1 charm): fog thins at night while carried + awakened. */
+  private batNightWayfinding = false;
+  /** Scratch vectors for the per-frame edge-arrow update (no per-frame allocation). */
+  private edgeAnchor = new THREE.Vector3();
+  private edgeToCamp = new THREE.Vector3();
+  private edgeForward = new THREE.Vector3();
   private gen: WorldGen;
   private player: PlayerController;
   /** Proximity tracker: engine-owned, subscribes to 'player:moved' and
@@ -305,6 +424,16 @@ export class WorldRenderer {
   private pileGroup: THREE.Group | null = null;
   /** Placed-trap markers, rebuilt on 'trap:placed' (below). */
   private trapGroup: THREE.Group | null = null;
+  /**
+   * Staged-bone meshes (Adam 2026-10-27 — tier-1 Waking,
+   * site side): one pale bone per staged site, NOT
+   * chunk-filtered — a staged bone must stay visible
+   * wherever it lies. Own lifecycle (staging events +
+   * constructor + setWorldGen clear), separate from the
+   * placed group: staging is rarer than placement, and
+   * the two rebuild for different reasons.
+   */
+  private stagedBoneGroup: THREE.Group | null = null;
   /**
    * Sky rig (Adam 2026-10-26): dome + sun + moon + stars + clouds
    * + the lights they drive. Owns the day/night time driver (see
@@ -372,8 +501,27 @@ export class WorldRenderer {
       bus.on('fire:lit', rebuild),
       bus.on('shelter:placed', rebuild),
       bus.on('loom:placed', rebuild),
+      bus.on('torch:placed', rebuild),
+      bus.on('torch:removed', rebuild),
+      bus.on('altar:placed', rebuild),
+      bus.on('altar:removed', rebuild),
     );
+    // Staged bones rebuild on staging events only (separate
+    // group, separate lifecycle — see the field comment).
+    const rebuildStaged = (): void => this.rebuildStagedBones();
+    this.unsubPlaced.push(
+      bus.on('ritual:staged', rebuildStaged),
+      bus.on('ritual:unstaged', rebuildStaged),
+    );
+    this.rebuildStagedBones();
     this.rebuildPlacedGroup();
+    // Camp arrows rebuild on house placement (houses restore
+    // by re-placing, which emits shelter:placed — no silent
+    // restore path to miss) + once here for restored houses
+    // placed before construction.
+    const rebuildCamps = (): void => this.rebuildCampArrows();
+    this.unsubPlaced.push(bus.on('shelter:placed', rebuildCamps));
+    this.rebuildCampArrows();
     // Dropped piles rebuild on their own events (a pile dropped
     // at her feet must appear without a chunk reload).
     const rebuildPiles = (): void => this.rebuildPileGroup();
@@ -398,9 +546,13 @@ export class WorldRenderer {
       0.1,
       1000,
     );
+    // The camera joins the scene graph so its children render:
+    // screen-edge camp arrows are camera children (HUD-like,
+    // always in front). The camera itself is never drawn.
+    this.scene.add(this.camera);
 
     // Dim October light: the woods are watching, not sunbathing.
-    this.scene.fog = new THREE.FogExp2(0x1a2018, 0.008);
+    this.scene.fog = new THREE.FogExp2(0x1a2018, FOG_DENSITY);
     this.scene.background = new THREE.Color(0x1a2018);
     this.hemiLight = new THREE.HemisphereLight(0x9aa88a, 0x2a2018, 0.9);
     this.scene.add(this.hemiLight);
@@ -442,6 +594,7 @@ export class WorldRenderer {
     const candle = buildCandle();
     candle.position.set(CANDLE_HAND.x, CANDLE_HAND.y, CANDLE_HAND.z);
     this.witch.add(candle);
+    this.candle = candle;
     this.candleLight = new THREE.PointLight(
       CANDLE_LIGHT_COLOR,
       CANDLE_LIGHT_INTENSITY,
@@ -449,6 +602,26 @@ export class WorldRenderer {
       CANDLE_LIGHT_DECAY,
     );
     this.scene.add(this.candleLight);
+    // Carried lit-torch (Adam 2026-10-27 — Systems item
+    // 'lit-torch' landed first): model in the SAME left hand
+    // as the candle (the light hand), witch-group child, so
+    // third-person-only visibility is free. Default hidden —
+    // the shell drives it via setCarriesLitTorch (below).
+    // While carried, the torch SUPERSEDES the candle: one
+    // hand light at a time — torch model + light on, candle
+    // model + light off. The umbrella (right hand) is
+    // untouched: light and rain-cover coexist.
+    this.torch = buildTorch();
+    this.torch.visible = false;
+    this.torch.position.set(TORCH_HAND.x, TORCH_HAND.y, TORCH_HAND.z);
+    this.witch.add(this.torch);
+    this.torchLight = new THREE.PointLight(
+      TORCH_LIGHT_COLOR,
+      TORCH_LIGHT_INTENSITY,
+      TORCH_LIGHT_DISTANCE,
+      TORCH_LIGHT_DECAY,
+    );
+    this.scene.add(this.torchLight);
 
     window.addEventListener('resize', this.onResize);
     this.loop();
@@ -465,6 +638,90 @@ export class WorldRenderer {
    */
   setCarriesUmbrella(carried: boolean): void {
     if (this.umbrella) this.umbrella.visible = carried;
+  }
+
+  /**
+   * Carried-lit-torch visibility + hand-light supersede (Adam
+   * 2026-10-27). The shell calls this when the inventory
+   * changes, passing whether a 'lit-torch' is carried
+   * (inventory.count(ITEMS.litTorch) > 0): the torch graphic
+   * shows exactly when a lit torch is carried, and while it
+   * does, the candle model + light hide — one hand light at
+   * a time, torch over candle. App-side driving is UI's
+   * follow-up; until the shell calls this, the torch stays
+   * hidden and the candle carries the light (default).
+   */
+  setCarriesLitTorch(carried: boolean): void {
+    this.carriesLitTorch = carried;
+    if (this.torch) this.torch.visible = carried;
+    if (this.candle) this.candle.visible = !carried;
+  }
+
+  /**
+   * Camp-arrow visibility (Adam 2026-10-27 — water scrying
+   * reveals the arrows; SCRY BUTTON RULING, superseding the
+   * no-button amendment: approach still water → Scry button
+   * appears → press → arrows). The shell (Systems'
+   * CampDivination state via App/UI) calls this on Scry press
+   * (true) and on arrival/dismiss (false); default hidden —
+   * arrows are the scry reward, not a permanent HUD. Reveal
+   * persists until arrival or dismiss per Systems' state —
+   * this setter only follows the shell, it holds whatever it
+   * was last told until called again. The button itself is
+   * UI's build, not this setter's.
+   */
+  setCampArrowsVisible(visible: boolean): void {
+    this.campArrowsVisible = visible;
+    this.refreshArrowVisibility();
+  }
+
+  /**
+   * Camp arrows show while scry OR pigeon holds (pigeon wing
+   * bone — way-home sense, tier-1 charm: the same arrows,
+   * ungated by water, while carried + awakened). The shell
+   * drives both setters; either one showing keeps the
+   * arrows up — so a scry dismiss (arrival) does NOT hide
+   * pigeon arrows. Whether arrival should dismiss pigeon
+   * arrows too is the shell/UI's call (always-on vs
+   * dismiss-on-arrival), not this condition's.
+   */
+  private arrowsVisible(): boolean {
+    return this.campArrowsVisible || this.pigeonWayHome;
+  }
+
+  /** Refresh world + edge arrow visibility from the OR condition above. */
+  private refreshArrowVisibility(): void {
+    const show = this.arrowsVisible();
+    if (this.campArrowGroup) this.campArrowGroup.visible = show;
+    if (!show) for (const edge of this.campEdgeArrows) edge.mesh.visible = false;
+  }
+
+  /**
+   * Pigeon wing bone — way-home sense (tier-1 charm):
+   * shell-supplied carried + awakened boolean. Arrows show
+   * without water while true (UI wiring follows separately).
+   */
+  setPigeonWayHome(active: boolean): void {
+    this.pigeonWayHome = active;
+    this.refreshArrowVisibility();
+  }
+
+  /**
+   * Bat wing bone — night way-finding (tier-1 charm):
+   * shell-supplied carried + awakened boolean. Fog thins
+   * at night while true (applied per frame in the loop).
+   */
+  setBatNightWayfinding(active: boolean): void {
+    this.batNightWayfinding = active;
+  }
+
+  /**
+   * Owl talon — night sight (tier-1 charm): pass-through
+   * to the sky rig (shell-supplied carried + awakened
+   * boolean).
+   */
+  setOwlNightSight(active: boolean): void {
+    this.sky?.setOwlNightSight(active);
   }
 
   /**
@@ -540,7 +797,16 @@ export class WorldRenderer {
     fireState.clear();
     shelterState.clear();
     loomState.clear();
+    // Placed torches belong to the old world's map too.
+    torchState.clear();
+    // Placed altars belong to the old world's map too.
+    altarState.clear();
     this.rebuildPlacedGroup();
+    // Staged bones belong to the old world's sites too.
+    ritualSiteState.clear();
+    this.rebuildStagedBones();
+    // Camp arrows belong to the old world's houses too.
+    this.rebuildCampArrows();
     // Dropped piles belong to the old world's map too.
     pileState.clear();
     this.rebuildPileGroup();
@@ -809,6 +1075,25 @@ export class WorldRenderer {
     this.fireLights.push(light);
   }
 
+  /**
+   * One scene-level point light for a placed torch, at its
+   * flame: the SAME torch profile as the carried light
+   * (80/30/2, flicker ±15%), now at a fixed position — it
+   * lights an area or path instead of following her.
+   */
+  private addTorchLight(x: number, z: number): void {
+    const light = new THREE.PointLight(
+      TORCH_LIGHT_COLOR,
+      TORCH_LIGHT_INTENSITY,
+      TORCH_LIGHT_DISTANCE,
+      TORCH_LIGHT_DECAY,
+    );
+    light.position.set(x, TORCH_FLAME_Y - PLACED_TORCH_SINK, z);
+    light.userData.phase = flamePhase(x, z);
+    this.scene.add(light);
+    this.torchLights.push(light);
+  }
+
   /** Rebuild all player-placed meshes (fires + houses + looms). */
   private rebuildPlacedGroup(): void {
     if (this.placedGroup) {
@@ -829,6 +1114,10 @@ export class WorldRenderer {
     // through setWorldGen, which rebuilds from cleared state.
     for (const light of this.fireLights) this.scene.remove(light);
     this.fireLights = [];
+    // Placed-torch lights rebuild the same way: a placed torch
+    // is always lit, so its light lives and dies with its mesh.
+    for (const light of this.torchLights) this.scene.remove(light);
+    this.torchLights = [];
     const group = new THREE.Group();
     const box = (
       w: number,
@@ -985,8 +1274,127 @@ export class WorldRenderer {
       lg.add(roll);
       group.add(lg);
     }
+    for (const torch of torchState.snapshot()) {
+      // Planted torch (Adam 2026-10-27 — light an area or
+      // path): the carried torch model, stuck upright in the
+      // ground (planting look, my call — upright planted, not
+      // leaning: a path light needs no wall to lean on), sunk
+      // by PLACED_TORCH_SINK so it reads planted. Always lit:
+      // the flame meshes are basic-material (read lit in
+      // darkness) and the light below is always on. Scene-level
+      // like all placed entities — chunk reload never touches
+      // it, and save restore rebuilds it via the constructor's
+      // initial rebuildPlacedGroup (torchState.restore first).
+      const tg = new THREE.Group();
+      tg.position.set(torch.x, -PLACED_TORCH_SINK, torch.z);
+      tg.add(buildTorch());
+      group.add(tg);
+      this.addTorchLight(torch.x, torch.z);
+    }
+    for (const altar of altarState.snapshot()) {
+      // Made ritual altar (Adam 2026-10-27 — placeable +
+      // visible ONLY, no ritual actions): the stone-table +
+      // clay-bowl graphic, sitting on the ground at the
+      // placed position. Scene-level like all placed
+      // entities — chunk reload never touches it, and save
+      // restore rebuilds it via the constructor's initial
+      // rebuildPlacedGroup (altarState.restore first). No
+      // light: an altar is not a light source.
+      const ag = new THREE.Group();
+      ag.position.set(altar.x, 0, altar.z);
+      ag.add(buildAltarGroup());
+      group.add(ag);
+    }
     this.scene.add(group);
     this.placedGroup = group;
+  }
+
+  /**
+   * Rebuild staged bones from the staging state (Adam
+   * 2026-10-27 — tier-1 Waking, site side): one pale bone
+   * per staged site, lying flat. Placement, measured at
+   * build (flagged constants, not magic): made altar →
+   * slab top 0.84 + bone half-height 0.05 = 0.89, offset
+   * z +0.37 so the bone lies beside the bowl (bowl radius
+   * 0.3, bone half-width 0.05 → clears by 0.02, inside the
+   * 0.45 slab edge); stump → stump top 0.6 (baseY 0.3 +
+   * geometry top 0.3) + 0.05 = 0.65, centred on the stump.
+   * Boulder stagings draw NOTHING (no boulder objects
+   * exist yet) — the state still holds them, and Systems'
+   * completion logic reads state, not this group. Own
+   * dispose pattern (same traverse as the placed group);
+   * dispose() routes through setWorldGen, which clears
+   * the state and rebuilds this group empty.
+   */
+  private rebuildStagedBones(): void {
+    if (this.stagedBoneGroup) {
+      this.scene.remove(this.stagedBoneGroup);
+      this.stagedBoneGroup.traverse((obj) => {
+        if (obj instanceof THREE.Mesh) {
+          obj.geometry.dispose();
+          const mat = obj.material;
+          if (Array.isArray(mat)) mat.forEach((m) => m.dispose());
+          else mat.dispose();
+        }
+      });
+      this.stagedBoneGroup = null;
+    }
+    const group = new THREE.Group();
+    for (const staged of ritualSiteState.snapshot()) {
+      if (staged.site.kind === 'boulder') continue;
+      const bone = buildStagedBone();
+      if (staged.site.kind === 'altar') {
+        bone.position.set(staged.site.x, 0.89, staged.site.z + 0.37);
+      } else {
+        bone.position.set(staged.site.x, 0.65, staged.site.z);
+      }
+      group.add(bone);
+    }
+    this.scene.add(group);
+    this.stagedBoneGroup = group;
+  }
+
+  /**
+   * Rebuild camp arrows from the placed-house list (Adam
+   * 2026-10-27 — big, obnoxious, pointing down from above):
+   * one world arrow above EACH placed house (her camps,
+   * plural — every house type is a camp), plus one
+   * screen-edge arrow per house as a camera child (hidden
+   * until its camp leaves the view). World arrows bob on
+   * flameTime in the loop; edge arrows are repositioned
+   * there per frame. Rebuilt on shelter:placed + setter
+   * toggle paths; setWorldGen clears via the empty snapshot.
+   */
+  private rebuildCampArrows(): void {
+    if (this.campArrowGroup) {
+      this.scene.remove(this.campArrowGroup);
+      this.campArrowGroup.traverse((obj) => {
+        if (obj instanceof THREE.Mesh) {
+          obj.geometry.dispose();
+          const mat = obj.material;
+          if (Array.isArray(mat)) mat.forEach((m) => m.dispose());
+          else mat.dispose();
+        }
+      });
+      this.campArrowGroup = null;
+    }
+    for (const edge of this.campEdgeArrows) this.camera.remove(edge.mesh);
+    this.campEdgeArrows = [];
+    const group = new THREE.Group();
+    for (const house of shelterState.snapshot()) {
+      const arrow = buildCampArrow();
+      arrow.position.set(house.x, CAMP_ARROW_CENTER_Y, house.z);
+      arrow.userData.phase = flamePhase(house.x, house.z);
+      arrow.userData.baseY = CAMP_ARROW_CENTER_Y;
+      group.add(arrow);
+      const edge = buildEdgeArrow();
+      edge.visible = false;
+      this.camera.add(edge);
+      this.campEdgeArrows.push({ mesh: edge, house });
+    }
+    group.visible = this.arrowsVisible();
+    this.scene.add(group);
+    this.campArrowGroup = group;
   }
 
   /**
@@ -1227,26 +1635,51 @@ export class WorldRenderer {
         FIRE_LIGHT_INTENSITY *
         (1 + FIRE_LIGHT_FLICKER_AMPLITUDE * fireLightFlicker(this.flameTime, light.userData.phase as number));
     }
+    // Placed-torch lights flicker the same way, at the torch
+    // amplitude, each with its own position-hash phase so a
+    // path of torches does not sync.
+    for (const light of this.torchLights) {
+      light.intensity =
+        TORCH_LIGHT_INTENSITY *
+        (1 + TORCH_FLICKER_AMPLITUDE * fireLightFlicker(this.flameTime, light.userData.phase as number));
+    }
 
     // Witch mesh follows the player; hidden in first-person.
     this.witch.position.set(this.player.x, 0, this.player.z);
     this.witch.rotation.y = this.player.facing;
     this.witch.visible = this.player.mode !== 'first';
 
-    // Carried-candle light follows the flame's world position:
-    // the hand offset rotated by facing (same Y-rotation the
-    // witch group itself uses), at flame height. Flicker is a
-    // small mixed-sine wobble on flameTime — deterministic,
-    // never random — in the same spirit as the fire flames.
-    {
-      const [ox, oz] = rotateOffsetY(CANDLE_HAND.x, CANDLE_HAND.z, this.player.facing);
-      this.candleLight.position.set(
+    // Hand light: exactly one shines — torch while a lit
+    // torch is carried (superseding the candle), else the
+    // candle. Each light follows its own flame's world
+    // position; the dark one sits at intensity 0.
+    if (this.carriesLitTorch) {
+      this.candleLight.intensity = 0;
+      const [ox, oz] = rotateOffsetY(TORCH_HAND.x, TORCH_HAND.z, this.player.facing);
+      this.torchLight.position.set(
         this.player.x + ox,
-        CANDLE_HAND.y + CANDLE_FLAME_Y,
+        TORCH_HAND.y + TORCH_FLAME_Y,
         this.player.z + oz,
       );
       const flick = (Math.sin(this.flameTime * 10) + Math.sin(this.flameTime * 23 + 1.7)) / 2;
-      this.candleLight.intensity = CANDLE_LIGHT_INTENSITY * (1 + CANDLE_FLICKER_AMPLITUDE * flick);
+      this.torchLight.intensity = TORCH_LIGHT_INTENSITY * (1 + TORCH_FLICKER_AMPLITUDE * flick);
+    } else {
+      this.torchLight.intensity = 0;
+      // Carried-candle light follows the flame's world position:
+      // the hand offset rotated by facing (same Y-rotation the
+      // witch group itself uses), at flame height. Flicker is a
+      // small mixed-sine wobble on flameTime — deterministic,
+      // never random — in the same spirit as the fire flames.
+      {
+        const [ox, oz] = rotateOffsetY(CANDLE_HAND.x, CANDLE_HAND.z, this.player.facing);
+        this.candleLight.position.set(
+          this.player.x + ox,
+          CANDLE_HAND.y + CANDLE_FLAME_Y,
+          this.player.z + oz,
+        );
+        const flick = (Math.sin(this.flameTime * 10) + Math.sin(this.flameTime * 23 + 1.7)) / 2;
+        this.candleLight.intensity = CANDLE_LIGHT_INTENSITY * (1 + CANDLE_FLICKER_AMPLITUDE * flick);
+      }
     }
 
     if (this.player.mode === 'first') {
@@ -1296,6 +1729,48 @@ export class WorldRenderer {
       playerX: this.player.x,
       playerZ: this.player.z,
     });
+
+    // Bat wing bone — night way-finding (tier-1 charm,
+    // DRAFT factor): fog thins at night while carried +
+    // awakened, scaled by the sky's night factor (full
+    // night −30%, twilight partial, day untouched).
+    // Distinct from owl by construction: owl is light,
+    // bat is fog.
+    const fog = this.scene.fog;
+    if (fog instanceof THREE.FogExp2) {
+      const night = this.sky?.nightFactor ?? 0;
+      fog.density = this.batNightWayfinding
+        ? FOG_DENSITY * (1 - (1 - BAT_FOG_FACTOR) * night)
+        : FOG_DENSITY;
+    }
+
+    // Camp arrows, after this frame's camera transform is set:
+    // world arrows bob (visible while scry or pigeon is on); edge arrows track off-screen camps per frame
+    // (camera children, so they ride every view). updateMatrix
+    // World first — project() needs this frame's matrices, not
+    // last frame's (render would refresh them too late).
+    if (this.arrowsVisible() && this.campArrowGroup) {
+      for (const arrow of this.campArrowGroup.children) {
+        arrow.position.y =
+          (arrow.userData.baseY as number) +
+          CAMP_ARROW_BOB * Math.sin(this.flameTime * 2 + (arrow.userData.phase as number));
+      }
+      this.camera.updateMatrixWorld();
+      const halfH = Math.tan(THREE.MathUtils.degToRad(this.camera.fov / 2)) * CAMP_EDGE_DEPTH;
+      const halfW = halfH * this.camera.aspect;
+      this.camera.getWorldDirection(this.edgeForward);
+      for (const edge of this.campEdgeArrows) {
+        this.edgeAnchor.set(edge.house.x, CAMP_ARROW_CENTER_Y, edge.house.z);
+        this.edgeToCamp.copy(this.edgeAnchor).sub(this.camera.position);
+        const behind = this.edgeToCamp.dot(this.edgeForward) < 0;
+        this.edgeAnchor.project(this.camera);
+        const t = edgeArrowTransform(this.edgeAnchor.x, this.edgeAnchor.y, behind);
+        if (!t.offScreen) { edge.mesh.visible = false; continue; }
+        edge.mesh.visible = true;
+        edge.mesh.position.set(t.x * halfW, t.y * halfH, -CAMP_EDGE_DEPTH);
+        edge.mesh.rotation.set(0, 0, t.angle);
+      }
+    }
 
     this.renderer.render(this.scene, this.camera);
   };

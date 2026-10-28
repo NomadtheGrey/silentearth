@@ -159,6 +159,14 @@ export class HomeStorage {
   private readonly stacks = new Map<ItemId, number>();
   private house: ItemId;
 
+  /**
+   * Charm storage bonus in counts (mouse, Track B):
+   * session state, shell-synced (setCharmBonus on boot
+   * + list change) — never saved; derives from the
+   * awakening record, which IS saved. Default 0.
+   */
+  private charmBonus = 0;
+
   constructor(house: ItemId, initial?: Record<string, number>) {
     // Validates the house (throws for non-houses) before storing.
     homeStorageCapacity(house);
@@ -177,9 +185,27 @@ export class HomeStorage {
     return this.house;
   }
 
-  /** Storage capacity of the current house. */
+  /**
+   * Set the charm storage bonus in counts (mouse +25
+   * while carried + awakened, else 0 — see
+   * mouseStorageBonus in charms.ts). Must be a
+   * non-negative integer.
+   */
+  setCharmBonus(counts: number): void {
+    if (!Number.isInteger(counts) || counts < 0) {
+      throw new Error('Charm storage bonus must be a non-negative integer.');
+    }
+    this.charmBonus = counts;
+  }
+
+  /** Current charm storage bonus in counts. */
+  charmBonusCounts(): number {
+    return this.charmBonus;
+  }
+
+  /** Storage capacity of the current house, including any charm bonus. */
   capacity(): number {
-    return homeStorageCapacity(this.house);
+    return homeStorageCapacity(this.house) + this.charmBonus;
   }
 
   count(item: ItemId): number {

@@ -172,10 +172,12 @@
 import { bus } from './events';
 import { CHUNK_SIZE } from '../constants';
 import {
+  CLAY_BONUS_CHANCE,
   SOURCE_BY_ID,
   harvestStageRank,
   harvestYieldForTool,
   type GroundMaterialDef,
+  type HarvestSourceDef,
   type ToolTier,
 } from './objects';
 import {
@@ -191,6 +193,7 @@ import {
   type HarvestState,
 } from './harvestState';
 import type { WorldGen } from './worldgen';
+import { boneItemId, boneKindAt } from './boneKind';
 import { TOO_HUNGRY_STAGE, type HungerStageQuery } from './hunger';
 import { loomState } from './loomState';
 import { pileState } from './pileState';
@@ -251,6 +254,42 @@ export interface HarvestOutcomeDeps {
 }
 
 /**
+ * Primary-yield item for a scatter source at a position:
+ * bones yield their kind item (Adam 2026-10-28 —
+ * individual bones in the world, each carrying its kind);
+ * everything else yields the def's primary. The kind
+ * derives from the TARGET position (boneKindAt on the
+ * world seed + target x/z) — never the player's position.
+ * Quantities are untouched (generic base + bonus rule) —
+ * only the item string changes for bones.
+ */
+function primaryYieldItem(source: HarvestSourceDef, gen: WorldGen, x: number, z: number): string {
+  if (source.kind === 'bone') return boneItemId(boneKindAt(gen.seed, x, z));
+  return source.primaryYield ?? '';
+}
+
+/**
+ * Mole paw — earth sense (tier-1 charm): shell-supplied
+ * carried + awakened boolean (UI wiring follows).
+ */
+let moleEarthSense = false;
+
+/** Shell setter for mole earth sense (see clayBonusChanceFor). */
+export function setMoleEarthSense(active: boolean): void {
+  moleEarthSense = active;
+}
+
+/**
+ * Clay bonus chance (tier-1 charm, DRAFT +10pp): 0.25 →
+ * 0.35 while carried + awakened, capped at 1.0. The
+ * gated-'CLAY' grant sites below read through this, so
+ * the chance lives in one place, never scattered.
+ */
+export function clayBonusChanceFor(moleActive: boolean): number {
+  return Math.min(1, CLAY_BONUS_CHANCE + (moleActive ? 0.1 : 0));
+}
+
+/**
  * Station presence at (x, z): a stump within HARVEST_RANGE means a
  * workstation is available (stumps are workstation anchors in
  * objects.ts). Query, not event — crafting checks availability at
@@ -295,6 +334,48 @@ export function stationPresence(
   // loomState, like the felled-stump check reads live state.
   const loom = loomState.loomsInRange(x, z, HARVEST_RANGE);
   return { workstation, loom };
+}
+
+/**
+ * Stump positions at (x, z) (Adam 2026-10-28 — UI gap #4:
+ * the shell needs positions, not just presence booleans,
+ * to stage onto stumps). Mirrors stationPresence exactly:
+ * felled stumps in state + grown stump objects in range
+ * (minus removed), deduped by rounded position. Default
+ * range HARVEST_RANGE (staging is a near-site interaction,
+ * same range as workstation presence). Positions are the
+ * whole site identity for stumps (stumpSiteId derives from
+ * them in ritualSite.ts).
+ */
+export function stumpPositions(
+  gen: WorldGen,
+  x: number,
+  z: number,
+  range: number = HARVEST_RANGE,
+): Array<{ x: number; z: number }> {
+  const out: Array<{ x: number; z: number }> = [];
+  const seen = new Set<string>();
+  const push = (sx: number, sz: number): void => {
+    const key = `${sx.toFixed(2)},${sz.toFixed(2)}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    out.push({ x: sx, z: sz });
+  };
+  for (const s of harvestState.felledStumpPositionsInRange(x, z, range)) push(s.x, s.z);
+  const minCx = Math.floor((x - range) / CHUNK_SIZE);
+  const maxCx = Math.floor((x + range) / CHUNK_SIZE);
+  const minCz = Math.floor((z - range) / CHUNK_SIZE);
+  const maxCz = Math.floor((z + range) / CHUNK_SIZE);
+  for (let cz = minCz; cz <= maxCz; cz++) {
+    for (let cx = minCx; cx <= maxCx; cx++) {
+      for (const obj of gen.generateChunk(cx, cz).objects) {
+        if (obj.kind !== 'stump') continue;
+        if (harvestState.isRemoved(scatterTargetId(cx, cz, obj))) continue;
+        if (Math.hypot(obj.x - x, obj.z - z) <= range) push(obj.x, obj.z);
+      }
+    }
+  }
+  return out;
 }
 
 /**
@@ -696,7 +777,7 @@ export function createHarvestOutcomeListener(
       const removeYields = new Map<string, number>();
       mergeYields(
         removeYields,
-        source.primaryYield ?? '',
+        primaryYieldItem(source, gen, req.x, req.z),
         outcome.base * REMOVE_YIELD_MULTIPLIER +
           (rng() < outcome.bonusChance ? outcome.bonus : 0),
       );
@@ -710,10 +791,14 @@ export function createHarvestOutcomeListener(
           }
           const gatedYield = gated.yieldByStage[harvestStageRank(tool)];
           if (!gatedYield) continue;
+          // Mole paw — earth sense (tier-1 charm): clay's
+          // bonus chance rises while carried + awakened.
+          const bonusChance =
+            gated.item === 'CLAY' ? clayBonusChanceFor(moleEarthSense) : gatedYield.bonusChance;
           mergeYields(
             removeYields,
             gated.item,
-            gatedYield.base + (rng() < gatedYield.bonusChance ? gatedYield.bonus : 0),
+            gatedYield.base + (rng() < bonusChance ? gatedYield.bonus : 0),
           );
         }
       }
@@ -770,7 +855,7 @@ export function createHarvestOutcomeListener(
     const yields = new Map<string, number>();
     mergeYields(
       yields,
-      source.primaryYield ?? '',
+      primaryYieldItem(source, gen, req.x, req.z),
       outcome.base + (rng() < outcome.bonusChance ? outcome.bonus : 0),
     );
     for (const secondary of source.secondaryYields) {
@@ -783,10 +868,14 @@ export function createHarvestOutcomeListener(
         }
         const gatedYield = gated.yieldByStage[harvestStageRank(tool)];
         if (!gatedYield) continue;
+        // Mole paw — earth sense (tier-1 charm): clay's
+        // bonus chance rises while carried + awakened.
+        const bonusChance =
+          gated.item === 'CLAY' ? clayBonusChanceFor(moleEarthSense) : gatedYield.bonusChance;
         mergeYields(
           yields,
           gated.item,
-          gatedYield.base + (rng() < gatedYield.bonusChance ? gatedYield.bonus : 0),
+          gatedYield.base + (rng() < bonusChance ? gatedYield.bonus : 0),
         );
       }
     }

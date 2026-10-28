@@ -82,7 +82,7 @@
  * 2003619); this layer invents no event.
  */
 
-import { Fragment } from 'react';
+import { Fragment, type ReactNode } from 'react';
 import { HarvestButton, RemoveButton } from './HarvestButton';
 import type { HarvestTarget, HarvestRequest } from './proximityHarvest';
 import type { UiThemeName } from './themes';
@@ -101,6 +101,12 @@ export interface ProximityHarvestButtonsProps {
   onRemove?: (target: HarvestTarget) => void;
   /** Verb for the remove button. Default "Remove" (lane's pick). */
   removeLabel?: string;
+  /**
+   * Optional node rendered first in the column, above the
+   * harvest buttons (e.g. a LOOK action for the nearest
+   * target). The caller owns its visibility and content.
+   */
+  lookNode?: ReactNode;
   /** Look for the buttons. Default "mire" (the world outside). */
   theme?: UiThemeName;
 }
@@ -110,6 +116,7 @@ export function ProximityHarvestButtons({
   onHarvest,
   onRemove,
   removeLabel = 'Remove',
+  lookNode,
   theme = 'mire',
 }: ProximityHarvestButtonsProps) {
   if (targets.length === 0) {
@@ -124,6 +131,7 @@ export function ProximityHarvestButtons({
     // 56 px floor keeps at least one button visible; overflow
     // scrolls inside the column, never under a top control.
     <div className="pointer-events-auto absolute bottom-[52%] left-1/2 z-40 flex max-h-[min(40vh,max(56px,calc(48vh-112px)))] min-[480px]:max-h-[min(40vh,max(56px,calc(48vh-60px)))] w-max max-w-[calc(100vw-1rem)] -translate-x-1/2 flex-col items-center gap-2 overflow-y-auto px-1 py-1">
+      {lookNode}
       {targets.map((target) => (
         <Fragment key={target.id}>
           {target.kind === 'scatter' && onRemove ? (

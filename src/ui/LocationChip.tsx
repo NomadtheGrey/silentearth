@@ -30,6 +30,15 @@ export interface LocationChipProps {
   biomePercent: number;
   /** Measured framerate, or null until the first sample lands. */
   fps: number | null;
+  /**
+   * Zone coords (east, north) from the shell's zoneCoords
+   * call. Omitted = no zone readout (the chip predates
+   * zones). Numbers only — the [+10, 0] sign formatting
+   * lives here, in the display, not in the helper.
+   */
+  zoneX?: number;
+  /** Second zone axis (north-positive), paired with zoneX. */
+  zoneZ?: number;
   /** Look for the pill. Default "mire" (the world outside). */
   theme?: UiThemeName;
 }
@@ -40,13 +49,22 @@ export function LocationChip({
   biomeName,
   biomePercent,
   fps,
+  zoneX,
+  zoneZ,
   theme = 'mire',
 }: LocationChipProps) {
   const t = UI_THEMES[theme];
+  // Zone format (Adam's example [+10, 0]): '+' on
+  // positives on BOTH axes, plain zero/negatives.
+  const signed = (n: number) => (n > 0 ? `+${n}` : `${n}`);
+  const zoneText =
+    zoneX === undefined || zoneZ === undefined
+      ? null
+      : `[${signed(zoneX)}, ${signed(zoneZ)}]`;
   return (
     <div
       className="pointer-events-none absolute bottom-2 left-1/2 z-40 -translate-x-1/2"
-      aria-label={`Location: ${biomeName} ${biomePercent} percent, position ${x.toFixed(1)}, ${z.toFixed(1)}${fps !== null ? `, ${fps} frames per second` : ''}`}
+      aria-label={`Location: ${biomeName} ${biomePercent} percent, position ${x.toFixed(1)}, ${z.toFixed(1)}${zoneText !== null ? `, zone ${zoneText}` : ''}${fps !== null ? `, ${fps} frames per second` : ''}`}
     >
       <p
         className={
@@ -55,6 +73,7 @@ export function LocationChip({
         }
       >
         {biomeName} {biomePercent}% · ({x.toFixed(1)}, {z.toFixed(1)})
+        {zoneText !== null ? ` · ${zoneText}` : ''}
         {fps !== null ? ` · ${fps} FPS` : ''}
       </p>
     </div>

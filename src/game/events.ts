@@ -247,6 +247,57 @@ export interface EventMap {
    */
   'loom:placed': { id: string; x: number; z: number };
   /**
+   * A torch was placed (torchState.placeTorch, Adam 2026-10-27
+   * — a carried lit torch planted to light an area or path).
+   * Free placement, cost-free engine primitive — the consume
+   * of one carried 'lit-torch' lives with Systems + UI.
+   * Renderer rebuilds the placed group from this; UI projects
+   * placed-torch chips from torchState.snapshot() + this event.
+   */
+  'torch:placed': { id: string; x: number; z: number };
+  /**
+   * A placed torch was picked back up (torchState.removeTorch).
+   * The pickup grant (return 'lit-torch', lit not unlit) lives
+   * with Systems. Renderer rebuilds the placed group from this.
+   */
+  'torch:removed': { id: string };
+  /**
+   * A made altar was placed (altarState.placeAltar, Adam
+   * 2026-10-27 — placeable + visible ONLY, no ritual
+   * actions). Free placement, cost-free engine primitive —
+   * the craft + consume lives with Systems + UI. Renderer
+   * rebuilds the placed group from this; UI projects
+   * placed-altar chips (label-only) from altarState
+   * .snapshot() + this event.
+   */
+  'altar:placed': { id: string; x: number; z: number };
+  /**
+   * A placed altar was removed (altarState.removeAltar).
+   * No removal UI exists in this order (label-only chip) —
+   * the event exists so the renderer + shell stay in sync
+   * if one ever does. Renderer rebuilds the placed group.
+   */
+  'altar:removed': { id: string };
+  /**
+   * A bone was staged on a ritual site (ritualSiteState
+   * .stageBone, Adam 2026-10-27 — tier-1 Waking, site
+   * side). Site is the full site ref (kind + siteId + x/z);
+   * bone is Systems' design key (opaque here). Renderer
+   * rebuilds the staged-bone group from this; Systems'
+   * completion logic reads the state, not this event.
+   */
+  'ritual:staged': {
+    site: { kind: 'altar' | 'stump' | 'boulder'; siteId: string; x: number; z: number };
+    bone: string;
+  };
+  /**
+   * A staged bone left its site (ritualSiteState
+   * .unstageBone, or replaced by a new staging on the same
+   * site — replace emits unstaged, then staged). Renderer
+   * rebuilds the staged-bone group from this.
+   */
+  'ritual:unstaged': { siteId: string };
+  /**
    * A trap entity was placed (trapState.placeTrap, Adam's
    * rule: crafting a trap places it right there). Cost-free
    * engine primitive — recipe/cost gating lives with Systems

@@ -127,6 +127,12 @@ export interface OptionsModalProps {
   perspective?: CameraPerspective;
   /** Called when the player picks a perspective. */
   onPerspectiveChange?: (perspective: CameraPerspective) => void;
+  /**
+   * Called when the player asks to re-read the introduction.
+   * Omitted = no Introduction section (mirrors the
+   * Perspective section's optional pattern).
+   */
+  onShowIntro?: () => void;
   /** Called when the modal is closed. */
   onClose?: () => void;
   /** Bottom-sheet layout + thumb-sized controls on touch. Default false. */
@@ -140,6 +146,7 @@ export function OptionsModal({
   onFontChange,
   perspective,
   onPerspectiveChange,
+  onShowIntro,
   onClose,
   comfortable = false,
   theme = 'mire',
@@ -255,6 +262,29 @@ export function OptionsModal({
                     comfortable={comfortable}
                     onChange={onPerspectiveChange}
                   />
+                </div>
+              ) : null}
+              {onShowIntro !== undefined ? (
+                <div className="mt-4">
+                  <p
+                    className={'mb-1 block text-sm font-medium ' + t.heading}
+                  >
+                    Introduction
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => onShowIntro?.()}
+                    className={
+                      comfortable
+                        ? 'rounded px-3 py-2 text-sm min-h-[44px] ' + t.button
+                        : 'rounded px-2 py-1 text-sm ' + t.button
+                    }
+                  >
+                    Show introduction
+                  </button>
+                  <p className={'mt-2 text-sm ' + t.muted}>
+                    The first-run introduction, for later reference.
+                  </p>
                 </div>
               ) : null}
             </div>

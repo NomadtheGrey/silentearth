@@ -48,7 +48,8 @@ import type { MeshSpec } from './objects';
 import { hashSeed, mulberry32 } from './seed';
 
 /** Ground-cover disc radii per kind (disc-shaped sources only). */
-const DISC_RADIUS: Partial<Record<ScatterKind, number>> = {
+/** Ground-disc radii by scatter kind (shared with waterProximity's pond edge). */
+export const DISC_RADIUS: Partial<Record<ScatterKind, number>> = {
   bogPatch: 1.4,
   standingWater: 1.2,
   pond: 4.5,
@@ -637,5 +638,159 @@ export function buildCandle(): THREE.Group {
   flameInner.scale.set(1, 1.6, 1);
   flameInner.position.set(0, 0.3, 0);
   g.add(flameInner);
+  return g;
+}
+
+/** Flame-center height inside a buildTorch() group (stick bottom = 0). */
+export const TORCH_FLAME_Y = 0.8;
+
+/**
+ * Downward camp arrow (Adam 2026-10-27 — BIG, OBNOXIOUS,
+ * pointing DOWN from ABOVE): a 5 m arrow — 3.2 m shaft +
+ * 1.8 m head, apex down — in unlit vivid yellow, fog-free,
+ * drawn on top of everything (depthTest off, renderOrder
+ * 999): a divination marker, not a physical object, so trees
+ * and terrain never hide it. Group origin = shaft center;
+ * the renderer hangs it above a house at CAMP_ARROW_CENTER_Y.
+ */
+export function buildCampArrow(): THREE.Group {
+  const g = new THREE.Group();
+  const mat = new THREE.MeshBasicMaterial({ color: 0xffe600, fog: false, depthTest: false });
+  const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 3.2, 8), mat);
+  shaft.renderOrder = 999;
+  g.add(shaft);
+  const head = new THREE.Mesh(new THREE.ConeGeometry(0.9, 1.8, 12), mat);
+  head.rotation.x = Math.PI; // apex down
+  head.position.y = -2.5;
+  head.renderOrder = 999;
+  g.add(head);
+  return g;
+}
+
+/**
+ * Screen-edge camp arrow: a flat arrow in the camera's XY
+ * plane, pointing +Y by default — the renderer rotates it
+ * (rotation.z) toward the off-screen camp. Same unmissable
+ * yellow, fog-free, depthless, on top.
+ */
+export function buildEdgeArrow(): THREE.Group {
+  const g = new THREE.Group();
+  const mat = new THREE.MeshBasicMaterial({ color: 0xffe600, fog: false, depthTest: false });
+  const shaft = new THREE.Mesh(new THREE.BoxGeometry(0.28, 1.2, 0.05), mat);
+  shaft.renderOrder = 999;
+  g.add(shaft);
+  const head = new THREE.Mesh(new THREE.ConeGeometry(0.55, 0.9, 12), mat);
+  head.position.y = 1.05;
+  head.renderOrder = 999;
+  g.add(head);
+  return g;
+}
+
+/**
+ * Carried torch (Adam 2026-10-27 — Systems torch item + batch
+ * lighting landed first): dark stick + twine binding + charred
+ * head + two-part basic-material flame (amber outer, pale
+ * core — basic on purpose so the flame reads lit in darkness,
+ * like the candle's). Bigger flame than the candle's: this is
+ * the brighter light. Held in the left hand (the light hand);
+ * the renderer supersedes the candle with it while a lit
+ * torch is carried.
+ */
+export function buildTorch(): THREE.Group {
+  const g = new THREE.Group();
+  const stick = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.04, 0.65, 8), meshMat(0x4a3220));
+  stick.position.set(0, 0.325, 0);
+  g.add(stick);
+  const binding = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.08, 8), meshMat(0x8a7a50));
+  binding.position.set(0, 0.6, 0);
+  g.add(binding);
+  const head = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.045, 0.1, 8), meshMat(0x1a1208));
+  head.position.set(0, 0.68, 0);
+  g.add(head);
+  const flameOuter = new THREE.Mesh(
+    new THREE.SphereGeometry(0.05, 8, 8),
+    new THREE.MeshBasicMaterial({ color: 0xffa030 }),
+  );
+  flameOuter.scale.set(1, 1.8, 1);
+  flameOuter.position.set(0, TORCH_FLAME_Y, 0);
+  g.add(flameOuter);
+  const flameInner = new THREE.Mesh(
+    new THREE.SphereGeometry(0.03, 8, 8),
+    new THREE.MeshBasicMaterial({ color: 0xffe080 }),
+  );
+  flameInner.scale.set(1, 1.6, 1);
+  flameInner.position.set(0, 0.78, 0);
+  g.add(flameInner);
+  return g;
+}
+
+/**
+ * A made ritual altar (Adam 2026-10-27 — placeable + visible
+ * ONLY, no ritual actions). The read-at-a-glance shape, my
+ * design on the draft suggestion (flagged): a flat stone
+ * TABLE on four wooden legs, with a clay bowl atop the
+ * centre. Deliberately NOT a house (no walls, no roof) and
+ * NOT a fire (no logs, no flame, no light — an altar is
+ * not a light source until a ritual says so). Symmetric, so
+ * it needs no facing. Overall ~1.4 m wide, ~1.0 m tall:
+ * person-scale, unmistakable at a glance, smaller than any
+ * house. Lambert materials throughout (lit by sun/moon
+ * like the houses — dark at night, like everything unlit).
+ */
+export function buildAltarGroup(): THREE.Group {
+  const g = new THREE.Group();
+  // Four wooden legs (frame) at the slab corners, inset.
+  const legGeo = new THREE.BoxGeometry(0.1, 0.72, 0.1);
+  const legMat = meshMat(0x6b4a2f);
+  for (const sx of [-1, 1]) {
+    for (const sz of [-1, 1]) {
+      const leg = new THREE.Mesh(legGeo, legMat);
+      leg.position.set(sx * 0.55, 0.36, sz * 0.3);
+      g.add(leg);
+    }
+  }
+  // Flat stone slab (base/table): 1.4 x 0.12 x 0.9, top at 0.84.
+  const slab = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.12, 0.9), meshMat(0x8a8a86));
+  slab.position.set(0, 0.78, 0);
+  g.add(slab);
+  // Clay bowl atop the centre: a lathe bowl (profile from
+  // foot to rim), terracotta, double-sided so the hollow
+  // reads from above instead of capping shut.
+  const profile: THREE.Vector2[] = [
+    new THREE.Vector2(0.02, 0),
+    new THREE.Vector2(0.12, 0.01),
+    new THREE.Vector2(0.22, 0.06),
+    new THREE.Vector2(0.28, 0.14),
+    new THREE.Vector2(0.3, 0.2),
+  ];
+  const bowlMat = new THREE.MeshLambertMaterial({ color: 0xb5654a, side: THREE.DoubleSide });
+  const bowl = new THREE.Mesh(new THREE.LatheGeometry(profile, 20), bowlMat);
+  bowl.position.set(0, 0.84, 0);
+  g.add(bowl);
+  return g;
+}
+
+/**
+ * A staged ritual bone (Adam 2026-10-27 — tier-1 Waking,
+ * site side). The read-at-a-glance shape, my design
+ * (flagged): a small pale bone LYING FLAT — shaft with a
+ * knob at each end, bone-white, ~0.5 m long, ~0.1 m thick.
+ * It lies on the site (altar slab beside the bowl, stump
+ * top), never upright, never glowing — a staged bone is
+ * waiting, not awakened. The renderer positions it per
+ * site kind; this builder only shapes it, lying along X
+ * with its centre at the origin.
+ */
+export function buildStagedBone(): THREE.Group {
+  const g = new THREE.Group();
+  const mat = meshMat(0xe8e0cc);
+  const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.4, 8), mat);
+  shaft.rotation.z = Math.PI / 2;
+  g.add(shaft);
+  for (const sx of [-1, 1]) {
+    const knob = new THREE.Mesh(new THREE.SphereGeometry(0.05, 8, 8), mat);
+    knob.position.set(sx * 0.2, 0, 0);
+    g.add(knob);
+  }
   return g;
 }

@@ -67,6 +67,14 @@ export interface InventoryPanelProps {
   /** Called when the player presses Eat on an item. Optional. */
   onEatItem?: (id: string) => void;
   /**
+   * Item ids that can be lit (unlit torches). Items in this
+   * set gain a Light button. Omitted = no Light buttons;
+   * lighting itself is the caller's job.
+   */
+  lightableIds?: ReadonlySet<string>;
+  /** Called when the player presses Light on an item. Optional. */
+  onLightItem?: (id: string) => void;
+  /**
    * Home-storage section, shown when the caller opens one
    * (sheltered at a placed house). Omitted = personal list
    * only, no Deposit buttons.
@@ -100,6 +108,8 @@ export function InventoryPanel({
   onPlaceItem,
   foodIds,
   onEatItem,
+  lightableIds,
+  onLightItem,
   storage,
   onDepositItem,
   onDropItem,
@@ -200,6 +210,16 @@ export function InventoryPanel({
                     className={actionBtn}
                   >
                     Eat
+                  </button>
+                ) : null}
+                {(lightableIds?.has(item.id) ?? false) && onLightItem ? (
+                  <button
+                    type="button"
+                    onClick={() => onLightItem(item.id)}
+                    aria-label={`Light ${item.name}`}
+                    className={actionBtn}
+                  >
+                    Light
                   </button>
                 ) : null}
                 {storage !== undefined && onDepositItem ? (

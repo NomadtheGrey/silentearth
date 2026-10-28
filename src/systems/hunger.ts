@@ -324,6 +324,18 @@ export type HungerStage = 'fed' | 'hungry' | 'too-hungry';
 export class HungerState {
   private hunger: number;
 
+  /**
+   * Drain-rate multiplier (default 1 = pinned base rate).
+   * Charm support (2026-10-28, Track A): the shell sets
+   * this from carried awakened charms (shrew ×0.9 while
+   * carried; snake later multiplies into the SAME field
+   * — drain multipliers combine MULTIPLICATIVELY, so
+   * the shell computes the product, not a sum). Session
+   * state only: the shell recomputes it from inventory
+   * + charms on boot — nothing is saved here.
+   */
+  private drainMult = 1;
+
   /** Starts fully fed unless wiring passes a starting/saved value. */
   constructor(initial: number = HUNGER_MAX) {
     if (!Number.isFinite(initial)) {
@@ -379,16 +391,38 @@ export class HungerState {
     this.hunger = clampHunger(this.hunger - amount);
   }
 
+  /** Current drain-rate multiplier (1 = base rate). */
+  drainMultiplier(): number {
+    return this.drainMult;
+  }
+
   /**
-   * Advance time: drain for `seconds` real seconds at the default
-   * rate (full → empty in HUNGER_SECONDS_TO_EMPTY). Wiring scales
-   * `seconds` if the game clock runs at a different rate.
+   * Set the drain-rate multiplier (charm effects — see
+   * field comment). Must be finite and > 0 (approved
+   * claim: clamped > 0 — 0 is NOT a pause mechanism;
+   * sleep's pinned hunger-pause rule, when built, gets
+   * its own mechanism, not a 0 multiplier conflated
+   * with rate).
+   */
+  setDrainMultiplier(m: number): void {
+    if (!Number.isFinite(m) || m <= 0) {
+      throw new Error('Drain multiplier must be a finite positive number.');
+    }
+    this.drainMult = m;
+  }
+
+  /**
+   * Advance time: drain for `seconds` real seconds at the
+   * multiplier × base rate (full → empty in
+   * HUNGER_SECONDS_TO_EMPTY at multiplier 1; ×0.9 → 1 pt
+   * per ~33.3 s). Wiring scales `seconds` if the game
+   * clock runs at a different rate.
    */
   tick(seconds: number): void {
     if (!Number.isFinite(seconds) || seconds < 0) {
       throw new Error('Tick seconds must be a finite non-negative number.');
     }
-    this.drain((HUNGER_MAX * seconds) / HUNGER_SECONDS_TO_EMPTY);
+    this.drain((HUNGER_MAX * seconds * this.drainMult) / HUNGER_SECONDS_TO_EMPTY);
   }
 
   /** Restore hunger by an absolute amount (clamped at 100). */

@@ -44,15 +44,63 @@
  *   writes traps as-is (ids saved verbatim — restore()
  *   recomputes its id counter from the max id suffix, so
  *   later placeTrap ids cannot collide).
+ * - placed torches (position, id optional — no game import):
+ *   same additive-field rule (old saves load torches: [])
+ *   and the same leniency as traps on read (entries pass
+ *   through, the placed-torch restore validates + drops
+ *   bad records, so a bad torch record can never corrupt
+ *   the whole document). Placed torches are ALWAYS lit
+ *   (she places light, not sticks; no-burnout pin
+ *   extended), so no lit flag is stored. `id` is optional
+ *   because Background's placed-torch entity owns the id
+ *   scheme (spot-keyed vs sequential is their call) — the
+ *   save carries position always and the id when the
+ *   entity provides one. Order preserved; duplicate
+ *   positions allowed (two torches at one spot are two
+ *   entries).
+ * - partial true names (name-sight look counts, key +
+ *   looks): same additive-field rule (old saves load
+ *   nameSight: []) and the same leniency as torches on
+ *   read (bad entries dropped, the document survives).
+ *   Trap-save pattern: format now, App wiring later —
+ *   serialize writes the snapshot as-is, restore()
+ *   validates again. Version stays 1.
+ * - placed altars (position, id optional — no game
+ *   import): same additive-field rule (old saves load
+ *   altars: []) and the same leniency as torches on read
+ *   (entries pass through, the placed-altar restore
+ *   validates + drops bad records, so a bad altar record
+ *   can never corrupt the whole document). Placed altars
+ *   carry no ritual state — the altar is the SITE;
+ *   rituals come later, so no ritual field is stored.
+ *   `id` is optional because Background's placed-altar
+ *   entity owns the id scheme (torch precedent) — the
+ *   save carries position always and the id when the
+ *   entity provides one. Order preserved; duplicate
+ *   positions allowed (two altars at one spot are two
+ *   entries).
+ * - ritual stagings + awakenings (tier-1 Waking state):
+ *   same additive-field rule (old saves load stagings:
+ *   [] + awakenings: []) and the name-sight leniency on
+ *   read (bad entries dropped, the document survives).
+ *   Trap-save pattern: format now, App wiring later —
+ *   serialize writes the snapshots as-is, restore()
+ *   validates again. Version stays 1.
+ * - charm-list migration (2026-10-28, deserialize
+ *   only): a save holding the grant's shrew item +
+ *   its awakening drops the item (record kept) — see
+ *   the migration block in deserializeSave.
  * - world state (Background's persistence seams, a39f47f):
  *   fires[].lighting (LightingProcess shape; lit needs no
  *   field — fires[].lit already exists), harvestState
- *   (HarvestStateSnapshot shape), sky { cycleT }, facing
- *   { yaw, pitch }. Same additive-field rule: old saves load
- *   defaults (empty harvest snapshot, dawn sky, default
- *   look), never break. Invalid entries pass through —
- *   the engine restores validate and drop (replace, not
- *   merge; null snapshots ignored there).
+ *   (HarvestStateSnapshot shape), sky { cycleT,
+ *   daysElapsed? } (dawn count for the moon-phase cycle —
+ *   absent on old saves, which load as current, i.e. 0),
+ *   facing { yaw, pitch }. Same additive-field rule: old
+ *   saves load defaults (empty harvest snapshot, dawn sky,
+ *   default look), never break. Invalid entries pass
+ *   through — the engine restores validate and drop
+ *   (replace, not merge; null snapshots ignored there).
  *   APP WIRING (live): saveNow passes the pile
  *   singleton's snapshot stacks as draft.piles, and boot
  *   restore re-places each saved kind through
@@ -95,6 +143,16 @@
 // ---------------------------------------------------------------------------
 
 import { normalizeItemId } from './inventory';
+// Single source for the name-sight record (name-sight.ts
+// owns it; save.ts imports it — no second mirror to drift,
+// the placed-torch id nuance taught us that lesson).
+import type { SavedNameLook } from './name-sight';
+// Single source for the ritual records (rituals.ts /
+// charms.ts own them; save.ts imports them — no second
+// mirror to drift, the placed-torch id lesson).
+import type { SavedRitualStaging } from './rituals';
+import { FIRST_CHARM_ITEM, FIRST_CHARM_KIND } from './charms';
+import type { SavedAwakening } from './charms';
 
 /** Storage key. The version rides inside the document too. */
 export const SAVE_KEY = 'silentearth-save-v1';
@@ -199,6 +257,38 @@ export interface SavedTrap {
 }
 
 /**
+ * A placed torch, as saved. Placed torches are ALWAYS lit
+ * (she places light, not sticks; no-burnout pin extended),
+ * so no lit flag is stored — a saved torch is a lit torch.
+ * `id` is optional: Background's placed-torch entity owns
+ * the id scheme (spot-keyed vs sequential is their call);
+ * the save carries position always and the id when the
+ * entity provides one. Order preserved; duplicate
+ * positions allowed (two torches at one spot are two
+ * entries, not one merged record).
+ */
+export interface SavedTorch {
+  x: number;
+  z: number;
+  id?: string;
+}
+
+/**
+ * A placed altar, as saved. No ritual state is stored —
+ * the altar is the SITE; rituals come later. `id` is
+ * optional: Background's placed-altar entity owns the id
+ * scheme (torch precedent); the save carries position
+ * always and the id when the entity provides one. Order
+ * preserved; duplicate positions allowed (two altars at
+ * one spot are two entries, not one merged record).
+ */
+export interface SavedAltar {
+  x: number;
+  z: number;
+  id?: string;
+}
+
+/**
  * World harvest state, as saved. Structural mirror of the game
  * layer's HarvestStateSnapshot (harvestState.ts) by literal —
  * systems does not import game modules. The engine's restore()
@@ -267,10 +357,18 @@ export function emptySavedHarvestState(): SavedHarvestState {
 /**
  * Sky state, as saved. Structural mirror of the game layer's
  * SkySnapshot (sky.ts) by literal: cycle position t in [0,1)
- * ONLY (month is an input, not state). 0 = dawn (sky.ts).
+ * + dawn count daysElapsed (month is an input, not state).
+ * 0 = dawn (sky.ts). daysElapsed is OPTIONAL, mirroring
+ * SkySnapshot: absent on old saves (Background's restore
+ * treats absence via its dawn rule — boot from a fresh rig
+ * never jumps backward, so old saves still load at 0, as
+ * before). Present + finite on new saves, it wins
+ * absolutely in restore — a refresh no longer rewinds the
+ * moon phase toward the seed base.
  */
 export interface SavedSky {
   cycleT: number;
+  daysElapsed?: number;
 }
 
 /** Dawn default: the sky default for saves predating it. */
@@ -305,6 +403,16 @@ export interface SaveData {
   piles: SavedPile[];
   /** Placed traps (craft-placed); [] for old saves. */
   traps: SavedTrap[];
+  /** Placed torches (always lit); [] for old saves. */
+  torches: SavedTorch[];
+  /** Placed altars (sites, no ritual state); [] for old saves. */
+  altars: SavedAltar[];
+  /** Partial-true-name look counts; [] for old saves. */
+  nameSight: SavedNameLook[];
+  /** Ritual stagings (site + kind + steps); [] for old saves. */
+  stagings: SavedRitualStaging[];
+  /** Charm awakenings (kind + tier); [] for old saves. */
+  awakenings: SavedAwakening[];
   /** World harvest state; empty snapshot for old saves. */
   harvestState: SavedHarvestState;
   /** Sky cycle position; dawn ({ cycleT: 0 }) for old saves. */
@@ -368,6 +476,60 @@ export interface SaveDraft {
     type: string;
     x: number;
     z: number;
+  }>;
+  /**
+   * Placed torches from the placed-torch source
+   * (Background's entity snapshot, once it lands).
+   * OPTIONAL so existing saveNow call sites keep
+   * compiling unchanged until the App wiring lands
+   * (trap-save pattern: format now, wiring later).
+   */
+  torches?: ReadonlyArray<{
+    x: number;
+    z: number;
+    id?: string;
+  }>;
+  /**
+   * Placed altars from the placed-altar source
+   * (Background's entity snapshot, once it lands).
+   * OPTIONAL so existing saveNow call sites keep
+   * compiling unchanged until the App wiring lands
+   * (trap-save pattern: format now, wiring later).
+   */
+  altars?: ReadonlyArray<{
+    x: number;
+    z: number;
+    id?: string;
+  }>;
+  /**
+   * Partial-true-name looks from NameSight.snapshot().
+   * OPTIONAL so existing saveNow call sites keep
+   * compiling unchanged until the App wiring lands
+   * (trap-save pattern: format now, wiring later).
+   */
+  nameSight?: ReadonlyArray<{
+    key: string;
+    looks: number;
+  }>;
+  /**
+   * Ritual stagings from StagingBook.snapshot() +
+   * awakenings from CharmState.snapshot(). OPTIONAL so
+   * existing saveNow call sites keep compiling unchanged
+   * until the App wiring lands (trap-save pattern:
+   * format now, wiring later).
+   */
+  stagings?: ReadonlyArray<{
+    siteKey: string;
+    boneKind: string;
+    bonePlaced: boolean;
+    offeringGiven: boolean;
+    nameSpoken: boolean;
+    extrasDone: string[];
+    completed: boolean;
+  }>;
+  awakenings?: ReadonlyArray<{
+    kind: string;
+    tier: number;
   }>;
 }
 
@@ -460,7 +622,21 @@ export function serializeSave(draft: SaveDraft): SaveData {
             })),
           }
         : emptySavedHarvestState(),
-    sky: draft.sky !== undefined ? { ...draft.sky } : { ...DAWN_SAVED_SKY },
+    // Sky: built EXPLICITLY, not spread — the old spread
+    // hid the daysElapsed field (it rode along invisibly
+    // while deserialize stripped it, so the moon phase
+    // rewound on every refresh). daysElapsed rides only
+    // when the draft carries it; old drafts (cycleT only)
+    // serialize cycleT only, as before.
+    sky:
+      draft.sky !== undefined
+        ? {
+            cycleT: draft.sky.cycleT,
+            ...(draft.sky.daysElapsed !== undefined
+              ? { daysElapsed: draft.sky.daysElapsed }
+              : {}),
+          }
+        : { ...DAWN_SAVED_SKY },
     facing:
       draft.facing !== undefined
         ? { ...draft.facing }
@@ -483,6 +659,57 @@ export function serializeSave(draft: SaveDraft): SaveData {
       type: trap.type,
       x: trap.x,
       z: trap.z,
+    })),
+    // Torches: written AS-IS (positions verbatim, id when
+    // the entity provides one — no filtering, no
+    // normalization). Invalid entries are restore()'s
+    // problem, not serialize's: the placed-torch restore
+    // validates (finite coords) and drops them. Placed
+    // torches are always lit, so no lit flag is written.
+    torches: (draft.torches ?? []).map((torch) => ({
+      x: torch.x,
+      z: torch.z,
+      ...(torch.id !== undefined ? { id: torch.id } : {}),
+    })),
+    // Altars: written AS-IS (positions verbatim, id when
+    // the entity provides one — no filtering, no
+    // normalization). Invalid entries are restore()'s
+    // problem, not serialize's: the placed-altar restore
+    // validates (finite coords) and drops them. No ritual
+    // state is written — the altar is the SITE.
+    altars: (draft.altars ?? []).map((altar) => ({
+      x: altar.x,
+      z: altar.z,
+      ...(altar.id !== undefined ? { id: altar.id } : {}),
+    })),
+    // Name-sight: written AS-IS (key + looks verbatim, no
+    // filtering, no normalization — keys are caller-defined
+    // thing keys, not inventory ids). Invalid entries are
+    // restore()'s problem, not serialize's: NameSight.
+    // restore() validates (non-empty key + positive-int
+    // looks) and drops them.
+    nameSight: (draft.nameSight ?? []).map((entry) => ({
+      key: entry.key,
+      looks: entry.looks,
+    })),
+    // Ritual stagings + awakenings: written AS-IS (records
+    // verbatim, no filtering, no normalization — site keys
+    // and bone kinds are caller-defined, not inventory
+    // ids). Invalid entries are restore()'s problem, not
+    // serialize's: StagingBook / CharmState restore()
+    // validate and drop them.
+    stagings: (draft.stagings ?? []).map((entry) => ({
+      siteKey: entry.siteKey,
+      boneKind: entry.boneKind,
+      bonePlaced: entry.bonePlaced,
+      offeringGiven: entry.offeringGiven,
+      nameSpoken: entry.nameSpoken,
+      extrasDone: [...entry.extrasDone],
+      completed: entry.completed,
+    })),
+    awakenings: (draft.awakenings ?? []).map((entry) => ({
+      kind: entry.kind,
+      tier: entry.tier,
     })),
     // Piles: multi-kind stacks, normalized ids, invalid
     // entries dropped (same filtering rule as
@@ -731,8 +958,18 @@ export function deserializeSave(value: unknown): SaveData | null {
     const harvestState: SavedHarvestState = isRecord(value.harvestState)
       ? (value.harvestState as unknown as SavedHarvestState)
       : emptySavedHarvestState();
+    // Sky: daysElapsed passes through ONLY when a finite
+    // number — absent or non-finite loads as absent (the
+    // old-save shape), and Background's restore handles
+    // absence via its dawn rule. Restore normalizes
+    // (floor, max 0); parse does not duplicate that.
     const sky: SavedSky = isRecord(value.sky)
-      ? { cycleT: value.sky.cycleT as number }
+      ? {
+          cycleT: value.sky.cycleT as number,
+          ...(isFiniteNumber(value.sky.daysElapsed)
+            ? { daysElapsed: value.sky.daysElapsed }
+            : {}),
+        }
       : { ...DAWN_SAVED_SKY };
     const facing: SavedFacing = isRecord(value.facing)
       ? {
@@ -761,6 +998,135 @@ export function deserializeSave(value: unknown): SaveData | null {
         });
       }
     }
+    // Torches are optional on read, same leniency as
+    // traps: an old v1 save without them loads with
+    // torches: []. Entries pass through UNVALIDATED —
+    // the placed-torch restore validates (finite coords)
+    // and drops bad records, so a bad torch entry can
+    // never corrupt the whole document. A non-array
+    // torches field loads as [] — the section drops,
+    // the document survives. `id` passes through only
+    // when present as a string (the field is optional:
+    // Background's entity owns the id scheme).
+    const torches: SavedTorch[] = [];
+    if (value.torches !== undefined && Array.isArray(value.torches)) {
+      for (const entry of value.torches) {
+        if (!isRecord(entry)) continue;
+        torches.push({
+          x: entry.x as number,
+          z: entry.z as number,
+          ...(typeof entry.id === 'string'
+            ? { id: entry.id as string }
+            : {}),
+        });
+      }
+    }
+    // Altars are optional on read, same leniency as
+    // torches: an old v1 save without them loads with
+    // altars: []. Entries pass through UNVALIDATED —
+    // the placed-altar restore validates (finite coords)
+    // and drops bad records, so a bad altar entry can
+    // never corrupt the whole document. A non-array
+    // altars field loads as [] — the section drops,
+    // the document survives. `id` passes through only
+    // when present as a string (the field is optional:
+    // Background's entity owns the id scheme).
+    const altars: SavedAltar[] = [];
+    if (value.altars !== undefined && Array.isArray(value.altars)) {
+      for (const entry of value.altars) {
+        if (!isRecord(entry)) continue;
+        altars.push({
+          x: entry.x as number,
+          z: entry.z as number,
+          ...(typeof entry.id === 'string'
+            ? { id: entry.id as string }
+            : {}),
+        });
+      }
+    }
+    // Name-sight is optional on read, same additive-field
+    // rule: an old v1 save without it loads with
+    // nameSight: []. A non-array field loads as [] — the
+    // section drops, the document survives. Bad entries
+    // (non-record, empty key, non-positive-int looks)
+    // drop here AND again in NameSight.restore(), so a bad
+    // look record can never corrupt the whole document.
+    const nameSight: SavedNameLook[] = [];
+    if (value.nameSight !== undefined && Array.isArray(value.nameSight)) {
+      for (const entry of value.nameSight) {
+        if (!isRecord(entry)) continue;
+        if (typeof entry.key !== 'string' || entry.key === '') continue;
+        if (!Number.isInteger(entry.looks) || (entry.looks as number) <= 0) {
+          continue;
+        }
+        nameSight.push({ key: entry.key, looks: entry.looks as number });
+      }
+    }
+    // Ritual stagings + awakenings are optional on read,
+    // same additive-field rule: old v1 saves without them
+    // load with stagings: [] + awakenings: []. Non-array
+    // fields load as [] — the sections drop, the document
+    // survives. Bad entries drop here AND again in
+    // StagingBook / CharmState restore(), so a bad ritual
+    // record can never corrupt the whole document.
+    const stagings: SavedRitualStaging[] = [];
+    if (value.stagings !== undefined && Array.isArray(value.stagings)) {
+      for (const entry of value.stagings) {
+        if (!isRecord(entry)) continue;
+        if (typeof entry.siteKey !== 'string' || entry.siteKey === '') continue;
+        if (typeof entry.boneKind !== 'string' || entry.boneKind === '') continue;
+        if (
+          typeof entry.bonePlaced !== 'boolean' ||
+          typeof entry.offeringGiven !== 'boolean' ||
+          typeof entry.nameSpoken !== 'boolean' ||
+          typeof entry.completed !== 'boolean'
+        ) {
+          continue;
+        }
+        if (
+          !Array.isArray(entry.extrasDone) ||
+          (entry.extrasDone as unknown[]).some((e) => typeof e !== 'string')
+        ) {
+          continue;
+        }
+        stagings.push({
+          siteKey: entry.siteKey,
+          boneKind: entry.boneKind,
+          bonePlaced: entry.bonePlaced as boolean,
+          offeringGiven: entry.offeringGiven as boolean,
+          nameSpoken: entry.nameSpoken as boolean,
+          extrasDone: [...(entry.extrasDone as string[])],
+          completed: entry.completed as boolean,
+        });
+      }
+    }
+    const awakenings: SavedAwakening[] = [];
+    if (value.awakenings !== undefined && Array.isArray(value.awakenings)) {
+      for (const entry of value.awakenings) {
+        if (!isRecord(entry)) continue;
+        if (typeof entry.kind !== 'string' || entry.kind === '') continue;
+        if (!Number.isInteger(entry.tier) || (entry.tier as number) <= 0) {
+          continue;
+        }
+        awakenings.push({ kind: entry.kind, tier: entry.tier as number });
+      }
+    }
+    // CHARM-LIST MIGRATION (2026-10-28, shrew-only):
+    // an existing save holding the grant's shrew item
+    // + its awakening moves the charm to the list: drop
+    // the item, keep the record (0.5 lb frees). Safe
+    // because the grant is the shrew's sole source
+    // (world excludes shrew) — no found bone is ever
+    // removed. Item-only saves keep the item (they
+    // self-heal: next boot's grant awakens, the
+    // following save migrates). Idempotent: re-save
+    // writes the cleaned inventory.
+    if (
+      awakenings.some((entry) => entry.kind === FIRST_CHARM_KIND) &&
+      inventory[FIRST_CHARM_ITEM] !== undefined
+    ) {
+      delete inventory[FIRST_CHARM_ITEM];
+    }
     return {
       version: SAVE_VERSION,
       savedAt: value.savedAt,
@@ -775,6 +1141,11 @@ export function deserializeSave(value: unknown): SaveData | null {
       looms,
       piles,
       traps,
+      torches,
+      altars,
+      nameSight,
+      stagings,
+      awakenings,
       harvestState,
       sky,
       facing,

@@ -85,11 +85,11 @@
  * 1, 2, 4, 5, or 10):
  * - 0.1 lb: acorns, bog-berries, elderberries, luminous-spores.
  * - 0.25 lb: dry-kindling, twined-cordage, grass, salt-crystal,
- *   edible-mushroom, poison-mushroom, apple.
+ *   edible-mushroom, poison-mushroom, apple, paper.
  * - 0.5 lb: tender-vines, peat-moss, bone, flint, pointy-hat,
- *   mossy-mittens.
+ *   mossy-mittens, plant-pulp, pressed-sheets.
  * - 1 lb: snap-wood, river-silt, clay, dirt, mud, garden-trowel,
- *   sharp-trowel, shawl, umbrella, clay-pot.
+ *   sharp-trowel, shawl, umbrella, clay-pot, grimoire.
  * - 2 lb: river-stone, downed-oak, spade, axe-trowel,
  *   hooded-cloak, bog-boots.
  * - 4 lb: spade-axe, clay-brick, and homes / fires / stations
@@ -220,13 +220,40 @@ export const ITEM_WEIGHT_LB: Readonly<Record<string, number>> = {
   mushrooms: 0.25, // lane judgment: plural food family
   'poison-mushrooms': 0.25, // lane judgment: plural food family
   apple: 0.25,
+  // Paper chain: dry paper lighter than damp sheets.
+  [ITEMS.paper]: 0.25,
   // 0.5 lb
   [ITEMS.tenderVines]: 0.5,
   [ITEMS.peatMoss]: 0.5,
   bone: 0.5,
+  // Primal bones: a bone's weight (lane judgment, flagged).
+  [ITEMS.primalBoneShrewSkull]: 0.5,
+  [ITEMS.primalBonePigeonWingBone]: 0.5,
+  [ITEMS.primalBoneSnakeVertebra]: 0.5,
+  [ITEMS.primalBoneTurtleShellFragment]: 0.5,
+  [ITEMS.primalBoneCrowBeak]: 0.5,
+  [ITEMS.primalBoneOwlTalon]: 0.5,
+  [ITEMS.primalBoneBatWingBone]: 0.5,
+  [ITEMS.primalBoneMouseSpine]: 0.5,
+  [ITEMS.primalBoneRaccoonTooth]: 0.5,
+  [ITEMS.primalBoneGroundhogTooth]: 0.5,
+  [ITEMS.primalBoneFoxFemur]: 0.5,
+  [ITEMS.primalBoneDeerAntlerTip]: 0.5,
+  [ITEMS.primalBoneWolfTooth]: 0.5,
+  [ITEMS.primalBoneFrogPelvis]: 0.5,
+  [ITEMS.primalBoneMolePaw]: 0.5,
+  [ITEMS.primalBoneBearClaw]: 0.5,
+  [ITEMS.primalBoneRabbitJaw]: 0.5,
+  [ITEMS.primalBoneBeaverIncisor]: 0.5,
   [ITEMS.flint]: 0.5,
+  // Lane judgment: stick + binding + tinder, light to carry.
+  [ITEMS.torch]: 0.5,
+  [ITEMS.litTorch]: 0.5,
   [ITEMS.pointyHat]: 0.5,
   [ITEMS.mossyMittens]: 0.5,
+  // Paper chain: wet mass / damp sheets.
+  [ITEMS.plantPulp]: 0.5,
+  [ITEMS.pressedSheets]: 0.5,
   // 1 lb
   [ITEMS.snapWood]: 1,
   [ITEMS.riverSilt]: 1,
@@ -238,6 +265,7 @@ export const ITEM_WEIGHT_LB: Readonly<Record<string, number>> = {
   [ITEMS.shawl]: 1,
   [ITEMS.umbrella]: 1,
   [ITEMS.clayPot]: 1,
+  [ITEMS.grimoire]: 1,
   // 2 lb
   [ITEMS.riverStone]: 2,
   [ITEMS.downedOak]: 2,
@@ -263,6 +291,10 @@ export const ITEM_WEIGHT_LB: Readonly<Record<string, number>> = {
   [ITEMS.craftedWorkstation]: 4,
   [ITEMS.pottersWheel]: 4,
   [ITEMS.loom]: 4,
+  // Ritual altar while carried (same flagged interval as
+  // homes / fires / stations — placed structures ride 4 lb
+  // between craft and place).
+  [ITEMS.altar]: 4,
 };
 
 /**
@@ -403,6 +435,7 @@ export const ITEM_DISPLAY_NAMES: Readonly<Record<string, string>> = {
   'crafted-workstation': 'Crafted Workstation',
   'potters-wheel': "Potter's Wheel",
   loom: 'Loom',
+  altar: 'Altar',
   'clay-pot': 'Clay Pot',
   'clay-brick': 'Clay Brick',
   'small-basket': 'Small Basket',
@@ -414,12 +447,36 @@ export const ITEM_DISPLAY_NAMES: Readonly<Record<string, string>> = {
   'mossy-mittens': 'Mossy Mittens',
   'bog-boots': 'Bog Boots',
   umbrella: 'Umbrella',
+  torch: 'Torch',
+  'lit-torch': 'Lit Torch',
+  'plant-pulp': 'Plant Pulp',
+  'pressed-sheets': 'Pressed Sheets',
+  paper: 'Paper',
+  grimoire: 'Grimoire',
   snare: 'Snare',
   'fish-weir-trap': 'Fish / Weir Trap',
   'pot-trap': 'Pot Trap',
   pitfall: 'Pitfall',
   deadfall: 'Deadfall',
   bone: 'Bone',
+  'primal-bone-shrew-skull': 'Primal Bone - shrew skull',
+  'primal-bone-pigeon-wing-bone': 'Primal Bone - pigeon wing bone',
+  'primal-bone-snake-vertebra': 'Primal Bone - snake vertebra',
+  'primal-bone-turtle-shell-fragment': 'Primal Bone - turtle shell fragment',
+  'primal-bone-crow-beak': 'Primal Bone - crow beak',
+  'primal-bone-owl-talon': 'Primal Bone - owl talon',
+  'primal-bone-bat-wing-bone': 'Primal Bone - bat wing bone',
+  'primal-bone-mouse-spine': 'Primal Bone - mouse spine',
+  'primal-bone-raccoon-tooth': 'Primal Bone - raccoon tooth',
+  'primal-bone-groundhog-tooth': 'Primal Bone - groundhog tooth',
+  'primal-bone-fox-femur': 'Primal Bone - fox femur',
+  'primal-bone-deer-antler-tip': 'Primal Bone - deer antler tip',
+  'primal-bone-wolf-tooth': 'Primal Bone - wolf tooth',
+  'primal-bone-frog-pelvis': 'Primal Bone - frog pelvis',
+  'primal-bone-mole-paw': 'Primal Bone - mole paw',
+  'primal-bone-bear-claw': 'Primal Bone - bear claw',
+  'primal-bone-rabbit-jaw': 'Primal Bone - rabbit jaw',
+  'primal-bone-beaver-incisor': 'Primal Bone - beaver incisor',
   'salt-crystal': 'Salt Crystal',
   dirt: 'Dirt',
   mud: 'Mud',
@@ -471,6 +528,8 @@ export interface CapacityBreakdown {
   trundleTool: number;
   /** PINNED worn bonuses total (hat +1 lb, shawl +3 lb, cloak +6 lb). */
   worn: number;
+  /** Charm bonus in pounds (bear, Track B; 0 with no bear charm). */
+  charms: number;
   total: number;
   largeBasketMode: LargeBasketMode;
   /** PINNED 50 lb (Adam 2026-10-26) — the live Trundle-Tool bonus. */
@@ -518,6 +577,14 @@ export class PersonalInventory implements CraftingInventory {
   private readonly stacks = new Map<ItemId, number>();
   private readonly largeBasketMode: LargeBasketMode;
   private worn = new Set<ItemId>();
+
+  /**
+   * Charm capacity bonus in pounds (bear, Track B):
+   * session state, shell-synced (setCharmCapacityBonusLb
+   * on boot + list change) — never saved; derives from
+   * the awakening record, which IS saved. Default 0.
+   */
+  private charmBonusLb = 0;
 
   constructor(options: PersonalInventoryOptions) {
     this.largeBasketMode = options.largeBasketMode;
@@ -636,6 +703,25 @@ export class PersonalInventory implements CraftingInventory {
     }
   }
 
+  /**
+   * Set the charm capacity bonus in pounds (bear +10
+   * while carried + awakened, else 0 — see
+   * bearCapacityBonusLb in charms.ts). Must be finite
+   * and ≥ 0. Feeds capacity()/capacityLb() and, through
+   * them, addPartial/canCarry checks.
+   */
+  setCharmCapacityBonusLb(lb: number): void {
+    if (!Number.isFinite(lb) || lb < 0) {
+      throw new Error('Charm capacity bonus must be a finite non-negative number.');
+    }
+    this.charmBonusLb = lb;
+  }
+
+  /** Current charm capacity bonus in pounds. */
+  charmCapacityBonusLb(): number {
+    return this.charmBonusLb;
+  }
+
   // --- Capacity (pounds) ---
 
   /** Total carrying capacity right now, given owned gear, in pounds. */
@@ -681,6 +767,7 @@ export class PersonalInventory implements CraftingInventory {
       largeBasket: hasLargeBasket ? LARGE_BASKET_BONUS : 0,
       trundleTool: hasTrundleTool ? TRUNDLE_TOOL_BONUS : 0,
       worn,
+      charms: this.charmBonusLb,
       total: 0,
       largeBasketMode: this.largeBasketMode,
       trundleToolBonus: TRUNDLE_TOOL_BONUS,
@@ -691,7 +778,8 @@ export class PersonalInventory implements CraftingInventory {
       breakdown.smallBasket +
       breakdown.largeBasket +
       breakdown.trundleTool +
-      breakdown.worn;
+      breakdown.worn +
+      breakdown.charms;
     return breakdown;
   }
 

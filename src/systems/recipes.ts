@@ -41,6 +41,7 @@ export const ITEMS = {
   // Harvest / raw ingredients (prototype names in the design doc).
   snapWood: 'snap-wood',
   tenderVines: 'tender-vines',
+  grass: 'grass',
   peatMoss: 'peat-moss',
   downedOak: 'downed-oak',
   riverSilt: 'river-silt',
@@ -94,6 +95,47 @@ export const ITEMS = {
   // Umbrella (2026-10-26 queued work — carried rain protection,
   // see umbrella.ts for the mechanic and coordination shape).
   umbrella: 'umbrella',
+  // Torch (2026-10-27 — carried light, brighter than the candle;
+  // see torch.ts for the batch lighting action).
+  torch: 'torch',
+  litTorch: 'lit-torch',
+  // Paper chain (2026-10-27 — grimoire materials; see the
+  // paper-chain recipes below for the chain).
+  plantPulp: 'plant-pulp',
+  pressedSheets: 'pressed-sheets',
+  paper: 'paper',
+  grimoire: 'grimoire',
+  // Ritual altar (2026-10-27 — made ritual site, placeable
+  // only; see altar.ts for the place grant + scope guard).
+  altar: 'altar',
+  // Primal bones (2026-10-27 first charm + 2026-10-28
+  // individual bones build; see charms.ts). Kind rule,
+  // documented: 'primal-bone-<shape-slug>'. Grouped by
+  // ritual sky (rituals.ts order). Shrew is the outright
+  // first charm (no Waking); the rest are Waking kinds.
+  primalBoneShrewSkull: 'primal-bone-shrew-skull',
+  // DAY.
+  primalBonePigeonWingBone: 'primal-bone-pigeon-wing-bone',
+  primalBoneSnakeVertebra: 'primal-bone-snake-vertebra',
+  primalBoneTurtleShellFragment: 'primal-bone-turtle-shell-fragment',
+  primalBoneCrowBeak: 'primal-bone-crow-beak',
+  // NIGHT.
+  primalBoneOwlTalon: 'primal-bone-owl-talon',
+  primalBoneBatWingBone: 'primal-bone-bat-wing-bone',
+  primalBoneMouseSpine: 'primal-bone-mouse-spine',
+  primalBoneRaccoonTooth: 'primal-bone-raccoon-tooth',
+  primalBoneGroundhogTooth: 'primal-bone-groundhog-tooth',
+  // TWILIGHT.
+  primalBoneFoxFemur: 'primal-bone-fox-femur',
+  primalBoneDeerAntlerTip: 'primal-bone-deer-antler-tip',
+  // MOON PHASE.
+  primalBoneWolfTooth: 'primal-bone-wolf-tooth',
+  // SKY-INDEPENDENT.
+  primalBoneFrogPelvis: 'primal-bone-frog-pelvis',
+  primalBoneMolePaw: 'primal-bone-mole-paw',
+  primalBoneBearClaw: 'primal-bone-bear-claw',
+  primalBoneRabbitJaw: 'primal-bone-rabbit-jaw',
+  primalBoneBeaverIncisor: 'primal-bone-beaver-incisor',
   // Traps (brainstorm only — nothing picked; see their notes).
   snare: 'snare',
   fishWeirTrap: 'fish-weir-trap',
@@ -173,6 +215,20 @@ export interface Recipe {
    * First use: pitfall, stage 1 (Adam, 2026-10-26).
    */
   requiresToolStage?: number;
+  /**
+   * Creek-water requirement (paper chain, Adam 2026-10-27):
+   * the recipe must be crafted near a creek. PROXIMITY, not
+   * carried water — water-carrying is NOT invented — and
+   * NOT a station: a creek is a place, not a structure.
+   * Checked by canCraft + executeCraft ONLY when the shell
+   * supplies creek proximity (nearCreek input); a null /
+   * omitted input leaves the gate OFF (transitional, like
+   * hunger omitted — until Background's water adapter
+   * lands, the shell cannot compute creek proximity, so
+   * the recipe crafts by hand anywhere meanwhile).
+   * First use: plant-pulp.
+   */
+  requiresCreek?: boolean;
   /**
    * Craft-places (Adam, 2026-10-26; DEV correction: Systems
    * does NOT emit): crafting this recipe places right there
@@ -325,6 +381,106 @@ const DRAFT_RECIPES: Recipe[] = [
       '(not unstated) so the UI shows "by hand" plainly. This is ' +
       'the friction-lighting fuel: slow lighting consumes 1 ' +
       'dry-kindling (fire.ts), not raw snap-wood.',
+  },
+
+  // --- Torch: stick + binding + tinder, made by hand (Adam, 2026-10-27).
+  {
+    id: 'torch',
+    name: 'Torch',
+    status: 'draft',
+    output: { item: ITEMS.torch, quantity: 1 },
+    ingredients: [
+      i(ITEMS.snapWood, 1),
+      i(ITEMS.twinedCordage, 1),
+      i(ITEMS.dryKindling, 1),
+    ],
+    station: 'hand',
+    notes:
+      'DRAFT. Snap-Wood 1 + Twined Cordage 1 + Dry Kindling 1 -> ' +
+      '1 torch, made by hand anywhere — no station needed ' +
+      "(Adam's doubt, 2026-10-27: she needs no station for " +
+      'these). Lighting is a SEPARATE batch action (torch.ts ' +
+      'lightTorches): one press lights EVERY carried unlit ' +
+      'torch — at a lit fire, or with carried flint + ' +
+      'river-stone (both kept, fire-lighting precedent). Lit ' +
+      'torches are carried light, brighter than the candle ' +
+      '(Adam: well-lit to 6 m, dim to at least 12 m; exact ' +
+      'values Background\'s); no burnout, no duration, ' +
+      'no chain-lighting (Adam: both rejected as ' +
+      'annoying/tedious). Quantities + the cordage binding ' +
+      'are lane-decided for the pin pass; no tallow/resin ' +
+      '(not in the game). Placeable candles are NOT in this ' +
+      'order (later, after torches).',
+  },
+
+  // --- Paper chain (Adam, DEV chat 2026-10-27, solid-points
+  // round): plant fiber + creek water -> pulp -> pressed
+  // sheets -> dried paper -> grimoire. ALL quantities below
+  // are lane-decided DRAFT for Adam's pin pass. Pressing +
+  // drying are instant recipe steps (like all crafts) — no
+  // timed press/dry mechanic is invented here.
+  {
+    id: 'plant-pulp',
+    name: 'Plant Pulp',
+    status: 'draft',
+    output: { item: ITEMS.plantPulp, quantity: 2 },
+    ingredients: [i(ITEMS.tenderVines, 2), i(ITEMS.grass, 2)],
+    station: 'hand',
+    requiresCreek: true,
+    notes:
+      'DRAFT. Fiber + creek water -> pulp. Fiber sources, ' +
+      'both on hand: tender-vines (reed harvests yield ' +
+      'tender-vines — reedBed primaryYield is TENDER_VINES, ' +
+      'so reeds are covered without a reeds item) + grass. ' +
+      'Water shape decided (lane call, flagged): PROXIMITY ' +
+      'to a creek (requiresCreek), NOT carried water (never ' +
+      'invented) and NOT a station (a creek is a place, not ' +
+      'a structure). Gate is transitional: until ' +
+      "Background's water adapter lands, the shell cannot " +
+      'compute creek proximity, so pulp crafts by hand ' +
+      'anywhere meanwhile — the gate arms the moment the ' +
+      'shell supplies nearCreek. Quantities draft.',
+  },
+  {
+    id: 'pressed-sheets',
+    name: 'Pressed Sheets',
+    status: 'draft',
+    output: { item: ITEMS.pressedSheets, quantity: 2 },
+    ingredients: [i(ITEMS.plantPulp, 2)],
+    station: 'hand',
+    notes:
+      'DRAFT. Pulp -> pressed sheets, by hand. Pressing is ' +
+      'an instant recipe step (no timed press invented). ' +
+      'Quantities draft.',
+  },
+  {
+    id: 'paper',
+    name: 'Paper',
+    status: 'draft',
+    output: { item: ITEMS.paper, quantity: 2 },
+    ingredients: [i(ITEMS.pressedSheets, 2)],
+    station: 'hand',
+    notes:
+      'DRAFT. Pressed sheets -> dried paper, by hand. ' +
+      'Drying is an instant recipe step (no timed drying ' +
+      'invented); dry paper weighs less than damp sheets ' +
+      '(0.25 lb vs 0.5 lb). Quantities draft.',
+  },
+  {
+    id: 'grimoire',
+    name: 'Grimoire',
+    status: 'draft',
+    output: { item: ITEMS.grimoire, quantity: 1 },
+    ingredients: [i(ITEMS.paper, 4), i(ITEMS.twinedCordage, 2)],
+    station: 'hand',
+    notes:
+      'DRAFT. Grimoire assembly = paper + cordage binding, ' +
+      'by hand. Cover TBD (flagged — NOT in this recipe; ' +
+      'a cover item comes later, not invented here). PAGES ' +
+      'NOT BUILT: the book is an object now; page-unlock ' +
+      '(record) behavior ties to the discovery mechanic ' +
+      '(still proposal, not pinned) and is a follow-up ' +
+      'when discovery pins. Quantities draft.',
   },
 
   // --- Tool ladder: ONE tool, evolving. Upgrade costs, not rebuilds.
@@ -846,6 +1002,29 @@ const DRAFT_RECIPES: Recipe[] = [
       'DRAFT — BRAINSTORM, NOTHING PICKED. River stone is the ' +
       'weight. Craftable by hand anywhere — no workstation ' +
       'needed (Adam\'s ruling, 2026-10-26: traps are hand-crafted).',
+  },
+  {
+    id: 'altar',
+    name: 'Altar',
+    status: 'draft',
+    output: { item: ITEMS.altar, quantity: 1 },
+    ingredients: [
+      i(ITEMS.riverStone, 4),
+      i(ITEMS.snapWood, 2),
+      i(ITEMS.clay, 2),
+      i(ITEMS.twinedCordage, 2),
+    ],
+    station: 'hand',
+    notes:
+      'DRAFT quantities for Adam\'s pin pass (DEV brief ' +
+      '2026-10-27). Ritual altar, PLACEABLE ONLY: she builds ' +
+      'it where she stands (station hand — flagged), crafts ' +
+      'to a carried altar item, and a Place step consumes it ' +
+      '(houses/fires pattern; see altar.ts). Moss / salt / ' +
+      'bone dressing + focus are NOT in this recipe (later ' +
+      'dressing, flagged — do not add them). Upgrade tiers ' +
+      'NOT built. RITUALS THEMSELVES NOT IN THIS ORDER — ' +
+      'the altar is the SITE; rituals come later.',
   },
 ];
 
