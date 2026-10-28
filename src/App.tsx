@@ -507,24 +507,25 @@
  *   'stump' is the kind passed; the component maps all three
  *   brief-named kinds (stump / workstation / Stumpy) so the
  *   title follows from a prop when presence learns kinds.
- * - INVENTORY DROP V1, LIVE (Adam, 2026-10-26 — "for next
- *   pass"): every personal inventory row gains a Drop button
- *   (storage rows never get one). One item per press, dropped
- *   at her feet as a ground pile in the same pile system as
- *   overflow — merges by item at the same spot, pick-up-able
- *   later via the pile USE trigger. Shell wiring: Systems'
- *   dropFromInventory(item, 1) validates + removes, then the
- *   shell hands the record to pileState.drop() (no
- *   pileState.spawn exists; drop() is the spawn equivalent
- *   and emits pile:dropped for tracker + renderer). A failed
- *   drop leaves the inventory exact (Systems builds the
- *   record before removing; remove() throws before mutating).
- *   Dropped piles ride the pending pile save wiring; no
- *   separate save handling invented. Worn garments drop
- *   without unwearing (mirroring deposit: bonus self-cancels
- *   at count 0, returns on pickup). Quantity choice: one per
- *   press, per the brief and Systems' V1 note — unless Adam
- *   corrects it.
+ * - INVENTORY DROP, LIVE (Adam, 2026-10-26 — "for next
+ *   pass", arrows 2026-10-28): every personal inventory
+ *   row gains ↓ drop-one + ↓↓ drop-all arrows (storage
+ *   rows never get one), both dropped at her feet as a
+ *   ground pile in the same pile system as overflow —
+ *   merges by item at the same spot, pick-up-able later
+ *   via the pile USE trigger. Shell wiring: Systems'
+ *   dropFromInventory(item, quantity) validates + removes,
+ *   then the shell hands the record to pileState.drop()
+ *   (no pileState.spawn exists; drop() is the spawn
+ *   equivalent and emits pile:dropped for tracker +
+ *   renderer). A failed drop leaves the inventory exact
+ *   (Systems builds the record before removing; remove()
+ *   throws before mutating). Dropped piles ride the
+ *   pending pile save wiring; no separate save handling
+ *   invented. Worn-gear rows never reach the Drop arrows
+ *   (worn-gear landing); carried-unworn garments drop
+ *   without unwearing (mirroring deposit: bonus
+ *   self-cancels at count 0, returns on pickup).
  * - BELOW-PERMIT WORDING, LIVE (Adam, 2026-10-26 — "below
  *   permit" too vague): a below-permit harvest failure now
  *   reads "Needs {Tool}." (e.g. downed oak → "Needs
@@ -4791,23 +4792,22 @@ export default function App() {
     saveNow();
   };
 
-  // INVENTORY DROP V1 (Adam, 2026-10-26 — "for next pass"):
-  // one item per press, dropped at her feet as a ground pile
-  // in the same pile system as overflow (merges by item at
-  // the same spot, pick-up-able later via the pile USE
-  // trigger). Systems validates + removes first — the pile
-  // record is built before the removal and remove() throws
-  // before mutating on insufficiency, so a failed drop leaves
-  // the inventory exactly as it was — then the shell hands
-  // the record to pileState.drop(), the spawn equivalent
-  // (no pileState.spawn exists; drop() creates/merges and
-  // emits pile:dropped for the tracker + renderer). Dropped
-  // piles ride the pending pile save wiring like overflow
-  // piles; no separate save handling is invented here.
-  // Worn garments drop like anything else (no unwear —
-  // mirroring deposit: the worn bonus already self-cancels
-  // when the carried count hits 0 via the setWorn re-sync,
-  // and returns if the garment is picked back up).
+  // INVENTORY DROP (Adam, 2026-10-26 — "for next pass",
+  // arrows 2026-10-28): ↓ drops one per press, ↓↓
+  // (handleDropAllItem) drops the live carried count —
+  // same feet destination, never retargeted into a pile.
+  // One item per press was the V1 UI calling convention,
+  // not a Systems limit: dropFromInventory takes quantity.
+  // The rest of the shape is unchanged (ground pile in
+  // the same pile system as overflow; Systems validates
+  // + removes first, so a failed drop leaves the
+  // inventory exactly as it was; then the shell hands
+  // the record to pileState.drop()). Worn-gear rows never
+  // reach the Drop arrows (worn-gear landing); a
+  // carried-unworn garment drops without unwearing (the
+  // worn bonus already self-cancels when the carried
+  // count hits 0 via the setWorn re-sync, and returns if
+  // the garment is picked back up).
   const handleDropItem = (itemId: string) => {
     const player = playerRef.current;
     if (!player) {
@@ -4820,6 +4820,40 @@ export default function App() {
       inventory.setWorn(wardrobe.wornItemIds());
       setWornGarments(wardrobe.wornGarments());
       setDropNote(`Dropped 1 ${displayNameFor(itemId)}.`);
+    } catch (error) {
+      setDropNote(
+        error instanceof Error ? error.message : 'Could not drop that.',
+      );
+    }
+    refreshInventory();
+    saveNow();
+  };
+
+  // INVENTORY DROP ALL (Adam, 2026-10-28 — arrows in the
+  // Inventory modal): the ↓↓ mate of handleDropItem —
+  // same flow, quantity = the live carried count, same
+  // feet destination (never retargeted into a pile).
+  // Note "Dropped {N} {name}." mirrors the one-drop note.
+  const handleDropAllItem = (itemId: string) => {
+    const player = playerRef.current;
+    if (!player) {
+      setDropNote('Could not drop that.');
+      return;
+    }
+    const quantity = inventory.count(itemId as ItemId);
+    if (quantity <= 0) return;
+    try {
+      const pile = dropFromInventory(
+        itemId,
+        quantity,
+        inventory,
+        player.x,
+        player.z,
+      );
+      pileState.drop(pile.item, pile.quantity, pile.x, pile.z);
+      inventory.setWorn(wardrobe.wornItemIds());
+      setWornGarments(wardrobe.wornGarments());
+      setDropNote(`Dropped ${quantity} ${displayNameFor(itemId)}.`);
     } catch (error) {
       setDropNote(
         error instanceof Error ? error.message : 'Could not drop that.',
@@ -5824,6 +5858,38 @@ export default function App() {
       : null;
   const homeChipVisible =
     sheltered && homeChipAnchor !== null && !paused;
+
+  // Nearby pile for the Inventory modal's pickup section
+  // (Adam, 2026-10-28): the NEAREST pile in range from
+  // App's existing piles state — pilesInRange +
+  // HARVEST_RANGE 2.5 m, the pile menu/chips range
+  // (verified at build: App 2971 + proximity 305, range
+  // 2.5 at proximity 103 — no divergence). Nearest =
+  // smallest PileTarget.distance, ties → first in state
+  // order. Kinds in stacks order (pile-menu order), with
+  // live carried counts. Worn-gear kinds are NOT
+  // filtered here — pile Take is recovery. Undefined =
+  // no pile in range → the section hides. The modal
+  // STAYS OPEN when the pile empties (subject = pack):
+  // the section re-renders away (or switches to the
+  // next-nearest pile) as piles state updates.
+  const nearestPile =
+    piles.length === 0
+      ? undefined
+      : piles.reduce((best, pile) =>
+          pile.distance < best.distance ? pile : best,
+        );
+  const nearbyPile =
+    nearestPile === undefined
+      ? undefined
+      : {
+          kinds: nearestPile.stacks.map((stack) => ({
+            id: stack.item,
+            name: displayNameFor(stack.item),
+            pileQuantity: stack.quantity,
+            carriedQuantity: inventory.count(stack.item as ItemId),
+          })),
+        };
 
   // The fire whose lighting menu is open, with its anchor.
   const selectedFire =
@@ -7215,6 +7281,16 @@ export default function App() {
             storage={storageSection}
             onDepositItem={handleDepositItem}
             onDropItem={handleDropItem}
+            onDropAllItem={handleDropAllItem}
+            nearbyPile={nearbyPile}
+            onTakeItem={(kind, quantity) =>
+              nearestPile !== undefined
+                ? handlePileAction(
+                    nearestPile,
+                    quantity === 1 ? `take-one:${kind}` : `take-all:${kind}`,
+                  )
+                : undefined
+            }
             capacityText={capacityText}
             onClose={() => setInventoryOpen(false)}
             comfortable={isTouch}

@@ -51,6 +51,23 @@ export interface InventoryWornSection {
   entries: string[];
 }
 
+/** One kind in the Inventory modal's nearby-pile section. */
+export interface InventoryNearbyPileKind {
+  /** Item id (kind key for take actions). */
+  id: string;
+  /** Display name. */
+  name: string;
+  /** Quantity in the pile. */
+  pileQuantity: number;
+  /** Quantity carried. */
+  carriedQuantity: number;
+}
+
+/** The nearest in-range pile for the modal's pickup section. */
+export interface InventoryNearbyPile {
+  kinds: InventoryNearbyPileKind[];
+}
+
 export interface InventoryPanelProps {
   items: InventoryItem[];
   /** Id of the selected item, if any. Undefined = nothing selected. */
@@ -91,13 +108,34 @@ export interface InventoryPanelProps {
   /** Called when the player presses Deposit on a carried item. */
   onDepositItem?: (id: string) => void;
   /**
-   * Called when the player presses Drop on a carried item.
-   * Every personal row gains a Drop button when this is
+   * Called when the player presses Drop-one on a carried item.
+   * Every personal row gains a ↓ button when this is
    * passed; storage rows never get one (dropping is from
    * the pack she carries, not the house store). Dropping
    * itself is the caller's job.
    */
   onDropItem?: (id: string) => void;
+  /**
+   * Called when the player presses Drop-all on a carried item.
+   * Every personal row gains a ↓↓ button when this is
+   * passed (same feet destination as ↓, whole carried
+   * stack). Dropping itself is the caller's job.
+   */
+  onDropAllItem?: (id: string) => void;
+  /**
+   * Nearby pile for the pickup section, shown after the
+   * personal rows when present (nearest in-range pile,
+   * caller-derived). Its kinds gain ↑/↑↑ buttons via
+   * onTakeItem. Omitted = no pickup section. Worn-gear
+   * kinds are NOT filtered here — pile Take is recovery.
+   */
+  nearbyPile?: InventoryNearbyPile;
+  /**
+   * Called when the player presses a Take arrow on a
+   * nearby-pile kind: quantity 1 (↑) or 'all' (↑↑, the
+   * live pile quantity). Taking itself is the caller's job.
+   */
+  onTakeItem?: (id: string, quantity: 1 | 'all') => void;
   /**
    * Worn-gear strip, shown directly under the portrait and
    * above the Carrying line (Adam, 2026-10-28): the worn
@@ -131,6 +169,9 @@ export function InventoryPanel({
   storage,
   onDepositItem,
   onDropItem,
+  onDropAllItem,
+  nearbyPile,
+  onTakeItem,
   worn,
   capacityText,
   onClose,
@@ -185,6 +226,10 @@ export function InventoryPanel({
       {capacityText ? (
         <p className={'mb-2 text-sm ' + t.muted}>{capacityText}</p>
       ) : null}
+      <p className={'mb-2 text-xs ' + t.muted}>
+        ↓ Drop one at feet · ↓↓ Drop all at feet · ↑ Take one from pile · ↑↑
+        Take all from pile
+      </p>
 
       {items.length === 0 ? (
         <p className={'italic ' + t.muted}>Nothing carried yet.</p>
@@ -271,10 +316,20 @@ export function InventoryPanel({
                   <button
                     type="button"
                     onClick={() => onDropItem(item.id)}
-                    aria-label={`Drop ${item.name}`}
-                    className={actionBtn}
+                    aria-label={`Drop one ${item.name} at feet`}
+                    className="min-h-[44px] min-w-[44px] rounded text-base hover:bg-stone-800"
                   >
-                    Drop
+                    <span aria-hidden="true">↓</span>
+                  </button>
+                ) : null}
+                {onDropAllItem ? (
+                  <button
+                    type="button"
+                    onClick={() => onDropAllItem(item.id)}
+                    aria-label={`Drop all ${item.name} at feet`}
+                    className="min-h-[44px] min-w-[44px] rounded text-base hover:bg-stone-800"
+                  >
+                    <span aria-hidden="true">↓↓</span>
                   </button>
                 ) : null}
               </li>
@@ -283,6 +338,47 @@ export function InventoryPanel({
         </ul>
       )}
 
+      {nearbyPile !== undefined && nearbyPile.kinds.length > 0 ? (
+        <>
+          <VineDivider className="mb-2 mt-3" />
+          <h3 className={'text-base font-semibold ' + t.heading}>
+            Nearby pile
+          </h3>
+          <ul className="flex flex-col gap-1">
+            {nearbyPile.kinds.map((kind) => (
+              <li key={kind.id} className="flex items-center gap-1">
+                <span className="flex flex-1 items-baseline justify-between gap-2 rounded px-2 py-1 text-left">
+                  <span className="text-sm">{kind.name}</span>
+                  <span className="text-sm text-stone-300">
+                    pile ×{kind.pileQuantity} · carried ×
+                    {kind.carriedQuantity}
+                  </span>
+                </span>
+                {onTakeItem ? (
+                  <button
+                    type="button"
+                    onClick={() => onTakeItem(kind.id, 1)}
+                    aria-label={`Take one ${kind.name} from pile`}
+                    className="min-h-[44px] min-w-[44px] rounded text-base hover:bg-stone-800"
+                  >
+                    <span aria-hidden="true">↑</span>
+                  </button>
+                ) : null}
+                {onTakeItem ? (
+                  <button
+                    type="button"
+                    onClick={() => onTakeItem(kind.id, 'all')}
+                    aria-label={`Take all ${kind.name} from pile`}
+                    className="min-h-[44px] min-w-[44px] rounded text-base hover:bg-stone-800"
+                  >
+                    <span aria-hidden="true">↑↑</span>
+                  </button>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        </>
+      ) : null}
       {storage !== undefined ? (
         <>
           <VineDivider className="mb-2 mt-3" />
