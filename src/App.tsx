@@ -124,7 +124,11 @@
  *   Place here drops the fire at her position AND consumes
  *   the carried item (the engine primitives are cost-free,
  *   so UI-side consumption is the gating — placing without
- *   it would duplicate the item). Every placed fire gets an
+ *   it would duplicate the item). Campfire is the exception:
+ *   single-tap (Adam, 2026-10-28) — its Place press places
+ *   instantly at her feet, no mode, no ghost, no panel;
+ *   hearth/kiln/bloomery keep the flow above. Every placed
+ *   fire gets an
  *   anchored FireState chip (unlit / lighting / lit, with
  *   click count or friction phase); tapping an unlit fire
  *   opens its lighting menu (ContextMenu): flint (disabled
@@ -427,6 +431,10 @@
  *   buttons live in their own z-40 overlay — above panels
  *   (z-30), below modals (z-50); a z-40 child inside the
  *   z-30 world overlay would still paint under the panels.
+ *   STATION ANCHOR (Adam, 2026-10-28, reading (b)): at a
+ *   station the column instead anchors above that station's
+ *   projected center (same z-40 overlay, never z-30);
+ *   away from stations it stays screen-fixed as above.
  *   Target data and harvest behavior are unchanged;
  *   position only. NOTE: the targets' anchorX/anchorY are
  *   no longer consumed by the buttons (the shared projection
@@ -1485,6 +1493,24 @@
  *   rides its own glow landing). Parity: the deer line
  *   is shared, touch + desktop alike; mouse/bear show
  *   through existing lines, both alike.
+ * - PILL / CAMERA / RESUME FIXES, LIVE (Adam's
+ *   quibbles, 2026-10-28): PILL — harvest:completed
+ *   now dismisses the target's Harvest button at once
+ *   (harvestedIds set, scatter only; 'remove' drops
+ *   the whole target; ground piles untouched) AND the
+ *   pickup feedback moved last into the z-40 overlay
+ *   (above the menu, below modals) — the pill used to
+ *   sit in the z-30 overlay under the z-40 column.
+ *   CAMERA — fresh boot defaults player.mode to
+ *   'first' (was: 'third' field default survived when
+ *   no save existed, while App state said 'first';
+ *   the renderer follows player.mode). RESUME —
+ *   PausedIndicator centered on both axes, bigger.
+ *   SLEEP VERIFY (no code): the broadened sleep
+ *   emits houseId null away from home; App's only
+ *   sleep:completed consumer ignores the payload, so
+ *   it is null-safe as-is. Parity: all three fixes
+ *   shared, touch + desktop alike.
  * POINTER DISCIPLINE: overlays are pointer-events-none except the
  * small interactive pieces (HUD buttons, panels, harvest buttons),
  * so world clicks — including the first-person mouse-capture click
@@ -1582,6 +1608,7 @@ import {
   type FontId,
 } from './ui/OptionsModal';
 import { IntroModal } from './ui/IntroModal';
+import { RemoveConfirm } from './ui/RemoveConfirm';
 import { InventoryPanel } from './ui/InventoryPanel';
 import { CraftingMenu } from './ui/CraftingMenu';
 import { ProximityHarvestButtons } from './ui/ProximityHarvestButtons';
@@ -1635,10 +1662,16 @@ import {
   SEASON_START_MONTH,
 } from './game/weather';
 import {
+  ownedStage,
   ownedTier,
   ownedToolItem,
   type OwnedToolItem,
 } from './systems/owned-tool';
+import {
+  evaluateQuests,
+  emptyQuestFlags,
+  type QuestFlags,
+} from './systems/quests';
 import { canCraft } from './systems/crafting';
 import {
   ITEMS,
@@ -1768,10 +1801,10 @@ const HOUSE_ITEM_TO_TYPE: Record<string, HouseType> = {
 };
 
 /** Item ids the inventory panel offers a Place button for.
- * Lit torches and altars ride this set for the BUTTON only —
- * their handlers branch to instant-at-feet (see
- * handlePlaceItem), never the preview-ghost flow the other
- * ids use. */
+ * Lit torches, altars, and campfires ride this set for the
+ * BUTTON only — their handlers branch to instant-at-feet
+ * (see handlePlaceItem), never the preview-ghost flow the
+ * other ids (hearth/kiln/bloomery/houses/looms) use. */
 const PLACEABLE_IDS: ReadonlySet<string> = new Set([
   ...Object.keys(FIRE_ITEM_TO_TYPE),
   ...Object.keys(HOUSE_ITEM_TO_TYPE),
@@ -1785,6 +1818,29 @@ const FIRE_NAME: Record<FireType, string> = {
   hearth: 'Hearth',
   kiln: 'Kiln',
   bloomery: 'Bloomery',
+};
+
+// QUEST HINTS (draft one-liners, Adam pins before merge):
+// one hint per Systems quest id, in priority order. The
+// Make Campfire hint says PLACE (the predicate completes on
+// a placed campfire, not a crafted one); the Wake a Charm
+// hint says ritual (the outright shrew grant is not one).
+const QUEST_HINTS: Record<string, string> = {
+  'collect-food': 'Gather something edible — berries, acorns, mushrooms, apples.',
+  'eat-when-hungry': 'Eat when hunger drops below fed.',
+  'make-campfire': 'Place a campfire.',
+  'light-campfire': 'Light a placed campfire.',
+  'make-lean-to': 'Build a lean-to.',
+  rest: 'Sleep until sunrise.',
+  'find-flint': 'Pick up flint.',
+  'make-torch': 'Craft a torch.',
+  'light-torch': 'Light a torch for carried light.',
+  'use-stump': 'Craft something at a stump workstation.',
+  'upgrade-tool': 'Sharpen or upgrade the trowel.',
+  'gather-clay': 'Gather clay.',
+  'better-house': 'Raise a thatch hut.',
+  'find-bone': 'Find a bone.',
+  'wake-charm': 'Complete a Waking ritual.',
 };
 
 /**
@@ -2171,8 +2227,34 @@ export default function App() {
   const [eatNote, setEatNote] = useState<string | null>(null);
   const [torchNote, setTorchNote] = useState<string | null>(null);
   const [altarNote, setAltarNote] = useState<string | null>(null);
+  const [fireNote, setFireNote] = useState<string | null>(null);
   const [dropNote, setDropNote] = useState<string | null>(null);
   const [storageNote, setStorageNote] = useState<string | null>(null);
+  // Quest flags (Quest Log tab, 2026-10-28): shell-owned event
+  // flags Systems predicates read but cannot derive (eat while
+  // hungry, slept, ritual completed, crafted at stump). The
+  // state drives the tab; the ref mirrors it for saveNow
+  // (which reads refs + singletons). Boot init beside the
+  // stagings/awakenings restore; setters ride the wiring
+  // follow-up — the tab only reads, so all four read false
+  // until that landing.
+  const [questFlags, setQuestFlags] = useState<QuestFlags>(() =>
+    emptyQuestFlags(),
+  );
+  const questFlagsRef = useRef<QuestFlags>(emptyQuestFlags());
+  // Flag setter (wiring follow-up, 2026-10-28): idempotent —
+  // already-true is a no-op (no extra save, no re-render).
+  // Updates the ref (what saveNow persists) + the state
+  // (what the tab renders). Call sites saveNow themselves
+  // (or already save after the action). Safe in the boot
+  // effect's first-render closure: it reads the ref, not
+  // render-time state.
+  const setQuestFlag = (key: keyof QuestFlags) => {
+    if (questFlagsRef.current[key]) return;
+    const next = { ...questFlagsRef.current, [key]: true };
+    questFlagsRef.current = next;
+    setQuestFlags(next);
+  };
 
   const [seedInput, setSeedInput] = useState(bootSave?.seed ?? DEFAULT_SEED);
   const [seed, setSeed] = useState(bootSave?.seed ?? DEFAULT_SEED);
@@ -2205,10 +2287,20 @@ export default function App() {
     ownedToolItem(inventory),
   );
   const [harvestTargets, setHarvestTargets] = useState<HarvestTarget[]>([]);
+  // Targets harvested since the last projection (pill
+  // fix): the column suppresses ONLY their Harvest
+  // button (Remove stays) until the tracker stops
+  // emitting them or the next projection prunes the
+  // mark. Scatter ids only — the completion handler
+  // never marks ground targets (a pile may still hold
+  // items after a take).
+  const [harvestedIds, setHarvestedIds] = useState<ReadonlySet<string>>(
+    new Set(),
+  );
   // In-range dropped piles (harvest overflow), nearest first per
   // the tracker. Drives the touch USE fallback, the touch
   // PICK UP label, the desktop pickup button, and the pile
-  // chips + menu (see handleTouchInteract + the pile
+  // chips + menu (see handleUseInteract + the pile
   // computations before return + pileMenuActions /
   // handlePileAction). Ref mirrors state so the
   // first-render recomputeAnchors closure sees piles fresh.
@@ -2663,6 +2755,11 @@ export default function App() {
           // refresh.
           stagings: stagingBookRef.current.snapshot(),
           awakenings: charmStateRef.current.snapshot(),
+          // QUEST SAVE WIRING: the live quest flags ride every
+          // save (all-false serializes as all-false; absent on
+          // old saves reads as all-false on load). Flags are
+          // set by the wiring follow-up; the tab only reads.
+          quests: { ...questFlagsRef.current },
           // LOOK SAVE WIRING: the live look counts ride
           // every save (snapshot as-is, first-look order;
           // serialize writes them verbatim, restore
@@ -2755,6 +2852,17 @@ export default function App() {
       });
     }
     setHarvestTargets(projected);
+    // Pill fix: prune harvested marks to currently-
+    // projected ids — a target that left range drops
+    // its mark, so a later re-emit renders its button
+    // fresh instead of suppressed.
+    setHarvestedIds((prev) => {
+      const next = new Set<string>();
+      for (const id of prev) {
+        if (projected.some((t) => t.id === id)) next.add(id);
+      }
+      return next;
+    });
     const fires: { fire: PlacedFire; x: number; y: number }[] = [];
     for (const fire of fireState.snapshot()) {
       const anchor = projectAnchor(fire.x, fire.z, 'scatter');
@@ -2901,14 +3009,20 @@ export default function App() {
     // engine-third until the first cycle. Set it directly
     // from the saved cameraMode here, before the facing
     // restore below (restoreFacing's behind sync reads mode).
+    // FRESH-BOOT DEFAULT (pill/camera/resume fixes): a
+    // fresh boot has no saved mode, and skipping the set
+    // left the 'third' field default in place while App
+    // state said 'first' — the renderer follows
+    // player.mode, so fresh boots showed third-person
+    // while the UI thought first. Saved mode still wins
+    // when present; 'first' otherwise, so App state and
+    // player agree from the first frame.
     // Guarded check-not-set like the trap restore, so a
     // second boot-effect run cannot yank a cycled mode back
     // to the saved one.
     if (!saveRestoredRef.current) {
       const bootMode = bootSaveRef.current?.cameraMode;
-      if (bootMode) {
-        player.mode = bootMode;
-      }
+      player.mode = bootMode ?? 'first';
     }
     // TRAP SAVE WIRING (restore-before-first-build): trapState.
     // restore() is silent — no 'trap:placed' emit — and the
@@ -3007,6 +3121,15 @@ export default function App() {
         // so altar positions are available here.
         stagingBookRef.current.restore(bootSaved.stagings ?? []);
         charmStateRef.current.restore(bootSaved.awakenings ?? []);
+        // QUEST SAVE WIRING: flags restore (all-false when the
+        // field is absent — old saves). Set by the wiring
+        // follow-up; the tab only reads.
+        const questFlagsInit = {
+          ...emptyQuestFlags(),
+          ...bootSaved.quests,
+        };
+        questFlagsRef.current = questFlagsInit;
+        setQuestFlags(questFlagsInit);
         ritualSiteState.restore(
           (bootSaved.stagings ?? []).flatMap((entry) => {
             if (!entry.bonePlaced || entry.completed) return [];
@@ -3461,6 +3584,16 @@ export default function App() {
       }
       syncShrewEffect();
     });
+    // QUEST FLAG (wiring follow-up, 2026-10-28): slept sets
+    // on ANY sleep completion, beside the groundhog listener
+    // (not inside it — rested/wake is its concern, quests
+    // are this one's). Groundhog's only saves on bonus, so
+    // this listener saves itself. Unsubscribed with
+    // offQuestSlept below.
+    const offQuestSlept = bus.on('sleep:completed', () => {
+      setQuestFlag('slept');
+      saveNow();
+    });
     // Autosave on pagehide: the last-chance write when she leaves
     // or refreshes. saveNow reads only refs + singletons (see its
     // note), so this first-render closure stays correct for the
@@ -3470,6 +3603,30 @@ export default function App() {
     };
     window.addEventListener('pagehide', onPageHide);
     const offCompleted = bus.on('harvest:completed', (p) => {
+      // PILL FIX: dismiss the harvested target's Harvest
+      // button at once (no movement needed for the menu
+      // to catch up — targets otherwise refresh only on
+      // the next projection). 'remove' drops the whole
+      // target (plant gone); 'harvest' marks it harvested
+      // (the column suppresses Harvest, Remove stays
+      // until the tracker stops emitting the regrowing
+      // plant). Scatter only — ground targets (piles)
+      // may still hold items after a take, so their
+      // button stays.
+      if (p.kind === 'scatter') {
+        if (p.action === 'remove') {
+          setHarvestTargets((current) =>
+            current.filter((t) => t.id !== p.targetId),
+          );
+          setHarvestedIds((prev) => {
+            const next = new Set(prev);
+            next.delete(p.targetId);
+            return next;
+          });
+        } else {
+          setHarvestedIds((prev) => new Set(prev).add(p.targetId));
+        }
+      }
       // PICKUP COUNTS AS A LOOK (Adam, 2026-10-28,
       // RULED — Systems 70f20b5 records it in rituals.ts
       // + supplies charms.recordBonePickupLook as THE
@@ -3608,6 +3765,7 @@ export default function App() {
       offShelterChanged();
       offSleep();
       offGroundhogWake();
+      offQuestSlept();
       unsubHarvestOutcome();
       offLoaded();
       offUnloaded();
@@ -3698,6 +3856,72 @@ export default function App() {
     return stationPresence(genRef.current, position.x, position.z);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [position.x, position.z, seed]);
+  // Station anchor (pill fix (b), Adam 2026-10-28): when
+  // standing at a station, the harvest column anchors above
+  // that station's projected center instead of sitting
+  // screen-fixed; away from stations (or when the projection
+  // is null, e.g. station behind the camera) the anchor is
+  // null and the column stays as today. Position sources are
+  // existing only: nearest stump from stumpPositions (it
+  // mirrors stationPresence exactly, so a true workstation
+  // presence guarantees a non-empty list), else nearest
+  // placed loom within HARVEST_RANGE from loomState.
+  // Projection reuses projectAnchor 'scatter' (the same
+  // above-ground point the stump chips use); the column's
+  // translate lifts it above the point like WorldAnchor's
+  // above-point placement, but inside the z-40 overlay —
+  // never the z-30 anchor overlay.
+  const stationAnchor = (() => {
+    if (!stationPresenceValue.workstation && !stationPresenceValue.loom) {
+      return null;
+    }
+    let nearest: { x: number; z: number } | null = null;
+    let nearestD = Infinity;
+    if (stationPresenceValue.workstation) {
+      for (const s of stumpPositions(genRef.current, position.x, position.z)) {
+        const d = Math.hypot(s.x - position.x, s.z - position.z);
+        if (d < nearestD) {
+          nearestD = d;
+          nearest = s;
+        }
+      }
+    }
+    if (!nearest && stationPresenceValue.loom) {
+      for (const loom of loomState.snapshot()) {
+        const d = Math.hypot(loom.x - position.x, loom.z - position.z);
+        if (d <= HARVEST_RANGE && d < nearestD) {
+          nearestD = d;
+          nearest = loom;
+        }
+      }
+    }
+    if (!nearest) return null;
+    return projectAnchor(nearest.x, nearest.z, 'scatter');
+  })();
+  // Quest Log display (2026-10-28): derived on every render
+  // from live state — no cached copy, no polling — so the tab
+  // reads fresh on activation (the tab switch re-renders) and
+  // on the 1 s tick, refreshInventory, and bus listeners like
+  // everything else. Hints are draft one-liners for Adam's
+  // pin pass; titles + completion come from Systems.
+  const questDisplay = inventory
+    ? evaluateQuests({
+        inventory,
+        ownedToolStage: ownedStage(inventory),
+        fires: fireState.snapshot().map((fire) => ({
+          type: fire.type,
+          lit: fire.lit,
+        })),
+        houses: shelterState.snapshot().map((house) => ({
+          type: house.type,
+        })),
+        placedTorches: torchState.snapshot().length,
+        flags: questFlags,
+      }).map((quest) => ({
+        ...quest,
+        hint: QUEST_HINTS[quest.id] ?? '',
+      }))
+    : undefined;
   const availableStations: CraftingStation[] = [];
   if (stationPresenceValue.workstation) {
     availableStations.push('workstation');
@@ -3853,6 +4077,12 @@ export default function App() {
   const pendingTrapRecipe = pendingTrapRecipeId
     ? RECIPES.find((candidate) => candidate.id === pendingTrapRecipeId)
     : undefined;
+  // PC-keys remove target (2026-10-28): the scatter target
+  // Shift+E armed for the confirm dialog; null = no dialog.
+  // The dialog owns its Enter/Esc; the App Esc listener
+  // yields while it is open (single Esc path).
+  const [pendingRemoveTarget, setPendingRemoveTarget] =
+    useState<HarvestTarget | null>(null);
 
   const executeCraftNow = (recipeId: string) => {
     const recipe = RECIPES.find((candidate) => candidate.id === recipeId);
@@ -3889,6 +4119,14 @@ export default function App() {
                 ? ` Owned tool is now ${result.owned}.`
                 : ''),
       );
+      // QUEST FLAG (wiring follow-up, 2026-10-28): a craft
+      // at a stump workstation sets craftedAtStump. The
+      // 'workstation' id is the stump today (presence comes
+      // solely from stumps); loom-only / station-less crafts
+      // do not set it. saveNow below covers persistence.
+      if (availableStations.includes('workstation')) {
+        setQuestFlag('craftedAtStump');
+      }
     } catch (error) {
       setCraftNote(
         error instanceof Error ? error.message : 'Crafting failed.',
@@ -4124,6 +4362,12 @@ export default function App() {
       if (!staging || !recipe) continue;
       const result = staging.complete(recipe, facts);
       if (!result) continue;
+      // QUEST FLAG (wiring follow-up, 2026-10-28): a
+      // completed Waking sets ritualCompleted. The outright
+      // shrew grant never calls complete(), so it cannot
+      // set this by construction. The loop's if (changed)
+      // saveNow covers persistence.
+      setQuestFlag('ritualCompleted');
       charmStateRef.current.awaken(result.kind, result.tier);
       // Awakening is a list change: re-sync the charm
       // hooks at once (the newly listed kind's effect
@@ -4276,6 +4520,38 @@ export default function App() {
       handlePlaceAltar();
       return;
     }
+    // Single-tap campfire (Adam, 2026-10-28): Place places at
+    // her feet immediately — no placement mode, no ghost, no
+    // "Place here" panel. Hearth/kiln/bloomery keep the
+    // two-step flow below; this branch is campfire only.
+    if (itemId === ITEMS.campfire) {
+      // Clear any armed placement mode first so no stale ghost
+      // lingers after the tap.
+      placementRef.current = null;
+      setPlacement(null);
+      setPlacementAnchor(null);
+      setPlacementNote(null);
+      const player = playerRef.current;
+      if (!player) return;
+      if (inventory.count(itemId) < 1) {
+        setFireNote('Nothing to place — that item is no longer carried.');
+        return;
+      }
+      try {
+        fireState.placeFire('campfire', player.x, player.z);
+        inventory.remove(itemId, 1);
+      } catch (error) {
+        setFireNote(
+          error instanceof Error ? error.message : 'Placement failed.',
+        );
+        return;
+      }
+      setFireNote(null);
+      refreshInventory();
+      saveNow();
+      setInventoryOpen(false);
+      return;
+    }
     const fireType = FIRE_ITEM_TO_TYPE[itemId];
     const houseType = HOUSE_ITEM_TO_TYPE[itemId];
     const loom = itemId === ITEMS.loom;
@@ -4353,11 +4629,20 @@ export default function App() {
       setEatNote('Acorns must be cooked first — cook them at a lit fire.');
       return;
     }
+    // QUEST FLAG (wiring follow-up, 2026-10-28): capture
+    // the PRE-eat stage — the try block overwrites it with
+    // the after stage, and an eat lifting her out of hungry
+    // must still count. Too-hungry eats do not set the flag
+    // (hungry-band-only).
+    const stageBeforeEat = hungerStage;
     try {
       const result = eat(hunger, inventory, itemId);
       setHungerStage(result.stage);
       setHungerValue(hunger.value());
       setEatNote(`Ate ${result.item} (+${result.nutrition} hunger).`);
+      if (stageBeforeEat === 'hungry') {
+        setQuestFlag('ateWhileHungry');
+      }
     } catch (error) {
       setEatNote(
         error instanceof Error ? error.message : 'Could not eat that.',
@@ -5259,19 +5544,28 @@ export default function App() {
   // untouched. Panels (inventory/crafting) are not modals,
   // so they do not block the toggle — flagged, not carved
   // out: if Adam wants Esc to close panels first, that is
-  // a follow-up.
+  // a follow-up. It also yields while the remove-confirm
+  // dialog is open (PC keys, 2026-10-28) — that dialog owns
+  // its own Enter/Esc, the single Esc path.
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent): void => {
       if (e.key !== 'Escape') return;
       const target = e.target as HTMLElement | null;
       const tag = target?.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
-      if (optionsOpen || introOpen || pendingTrapRecipe) return;
+      if (
+        optionsOpen ||
+        introOpen ||
+        pendingTrapRecipe ||
+        pendingRemoveTarget !== null
+      ) {
+        return;
+      }
       setOptionsOpen(true);
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [optionsOpen, introOpen, pendingTrapRecipe]);
+  }, [optionsOpen, introOpen, pendingTrapRecipe, pendingRemoveTarget]);
   const handleFontChange = (next: FontId): void => {
     setFont(next);
     saveFontChoice(next);
@@ -5418,7 +5712,14 @@ export default function App() {
       Math.hypot(scatter.worldX - fromX, scatter.worldZ - fromZ);
     return pile.distance <= scatterDistance;
   };
-  const handleTouchInteract = (): void => {
+  // Shared USE path (PC keys, 2026-10-28): the touch USE
+  // button, the E key, and the pointer-locked click all call
+  // this one handler — scatter-first from harvestTargets +
+  // pileWouldWin pile fallback + ground fallback. Renamed
+  // from handleTouchInteract (same body); nothing here is
+  // touch-specific. The zero-arg player.pressUse() path is
+  // NOT used (its shell query has no callers).
+  const handleUseInteract = (): void => {
     const player = playerRef.current;
     if (!player) return;
     const scatter = harvestTargets.find(
@@ -5439,6 +5740,119 @@ export default function App() {
       z: target.worldZ,
     });
   };
+
+  // PC KEYS (Adam, 2026-10-28 — every frequent action without
+  // Esc): E harvests (the shared USE path, same as the touch
+  // USE button), Shift+E arms Remove (confirm dialog), I/K/L
+  // toggle Inventory/Crafting/Charms, P toggles pause.
+  // Guards: typing (text input/textarea/select focus) swallows
+  // everything; paused allows P only (resume); any modal open
+  // (Options, intro, trap confirm, remove confirm) blocks all
+  // keys; any menu open allows only that menu's own toggle key
+  // to close it (anything else is ignored); Ctrl/Meta/Alt
+  // combos are never hijacked; held-key repeats are ignored
+  // (one press = one action). Separate listener beside the
+  // Esc listener above, same typing yield. Phone unchanged
+  // (no keyboard).
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent): void => {
+      if (e.repeat) return;
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      const target = e.target as HTMLElement | null;
+      const tag = target?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+      if (pausedRef.current) {
+        if (e.key.toLowerCase() === 'p') {
+          pauseState.setPaused(!pausedRef.current);
+        }
+        return;
+      }
+      if (
+        optionsOpen ||
+        introOpen ||
+        pendingTrapRecipe ||
+        pendingRemoveTarget !== null
+      ) {
+        return;
+      }
+      const key = e.key.toLowerCase();
+      if (inventoryOpen || craftingOpen || charmsOpen) {
+        if (key === 'i' && inventoryOpen) setInventoryOpen(false);
+        else if (key === 'k' && craftingOpen) setCraftingOpen(false);
+        else if (key === 'l' && charmsOpen) setCharmsOpen(false);
+        return;
+      }
+      if (key === 'e' && !e.shiftKey) {
+        handleUseInteract();
+      } else if (key === 'e' && e.shiftKey) {
+        const scatter = harvestTargets.find(
+          (candidate) => candidate.kind === 'scatter',
+        );
+        if (scatter) setPendingRemoveTarget(scatter);
+      } else if (key === 'i') {
+        setInventoryOpen((open) => !open);
+      } else if (key === 'k') {
+        setCraftingOpen((open) => !open);
+      } else if (key === 'l') {
+        if (charmsOpen) setCharmsOpen(false);
+        else openCharmsPanel();
+      } else if (key === 'p') {
+        pauseState.setPaused(!pausedRef.current);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [
+    optionsOpen,
+    introOpen,
+    pendingTrapRecipe,
+    pendingRemoveTarget,
+    inventoryOpen,
+    craftingOpen,
+    charmsOpen,
+    handleUseInteract,
+    openCharmsPanel,
+  ]);
+  // PC-KEYS CLICK (Adam, 2026-10-28): click-to-harvest while
+  // pointer-locked — the same shared USE path as E. Gated on
+  // a captured pointer (the locking click itself fires while
+  // pointerLockElement is still null, so it never harvests),
+  // left button only, not paused, no modal/panel open (locked
+  // clicks can't reach HUD buttons, but a keyboard-opened
+  // Options while locked must still block harvest). No
+  // conflict with player.onCanvasClick (unlocked →
+  // requestPointerLock, locked → no-op there). Phone
+  // unchanged (no pointer lock).
+  useEffect(() => {
+    const onClick = (e: MouseEvent): void => {
+      if (e.button !== 0) return;
+      if (document.pointerLockElement === null) return;
+      if (pausedRef.current) return;
+      if (
+        optionsOpen ||
+        introOpen ||
+        pendingTrapRecipe ||
+        pendingRemoveTarget !== null ||
+        inventoryOpen ||
+        craftingOpen ||
+        charmsOpen
+      ) {
+        return;
+      }
+      handleUseInteract();
+    };
+    window.addEventListener('click', onClick);
+    return () => window.removeEventListener('click', onClick);
+  }, [
+    optionsOpen,
+    introOpen,
+    pendingTrapRecipe,
+    pendingRemoveTarget,
+    inventoryOpen,
+    craftingOpen,
+    charmsOpen,
+    handleUseInteract,
+  ]);
 
   // LOCATION CHIP (see the header): dominant biome from the
   // same ground weights the scaffold readout formats — the
@@ -5797,13 +6211,6 @@ export default function App() {
             valid
           />
         ) : null}
-        {feedbacks.map((feedback) => (
-          <Fragment key={feedback.id}>
-            <WorldAnchor x={feedback.x} y={feedback.y}>
-              <ObjectFeedback text={feedback.text} tone={feedback.tone} />
-            </WorldAnchor>
-          </Fragment>
-        ))}
         {progressItems.map((item) => (
           <Fragment key={item.targetId}>
             <WorldAnchor x={item.x} y={item.y}>
@@ -5820,13 +6227,16 @@ export default function App() {
         modals (z-50). The buttons live in their own z-40 overlay
         because a z-40 child inside the z-30 overlay above would
         still paint under the z-30 panels (stacking contexts).
-        The column itself positions just above screen middle;
-        see ProximityHarvestButtons. */}
+        The column itself positions just above screen middle,
+        or above the station's projected center when
+        stationAnchor is set; see ProximityHarvestButtons. */}
       <div className="pointer-events-none absolute inset-0 z-40">
         <ProximityHarvestButtons
           targets={harvestTargets}
+          harvestedIds={harvestedIds}
           onHarvest={handleHarvest}
           onRemove={handleRemove}
+          stationAnchor={stationAnchor}
           lookNode={
             !LOOK_PARKED && lookTarget ? (
               <div className="flex flex-col items-center gap-1">
@@ -5858,6 +6268,21 @@ export default function App() {
               : `Pick up ${displayNameFor(desktopPilePickup.item)} × ${desktopPilePickup.quantity}`}
           </button>
         ) : null}
+        {/* PILL FIX: pickup feedback lives HERE, last in the
+          z-40 overlay (after the buttons + pile button), so
+          it paints ABOVE the menu instead of under it (it
+          used to sit in the z-30 overlay, where the z-40
+          column painted over it near screen-middle).
+          Still below z-50 modals. WorldAnchor positions
+          by % in any absolute inset-0 parent, so the move
+          changes layering only, not placement. */}
+        {feedbacks.map((feedback) => (
+          <Fragment key={feedback.id}>
+            <WorldAnchor x={feedback.x} y={feedback.y}>
+              <ObjectFeedback text={feedback.text} tone={feedback.tone} />
+            </WorldAnchor>
+          </Fragment>
+        ))}
       </div>
 
       {/* HUD shell: needs row (awaiting survival systems) + HUD block. */}
@@ -6180,6 +6605,11 @@ export default function App() {
             {altarNote}
           </p>
         ) : null}
+        {fireNote ? (
+          <p className="rounded bg-black/50 px-2 py-1 text-xs text-stone-200">
+            {fireNote}
+          </p>
+        ) : null}
         {dropNote ? (
           <p className="rounded bg-black/50 px-2 py-1 text-xs text-stone-200">
             {dropNote}
@@ -6228,7 +6658,7 @@ export default function App() {
           onMove={applyTouchMove}
           onTurn={applyTurn}
           onLook={applyTouchLook}
-          onInteract={handleTouchInteract}
+          onInteract={handleUseInteract}
           interactLabel={touchPilePickup ? 'PICK UP' : undefined}
         />
       ) : null}
@@ -6244,10 +6674,28 @@ export default function App() {
             setOptionsOpen(false);
             setIntroOpen(true);
           }}
+          quests={questDisplay}
           onClose={() => setOptionsOpen(false)}
           comfortable={isTouch}
         />
       ) : null}
+
+      {/* Remove confirm (PC keys, 2026-10-28): Shift+E arms
+        a scatter target; Enter/Remove confirms (same
+        handleRemove call as the button), Esc/backdrop/
+        Cancel aborts with nothing consumed. Standalone
+        dialog (not Popup) so its Enter/Esc is the single
+        path — the App Esc listener yields while it is open. */}
+      <RemoveConfirm
+        open={pendingRemoveTarget !== null}
+        targetName={pendingRemoveTarget?.name ?? ''}
+        onConfirm={() => {
+          const target = pendingRemoveTarget;
+          setPendingRemoveTarget(null);
+          if (target) handleRemove(target);
+        }}
+        onCancel={() => setPendingRemoveTarget(null)}
+      />
 
       {/* Intro modal: first run (no save at boot) + re-openable
         from Options. Same z-50 shell as OptionsModal; the two

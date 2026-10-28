@@ -313,6 +313,30 @@ export function groundhogWakeBonus(
     : 0;
 }
 
+/**
+ * Crow pile-glow tier (crow glow, 2026-10-28): the
+ * FACT only, no display. Returns the crow charm's
+ * list tier verbatim when carried + awakened, else 0
+ * — tier read from the existing tier field (tierOf),
+ * no new tier system, no clamp invented (tiers above
+ * 3 don't exist; display interpretation is
+ * Background/UI's). Display contract: 0 = base slight
+ * memory-glow; 1 = bright glow; 2 = bright glow +
+ * arrows (couple of zones, ~2 draft); 3 = arrows from
+ * any distance + range (meters draft, frog pattern).
+ * Background owns marker glow/range/culling, UI owns
+ * arrow display — this fact feeds both, renders
+ * neither.
+ */
+export function crowGlowTier(
+  carried: boolean,
+  charms: CharmState,
+): number {
+  return carried && charms.isAwakened('crow-beak')
+    ? charms.tierOf('crow-beak')
+    : 0;
+}
+
 /** One awakening's saved shape (see CharmState.snapshot). */
 export interface SavedAwakening {
   kind: string;

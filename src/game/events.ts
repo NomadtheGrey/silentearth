@@ -321,13 +321,15 @@ export interface EventMap {
    * 'sleep:requested' is UI's sleep button → the sleep outcome
    * listener: her position at press time. 'sleep:completed'
    * means the live sky jumped to dawn (cycleT 0) — time-only,
-   * no hunger/health restore, no player move. 'sleep:failed'
-   * carries one reason: 'not-night' (daytime press),
-   * 'not-sheltered' (no placed house within SHELTER_RADIUS),
-   * 'no-sky' (no live rig). Check order is night, then shelter.
+   * no hunger/health restore, no player move; houseId names the
+   * nearby house, or null when she sleeps away from any house
+   * (anywhere sleep, Adam 2026-10-28 — no shelter gate).
+   * 'sleep:failed' carries one reason: 'not-night' (daytime
+   * press) or 'no-sky' (no live rig). Check order is sky,
+   * then night.
    */
   'sleep:requested': { x: number; z: number };
-  'sleep:completed': { x: number; z: number; cycleT: 0; houseId: string };
+  'sleep:completed': { x: number; z: number; cycleT: 0; houseId: string | null };
   'sleep:failed': { x: number; z: number; reason: SleepFailedReason };
 }
 

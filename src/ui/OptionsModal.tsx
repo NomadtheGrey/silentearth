@@ -13,7 +13,10 @@
  * The SECOND tab is Build history (Adam, 2026-10-26): the
  * recent build records from buildHistory.ts, newest first,
  * capped at 20, each with what changed, why, the date, and
- * the merge reference.
+ * the merge reference. The THIRD tab is the Quest Log
+ * (2026-10-28): the Systems quest list in priority order,
+ * all visible, first incomplete highlighted as current —
+ * rendered by QuestLog from the caller's mapped props.
  *
  * PERSPECTIVE (Adam, 2026-10-26): the camera-perspective
  * buttons live HERE, in the Settings tab beside the font —
@@ -41,6 +44,7 @@
  */
 
 import { useEffect, useState } from 'react';
+import { QuestLog, type QuestDisplay } from './QuestLog';
 import { UI_THEMES, type UiThemeName } from './themes';
 import { BUILD_HISTORY } from './buildHistory';
 import { CameraToggle } from './CameraToggle';
@@ -110,6 +114,7 @@ export function fontClassFor(font: FontId): string {
 const OPTION_TABS = [
   { id: 'settings', label: 'Settings' },
   { id: 'history', label: 'Build history' },
+  { id: 'quests', label: 'Quest Log' },
 ] as const;
 
 type OptionsTabId = (typeof OPTION_TABS)[number]['id'];
@@ -133,6 +138,12 @@ export interface OptionsModalProps {
    * Perspective section's optional pattern).
    */
   onShowIntro?: () => void;
+  /**
+   * Quests in priority order, mapped by the caller from
+   * Systems results. Omitted = the tab shows the empty line
+   * (mirrors the Perspective section's optional pattern).
+   */
+  quests?: QuestDisplay[];
   /** Called when the modal is closed. */
   onClose?: () => void;
   /** Bottom-sheet layout + thumb-sized controls on touch. Default false. */
@@ -147,6 +158,7 @@ export function OptionsModal({
   perspective,
   onPerspectiveChange,
   onShowIntro,
+  quests,
   onClose,
   comfortable = false,
   theme = 'mire',
@@ -314,6 +326,9 @@ export function OptionsModal({
                 </ul>
               )}
             </div>
+          ) : null}
+          {activeTab === 'quests' ? (
+            <QuestLog quests={quests ?? []} theme={theme} />
           ) : null}
         </div>
       </section>

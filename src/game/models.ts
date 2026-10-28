@@ -348,7 +348,12 @@ export function buildKindGeometry(spec: MeshSpec, kind: ScatterKind): THREE.Buff
       }
       return merge([
         part(cyl(0.45, 0.55, 0.6, 8), c),
-        part(flatDisc(0.42, 8), e, { p: [0, extraDy, 0] }),
+        // Top disc lifted 0.01 above the trunk cap plane: the
+        // disc at extraDy sat EXACTLY on the trunk's top cap
+        // (both at local 0.30), z-fighting across the stump's
+        // top face. The 1 cm lift kills the coplanar pair
+        // without changing the top color or the silhouette.
+        part(flatDisc(0.42, 8), e, { p: [0, extraDy + 0.01, 0] }),
         ...roots,
       ]);
     }
