@@ -2241,6 +2241,19 @@ export default function App() {
     emptyQuestFlags(),
   );
   const questFlagsRef = useRef<QuestFlags>(emptyQuestFlags());
+  // Flag setter (wiring follow-up, 2026-10-28): idempotent —
+  // already-true is a no-op (no extra save, no re-render).
+  // Updates the ref (what saveNow persists) + the state
+  // (what the tab renders). Call sites saveNow themselves
+  // (or already save after the action). Safe in the boot
+  // effect's first-render closure: it reads the ref, not
+  // render-time state.
+  const setQuestFlag = (key: keyof QuestFlags) => {
+    if (questFlagsRef.current[key]) return;
+    const next = { ...questFlagsRef.current, [key]: true };
+    questFlagsRef.current = next;
+    setQuestFlags(next);
+  };
 
   const [seedInput, setSeedInput] = useState(bootSave?.seed ?? DEFAULT_SEED);
   const [seed, setSeed] = useState(bootSave?.seed ?? DEFAULT_SEED);
@@ -3570,6 +3583,16 @@ export default function App() {
       }
       syncShrewEffect();
     });
+    // QUEST FLAG (wiring follow-up, 2026-10-28): slept sets
+    // on ANY sleep completion, beside the groundhog listener
+    // (not inside it — rested/wake is its concern, quests
+    // are this one's). Groundhog's only saves on bonus, so
+    // this listener saves itself. Unsubscribed with
+    // offQuestSlept below.
+    const offQuestSlept = bus.on('sleep:completed', () => {
+      setQuestFlag('slept');
+      saveNow();
+    });
     // Autosave on pagehide: the last-chance write when she leaves
     // or refreshes. saveNow reads only refs + singletons (see its
     // note), so this first-render closure stays correct for the
@@ -3741,6 +3764,7 @@ export default function App() {
       offShelterChanged();
       offSleep();
       offGroundhogWake();
+      offQuestSlept();
       unsubHarvestOutcome();
       offLoaded();
       offUnloaded();
@@ -4088,6 +4112,14 @@ export default function App() {
                 ? ` Owned tool is now ${result.owned}.`
                 : ''),
       );
+      // QUEST FLAG (wiring follow-up, 2026-10-28): a craft
+      // at a stump workstation sets craftedAtStump. The
+      // 'workstation' id is the stump today (presence comes
+      // solely from stumps); loom-only / station-less crafts
+      // do not set it. saveNow below covers persistence.
+      if (availableStations.includes('workstation')) {
+        setQuestFlag('craftedAtStump');
+      }
     } catch (error) {
       setCraftNote(
         error instanceof Error ? error.message : 'Crafting failed.',
@@ -4323,6 +4355,12 @@ export default function App() {
       if (!staging || !recipe) continue;
       const result = staging.complete(recipe, facts);
       if (!result) continue;
+      // QUEST FLAG (wiring follow-up, 2026-10-28): a
+      // completed Waking sets ritualCompleted. The outright
+      // shrew grant never calls complete(), so it cannot
+      // set this by construction. The loop's if (changed)
+      // saveNow covers persistence.
+      setQuestFlag('ritualCompleted');
       charmStateRef.current.awaken(result.kind, result.tier);
       // Awakening is a list change: re-sync the charm
       // hooks at once (the newly listed kind's effect
@@ -4584,11 +4622,20 @@ export default function App() {
       setEatNote('Acorns must be cooked first — cook them at a lit fire.');
       return;
     }
+    // QUEST FLAG (wiring follow-up, 2026-10-28): capture
+    // the PRE-eat stage — the try block overwrites it with
+    // the after stage, and an eat lifting her out of hungry
+    // must still count. Too-hungry eats do not set the flag
+    // (hungry-band-only).
+    const stageBeforeEat = hungerStage;
     try {
       const result = eat(hunger, inventory, itemId);
       setHungerStage(result.stage);
       setHungerValue(hunger.value());
       setEatNote(`Ate ${result.item} (+${result.nutrition} hunger).`);
+      if (stageBeforeEat === 'hungry') {
+        setQuestFlag('ateWhileHungry');
+      }
     } catch (error) {
       setEatNote(
         error instanceof Error ? error.message : 'Could not eat that.',
