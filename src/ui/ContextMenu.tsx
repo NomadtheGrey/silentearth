@@ -16,6 +16,7 @@
  * in this directory.
  */
 
+import type { ReactNode } from 'react';
 import type { ContextAction } from './types';
 import { UI_THEMES, type UiThemeName } from './themes';
 
@@ -24,6 +25,12 @@ export interface ContextMenuProps {
   objectName: string;
   /** Actions the caller offers for this object. */
   actions: ContextAction[];
+  /**
+   * Optional node rendered above the actions (e.g. a progress
+   * bar for the object's ongoing process). Menus that pass
+   * nothing render exactly as before.
+   */
+  header?: ReactNode;
   /** Id of the highlighted action, if any. Undefined = none. */
   selectedActionId?: string;
   /** Called when the player picks an action. Optional. */
@@ -37,6 +44,7 @@ export interface ContextMenuProps {
 export function ContextMenu({
   objectName,
   actions,
+  header,
   selectedActionId,
   onSelect,
   onClose,
@@ -58,6 +66,7 @@ export function ContextMenu({
           </button>
         ) : null}
       </div>
+      {header ? <div className="mb-2">{header}</div> : null}
       {actions.length === 0 ? (
         <p className={'text-sm italic ' + t.muted}>
           No actions yet — actions arrive with the interaction system.

@@ -1546,6 +1546,7 @@ import type { TrapType } from './game/traps';
 import { harvestState } from './game/harvestState';
 import { SOURCE_BY_ID, type ToolTier } from './game/objects';
 import type { FireType } from './game/fire';
+import { FLINT_CLICKS, FRICTION_WAIT_MS } from './game/fire';
 import {
   shelterState,
   shelterAt,
@@ -2328,6 +2329,12 @@ export default function App() {
     { fire: PlacedFire; x: number; y: number }[]
   >([]);
   const [selectedFireId, setSelectedFireId] = useState<string | null>(null);
+  // Campfire tap (Adam, 2026-10-28): the pending pointerdown
+  // for tap-near-fire (touch-only, container handlers below).
+  // A ref, not state — a tap must not re-render on press.
+  const fireTapRef = useRef<{ x: number; y: number; time: number } | null>(
+    null,
+  );
   // Placed torches (Background singleton, read fresh on every
   // event), their projected anchors, and the torch whose menu
   // is open — the fire-chip pattern, one torch per chip. The
@@ -4885,6 +4892,49 @@ export default function App() {
   };
 
   /** Lighting + cooking menu actions for one placed fire. */
+  // Lighting progress bar (Adam, 2026-10-28): the fire menu's
+  // header, shown only while a lighting process exists (no
+  // process → null, no bar). Derived per render from
+  // PlacedFire.lighting — no new state, no new timer: the
+  // bar advances on the existing 1 s tick + fire:lighting
+  // refreshes, and freezes on pause by construction
+  // (waitUntil shifts on pause, so the waiting fraction
+  // stops moving; clicks don't advance while paused because
+  // lighting state doesn't change). Labels mirror the chip
+  // detail + menu action words exactly, so the bar never
+  // contradicts them. Menu-only — the chip keeps text.
+  const lightingBarFor = (fire: PlacedFire) => {
+    const lighting = fire.lighting;
+    if (lighting === null) return null;
+    const bar = (fraction: number, label: string) => (
+      <div>
+        <div className="h-2 w-full overflow-hidden rounded bg-black/40">
+          <div
+            className="h-full rounded bg-amber-400"
+            style={{ width: `${Math.round(fraction * 100)}%` }}
+          />
+        </div>
+        <p className="mt-1 text-xs text-stone-300">{label}</p>
+      </div>
+    );
+    if (lighting.method === 'friction') {
+      if (lighting.phase === 'ready') {
+        return bar(1, 'Ready — rub again');
+      }
+      const fraction = Math.min(
+        1,
+        Math.max(
+          0,
+          1 - (lighting.waitUntil - Date.now()) / FRICTION_WAIT_MS,
+        ),
+      );
+      return bar(fraction, `Waiting… ${Math.round(fraction * 100)}%`);
+    }
+    return bar(
+      lighting.clicks / FLINT_CLICKS,
+      `Clicks ${lighting.clicks} of ${FLINT_CLICKS}`,
+    );
+  };
   const fireMenuActions = (fire: PlacedFire): ContextAction[] => {
     if (fire.lit) {
       const hasAcorns = inventory.count(FOOD_ACORNS) > 0;
@@ -6095,8 +6145,64 @@ export default function App() {
         fontClassFor(font)
       }
     >
-      {/* 3D viewport */}
-      <div ref={containerRef} className="absolute inset-0" />
+      {/* 3D viewport: campfire tap (Adam, 2026-10-28,
+        touch-only) — a tap (not a drag) on the world canvas
+        within 64 px of a placed fire's projected anchor
+        (fireAnchors, the SAME projection the chips use)
+        selects that fire, opening the same ContextMenu as
+        a chip tap. 64 px = 44 px chip + generous finger
+        margin, phone-first; nearest anchor wins on overlap.
+        Touch-only by design: an unlocked desktop tap would
+        ALSO request pointer lock (player.onCanvasClick),
+        leaving a locked pointer behind an unusable menu,
+        and locked desktop taps keep harvesting — desktop
+        keeps chip-click. Paused guard: PausedIndicator's
+        wrapper is pointer-events-none, so taps outside its
+        button DO reach the canvas — the guard is needed,
+        not optional. HUD buttons are siblings of this div,
+        never inside it, so their taps never reach here.
+        Chip taps never double-open: chips are siblings in
+        the z-30 overlay, not inside this div. */}
+      <div
+        ref={containerRef}
+        className="absolute inset-0"
+        onPointerDown={(e) => {
+          if (!isTouch || paused) return;
+          fireTapRef.current = {
+            x: e.clientX,
+            y: e.clientY,
+            time: Date.now(),
+          };
+        }}
+        onPointerUp={(e) => {
+          const down = fireTapRef.current;
+          fireTapRef.current = null;
+          if (!isTouch || paused || down === null) return;
+          const moved = Math.hypot(e.clientX - down.x, e.clientY - down.y);
+          if (moved > 8 || Date.now() - down.time > 500) return;
+          const container = containerRef.current;
+          if (!container) return;
+          const width = container.clientWidth;
+          const height = container.clientHeight;
+          if (width === 0 || height === 0) return;
+          let best: { id: string; distance: number } | null = null;
+          for (const anchor of fireAnchors) {
+            const ax = (anchor.x / 100) * width;
+            const ay = (anchor.y / 100) * height;
+            const distance = Math.hypot(e.clientX - ax, e.clientY - ay);
+            if (
+              distance <= 64 &&
+              (best === null || distance < best.distance)
+            ) {
+              best = { id: anchor.fire.id, distance };
+            }
+          }
+          if (best !== null) setSelectedFireId(best.id);
+        }}
+        onPointerCancel={() => {
+          fireTapRef.current = null;
+        }}
+      />
 
       {/* World-anchored overlay: fire chips, menus, feedback. */}
       <div className="pointer-events-none absolute inset-0 z-30">
@@ -6183,6 +6289,7 @@ export default function App() {
           >
             <ContextMenu
               objectName={FIRE_NAME[selectedFire.type]}
+              header={lightingBarFor(selectedFire)}
               actions={fireMenuActions(selectedFire)}
               onSelect={(id) => handleFireAction(selectedFire.id, id)}
               onClose={() => setSelectedFireId(null)}
