@@ -126,7 +126,7 @@ export const BIOMES: BiomeDef[] = [
       bush: 0.20, tree: 0.18, snapWood: 0.15, tenderVines: 0.05, log: 0.05,
       riverStone: 0.10, bone: 0.05, peatMoss: 0.05, vine: 0.05, downedOak: 0.05,
       riverSilt: 0.02, saltCrystal: 0.02, bogPatch: 0.01, standingWater: 0.01,
-      stump: 0.02, appleTree: 0.06, flint: 0.08,
+      stump: 0.02, appleTree: 0.06, flint: 0.08, flower: 0.08,
     },
     // The pleasant neighbor: higher, drier, firm footing.
     anchor: {
@@ -144,7 +144,7 @@ export const BIOMES: BiomeDef[] = [
       riverSilt: 0.25, standingWater: 0.20, riverStone: 0.15, peatMoss: 0.10,
       snapWood: 0.05, tenderVines: 0.05, bush: 0.05, log: 0.05, bone: 0.03,
       bogPatch: 0.05, vine: 0.02, bogGrowth: 0.02, edibleMushroom: 0.04, poisonMushroom: 0.04,
-      flint: 0.10, pond: 0.03,
+      flint: 0.10, pond: 0.03, flower: 0.03,
     },
     // Silt beds and shallow water along ridged creek lines.
     anchor: {
