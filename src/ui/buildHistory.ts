@@ -45,7 +45,7 @@ const ALL_RECORDS: BuildRecord[] = [
   {
     merge: 'Merge #14',
     pr: 29,
-    sha: 'pending',
+    sha: '623cc3e',
     date: '2026-10-28',
     what: 'Quest Log tab in Options (15 quests, flags wired so every quest completes on its action), PC keys (E + click harvest, Shift+E remove confirm, I/K/L/P toggles + guards), sleep anywhere (shelter gate removed), crow pile-glow base (fact + marker; UI arrows + shell wiring follow), favicon v2 (dark hat + light outline + pale crescent), stump top fix, single-tap campfire, pill over stump center, traps doc resolutions.',
     why: 'The game gets a to-do list that completes on its actions, desktop keys that match phone taps, sleep anywhere she is, and a favicon that reads on dark and light tabs — while the crow glow starts at its base level.',
