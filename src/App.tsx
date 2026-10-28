@@ -1403,6 +1403,25 @@
  *   water-gated path; frog hint display excluded
  *   (waits for Systems' frog fact). Parity: chip +
  *   hooks shared, touch + desktop alike.
+ * - FROG WATER HINT, LIVE (Systems 126c9aa —
+ *   nearestStillWater fact): the queue's last display
+ *   piece. App derives the fact per render from
+ *   position (waters via stillWatersNear, both ranges
+ *   default — adapter 50 + fact 50 draft — no range
+ *   or math invented); gate = frog listed (isAwakened
+ *   'frog-pelvis') AND fact non-null; null = no hint
+ *   (no waters, beyond range, already at water).
+ *   New FrogHint (props-driven, text-only,
+ *   pointer-events-none): "Still water 23 m NE" —
+ *   8-point compass from the fact's unit vector
+ *   under the compass pin (East +x, North −z),
+ *   whole meters rounded for display only (the
+ *   fact's float is the truth). Seat: bottom-centre
+ *   above the LocationChip, hidden with any panel/
+ *   modal open or paused; when the scry button is
+ *   also showing, the hint lifts above it so the two
+ *   never stack on one seat. Parity: shared, touch +
+ *   desktop alike.
  * POINTER DISCIPLINE: overlays are pointer-events-none except the
  * small interactive pieces (HUD buttons, panels, harvest buttons),
  * so world clicks — including the first-person mouse-capture click
@@ -1423,6 +1442,7 @@ import {
   stumpPositions,
 } from './game/harvest';
 import { zoneCoords } from './game/zones';
+import { FrogHint } from './ui/FrogHint';
 import { BIOME_BY_ID } from './game/biomes';
 import {
   fireState,
@@ -1446,6 +1466,7 @@ import {
 import {
   evaluateCampReveal,
   isNearStillWater,
+  nearestStillWater,
   findCamps,
   CampDivination,
 } from './systems/divination';
@@ -5231,6 +5252,24 @@ export default function App() {
   // (~6.4 s per zone at walk speed).
   const [zoneX, zoneZ] = zoneCoords(position.x, position.z);
 
+  // Frog water hint (frog-hint build, Systems 126c9aa):
+  // Systems' nearestStillWater fact, derived per render
+  // from position so the hint follows her as she walks.
+  // Waters come from App's existing stillWatersNear call
+  // (waterProximity adapter); both ranges stay default
+  // (adapter 50 + fact FROG_WATER_RANGE 50, draft) —
+  // no range or math invented here. Gate: frog listed
+  // (list membership + awakened) AND fact non-null;
+  // null = no hint, exactly per the API (no waters, or
+  // beyond range, or already at/in water).
+  const frogHint = charmStateRef.current.isAwakened('frog-pelvis')
+    ? nearestStillWater(
+        position.x,
+        position.z,
+        stillWatersNear(genRef.current, position.x, position.z),
+      )
+    : null;
+
   // FPS, shell-side (see the header): a requestAnimationFrame
   // sampler, not a renderer instrument — the renderer is
   // untouched. State updates about once a second, never per
@@ -6084,6 +6123,29 @@ export default function App() {
         <div className="pointer-events-none absolute bottom-12 left-1/2 z-40 -translate-x-1/2">
           <ScryButton onPress={handleScry} />
         </div>
+      ) : null}
+
+      {/* Frog water hint: bottom-centre above the
+        LocationChip, the scry / pause seat family. Hidden
+        with any panel/modal open or paused (the scry hide
+        set minus the water/camp conditions — the fact
+        itself is the gate). When the scry button is also
+        showing, the hint lifts above it (aboveScry) so
+        the two never stack on one seat. */}
+      {frogHint !== null &&
+      !inventoryOpen &&
+      !craftingOpen &&
+      !charmsOpen &&
+      !optionsOpen &&
+      !introOpen &&
+      !pendingTrapRecipe &&
+      !paused ? (
+        <FrogHint
+          dx={frogHint.dx}
+          dz={frogHint.dz}
+          distanceMeters={frogHint.distance}
+          aboveScry={scryVisible}
+        />
       ) : null}
 
       {/* Esc hint: desktop only, and only while no modal is
