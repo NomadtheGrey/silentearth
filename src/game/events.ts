@@ -279,6 +279,25 @@ export interface EventMap {
    */
   'altar:removed': { id: string };
   /**
+   * A bone was staged on a ritual site (ritualSiteState
+   * .stageBone, Adam 2026-10-27 — tier-1 Waking, site
+   * side). Site is the full site ref (kind + siteId + x/z);
+   * bone is Systems' design key (opaque here). Renderer
+   * rebuilds the staged-bone group from this; Systems'
+   * completion logic reads the state, not this event.
+   */
+  'ritual:staged': {
+    site: { kind: 'altar' | 'stump' | 'boulder'; siteId: string; x: number; z: number };
+    bone: string;
+  };
+  /**
+   * A staged bone left its site (ritualSiteState
+   * .unstageBone, or replaced by a new staging on the same
+   * site — replace emits unstaged, then staged). Renderer
+   * rebuilds the staged-bone group from this.
+   */
+  'ritual:unstaged': { siteId: string };
+  /**
    * A trap entity was placed (trapState.placeTrap, Adam's
    * rule: crafting a trap places it right there). Cost-free
    * engine primitive — recipe/cost gating lives with Systems

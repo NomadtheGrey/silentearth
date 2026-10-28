@@ -769,3 +769,28 @@ export function buildAltarGroup(): THREE.Group {
   g.add(bowl);
   return g;
 }
+
+/**
+ * A staged ritual bone (Adam 2026-10-27 — tier-1 Waking,
+ * site side). The read-at-a-glance shape, my design
+ * (flagged): a small pale bone LYING FLAT — shaft with a
+ * knob at each end, bone-white, ~0.5 m long, ~0.1 m thick.
+ * It lies on the site (altar slab beside the bowl, stump
+ * top), never upright, never glowing — a staged bone is
+ * waiting, not awakened. The renderer positions it per
+ * site kind; this builder only shapes it, lying along X
+ * with its centre at the origin.
+ */
+export function buildStagedBone(): THREE.Group {
+  const g = new THREE.Group();
+  const mat = meshMat(0xe8e0cc);
+  const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.4, 8), mat);
+  shaft.rotation.z = Math.PI / 2;
+  g.add(shaft);
+  for (const sx of [-1, 1]) {
+    const knob = new THREE.Mesh(new THREE.SphereGeometry(0.05, 8, 8), mat);
+    knob.position.set(sx * 0.2, 0, 0);
+    g.add(knob);
+  }
+  return g;
+}

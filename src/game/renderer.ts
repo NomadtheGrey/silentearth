@@ -27,7 +27,7 @@ import type { WorldGen } from './worldgen';
 import { PlayerController } from './player';
 import { marshWeight } from './biomes';
 import { SOURCE_FOR_KIND } from './objects';
-import { buildAltarGroup, buildCampArrow, buildCandle, buildEdgeArrow, buildKindGeometry, buildTorch, buildUmbrella, buildWitch, CANDLE_FLAME_Y, TORCH_FLAME_Y, vertexLambert } from './models';
+import { buildAltarGroup, buildCampArrow, buildCandle, buildEdgeArrow, buildKindGeometry, buildStagedBone, buildTorch, buildUmbrella, buildWitch, CANDLE_FLAME_Y, TORCH_FLAME_Y, vertexLambert } from './models';
 import { ProximityTracker } from './proximity';
 import {
   harvestState,
@@ -42,6 +42,7 @@ import type { RiverParams } from './river';
 import { fireState } from './fireState';
 import { torchState } from './torchState';
 import { altarState } from './altarState';
+import { ritualSiteState } from './ritualSite';
 import type { PlacedHouse } from './shelter';
 import { FIRE_DEFS } from './fire';
 import { shelterState, HOUSE_DEFS } from './shelter';
@@ -411,6 +412,16 @@ export class WorldRenderer {
   /** Placed-trap markers, rebuilt on 'trap:placed' (below). */
   private trapGroup: THREE.Group | null = null;
   /**
+   * Staged-bone meshes (Adam 2026-10-27 — tier-1 Waking,
+   * site side): one pale bone per staged site, NOT
+   * chunk-filtered — a staged bone must stay visible
+   * wherever it lies. Own lifecycle (staging events +
+   * constructor + setWorldGen clear), separate from the
+   * placed group: staging is rarer than placement, and
+   * the two rebuild for different reasons.
+   */
+  private stagedBoneGroup: THREE.Group | null = null;
+  /**
    * Sky rig (Adam 2026-10-26): dome + sun + moon + stars + clouds
    * + the lights they drive. Owns the day/night time driver (see
    * sky.ts) — the renderer just feeds it dt + seasonal weather.
@@ -482,6 +493,14 @@ export class WorldRenderer {
       bus.on('altar:placed', rebuild),
       bus.on('altar:removed', rebuild),
     );
+    // Staged bones rebuild on staging events only (separate
+    // group, separate lifecycle — see the field comment).
+    const rebuildStaged = (): void => this.rebuildStagedBones();
+    this.unsubPlaced.push(
+      bus.on('ritual:staged', rebuildStaged),
+      bus.on('ritual:unstaged', rebuildStaged),
+    );
+    this.rebuildStagedBones();
     this.rebuildPlacedGroup();
     // Camp arrows rebuild on house placement (houses restore
     // by re-placing, which emits shelter:placed — no silent
@@ -722,6 +741,9 @@ export class WorldRenderer {
     // Placed altars belong to the old world's map too.
     altarState.clear();
     this.rebuildPlacedGroup();
+    // Staged bones belong to the old world's sites too.
+    ritualSiteState.clear();
+    this.rebuildStagedBones();
     // Camp arrows belong to the old world's houses too.
     this.rebuildCampArrows();
     // Dropped piles belong to the old world's map too.
@@ -1224,6 +1246,51 @@ export class WorldRenderer {
     }
     this.scene.add(group);
     this.placedGroup = group;
+  }
+
+  /**
+   * Rebuild staged bones from the staging state (Adam
+   * 2026-10-27 — tier-1 Waking, site side): one pale bone
+   * per staged site, lying flat. Placement, measured at
+   * build (flagged constants, not magic): made altar →
+   * slab top 0.84 + bone half-height 0.05 = 0.89, offset
+   * z +0.37 so the bone lies beside the bowl (bowl radius
+   * 0.3, bone half-width 0.05 → clears by 0.02, inside the
+   * 0.45 slab edge); stump → stump top 0.6 (baseY 0.3 +
+   * geometry top 0.3) + 0.05 = 0.65, centred on the stump.
+   * Boulder stagings draw NOTHING (no boulder objects
+   * exist yet) — the state still holds them, and Systems'
+   * completion logic reads state, not this group. Own
+   * dispose pattern (same traverse as the placed group);
+   * dispose() routes through setWorldGen, which clears
+   * the state and rebuilds this group empty.
+   */
+  private rebuildStagedBones(): void {
+    if (this.stagedBoneGroup) {
+      this.scene.remove(this.stagedBoneGroup);
+      this.stagedBoneGroup.traverse((obj) => {
+        if (obj instanceof THREE.Mesh) {
+          obj.geometry.dispose();
+          const mat = obj.material;
+          if (Array.isArray(mat)) mat.forEach((m) => m.dispose());
+          else mat.dispose();
+        }
+      });
+      this.stagedBoneGroup = null;
+    }
+    const group = new THREE.Group();
+    for (const staged of ritualSiteState.snapshot()) {
+      if (staged.site.kind === 'boulder') continue;
+      const bone = buildStagedBone();
+      if (staged.site.kind === 'altar') {
+        bone.position.set(staged.site.x, 0.89, staged.site.z + 0.37);
+      } else {
+        bone.position.set(staged.site.x, 0.65, staged.site.z);
+      }
+      group.add(bone);
+    }
+    this.scene.add(group);
+    this.stagedBoneGroup = group;
   }
 
   /**
