@@ -1542,7 +1542,15 @@ import {
 import { loomState } from './game/loomState';
 import { pileState, type PileTarget } from './game/pileState';
 import { HARVEST_RANGE } from './game/proximity';
-import { trapState } from './game/trapState';
+import { trapState, type PlacedTrap } from './game/trapState';
+import { TRAP_DEFS } from './game/traps';
+import { biomePresentKinds } from './game/animals';
+import {
+  collectTrapCatch,
+  catchItemFor,
+  eligibleKindsFor,
+  resolveTrapHour,
+} from './systems/trap-catch';
 import type { TrapType } from './game/traps';
 import { harvestState } from './game/harvestState';
 import { SOURCE_BY_ID, type ToolTier } from './game/objects';
@@ -2316,6 +2324,16 @@ export default function App() {
   // handlePileAction). Ref mirrors state so the
   // first-render recomputeAnchors closure sees piles fresh.
   const [piles, setPiles] = useState<PileTarget[]>([]);
+  // TRAP ROW (Adam, 2026-10-28): live placed-trap
+  // snapshot, re-read on trap events (placed / catch /
+  // hour-roll) and on collection. The row derivation
+  // below filters this by range per render.
+  const [traps, setTraps] = useState<PlacedTrap[]>(() =>
+    trapState.snapshot(),
+  );
+  const refreshTrapsFromState = () => {
+    setTraps(trapState.snapshot());
+  };
   const pilesRef = useRef<PileTarget[]>([]);
   // Harvest outcome feedback + multi-step progress, rendered
   // through WorldAnchor + ObjectFeedback / InteractionProgress.
@@ -3561,6 +3579,41 @@ export default function App() {
     });
     const offFirePlaced = bus.on('fire:placed', refreshFires);
     const offFireLighting = bus.on('fire:lighting', refreshFires);
+    // TRAP ROW (Adam, 2026-10-28): the shell owns trap
+    // rolls + row refresh. 'trap:catch' (emitted by
+    // setCatch, the shell's only catch writer) re-reads
+    // the snapshot + saves; 'trap:placed' re-reads for a
+    // newly placed trap; 'trap:hour' rolls every
+    // still-empty placed trap (uncaught-only, per emit —
+    // a mid-burst catch skips later emits in the same
+    // burst, since setCatch updates the trap at once).
+    // Eligible kinds = the trap's set ∩ biome-present
+    // kinds at the TRAP's position (the shell calls
+    // eligibleKindsFor directly — no new Systems
+    // function). Rolls use the trap's baited flag
+    // (always false until a baiting landing adds one).
+    const offTrapCatch = bus.on('trap:catch', () => {
+      refreshTrapsFromState();
+      saveNow();
+    });
+    const offTrapPlaced = bus.on('trap:placed', () => {
+      refreshTrapsFromState();
+    });
+    const offTrapHour = bus.on('trap:hour', () => {
+      const gen = genRef.current;
+      if (!gen) return;
+      for (const trap of trapState.snapshot()) {
+        if (trap.catch !== null) continue;
+        const eligible = eligibleKindsFor(
+          trap.type,
+          biomePresentKinds((x, z) => gen.weightsAt(x, z), trap.x, trap.z),
+        );
+        const outcome = resolveTrapHour(eligible, trap.baited);
+        if (outcome.caught) {
+          trapState.setCatch(trap.id, outcome.kind);
+        }
+      }
+    });
     const offFireLit = bus.on('fire:lit', refreshFires);
     const offTorchPlaced = bus.on('torch:placed', refreshTorches);
     const offTorchRemoved = bus.on('torch:removed', refreshTorches);
@@ -3789,6 +3842,9 @@ export default function App() {
       offProgress();
       offFirePlaced();
       offFireLighting();
+      offTrapCatch();
+      offTrapPlaced();
+      offTrapHour();
       offFireLit();
       offTorchPlaced();
       offTorchRemoved();
@@ -4229,6 +4285,51 @@ export default function App() {
     // the feedback. Nothing here grants, counts, or previews an
     // outcome ahead of those events.
     bus.emit('harvest:requested', request);
+  };
+
+  // TRAP COLLECT (Adam, 2026-10-28): ONE collect
+  // request per press (trap id). Caught → Systems
+  // grants the carcass (pack-full → catch STAYS,
+  // pile-grant precedent) and the shell clears the
+  // catch (setCatch emits 'trap:catch' → row re-reads
+  // + saves; this handler refreshes the inventory +
+  // pills the outcome + re-reads traps, covering the
+  // no-emit edge). Empty → "Nothing caught yet."
+  // (no Systems call — nothing to collect). The trap
+  // stays placed and re-catches; the label flips on
+  // the next render. Feedback copy is proposed, not
+  // pinned ("Caught {kind}!" / "Nothing caught yet.");
+  // the pack-full note is the established pile-take
+  // wording, filling a gap the claim left unnamed.
+  const handleCollectTrap = (trapId: string) => {
+    const trap = trapState.get(trapId);
+    if (!trap || trap.catch === null) {
+      sayAt(
+        trap?.x ?? playerRef.current?.x ?? 0,
+        trap?.z ?? playerRef.current?.z ?? 0,
+        'Nothing caught yet.',
+        'info',
+      );
+      return;
+    }
+    const kind = trap.catch;
+    const outcome = collectTrapCatch(inventory, kind);
+    if (outcome.collected === false) {
+      const carcass = catchItemFor(kind);
+      sayAt(
+        trap.x,
+        trap.z,
+        outcome.reason === 'Pack full.'
+          ? `Pack full — no room for ${carcass ? displayNameFor(carcass) : kind}.`
+          : outcome.reason,
+        'blocked',
+      );
+      return;
+    }
+    trapState.setCatch(trapId, null);
+    refreshTrapsFromState();
+    refreshInventory();
+    sayAt(trap.x, trap.z, `Caught ${kind}!`, 'gain');
   };
 
   const handleWear = (garment: WornGarment) => {
@@ -5993,6 +6094,57 @@ export default function App() {
       ? null
       : (piles.find((pile) => pile.id === selectedPileId) ?? null);
 
+  // TRAP ROW (Adam, 2026-10-28): the nearest placed
+  // trap within HARVEST_RANGE (2.5 m, the harvest
+  // range — piles/chips range, no divergence),
+  // nearest = smallest distance, ties → snapshot
+  // order. GATED: null with panels/modals open or
+  // paused (the App passes null when gated; legacy
+  // harvest rows stay ungated). Context menus do NOT
+  // gate it (the row is harvest-column UI, not a
+  // menu). Label follows the trap's catch: caught →
+  // "Collect {kind}", empty → "Check {TRAP_DEFS
+  // name}". Position: the row rides the existing
+  // harvest column (screen-fixed, same z-40 seat) —
+  // no projection, no column move (the stationAnchor
+  // precedent is the nearest-within-range shape,
+  // not a re-anchor).
+  const trapRowTrap = (() => {
+    const player = playerRef.current;
+    if (!player) return null;
+    if (
+      inventoryOpen ||
+      craftingOpen ||
+      charmsOpen ||
+      placement !== null ||
+      selectedSiteId !== null ||
+      optionsOpen ||
+      introOpen ||
+      pendingTrapRecipe ||
+      pendingRemoveTarget !== null ||
+      paused
+    ) {
+      return null;
+    }
+    let nearest: PlacedTrap | null = null;
+    let nearestDistance = Infinity;
+    for (const trap of traps) {
+      const distance = Math.hypot(trap.x - player.x, trap.z - player.z);
+      if (distance <= HARVEST_RANGE && distance < nearestDistance) {
+        nearest = trap;
+        nearestDistance = distance;
+      }
+    }
+    if (!nearest) return null;
+    return {
+      id: nearest.id,
+      label:
+        nearest.catch !== null
+          ? `Collect ${nearest.catch}`
+          : `Check ${TRAP_DEFS[nearest.type].name}`,
+    };
+  })();
+
   // TOUCH CONTROLS (phone build — see the header): coarse-pointer
   // devices get the touch layer and the collapsible HUD; desktop
   // rendering is unchanged by construction (every touch branch
@@ -6937,6 +7089,8 @@ export default function App() {
           onHarvest={handleHarvest}
           onRemove={handleRemove}
           stationAnchor={stationAnchor}
+          trap={trapRowTrap}
+          onCollectTrap={handleCollectTrap}
           lookNode={
             !LOOK_PARKED && lookTarget ? (
               <div className="flex flex-col items-center gap-1">

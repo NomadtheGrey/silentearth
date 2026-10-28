@@ -100,12 +100,25 @@
  * target (remove is permanent and stays available);
  * ground targets are never marked harvested by the
  * caller (a pile may still hold items after a take).
+ *
+ * TRAP ROW (Adam, 2026-10-28): when the caller passes
+ * trap, one trap button renders LAST in the column (after
+ * all harvest buttons), with the caller's label and no
+ * KindGlyph — plain text, same button look. Null trap =
+ * no row (the caller owns gating: panels/modals/paused
+ * pass null; legacy harvest rows stay ungated). A press
+ * reports the trap id through onCollectTrap; the outcome
+ * (grant, pack-full, nothing-caught) is the caller's job,
+ * not this component's. The row renders even with zero
+ * harvest targets (a trap nearby, no plants) — the
+ * empty-targets null return yields only when there is
+ * no trap either.
  */
 
 import { Fragment, type ReactNode } from 'react';
 import { HarvestButton, RemoveButton } from './HarvestButton';
 import type { HarvestTarget, HarvestRequest } from './proximityHarvest';
-import type { UiThemeName } from './themes';
+import { UI_THEMES, type UiThemeName } from './themes';
 
 export interface ProximityHarvestButtonsProps {
   /** In-range targets only, mapped from 'harvest:inRange' (see proximityHarvest.ts). */
@@ -140,6 +153,14 @@ export interface ProximityHarvestButtonsProps {
    * as before. The column keeps its z-40 overlay either way.
    */
   stationAnchor?: { x: number; y: number } | null;
+  /**
+   * Nearest placed trap in range, caller-derived (null =
+   * no row — gated or none in range). Renders LAST in
+   * the column, even with zero harvest targets.
+   */
+  trap?: { id: string; label: string } | null;
+  /** Called with the trap id for a trap-row press. */
+  onCollectTrap?: (id: string) => void;
   /** Look for the buttons. Default "mire" (the world outside). */
   theme?: UiThemeName;
 }
@@ -152,9 +173,12 @@ export function ProximityHarvestButtons({
   removeLabel = 'Remove',
   lookNode,
   stationAnchor,
+  trap,
+  onCollectTrap,
   theme = 'mire',
 }: ProximityHarvestButtonsProps) {
-  if (targets.length === 0) {
+  const t = UI_THEMES[theme];
+  if (targets.length === 0 && !trap) {
     return null;
   }
   // Dirt-row suppression (Adam, 2026-10-28): the ground row
@@ -229,6 +253,19 @@ export function ProximityHarvestButtons({
           ) : null}
         </Fragment>
       ))}
+      {trap && onCollectTrap ? (
+        <button
+          type="button"
+          onClick={() => onCollectTrap(trap.id)}
+          aria-label={trap.label}
+          className={
+            'flex min-h-[44px] items-center gap-2 rounded-full px-3 py-1.5 text-sm shadow-lg transition-transform hover:scale-105 ' +
+            t.panel
+          }
+        >
+          <span className="font-medium">{trap.label}</span>
+        </button>
+      ) : null}
     </div>
   );
 }
