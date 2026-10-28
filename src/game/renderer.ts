@@ -30,6 +30,8 @@ import { SOURCE_FOR_KIND } from './objects';
 import { buildAltarGroup, buildAnimal, buildCampArrow, buildCandle, buildEdgeArrow, buildKindGeometry, buildStagedBone, buildTorch, buildUmbrella, buildWitch, CANDLE_FLAME_Y, TORCH_FLAME_Y, vertexLambert } from './models';
 import { spawnAnimalsForChunk, updateAnimal } from './animals';
 import type { AnimalInstance } from './animals';
+import { crowGlowIntensity, CROW_GLOW_EMISSIVE } from './crow';
+import type { CrowTier } from './crow';
 import { ProximityTracker } from './proximity';
 import {
   harvestState,
@@ -393,6 +395,8 @@ export class WorldRenderer {
   private pigeonWayHome = false;
   /** Bat wing bone — night way-finding (tier-1 charm): fog thins at night while carried + awakened. */
   private batNightWayfinding = false;
+  /** Crow beak — pile glow tier (Systems owns the tier fact; this setter only reads it). Default 0 = base slight memory-glow, no arrows. */
+  private crowTier: CrowTier = 0;
   /** Scratch vectors for the per-frame edge-arrow update (no per-frame allocation). */
   private edgeAnchor = new THREE.Vector3();
   private edgeToCamp = new THREE.Vector3();
@@ -717,6 +721,25 @@ export class WorldRenderer {
    */
   setBatNightWayfinding(active: boolean): void {
     this.batNightWayfinding = active;
+  }
+
+  /**
+   * Crow beak — pile glow (tier-1 charm): shell-supplied tier
+   * (Systems owns the tier fact; this setter only reads it).
+   * Tier 0 = base slight memory-glow; tier ≥ 1 = bright glow
+   * (bright persists at tiers 2/3, which add arrows — the
+   * arrows themselves are UI's display, gated by crowPileArrow).
+   * Applies in place — no pile rebuild on tier change.
+   */
+  setCrowTier(tier: CrowTier): void {
+    this.crowTier = tier;
+    const intensity = crowGlowIntensity(tier);
+    this.pileGroup?.traverse((obj) => {
+      if (obj instanceof THREE.Mesh && obj.userData.isPileFlag) {
+        const mat = obj.material;
+        if (mat instanceof THREE.MeshLambertMaterial) mat.emissiveIntensity = intensity;
+      }
+    });
   }
 
   /**
@@ -1476,6 +1499,15 @@ export class WorldRenderer {
       pg.add(pole);
       const flag = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.18, 0.02), lambert(0xd8b040));
       flag.position.set(0.39, 0.82, 0);
+      // Crow pile-glow: the flag carries the glow (heap/pole
+      // unchanged). Emissive in the flag's own warm yellow, at
+      // the current tier's intensity (base slight at tier 0,
+      // bright at tier ≥ 1 — see crow.ts; setCrowTier updates
+      // existing flags in place, rebuild applies it to new ones).
+      flag.userData.isPileFlag = true;
+      const flagMat = flag.material as THREE.MeshLambertMaterial;
+      flagMat.emissive.set(CROW_GLOW_EMISSIVE);
+      flagMat.emissiveIntensity = crowGlowIntensity(this.crowTier);
       pg.add(flag);
       pg.position.set(pile.x, 0, pile.z);
       group.add(pg);
