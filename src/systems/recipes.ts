@@ -261,6 +261,27 @@ export interface Recipe {
    */
   placesTrap?: boolean;
   /**
+   * Stump-upgrade (Systems, 2026-10-28 — the Stumpy Workstation
+   * fix; trap-report precedent). Crafting this recipe transforms
+   * the FACED stump into a workbench instead of granting an
+   * inventory item — executeCraft consumes the ingredients and
+   * reports upgradedStump {type}, and the SHELL transforms via
+   * Background's anchor primitive on that result (single-caller
+   * rule, trap precedent). The anchor is NOT consumed
+   * (transformation, not harvest); station presence unchanged;
+   * trundle-move preserved; the splitting bonus keys on the
+   * upgraded state when splitting lands. The recipe's station
+   * gate ('workstation') IS the presence condition —
+   * 'workstation' presence comes solely from stumps today — so
+   * the entry crafts only AT a stump. First use:
+   * stumpy-workstation. Additions-aware (Adam, 2026-10-28):
+   * the workstation is ONE addition on the stump anchor, not an
+   * exclusive flag — other additions (e.g. altar) coexist;
+   * Systems' report path is workstation-specific, the altar
+   * rides the ritual system.
+   */
+  upgradesStump?: boolean;
+  /**
    * Carrying-capacity bonus, containers only. The BONUS numbers are
    * Adam's pinned numbers; the COSTS beside them are draft. Where the
    * doc leaves a bonus open, this field is left off and the open
@@ -702,20 +723,27 @@ const DRAFT_RECIPES: Recipe[] = [
     name: 'Stumpy Workstation',
     status: 'draft',
     output: { item: ITEMS.stumpyWorkstation, quantity: 1 },
+    station: 'workstation',
     ingredients: [
-      i(ITEMS.oldStump, 1),
       i(ITEMS.snapWood, 4),
       i(ITEMS.twinedCordage, 4),
     ],
+    upgradesStump: true,
     notes:
       'DRAFT. A found Old Stump upgraded into a proper workbench ' +
       '("feed the stump wood and cordage and it BECOMES the proper ' +
       'workbench"). PINNED 2026-10-25: stumps upgrade to a workstation. ' +
-      'Moveable via the Trundle-Tool; splitting wood there yields more ' +
-      'lumber than in the field. The found stump is modelled as an ' +
-      'ingredient because the engine works on inventory counts; the ' +
-      'world-side "found stump" object is a later wiring concern, not ' +
-      'something this data module settles.',
+      'Presence condition: station \'workstation\' (presence comes ' +
+      'solely from stumps today), so the entry crafts only AT a stump. ' +
+      'Execution reports upgradedStump (trap-report precedent): the ' +
+      'shell transforms the FACED stump; the anchor is NOT consumed ' +
+      '(transformation, not harvest); station presence unchanged; ' +
+      'trundle-move preserved. Moveable via the Trundle-Tool; ' +
+      'splitting wood there yields more lumber than in the field ' +
+      '(bonus keys on the upgraded state when splitting lands — no ' +
+      'splitting mechanic exists yet, no numbers now). Additions-aware: ' +
+      'the workstation is ONE addition on the stump anchor, not an ' +
+      'exclusive flag — other additions (e.g. altar) coexist.',
   },
   {
     id: 'crafted-workstation',
