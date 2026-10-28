@@ -74,6 +74,17 @@ export interface FacingSnapshot {
   pitch: number;
 }
 
+/**
+ * Fox femur — swift step (tier-1 charm, DRAFT +10%):
+ * movement speed factor while carried + awakened.
+ * Additive-points seam: future speed charms ADD their
+ * points to one bonus sum here, not multiply — with a
+ * single speed charm the factor is 1.10.
+ */
+export function swiftStepFactor(swiftActive: boolean): number {
+  return swiftActive ? 1.1 : 1;
+}
+
 export class PlayerController {
   x = 0;
   z = 0;
@@ -124,6 +135,17 @@ export class PlayerController {
   /** Wire Systems' bog-boots worn query (shell-owned wiring). */
   setBogBootsQuery(query: BogBootsQuery): void {
     this.bogBootsQuery = query;
+  }
+
+  /**
+   * Fox femur — swift step (tier-1 charm): shell-supplied
+   * carried + awakened boolean (UI wiring follows).
+   */
+  private swiftStep = false;
+
+  /** Shell setter for swift step (see swiftStepFactor). */
+  setSwiftStep(active: boolean): void {
+    this.swiftStep = active;
   }
   private canvas: HTMLCanvasElement | null = null;
   private emitTimer = 0;
@@ -385,7 +407,7 @@ export class PlayerController {
     const stage = this.hungerStageQuery?.() ?? null;
     const hunger =
       stage === 'hungry' || stage === 'too-hungry' ? HUNGRY_SPEED_MULTIPLIER : 1;
-    const speed = PLAYER_SPEED * terrain * hunger * magnitude;
+    const speed = PLAYER_SPEED * terrain * hunger * swiftStepFactor(this.swiftStep) * magnitude;
 
     if (this.mode === 'first' || this.mode === 'behind') {
       // Movement relative to view yaw (yaw = 0 faces -z). Rotate the local

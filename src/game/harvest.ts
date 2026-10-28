@@ -172,6 +172,7 @@
 import { bus } from './events';
 import { CHUNK_SIZE } from '../constants';
 import {
+  CLAY_BONUS_CHANCE,
   SOURCE_BY_ID,
   harvestStageRank,
   harvestYieldForTool,
@@ -265,6 +266,27 @@ export interface HarvestOutcomeDeps {
 function primaryYieldItem(source: HarvestSourceDef, gen: WorldGen, x: number, z: number): string {
   if (source.kind === 'bone') return boneItemId(boneKindAt(gen.seed, x, z));
   return source.primaryYield ?? '';
+}
+
+/**
+ * Mole paw — earth sense (tier-1 charm): shell-supplied
+ * carried + awakened boolean (UI wiring follows).
+ */
+let moleEarthSense = false;
+
+/** Shell setter for mole earth sense (see clayBonusChanceFor). */
+export function setMoleEarthSense(active: boolean): void {
+  moleEarthSense = active;
+}
+
+/**
+ * Clay bonus chance (tier-1 charm, DRAFT +10pp): 0.25 →
+ * 0.35 while carried + awakened, capped at 1.0. The
+ * gated-'CLAY' grant sites below read through this, so
+ * the chance lives in one place, never scattered.
+ */
+export function clayBonusChanceFor(moleActive: boolean): number {
+  return Math.min(1, CLAY_BONUS_CHANCE + (moleActive ? 0.1 : 0));
 }
 
 /**
@@ -769,10 +791,14 @@ export function createHarvestOutcomeListener(
           }
           const gatedYield = gated.yieldByStage[harvestStageRank(tool)];
           if (!gatedYield) continue;
+          // Mole paw — earth sense (tier-1 charm): clay's
+          // bonus chance rises while carried + awakened.
+          const bonusChance =
+            gated.item === 'CLAY' ? clayBonusChanceFor(moleEarthSense) : gatedYield.bonusChance;
           mergeYields(
             removeYields,
             gated.item,
-            gatedYield.base + (rng() < gatedYield.bonusChance ? gatedYield.bonus : 0),
+            gatedYield.base + (rng() < bonusChance ? gatedYield.bonus : 0),
           );
         }
       }
@@ -842,10 +868,14 @@ export function createHarvestOutcomeListener(
         }
         const gatedYield = gated.yieldByStage[harvestStageRank(tool)];
         if (!gatedYield) continue;
+        // Mole paw — earth sense (tier-1 charm): clay's
+        // bonus chance rises while carried + awakened.
+        const bonusChance =
+          gated.item === 'CLAY' ? clayBonusChanceFor(moleEarthSense) : gatedYield.bonusChance;
         mergeYields(
           yields,
           gated.item,
-          gatedYield.base + (rng() < gatedYield.bonusChance ? gatedYield.bonus : 0),
+          gatedYield.base + (rng() < bonusChance ? gatedYield.bonus : 0),
         );
       }
     }
