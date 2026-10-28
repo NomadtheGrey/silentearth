@@ -52,8 +52,13 @@
 // Types
 // ---------------------------------------------------------------------------
 
-import { ownedStage } from './owned-tool';
+import { ownedStage, ownedToolItem, TOOL_MAPPING } from './owned-tool';
+// GARMENTS is the single source for garment item ids. clothes.ts
+// imports CraftingInventory from here as type-only (erased at
+// compile), so this is not a runtime cycle.
+import { GARMENTS } from './clothes';
 import {
+  ITEMS,
   type CraftingStation,
   type Ingredient,
   type ItemId,
@@ -112,6 +117,121 @@ export interface CanCraftResult {
   creekMismatch: boolean;
   /** The station the recipe requires, when it states one. */
   requiredStation?: CraftingStation;
+  /**
+   * No-recraft ownership status (Adam, 2026-10-28): a recipe
+   * already owned or superseded is not craftable — ok is
+   * false when this is not 'available'. The menu renders
+   * disabled + bottom-sorted + labeled from this field.
+   */
+  ownership: CraftOwnership;
+}
+
+/**
+ * No-recraft ownership status (Adam, 2026-10-28):
+ * - 'available': craftable as far as ownership goes
+ *   (materials/station/tool-stage gates still apply).
+ * - 'already-owned': the exact output is already held.
+ * - 'superseded': a better rung of the same ladder is
+ *   already held (baskets: large held → small is
+ *   superseded; tools: higher rung held → lower is
+ *   superseded; same-stage non-upgrade siblings too).
+ */
+export type CraftOwnership = 'available' | 'already-owned' | 'superseded';
+
+/**
+ * Adam's pinned words for the two disabled states
+ * (single source — the menu renders these verbatim).
+ */
+export const CRAFT_OWNERSHIP_LABELS: Record<
+  Exclude<CraftOwnership, 'available'>,
+  string
+> = {
+  'already-owned': 'Already Owned',
+  superseded: 'Superseded',
+};
+
+/**
+ * Pure ownership check: may this recipe be crafted again
+ * from this inventory, ignoring materials/station?
+ *
+ * UpgradeFrom-chain-first, stage-second (DEV-required
+ * refinement of the rung rule): the rung rule alone
+ * would block trowel → sharp-trowel (both stage 0),
+ * so a recipe whose upgradeFrom IS the owned tool
+ * stays available at the same stage; same-stage
+ * siblings (not the upgradeFrom) are superseded.
+ * Yields are stage-based, so a blocked sibling loses
+ * nothing mechanically.
+ *
+ * Baskets: large held → small superseded + large
+ * already-owned; small only → small already-owned +
+ * large available; both (old saves) → small
+ * superseded + large already-owned.
+ * Singles (garments + apron + umbrella): held →
+ * already-owned. Worn ⊆ carried (wear never removes),
+ * and a dropped garment's worn flag grants nothing,
+ * so inventory presence is the ownership source.
+ * Everything else (placed structures, consumables,
+ * materials, unlisted singles like grimoire) →
+ * available (multiples allowed or flagged for pin).
+ */
+export function craftOwnershipStatus(
+  recipe: Recipe,
+  inventory: CraftingInventory,
+): CraftOwnership {
+  const output = recipe.output.item;
+
+  // Tool ladder.
+  const rung = TOOL_MAPPING[output]?.stage;
+  if (rung !== undefined) {
+    const ownedItem = ownedToolItem(inventory);
+    if (ownedItem === 'none') {
+      return 'available';
+    }
+    if (output === ownedItem) {
+      return 'already-owned';
+    }
+    const ownedRung = TOOL_MAPPING[ownedItem].stage;
+    if (rung < ownedRung) {
+      return 'superseded';
+    }
+    if (rung === ownedRung) {
+      const predecessors =
+        recipe.upgradeFrom === undefined
+          ? []
+          : Array.isArray(recipe.upgradeFrom)
+            ? recipe.upgradeFrom
+            : [recipe.upgradeFrom];
+      return predecessors.includes(ownedItem) ? 'available' : 'superseded';
+    }
+    return 'available';
+  }
+
+  // Basket ladder.
+  if (output === ITEMS.largeBasket) {
+    return inventory.count(ITEMS.largeBasket) >= 1
+      ? 'already-owned'
+      : 'available';
+  }
+  if (output === ITEMS.smallBasket) {
+    if (inventory.count(ITEMS.largeBasket) >= 1) {
+      return 'superseded';
+    }
+    return inventory.count(ITEMS.smallBasket) >= 1
+      ? 'already-owned'
+      : 'available';
+  }
+
+  // Singles: garments + apron + umbrella.
+  const isSingle =
+    output === ITEMS.apron ||
+    output === ITEMS.umbrella ||
+    GARMENTS.some((g) => g.item === output);
+  if (isSingle) {
+    return inventory.count(output) >= 1 ? 'already-owned' : 'available';
+  }
+
+  return 'available';
 }
 
 // ---------------------------------------------------------------------------
@@ -187,13 +307,18 @@ export function canCraft(
   const creekMismatch =
     recipe.requiresCreek === true && nearCreek === false;
 
+  // No-recraft ownership: an already-owned or superseded
+  // recipe is not craftable, whatever the materials say.
+  const ownership = craftOwnershipStatus(recipe, inventory);
+
   const ok =
     missingIngredients.length === 0 &&
     missingRequirements.length === 0 &&
     missingUpgradeFrom.length === 0 &&
     toolStageShortfall === undefined &&
     !stationMismatch &&
-    !creekMismatch;
+    !creekMismatch &&
+    ownership === 'available';
 
   return {
     ok,
@@ -204,6 +329,7 @@ export function canCraft(
     stationMismatch,
     creekMismatch,
     requiredStation: recipe.station,
+    ownership,
   };
 }
 
@@ -241,6 +367,12 @@ export function craft(
 ): { item: ItemId; quantity: number } {
   const check = canCraft(recipe, inventory, station);
   if (!check.ok) {
+    if (check.ownership !== 'available') {
+      throw new Error(
+        `Cannot craft ${recipe.name}: ` +
+          `${CRAFT_OWNERSHIP_LABELS[check.ownership]}.`,
+      );
+    }
     if (check.stationMismatch) {
       throw new Error(
         `Cannot craft ${recipe.name}: requires station ` +

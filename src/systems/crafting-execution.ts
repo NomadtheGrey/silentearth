@@ -107,7 +107,11 @@
  *   new PersonalInventory({ largeBasketMode: 'replace', initial })
  */
 
-import { canCraft } from './crafting';
+import {
+  canCraft,
+  craftOwnershipStatus,
+  CRAFT_OWNERSHIP_LABELS,
+} from './crafting';
 import { craftIntoInventory, PersonalInventory } from './inventory';
 import type { HungerState } from './hunger';
 import {
@@ -195,6 +199,20 @@ export function executeCraft(
   hunger: HungerState | null = null,
   nearCreek: boolean | null = null,
 ): CraftExecutionResult {
+  // Ownership gate, FIRST (before hunger): an already-owned
+  // or superseded recipe refuses with Adam's label and
+  // consumes nothing. Ownership is a recipe+inventory
+  // fact, not her state — it outranks the hunger message.
+  // canCraft reports the same status (ok=false) for the
+  // menu; this gate is the enforcement, never UI-only.
+  const ownership = craftOwnershipStatus(recipe, inventory);
+  if (ownership !== 'available') {
+    throw new Error(
+      `Cannot craft ${recipe.name}: ` +
+        `${CRAFT_OWNERSHIP_LABELS[ownership]}.`,
+    );
+  }
+
   // Hunger gate, before anything is consumed.
   if (hunger !== null && hunger.isTooHungry()) {
     throw new Error(

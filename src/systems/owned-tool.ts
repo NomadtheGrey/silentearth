@@ -118,8 +118,10 @@ interface ToolMapping {
 /**
  * One mapping table for all three tier views. Sharp trowel shares
  * the trowel stage (stage 0) — see the header.
+ * Exported for the no-recraft status (crafting.ts reads the
+ * output item's rung from it — single source, no second table).
  */
-const TOOL_MAPPING: Record<string, ToolMapping> = {
+export const TOOL_MAPPING: Record<string, ToolMapping> = {
   [ITEMS.gardenTrowel]: { tier: 'trowel', stage: 0, stageName: 'trowel' },
   [ITEMS.sharpTrowel]: {
     tier: 'sharpTrowel',
