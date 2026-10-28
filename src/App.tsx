@@ -1456,6 +1456,35 @@
  *   mouse/bear shell wiring, deer warning display.
  *   Parity: nothing visible changes except the wake
  *   bump on the shared meter, touch + desktop alike.
+ * - MOUSE/BEAR/DEER WIRING, LIVE (Systems Track B
+ *   factors): the remaining Systems-effect shell
+ *   wirings, closed in one landing. MOUSE: syncCharm-
+ *   Bonuses sets +25/0 home-storage counts (gate
+ *   'mouse-spine') on every placed house's store at
+ *   boot + ritual completion, plus at getHomeStore
+ *   creation (a house opened mid-game is not left
+ *   stale); capacity() already adds it, so existing
+ *   home-capacity displays pick it up. BEAR: the same
+ *   sync sets +10/0 lb pack capacity (gate 'bear-
+ *   claw') on the pack inventory; capacityLb() already
+ *   feeds it, so the existing carrying line picks it
+ *   up. DEER: syncDeerWarning feeds WeatherWarning
+ *   Background's stormApproaching rising-front signal
+ *   (NOT a countdown) + carried = isAwakened('deer-
+ *   antler-tip'), at boot + ritual completion + the
+ *   1 s timer tick (the fact moves with position, so
+ *   boot + completion alone would go stale as she
+ *   walks); StormWarning (new, props-driven, text-
+ *   only, pointer-events-none) renders 'A storm
+ *   approaches.' steady while active, pulsing on the
+ *   fired edge, seated beside HungerIndicator sharing
+ *   stack visibility. All gates list membership +
+ *   awakened, never main-inventory count; all three
+ *   bonuses/latches session-only, never saved. This
+ *   closes the Systems-effect wirings (crow pile-glow
+ *   rides its own glow landing). Parity: the deer line
+ *   is shared, touch + desktop alike; mouse/bear show
+ *   through existing lines, both alike.
  * POINTER DISCIPLINE: overlays are pointer-events-none except the
  * small interactive pieces (HUD buttons, panels, harvest buttons),
  * so world clicks — including the first-person mouse-capture click
@@ -1600,7 +1629,11 @@ import {
   serializeSave,
   type SaveData,
 } from './systems/save';
-import { clothingRemaining, SEASON_START_MONTH } from './game/weather';
+import {
+  clothingRemaining,
+  stormApproaching,
+  SEASON_START_MONTH,
+} from './game/weather';
 import {
   ownedTier,
   ownedToolItem,
@@ -1630,9 +1663,12 @@ import {
 import {
   CharmState,
   GroundhogRest,
+  WeatherWarning,
+  bearCapacityBonusLb,
   grantFirstCharm,
   groundhogWakeBonus,
   listCharms,
+  mouseStorageBonus,
   snakeDrainFactor,
   boneNote,
   boneKindFor,
@@ -1644,6 +1680,7 @@ import {
 } from './systems/charms';
 import { RitualPanel } from './ui/RitualPanel';
 import { CharmsPanel } from './ui/CharmsPanel';
+import { StormWarning } from './ui/StormWarning';
 
 type BusHarvestTarget = EventMap['harvest:inRange']['targets'][number];
 
@@ -2261,9 +2298,17 @@ export default function App() {
   // state like the warning latch — never saved (a load
   // mid-rested-day resets it until the next sleep).
   const groundhogRestRef = useRef(new GroundhogRest());
+  // Deer storm-warning latch (mouse/bear/deer wiring):
+  // session state like the shrew latch — never saved.
+  const weatherWarningRef = useRef(new WeatherWarning());
   const [hungerWarningActive, setHungerWarningActive] = useState(false);
   const [hungerWarningFlash, setHungerWarningFlash] = useState(false);
   const warningFlashTimerRef = useRef<number | undefined>(undefined);
+  // Deer warning display state (same shape as the shrew
+  // line: steady active + 2 s flash on the fired edge).
+  const [deerWarningActive, setDeerWarningActive] = useState(false);
+  const [deerWarningFlash, setDeerWarningFlash] = useState(false);
+  const deerWarningFlashTimerRef = useRef<number | undefined>(undefined);
   const syncShrewEffect = () => {
     // Carried source, SHELL-SIDE (DEV instruction):
     // LIST MEMBERSHIP since the charm-list landing
@@ -2314,6 +2359,64 @@ export default function App() {
         ) *
         groundhogRestRef.current.restedDrainFactor(),
     );
+  };
+  // CHARM-BONUS SYNC (mouse/bear wiring): the two
+  // session-only bonuses, shell-synced on list change
+  // (boot + ritual completion, beside syncCharmHooks).
+  // Mouse +25 home-storage counts while carried +
+  // awakened, else 0, applied to EVERY placed house's
+  // store (the bonus is a charm effect, not per-house);
+  // HomeStorage.capacity() already adds it, so existing
+  // home-capacity displays pick it up with no display
+  // work. Bear +10 lb pack capacity while carried +
+  // awakened, else 0, on the pack inventory; capacityLb()
+  // already feeds it, so the existing carrying line
+  // picks it up with no display work. Gates are list
+  // membership + awakened via isAwakened per kind,
+  // never main-inventory count. The inventory ref is
+  // nullable (not yet built at the earliest boot
+  // reads), so the bear leg guards it.
+  const syncCharmBonuses = () => {
+    const charms = charmStateRef.current;
+    const mouseBonus = mouseStorageBonus(
+      charms.isAwakened('mouse-spine'),
+      charms,
+    );
+    for (const store of homeStoresRef.current.values()) {
+      store.setCharmBonus(mouseBonus);
+    }
+    const pack = inventoryRef.current;
+    if (pack) {
+      pack.setCharmCapacityBonusLb(
+        bearCapacityBonusLb(charms.isAwakened('bear-claw'), charms),
+      );
+    }
+  };
+  // DEER WARNING SYNC (deer wiring): the storm latch,
+  // fed Background's rising-front signal (NOT a
+  // countdown) + carried = isAwakened('deer-antler-tip').
+  // The fact moves with position (month does not advance
+  // in-game yet), so this runs on the 1 s timer tick
+  // beside syncShrewEffect as well as boot + ritual
+  // completion — boot + completion alone would go stale
+  // as she walks. No player yet → no fact, no update
+  // (the latch holds its state until a fact exists).
+  const syncDeerWarning = () => {
+    const player = playerRef.current;
+    if (!player) return;
+    const fact = stormApproaching(genRef.current, player.x, player.z);
+    const result = weatherWarningRef.current.update(
+      fact,
+      charmStateRef.current.isAwakened('deer-antler-tip'),
+    );
+    setDeerWarningActive(result.active);
+    if (result.fired) {
+      setDeerWarningFlash(true);
+      window.clearTimeout(deerWarningFlashTimerRef.current);
+      deerWarningFlashTimerRef.current = window.setTimeout(() => {
+        setDeerWarningFlash(false);
+      }, 2000);
+    }
   };
   // CHARM-HOOK SYNC (zone + hooks build, Background G1/G2/G3):
   // the five landed charm hooks take shell-supplied
@@ -3091,6 +3194,8 @@ export default function App() {
     // setters are session state, never saved) — same
     // reason as the shrew sync above.
     syncCharmHooks();
+    syncCharmBonuses();
+    syncDeerWarning();
     applyShelterHouse(
       shelterAt(player.x, player.z, shelterState.snapshot()).houseId,
     );
@@ -3239,6 +3344,7 @@ export default function App() {
       // re-sync (the drain rate for the NEXT tick
       // follows the current carried/awakened state).
       syncShrewEffect();
+      syncDeerWarning();
       fireState.advanceLighting(Date.now());
       // Drive every tracked Systems fire's lighting clock
       // alongside the engine's (the bridge's tick half).
@@ -4023,6 +4129,8 @@ export default function App() {
       // hooks at once (the newly listed kind's effect
       // starts now, not on the next boot).
       syncCharmHooks();
+      syncCharmBonuses();
+      syncDeerWarning();
       // Anchor BEFORE unstaging: the staged site record
       // carries the site's true position for BOTH kinds
       // (altar + stump) — the old altarState-only lookup
@@ -4295,6 +4403,16 @@ export default function App() {
     const placed = shelterState.snapshot().find((h) => h.id === houseId);
     if (!placed) return null;
     const store = new HomeStorage(HOUSE_TYPE_TO_ITEM[placed.type]);
+    // Creation-time bonus (mouse wiring): a house opened
+    // mid-game gets the current mouse bonus at once —
+    // without this it would sit at 0 until the next
+    // list-change sync.
+    store.setCharmBonus(
+      mouseStorageBonus(
+        charmStateRef.current.isAwakened('mouse-spine'),
+        charmStateRef.current,
+      ),
+    );
     homeStoresRef.current.set(houseId, store);
     homeStoreItemsRef.current.set(houseId, new Set());
     return store;
@@ -5843,6 +5961,12 @@ export default function App() {
               value={hungerValue}
               warningActive={hungerWarningActive}
               warningFlash={hungerWarningFlash}
+            />
+          </div>
+          <div className="mt-2">
+            <StormWarning
+              active={deerWarningActive}
+              flash={deerWarningFlash}
             />
           </div>
           <ForageHint stage={hungerStage} />
