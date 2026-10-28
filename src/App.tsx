@@ -5630,20 +5630,23 @@ export default function App() {
   // Introduction section in Options (Settings tab).
   const [introOpen, setIntroOpen] = useState(() => bootSave === null);
 
-  // ESC TOGGLE (Adam, 2026-10-27 — Esc opens Options): with
-  // NO modal open, Esc opens the Options modal; with a modal
-  // open, that modal's own Esc listener closes it (previous
-  // brief stands) and this handler stands aside — one rule,
+  // ESC TOGGLE (Adam, 2026-10-27 — Esc opens Options; extended
+  // 2026-10-28 — Esc closes the topmost layer first): with
+  // NO modal open, Esc closes the topmost open layer, one
+  // per press, in fixed order — placement panel, context
+  // menus (pile, torch, fire — reverse render order),
+  // ritual panel, panels (charms, crafting, inventory —
+  // reverse render order) — and only with nothing open does
+  // it open the Options modal. With a modal open, that
+  // modal's own Esc listener closes it (previous brief
+  // stands) and this handler stands aside — one rule,
   // topmost-close else open-Options. Esc on open Options
   // closes Options; a second Esc with nothing open re-opens
   // it. The handler yields when focus sits in a text input,
   // textarea, or select (the seed field): typing Esc there
   // must not yank the player into Options. It acts on
   // Escape alone and swallows nothing, so V/C and WASD are
-  // untouched. Panels (inventory/crafting) are not modals,
-  // so they do not block the toggle — flagged, not carved
-  // out: if Adam wants Esc to close panels first, that is
-  // a follow-up. It also yields while the remove-confirm
+  // untouched. It also yields while the remove-confirm
   // dialog is open (PC keys, 2026-10-28) — that dialog owns
   // its own Enter/Esc, the single Esc path.
   useEffect(() => {
@@ -5660,11 +5663,58 @@ export default function App() {
       ) {
         return;
       }
+      if (placement !== null) {
+        handlePlaceCancel();
+        return;
+      }
+      if (selectedPileId !== null) {
+        selectedPileIdRef.current = null;
+        setSelectedPileId(null);
+        return;
+      }
+      if (selectedTorchId !== null) {
+        setSelectedTorchId(null);
+        return;
+      }
+      if (selectedFireId !== null) {
+        setSelectedFireId(null);
+        return;
+      }
+      if (selectedSiteId !== null) {
+        setSelectedSiteId(null);
+        setRitualNote(null);
+        return;
+      }
+      if (charmsOpen) {
+        setCharmsOpen(false);
+        return;
+      }
+      if (craftingOpen) {
+        setCraftingOpen(false);
+        return;
+      }
+      if (inventoryOpen) {
+        setInventoryOpen(false);
+        return;
+      }
       setOptionsOpen(true);
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [optionsOpen, introOpen, pendingTrapRecipe, pendingRemoveTarget]);
+  }, [
+    optionsOpen,
+    introOpen,
+    pendingTrapRecipe,
+    pendingRemoveTarget,
+    placement,
+    selectedPileId,
+    selectedTorchId,
+    selectedFireId,
+    selectedSiteId,
+    charmsOpen,
+    craftingOpen,
+    inventoryOpen,
+  ]);
   const handleFontChange = (next: FontId): void => {
     setFont(next);
     saveFontChoice(next);
