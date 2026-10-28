@@ -1676,7 +1676,7 @@ import {
   emptyQuestFlags,
   type QuestFlags,
 } from './systems/quests';
-import { canCraft } from './systems/crafting';
+import { canCraft, CRAFT_OWNERSHIP_LABELS } from './systems/crafting';
 import {
   ITEMS,
   RECIPES,
@@ -4072,7 +4072,24 @@ export default function App() {
         })),
         ...dependencyRows,
       ],
-      canCraft: check.ok,
+      canCraft: check.ok && check.ownership === 'available',
+      // NO-RECRAFT BINDING (Adam, 2026-10-28 — Systems owns
+      // the rule, the shell renders it): Systems' check.ok
+      // already folds ownership in (ok is false when
+      // ownership is not 'available'), so the && above is
+      // belt-and-braces, behavior-identical today — it
+      // makes the mapping literal: owned/superseded →
+      // canCraft false. The label is Systems' pinned word,
+      // rendered verbatim under the name; it replaces the
+      // availability note. The direct-upgrade exception
+      // lives in Systems' status (same-stage upgradeFrom
+      // stays available), so garden → sharp never lands
+      // here — if it ever did, the STATUS would be wrong,
+      // not this render.
+      disabledLabel:
+        check.ownership === 'available'
+          ? undefined
+          : CRAFT_OWNERSHIP_LABELS[check.ownership],
       availabilityNote,
       icon:
         recipe.output.item === UMBRELLA_ITEM_ID ? (
@@ -4081,18 +4098,34 @@ export default function App() {
     };
   });
 
+  // NO-RECRAFT ORDER (Adam, 2026-10-28): one stable
+  // partition of the full list — available recipes first
+  // in current order, owned/superseded last in current
+  // order. The section filters below preserve relative
+  // order, so this IS the per-section stable partition
+  // (within-section only, no re-sort); section order +
+  // accordion unchanged, and disabled rows stay visible
+  // when their section is expanded (never hidden). The
+  // flat menu prop rides the same order. Header counts
+  // read canCraft, so an all-disabled section renders
+  // "0 of N craftable" with its rows visible on expand.
+  const orderedCraftingRecipes = [
+    ...craftingRecipes.filter((recipe) => recipe.canCraft),
+    ...craftingRecipes.filter((recipe) => !recipe.canCraft),
+  ];
+
   // CRAFTING GROUPS: sections in DEV's group order, each filtered
   // from the recipe-ordered menu rows above (never re-sorted);
   // empty groups dropped here, and the menu drops them again
   // defensively. Unmapped recipes (none today — all 38 map)
   // trail under "Other" instead of vanishing.
-  const ungroupedRecipes = craftingRecipes.filter(
+  const ungroupedRecipes = orderedCraftingRecipes.filter(
     (recipe) => CRAFTING_GROUP_BY_RECIPE_ID[recipe.id] === undefined,
   );
   const craftingSections = [
     ...CRAFTING_GROUP_ORDER.map((title) => ({
       title,
-      recipes: craftingRecipes.filter(
+      recipes: orderedCraftingRecipes.filter(
         (recipe) => CRAFTING_GROUP_BY_RECIPE_ID[recipe.id] === title,
       ),
     })).filter((section) => section.recipes.length > 0),
@@ -7283,7 +7316,7 @@ export default function App() {
         ) : null}
         {craftingOpen ? (
           <CraftingMenu
-            recipes={craftingRecipes}
+            recipes={orderedCraftingRecipes}
             sections={craftingSections}
             stationNote={stationNote}
             comfortable={isTouch}

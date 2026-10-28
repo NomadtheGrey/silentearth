@@ -107,6 +107,9 @@ export interface RecipeIngredient {
  * PLACEHOLDER-FRIENDLY: recipes arrive from the Systems lane. This type
  * carries display text and a caller-decided `canCraft` flag only — the
  * panel never checks an inventory, never decides craftability itself.
+ * The optional ownership label ('Already Owned' / 'Superseded', from
+ * Systems' CRAFT_OWNERSHIP_LABELS) renders under the name and replaces
+ * the availability note when set.
  */
 export interface CraftingRecipe {
   id: string;
@@ -116,6 +119,13 @@ export interface CraftingRecipe {
   canCraft: boolean;
   /** Why crafting is or is not available, in the caller's words. Optional. */
   availabilityNote?: string;
+  /**
+   * No-recraft ownership label, caller-supplied from Systems'
+   * CRAFT_OWNERSHIP_LABELS. When set, the row is disabled
+   * and bottom-sorted, and this label replaces availabilityNote.
+   * Optional.
+   */
+  disabledLabel?: string;
   /** Caller-supplied glyph, rendered before the name. Optional. */
   icon?: ReactNode;
 }
