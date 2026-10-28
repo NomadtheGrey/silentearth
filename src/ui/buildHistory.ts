@@ -45,7 +45,7 @@ const ALL_RECORDS: BuildRecord[] = [
   {
     merge: 'Merge #12',
     pr: 25,
-    sha: 'pending',
+    sha: '5241f1a',
     date: '2026-10-28',
     what: 'Remaining-charm factor helpers (rabbit flee, raccoon loot, wolf signs — helpers only), stump crafting header names the tree stump, groundhog tier-1 rested day + waking refresh, flowers in the flowered biomes (meadow, forest, oldfield rise, creek bottom), groundhog shell wiring + snake drain factor (shrew × snake × rested = 0.729), mouse/bear/deer shell wiring (home +25, pack +10, storm warning line).',
     why: 'The tier-1 charm effects finish their wiring — a rested day, a slower drain, more room at home and in the pack, and a storm\u2019s warning — with flowers where they make sense and the stump named plainly in the crafting menu.',
