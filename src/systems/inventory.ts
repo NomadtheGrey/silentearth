@@ -210,6 +210,20 @@ export const ITEM_WEIGHT_LB: Readonly<Record<string, number>> = {
   elderberries: 0.1,
   [ITEMS.luminousSpores]: 0.1,
   'cooked-acorns': 0.1, // lane judgment: same as acorns
+  // Flowers (2026-10-28 brainstorm, DRAFT for pin pass):
+  // picked flowers ride the lightest cluster, berries precedent.
+  [ITEMS.whiteYarrow]: 0.1,
+  [ITEMS.goldConeflower]: 0.1,
+  [ITEMS.purpleClover]: 0.1,
+  [ITEMS.yellowDandelion]: 0.1,
+  [ITEMS.pinkMilkweed]: 0.1,
+  [ITEMS.redPoppy]: 0.1,
+  [ITEMS.tallSunflower]: 0.1,
+  [ITEMS.blueAster]: 0.1,
+  [ITEMS.whiteTrillium]: 0.1,
+  [ITEMS.woodViolet]: 0.1,
+  [ITEMS.creekIris]: 0.1,
+  [ITEMS.whiteWaterLily]: 0.1,
   // 0.25 lb
   [ITEMS.dryKindling]: 0.25,
   [ITEMS.twinedCordage]: 0.25,
@@ -510,6 +524,18 @@ export const ITEM_DISPLAY_NAMES: Readonly<Record<string, string>> = {
   honey: 'Honey',
   'sleeping-bag': 'Sleeping Bag',
   tent: 'Tent',
+  'white-yarrow': 'White Yarrow',
+  'gold-coneflower': 'Gold Coneflower',
+  'purple-clover': 'Purple Clover',
+  'yellow-dandelion': 'Yellow Dandelion',
+  'pink-milkweed': 'Pink Milkweed',
+  'red-poppy': 'Red Poppy',
+  'tall-sunflower': 'Tall Sunflower',
+  'blue-aster': 'Blue Aster',
+  'white-trillium': 'White Trillium',
+  'wood-violet': 'Wood Violet',
+  'creek-iris': 'Creek Iris',
+  'white-water-lily': 'White Water Lily',
 };
 
 /**

@@ -29,7 +29,7 @@ import { marshWeight } from './biomes';
 import { SOURCE_FOR_KIND } from './objects';
 import { buildAltarGroup, buildAnimal, buildCampArrow, buildCandle, buildEdgeArrow, buildKindGeometry, buildStagedBone, buildTorch, buildUmbrella, buildWitch, CANDLE_FLAME_Y, TORCH_FLAME_Y, vertexLambert } from './models';
 import { spawnAnimalsForChunk, updateAnimal } from './animals';
-import type { AnimalInstance } from './animals';
+import type { AnimalInstance, AnimalKind } from './animals';
 import { crowGlowIntensity, CROW_GLOW_EMISSIVE } from './crow';
 import type { CrowTier } from './crow';
 import { ProximityTracker } from './proximity';
@@ -794,6 +794,31 @@ export class WorldRenderer {
    */
   snapshotSky(): SkySnapshot | null {
     return this.sky?.snapshot() ?? null;
+  }
+
+  /**
+   * Live feed of loaded-chunk animals for the shell (creature-tag
+   * consumption, UI lane): one { kind, x, z } snapshot per ambient
+   * animal instance in a currently loaded chunk. Fresh array +
+   * fresh objects each call, so the shell's 250 ms poll reads
+   * current positions (instances move every frame via
+   * updateAnimal) without ever mutating renderer state.
+   * Instance x/z equal rendered x/z (pose adds bob to y only).
+   * ALL loaded-chunk animals, no cap, no nearest filter —
+   * nearest-only + range cap are the tag's job, UI-side. Kind is
+   * the AnimalKind id (UI capitalizes for display — no name
+   * field exists in ANIMAL_DEFS). No y: tags project x/z.
+   * No App.tsx touch: the shell polls this getter and renders
+   * its own tag.
+   */
+  getVisibleAnimals(): { kind: AnimalKind; x: number; z: number }[] {
+    const out: { kind: AnimalKind; x: number; z: number }[] = [];
+    for (const loaded of this.chunks.values()) {
+      for (const pair of loaded.animals) {
+        out.push({ kind: pair.instance.kind, x: pair.instance.x, z: pair.instance.z });
+      }
+    }
+    return out;
   }
 
   restoreSky(snap: SkySnapshot | null | undefined): void {

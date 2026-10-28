@@ -161,6 +161,27 @@ export const ITEMS = {
   // Camping (2026-10-28 — sleeping bag + tent; see camping.ts).
   sleepingBag: 'sleeping-bag',
   tent: 'tent',
+  // Flowers (2026-10-28 — brainstorm doc, 13 new kinds + existing
+  // pink; 12 harvested kinds here, DRAFT for Adam's pin pass).
+  // Pink lady slipper gets NO item in v1: the doc's scenery-only
+  // option "needs nothing," and the rare-harvest option is a
+  // potion-branch decision for the pin pass (lane-decided
+  // exclusion, flippable then). Existing pink 'flower' stays
+  // scenery-only, untouched. No recipes: flowers are harvested,
+  // not crafted. Yields (1 per harvest, proposed) ride
+  // Background's harvest table, not this registry.
+  whiteYarrow: 'white-yarrow',
+  goldConeflower: 'gold-coneflower',
+  purpleClover: 'purple-clover',
+  yellowDandelion: 'yellow-dandelion',
+  pinkMilkweed: 'pink-milkweed',
+  redPoppy: 'red-poppy',
+  tallSunflower: 'tall-sunflower',
+  blueAster: 'blue-aster',
+  whiteTrillium: 'white-trillium',
+  woodViolet: 'wood-violet',
+  creekIris: 'creek-iris',
+  whiteWaterLily: 'white-water-lily',
 } as const;
 
 // ---------------------------------------------------------------------------

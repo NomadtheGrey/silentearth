@@ -62,6 +62,8 @@ export const DISC_RADIUS: Partial<Record<ScatterKind, number>> = {
 const BERRY_COLOR = 0x7a2a3a;
 const FLOWER_CENTER_COLOR = 0xf0d060;
 const APPLE_COLOR = 0xc82828;
+/** Fixed stem green for the new flower cases (flowers landing, 2026-10-28). */
+const STEM_GREEN = 0x3a5a2a;
 
 /** Lighten (>1) or darken (<1) a packed color, clamped to white. */
 function shade(hex: number, factor: number): number {
@@ -443,14 +445,94 @@ export function buildKindGeometry(spec: MeshSpec, kind: ScatterKind): THREE.Buff
         part(sphere(0.18, 6, 5), c, { p: [0, 0.2, 0] }),
         part(sphere(0.07, 6, 5), FLOWER_CENTER_COLOR, { p: [0, 0.38, 0] }),
       ]);
+    // Flowers landing (2026-10-28): per-kind flower shapes, all
+    // stacked from y=0 up (defs carry baseY 0). c = petal color,
+    // e = accent from the def (centre, cone, leaves, pad). Stems
+    // are fixed green, unlike the generic flower case above.
+    case 'flowerDisc':
+      // Yarrow / dandelion / aster / violet: stem + flat disc head
+      // + centre dot. (Yarrow's blob cluster reads as a white disc
+      // at phone scale.)
+      return merge([
+        part(cyl(0.02, 0.03, 0.35, 4), STEM_GREEN, { p: [0, 0.175, 0] }),
+        part(cyl(0.16, 0.16, 0.03, 8), c, { p: [0, 0.37, 0] }),
+        part(sphere(0.05, 6, 5), e, { p: [0, 0.4, 0] }),
+      ]);
+    case 'flowerCone':
+      // Gold coneflower: stem + yellow disc rays + brown cone centre.
+      return merge([
+        part(cyl(0.02, 0.03, 0.35, 4), STEM_GREEN, { p: [0, 0.175, 0] }),
+        part(cyl(0.19, 0.19, 0.03, 8), c, { p: [0, 0.37, 0] }),
+        part(cone(0.12, 0.2, 8), e, { p: [0, 0.48, 0] }),
+      ]);
+    case 'flowerCup':
+      // Red poppy: stem + open red cup + dark centre disc.
+      return merge([
+        part(cyl(0.02, 0.03, 0.35, 4), STEM_GREEN, { p: [0, 0.175, 0] }),
+        part(cyl(0.15, 0.08, 0.12, 8), c, { p: [0, 0.41, 0] }),
+        part(cyl(0.06, 0.06, 0.02, 8), e, { p: [0, 0.48, 0] }),
+      ]);
+    case 'flowerTallDisc':
+      // Tall sunflower: tall thick stem + large disc + dark centre.
+      return merge([
+        part(cyl(0.03, 0.04, 1.0, 4), STEM_GREEN, { p: [0, 0.5, 0] }),
+        part(cyl(0.3, 0.3, 0.04, 10), c, { p: [0, 1.02, 0] }),
+        part(sphere(0.1, 8, 6), e, { p: [0, 1.06, 0] }),
+      ]);
+    case 'flowerTrillium':
+      // White trillium: low stem + 3 white petal discs in a triangle
+      // over 3 green leaf discs (the unmistakable shape).
+      return merge([
+        part(cyl(0.02, 0.03, 0.25, 4), STEM_GREEN, { p: [0, 0.125, 0] }),
+        part(cyl(0.09, 0.09, 0.02, 6), c, { p: [0.09, 0.27, 0] }),
+        part(cyl(0.09, 0.09, 0.02, 6), c, { p: [-0.045, 0.27, 0.078] }),
+        part(cyl(0.09, 0.09, 0.02, 6), c, { p: [-0.045, 0.27, -0.078] }),
+        part(cyl(0.1, 0.1, 0.02, 6), e, { p: [0.11, 0.22, 0] }),
+        part(cyl(0.1, 0.1, 0.02, 6), e, { p: [-0.055, 0.22, 0.095] }),
+        part(cyl(0.1, 0.1, 0.02, 6), e, { p: [-0.055, 0.22, -0.095] }),
+      ]);
+    case 'flowerPouch':
+      // Pink lady slipper: stem + pink pouch (scaled sphere) +
+      // petal discs behind it.
+      return merge([
+        part(cyl(0.02, 0.03, 0.3, 4), STEM_GREEN, { p: [0, 0.15, 0] }),
+        part(sphere(0.14, 8, 6), c, { p: [0, 0.36, 0], s: [1, 1.2, 1] }),
+        part(cyl(0.08, 0.08, 0.02, 6), shade(c, 0.7), { p: [0.08, 0.32, -0.06] }),
+        part(cyl(0.08, 0.08, 0.02, 6), shade(c, 0.7), { p: [-0.08, 0.32, -0.06] }),
+      ]);
+    case 'flowerIris':
+      // Creek iris: tall stem + 3 tilted blade cones (fixed green —
+      // e is spent on the yellow centre) + purple disc + centre.
+      return merge([
+        part(cyl(0.02, 0.03, 0.8, 4), STEM_GREEN, { p: [0, 0.4, 0] }),
+        part(cone(0.05, 0.7, 4), STEM_GREEN, { p: [0.09, 0.35, 0], r: [0, 0, -0.25] }),
+        part(cone(0.05, 0.7, 4), STEM_GREEN, { p: [-0.09, 0.35, 0], r: [0, 0, 0.25] }),
+        part(cone(0.05, 0.7, 4), STEM_GREEN, { p: [0, 0.35, 0.09], r: [0.25, 0, 0] }),
+        part(cyl(0.14, 0.14, 0.03, 8), c, { p: [0, 0.82, 0] }),
+        part(sphere(0.05, 6, 5), e, { p: [0, 0.85, 0] }),
+      ]);
+    case 'flowerPad':
+      // White water lily: wide green pad disc + white flower disc
+      // + pale centre. Flat by design (pond-edge ground scatter v1).
+      return merge([
+        part(cyl(0.32, 0.32, 0.03, 10), e, { p: [0, 0.02, 0] }),
+        part(cyl(0.14, 0.14, 0.03, 8), c, { p: [0, 0.06, 0] }),
+        part(sphere(0.04, 6, 5), FLOWER_CENTER_COLOR, { p: [0, 0.09, 0] }),
+      ]);
     case 'beehive': {
-      // Ground skep v1 (not tree-hung): cylindrical straw body
-      // + domed top + dark entrance slot. ~0.76 m wide, ~0.85 m
-      // tall — reads at phone scale without tree coupling.
+      // Tree-hung skep (beehive landing, 2026-10-28 — Adam:
+      // wild hives go ON TREES): cylindrical straw body +
+      // domed top + dark entrance slot, ~0.76 m wide, ~0.85 m
+      // tall, plus a 0.5 m rope from the dome top upward into
+      // the canopy. Worldgen hangs it beside a trunk at base
+      // height 1.8 m, so the geometry spans base..~1.35 m here.
+      // Small-tree artifact (accepted v1): on small trees the
+      // rope tip may rise above the canopy top.
       return merge([
         part(cyl(0.35, 0.38, 0.5, 10), c, { p: [0, 0.25, 0] }),
         part(new THREE.SphereGeometry(0.35, 10, 8, 0, Math.PI * 2, 0, Math.PI / 2), shade(c, 1.1), { p: [0, 0.5, 0] }),
         part(box(0.14, 0.09, 0.03), 0x1a1a12, { p: [0, 0.12, 0.38] }),
+        part(cyl(0.015, 0.015, 0.5, 4), shade(c, 0.6), { p: [0, 1.1, 0] }),
       ]);
     }
   }

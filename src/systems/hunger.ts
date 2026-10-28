@@ -208,6 +208,21 @@ export const FOOD_APPLE: ItemId = 'APPLE';
  * (one line) if Adam wants honey as an ingredient, not a food.
  */
 export const FOOD_HONEY: ItemId = 'honey';
+/**
+ * Flowers, food kinds only (Systems, 2026-10-28, brainstorm
+ * doc — 13 new kinds, 3 eaten). Eaten RAW, berries precedent,
+ * no cook gate. The flower item IS the food (honey pattern:
+ * no separate greens/seeds item in v1). Nutrition DRAFT for
+ * Adam's pin pass: dandelion greens 15 (the 15-group, plain
+ * food); sunflower seeds 10; wood violet garnish 5 ("small
+ * effect only" per the doc). The other 9 flower items are
+ * NOT food — eat() refuses them. Dye / salve / potion /
+ * medicine / charm / offering uses are seeds for later
+ * branches, not entries here.
+ */
+export const FOOD_DANDELION_GREENS: ItemId = 'yellow-dandelion';
+export const FOOD_SUNFLOWER_SEEDS: ItemId = 'tall-sunflower';
+export const FOOD_WOOD_VIOLET: ItemId = 'wood-violet';
 
 /**
  * Plain warning carried by the poison mushroom (Adam, 2026-10-26,
@@ -220,7 +235,9 @@ export const POISON_MUSHROOM_WARNING: string =
 
 /**
  * Foods eaten directly: berries as gathered, acorns once cooked,
- * mushrooms as gathered, apples raw as gathered, honey as gathered.
+ * mushrooms as gathered, apples raw as gathered, honey as gathered,
+ * flowers (dandelion greens, sunflower seeds, wood violet garnish)
+ * as gathered.
  * SPELLING NOTE (2026-10-26 id fix): these are the NORMALIZED
  * (kebab) ids, derived from the FOOD_* harvest-spelling constants
  * above — because this list's live consumer is App's FOOD_IDS
@@ -238,6 +255,9 @@ export const FOOD_ITEMS: ReadonlyArray<ItemId> = [
   FOOD_EDIBLE_MUSHROOM,
   FOOD_APPLE,
   FOOD_HONEY,
+  FOOD_DANDELION_GREENS,
+  FOOD_SUNFLOWER_SEEDS,
+  FOOD_WOOD_VIOLET,
 ].map(normalizeItemId);
 
 /**
@@ -266,6 +286,9 @@ export const FOOD_NUTRITION: Readonly<Record<string, number>> = {
   [FOOD_EDIBLE_MUSHROOM]: 15,
   [FOOD_APPLE]: 15,
   [FOOD_HONEY]: 15,
+  [FOOD_DANDELION_GREENS]: 15,
+  [FOOD_SUNFLOWER_SEEDS]: 10,
+  [FOOD_WOOD_VIOLET]: 5,
 };
 
 /**

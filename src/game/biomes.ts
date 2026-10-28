@@ -127,6 +127,8 @@ export const BIOMES: BiomeDef[] = [
       riverStone: 0.10, bone: 0.05, peatMoss: 0.05, downedOak: 0.05,
       riverSilt: 0.02, saltCrystal: 0.02, bogPatch: 0.01, standingWater: 0.01,
       stump: 0.02, appleTree: 0.06, flint: 0.08, flower: 0.08, beehive: 0.02,
+      // Flowers landing (2026-10-28): new kinds, pink untouched.
+      yarrow: 0.01, dandelion: 0.01, milkweed: 0.005, poppy: 0.02, sunflower: 0.02, aster: 0.015,
     },
     // The pleasant neighbor: higher, drier, firm footing.
     anchor: {
@@ -145,6 +147,8 @@ export const BIOMES: BiomeDef[] = [
       snapWood: 0.05, tenderVines: 0.07, bush: 0.05, log: 0.05, bone: 0.03,
       bogPatch: 0.05, bogGrowth: 0.02, edibleMushroom: 0.04, poisonMushroom: 0.04,
       flint: 0.10, pond: 0.03, flower: 0.03, beehive: 0.01,
+      // Flowers landing (2026-10-28): new kinds, pink untouched.
+      iris: 0.015, waterLily: 0.015,
     },
     // Silt beds and shallow water along ridged creek lines.
     anchor: {
@@ -195,6 +199,8 @@ export const BIOMES: BiomeDef[] = [
     density: 0.85,
     mix: {
       flower: 0.28, bush: 0.16, snapWood: 0.08, tree: 0.04, log: 0.04,
+      // Flowers landing (2026-10-28): new kinds, pink untouched.
+      yarrow: 0.03, coneflower: 0.05, clover: 0.02, dandelion: 0.03, milkweed: 0.03, sunflower: 0.04,
       tenderVines: 0.08, riverStone: 0.05, peatMoss: 0.03,
       bone: 0.01, stump: 0.01, appleTree: 0.05, flint: 0.05, beehive: 0.03,
     },
@@ -221,6 +227,8 @@ export const BIOMES: BiomeDef[] = [
       tallTree: 0.28, tree: 0.14, bush: 0.12, tenderVines: 0.18,
       log: 0.06, snapWood: 0.05, downedOak: 0.04, peatMoss: 0.04,
       flower: 0.03, riverStone: 0.02, bone: 0.01, stump: 0.01, bogGrowth: 0.01, edibleMushroom: 0.08, poisonMushroom: 0.08,
+      // Flowers landing (2026-10-28): new kinds, pink untouched.
+      aster: 0.007, trillium: 0.008, violet: 0.008, ladySlipper: 0.007,
       flint: 0.03, beehive: 0.01,
     },
     // Pretty and deep: tall trees, dappled light, a sparse flower floor.

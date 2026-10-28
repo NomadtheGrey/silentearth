@@ -1609,6 +1609,7 @@ import { PileInventoryModal } from './ui/PileInventoryModal';
 import { PileChip } from './ui/PileChip';
 import { TorchChip } from './ui/TorchChip';
 import { TentChip } from './ui/TentChip';
+import { AnimalTag } from './ui/AnimalTag';
 import { AltarChip } from './ui/AltarChip';
 import type { ContextAction } from './ui/types';
 import { TouchControls } from './ui/TouchControls';
@@ -8375,6 +8376,33 @@ export default function App() {
             {nearestScatter.name}
           </p>
         </WorldAnchor>
+      ) : null}
+
+      {/* Creature identifier tag (Adam, 2026-10-28): the
+        nearest world animal, display only — same hiding
+        set as the scatter tag above (any panel/modal open
+        or paused hides it; ritual/pile/placement menus do
+        not). The component polls Background's live feed
+        itself (animals move independently, so per-render
+        derivation would go stale); App only gates it and
+        hands it the feed, the live player position, and
+        the 'scatter' projector. */}
+      {!inventoryOpen &&
+      !craftingOpen &&
+      !charmsOpen &&
+      !optionsOpen &&
+      !introOpen &&
+      !pendingTrapRecipe &&
+      pendingRemoveTarget === null &&
+      !paused ? (
+        <AnimalTag
+          getAnimals={() => rendererRef.current?.getVisibleAnimals() ?? []}
+          getPlayerPos={() => {
+            const player = playerRef.current;
+            return player ? { x: player.x, z: player.z } : { x: 0, z: 0 };
+          }}
+          project={(x, z) => projectAnchor(x, z, 'scatter')}
+        />
       ) : null}
 
       {/* Esc hint: desktop only, and only while no modal is
