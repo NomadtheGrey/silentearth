@@ -309,6 +309,12 @@ export interface EventMap {
    */
   'trap:placed': { id: string; type: TrapType; x: number; z: number };
   /**
+   * A trap's catch changed (trapState.setCatch, the shell's write path:
+   * set on caught hour-roll, cleared on granted collection; kind null =
+   * cleared). Shell saves + UI row re-reads the snapshot on this.
+   */
+  'trap:catch': { id: string; kind: string | null };
+  /**
    * Shelter state at her position changed (tracker, change-only,
    * like weather:changed): multiplier from real placed houses
    * (1 = unsheltered), houseId of the nearest sheltering house
