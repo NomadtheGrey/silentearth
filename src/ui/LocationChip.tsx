@@ -5,16 +5,24 @@
  * Silent Earth redesign — location + biome + FPS chip (UI
  * lane, presentation only).
  *
- * A small translucent pill, always bottom-centre: dominant
- * biome with its percentage, player position, and framerate.
- * It carries no game logic — position, biome, and FPS arrive
- * as props, and the caller decides when it shows. It is
- * pointer-events-none, so it never steals a touch or a click
- * from the world, the look field, or a panel beneath it, and
- * it sits above the panels (z-40) but below modals (z-50).
- * Placement keeps it clear of the touch controls by
- * construction: the stick and USE buttons end 96 px above
- * the bottom edge, and this chip lives in the bottom ~36 px.
+ * A small translucent pill, rendered as a top row of the
+ * HUD (in-flow below the Needs row, via HudShell's
+ * topReadout slot — NOT an absolutely-positioned pill:
+ * the top area's heights vary, so flow, not offsets,
+ * keeps it clear of the Needs row, the slim bar, and
+ * the HUD column on every width). Dominant biome with
+ * its percentage, player position, zone coords, and
+ * framerate, plus an optional time/date/month line
+ * UNDER the coords (reserved slot for the calendar
+ * landing — null today, so no second line renders).
+ * It carries no game logic — position, biome, FPS,
+ * and the date line arrive as props, and the caller
+ * decides when it shows. It is pointer-events-none, so
+ * it never steals a touch or a click, and it hides
+ * with any panel/modal open (the caller's rule), so
+ * its old above-panels/below-modals stacking is moot.
+ * The move clears the bottom ~36 px entirely (touch
+ * controls already end 96 px above the bottom edge).
  */
 
 import { UI_THEMES, type UiThemeName } from './themes';
@@ -39,6 +47,15 @@ export interface LocationChipProps {
   zoneX?: number;
   /** Second zone axis (north-positive), paired with zoneX. */
   zoneZ?: number;
+  /**
+   * Time/date/month line, rendered as a second line
+   * inside the same pill UNDER the coords. RESERVED
+   * SLOT for the calendar landing: null/omitted today
+   * (no calendar exists yet) → no second line renders
+   * — no empty row, no gap, no invented values. The
+   * calendar landing only fills this prop.
+   */
+  timeDateMonth?: string | null;
   /** Look for the pill. Default "mire" (the world outside). */
   theme?: UiThemeName;
 }
@@ -51,6 +68,7 @@ export function LocationChip({
   fps,
   zoneX,
   zoneZ,
+  timeDateMonth,
   theme = 'mire',
 }: LocationChipProps) {
   const t = UI_THEMES[theme];
@@ -63,19 +81,20 @@ export function LocationChip({
       : `[${signed(zoneX)}, ${signed(zoneZ)}]`;
   return (
     <div
-      className="pointer-events-none absolute bottom-2 left-1/2 z-40 -translate-x-1/2"
-      aria-label={`Location: ${biomeName} ${biomePercent} percent, position ${x.toFixed(1)}, ${z.toFixed(1)}${zoneText !== null ? `, zone ${zoneText}` : ''}${fps !== null ? `, ${fps} frames per second` : ''}`}
+      className={
+        'pointer-events-none rounded px-2 py-1 text-xs text-stone-100 ' +
+        t.overlay
+      }
+      aria-label={`Location: ${biomeName} ${biomePercent} percent, position ${x.toFixed(1)}, ${z.toFixed(1)}${zoneText !== null ? `, zone ${zoneText}` : ''}${fps !== null ? `, ${fps} frames per second` : ''}${timeDateMonth ? `, ${timeDateMonth}` : ''}`}
     >
-      <p
-        className={
-          'whitespace-nowrap rounded px-2 py-1 text-xs text-stone-100 ' +
-          t.overlay
-        }
-      >
+      <p className="whitespace-nowrap">
         {biomeName} {biomePercent}% · ({x.toFixed(1)}, {z.toFixed(1)})
         {zoneText !== null ? ` · ${zoneText}` : ''}
         {fps !== null ? ` · ${fps} FPS` : ''}
       </p>
+      {timeDateMonth ? (
+        <p className="whitespace-nowrap text-center">{timeDateMonth}</p>
+      ) : null}
     </div>
   );
 }

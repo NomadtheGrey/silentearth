@@ -580,7 +580,7 @@
  *   brief): the shell gates its timers on 'game:pause-changed'
  *   via a pausedRef (intervals/rAF close over the ref, never
  *   state) + a paused state driving a small "Paused" badge
- *   (new PausedIndicator, bottom-centre above the LocationChip,
+ *   (new PausedIndicator, viewport-centred,
  *   pointer-events-none, badge only). Gated: the 1 s hunger
  *   timer (hunger.tick + advanceLighting + Systems fire ticks
  *   — the 25 s friction wait no longer flips to 'ready'
@@ -837,7 +837,7 @@
  *   out (Esc-to-close-panels-first is a follow-up if Adam
  *   wants it). INDICATOR: "Esc — Options" (wording draft
  *   for Adam's pin pass), bottom-right — seed controls
- *   own bottom-left, the LocationChip owns bottom-centre,
+ *   own bottom-left, the readout chip sits in the top row,
  *   bottom-right is free. Desktop only (hidden on touch:
  *   no Esc key there, the visible Options control is
  *   already the touch path); hidden while any modal is
@@ -1063,10 +1063,9 @@
  *   along-course projection; ponds scanned from
  *   generateChunk scatter in the 3x3 chunks around her,
  *   radius 4.5 × scale (mirrors the renderer's pond
- *   disc). Placement: bottom-centre above the
- *   LocationChip, the PausedIndicator's seat — the two
- *   never show together (Scry hides while paused);
- *   hidden with any panel/modal open, like the
+ *   disc). Placement: bottom-centre, the PausedIndicator's
+ *   seat — the two never show together (Scry hides while
+ *   paused); hidden with any panel/modal open, like the
  *   LocationChip. 44 px, same family as the pile
  *   button; touch + desktop identical (parity). The
  *   button IS the magic signal — no tutorial popup.
@@ -1432,10 +1431,9 @@
  *   8-point compass from the fact's unit vector
  *   under the compass pin (East +x, North −z),
  *   whole meters rounded for display only (the
- *   fact's float is the truth). Seat: bottom-centre
- *   above the LocationChip, hidden with any panel/
- *   modal open or paused; when the scry button is
- *   also showing, the hint lifts above it so the two
+ *   fact's float is the truth). Seat: bottom-centre,
+ *   hidden with any panel/modal open or paused; when
+ *   the scry button is also showing, the hint lifts above it so the two
  *   never stack on one seat. Parity: shared, touch +
  *   desktop alike.
  * - GROUNDHOG WIRING + SNAKE FACTOR, LIVE (Systems
@@ -7291,7 +7289,33 @@ export default function App() {
       </div>
 
       {/* HUD shell: needs row (awaiting survival systems) + HUD block. */}
-      <HudShell hideNeeds={isTouch && hudCollapsed}>
+      {/* Location chip: top row of the HUD (in-flow
+        below the Needs row, via HudShell's topReadout
+        slot — NOT the old absolute bottom-centre seat).
+        Always visible, including with the HUD collapsed
+        on touch (the slot is not gated by collapse).
+        It hides only while a panel or the modal is open
+        (rule unchanged by the move). */}
+      <HudShell
+        hideNeeds={isTouch && hudCollapsed}
+        topReadout={
+          !inventoryOpen &&
+          !craftingOpen &&
+          !charmsOpen &&
+          !optionsOpen &&
+          !introOpen ? (
+            <LocationChip
+              x={position.x}
+              z={position.z}
+              biomeName={dominantBiome.name}
+              biomePercent={dominantBiome.percent}
+              fps={fps}
+              zoneX={zoneX}
+              zoneZ={zoneZ}
+            />
+          ) : null
+        }
+      >
         {(!isTouch || !hudCollapsed) ? (
         <div
           className={
@@ -7809,33 +7833,13 @@ export default function App() {
         </Popup>
       ) : null}
 
-      {/* Location chip: always visible, including with the HUD
-        collapsed on touch (it lives outside the collapsible
-        stack). It hides only while a panel or the modal is
-        open, where it would sit on top of the bottom sheet. */}
-      {!inventoryOpen &&
-      !craftingOpen &&
-      !charmsOpen &&
-      !optionsOpen &&
-      !introOpen ? (
-        <LocationChip
-          x={position.x}
-          z={position.z}
-          biomeName={dominantBiome.name}
-          biomePercent={dominantBiome.percent}
-          fps={fps}
-          zoneX={zoneX}
-          zoneZ={zoneZ}
-        />
-      ) : null}
-
       {/* Scry button: appears at still water (DEV split —
         visibility on movement, reveal on press). Bottom-
-        centre above the LocationChip, the PausedIndicator's
-        seat — the two never show together (Scry hides while
-        paused), so the seat is shared, not stacked. Hidden
-        with any panel/modal open, like the LocationChip,
-        so it never sits on a bottom sheet. Label "Scry"
+        centre, the PausedIndicator's seat — the two never
+        show together (Scry hides while paused), so the seat
+        is shared, not stacked. Hidden with any panel/modal
+        open, like the readout chip, so it never sits on a
+        bottom sheet. Label "Scry"
         (Adam's verb); the button IS the magic signal — no
         tutorial popup. Press shows the renderer arrows
         (Background's API, wired in CAMP ARROWS WIRING);
