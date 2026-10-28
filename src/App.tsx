@@ -1485,6 +1485,24 @@
  *   rides its own glow landing). Parity: the deer line
  *   is shared, touch + desktop alike; mouse/bear show
  *   through existing lines, both alike.
+ * - PILL / CAMERA / RESUME FIXES, LIVE (Adam's
+ *   quibbles, 2026-10-28): PILL — harvest:completed
+ *   now dismisses the target's Harvest button at once
+ *   (harvestedIds set, scatter only; 'remove' drops
+ *   the whole target; ground piles untouched) AND the
+ *   pickup feedback moved last into the z-40 overlay
+ *   (above the menu, below modals) — the pill used to
+ *   sit in the z-30 overlay under the z-40 column.
+ *   CAMERA — fresh boot defaults player.mode to
+ *   'first' (was: 'third' field default survived when
+ *   no save existed, while App state said 'first';
+ *   the renderer follows player.mode). RESUME —
+ *   PausedIndicator centered on both axes, bigger.
+ *   SLEEP VERIFY (no code): the broadened sleep
+ *   emits houseId null away from home; App's only
+ *   sleep:completed consumer ignores the payload, so
+ *   it is null-safe as-is. Parity: all three fixes
+ *   shared, touch + desktop alike.
  * POINTER DISCIPLINE: overlays are pointer-events-none except the
  * small interactive pieces (HUD buttons, panels, harvest buttons),
  * so world clicks — including the first-person mouse-capture click
@@ -2205,6 +2223,16 @@ export default function App() {
     ownedToolItem(inventory),
   );
   const [harvestTargets, setHarvestTargets] = useState<HarvestTarget[]>([]);
+  // Targets harvested since the last projection (pill
+  // fix): the column suppresses ONLY their Harvest
+  // button (Remove stays) until the tracker stops
+  // emitting them or the next projection prunes the
+  // mark. Scatter ids only — the completion handler
+  // never marks ground targets (a pile may still hold
+  // items after a take).
+  const [harvestedIds, setHarvestedIds] = useState<ReadonlySet<string>>(
+    new Set(),
+  );
   // In-range dropped piles (harvest overflow), nearest first per
   // the tracker. Drives the touch USE fallback, the touch
   // PICK UP label, the desktop pickup button, and the pile
@@ -2755,6 +2783,17 @@ export default function App() {
       });
     }
     setHarvestTargets(projected);
+    // Pill fix: prune harvested marks to currently-
+    // projected ids — a target that left range drops
+    // its mark, so a later re-emit renders its button
+    // fresh instead of suppressed.
+    setHarvestedIds((prev) => {
+      const next = new Set<string>();
+      for (const id of prev) {
+        if (projected.some((t) => t.id === id)) next.add(id);
+      }
+      return next;
+    });
     const fires: { fire: PlacedFire; x: number; y: number }[] = [];
     for (const fire of fireState.snapshot()) {
       const anchor = projectAnchor(fire.x, fire.z, 'scatter');
@@ -2901,14 +2940,20 @@ export default function App() {
     // engine-third until the first cycle. Set it directly
     // from the saved cameraMode here, before the facing
     // restore below (restoreFacing's behind sync reads mode).
+    // FRESH-BOOT DEFAULT (pill/camera/resume fixes): a
+    // fresh boot has no saved mode, and skipping the set
+    // left the 'third' field default in place while App
+    // state said 'first' — the renderer follows
+    // player.mode, so fresh boots showed third-person
+    // while the UI thought first. Saved mode still wins
+    // when present; 'first' otherwise, so App state and
+    // player agree from the first frame.
     // Guarded check-not-set like the trap restore, so a
     // second boot-effect run cannot yank a cycled mode back
     // to the saved one.
     if (!saveRestoredRef.current) {
       const bootMode = bootSaveRef.current?.cameraMode;
-      if (bootMode) {
-        player.mode = bootMode;
-      }
+      player.mode = bootMode ?? 'first';
     }
     // TRAP SAVE WIRING (restore-before-first-build): trapState.
     // restore() is silent — no 'trap:placed' emit — and the
@@ -3470,6 +3515,30 @@ export default function App() {
     };
     window.addEventListener('pagehide', onPageHide);
     const offCompleted = bus.on('harvest:completed', (p) => {
+      // PILL FIX: dismiss the harvested target's Harvest
+      // button at once (no movement needed for the menu
+      // to catch up — targets otherwise refresh only on
+      // the next projection). 'remove' drops the whole
+      // target (plant gone); 'harvest' marks it harvested
+      // (the column suppresses Harvest, Remove stays
+      // until the tracker stops emitting the regrowing
+      // plant). Scatter only — ground targets (piles)
+      // may still hold items after a take, so their
+      // button stays.
+      if (p.kind === 'scatter') {
+        if (p.action === 'remove') {
+          setHarvestTargets((current) =>
+            current.filter((t) => t.id !== p.targetId),
+          );
+          setHarvestedIds((prev) => {
+            const next = new Set(prev);
+            next.delete(p.targetId);
+            return next;
+          });
+        } else {
+          setHarvestedIds((prev) => new Set(prev).add(p.targetId));
+        }
+      }
       // PICKUP COUNTS AS A LOOK (Adam, 2026-10-28,
       // RULED — Systems 70f20b5 records it in rituals.ts
       // + supplies charms.recordBonePickupLook as THE
@@ -5797,13 +5866,6 @@ export default function App() {
             valid
           />
         ) : null}
-        {feedbacks.map((feedback) => (
-          <Fragment key={feedback.id}>
-            <WorldAnchor x={feedback.x} y={feedback.y}>
-              <ObjectFeedback text={feedback.text} tone={feedback.tone} />
-            </WorldAnchor>
-          </Fragment>
-        ))}
         {progressItems.map((item) => (
           <Fragment key={item.targetId}>
             <WorldAnchor x={item.x} y={item.y}>
@@ -5825,6 +5887,7 @@ export default function App() {
       <div className="pointer-events-none absolute inset-0 z-40">
         <ProximityHarvestButtons
           targets={harvestTargets}
+          harvestedIds={harvestedIds}
           onHarvest={handleHarvest}
           onRemove={handleRemove}
           lookNode={
@@ -5858,6 +5921,21 @@ export default function App() {
               : `Pick up ${displayNameFor(desktopPilePickup.item)} × ${desktopPilePickup.quantity}`}
           </button>
         ) : null}
+        {/* PILL FIX: pickup feedback lives HERE, last in the
+          z-40 overlay (after the buttons + pile button), so
+          it paints ABOVE the menu instead of under it (it
+          used to sit in the z-30 overlay, where the z-40
+          column painted over it near screen-middle).
+          Still below z-50 modals. WorldAnchor positions
+          by % in any absolute inset-0 parent, so the move
+          changes layering only, not placement. */}
+        {feedbacks.map((feedback) => (
+          <Fragment key={feedback.id}>
+            <WorldAnchor x={feedback.x} y={feedback.y}>
+              <ObjectFeedback text={feedback.text} tone={feedback.tone} />
+            </WorldAnchor>
+          </Fragment>
+        ))}
       </div>
 
       {/* HUD shell: needs row (awaiting survival systems) + HUD block. */}

@@ -13,22 +13,27 @@
  * anywhere. The label says so outright ("Paused — tap to
  * resume"), so the control is visible before first use.
  *
- * Placement is bottom-centre above the LocationChip (bottom-12):
- * it clears the touch sticks (all start 96 px from the bottom),
- * the chip itself (ends ~36 px up), the middle-anchored harvest
- * column, and the top bars entirely. The wrapper is
- * pointer-events-none for positioning, but the button itself is
- * pointer-events-auto — otherwise it could never receive the
- * tap it exists for.
+ * Placement is viewport-centred on both axes (Adam,
+ * 2026-10-28: center + bigger): while paused nothing
+ * underneath is playable, so the control takes the
+ * middle instead of sitting bottom-centre above the
+ * LocationChip — it no longer competes with the chip,
+ * the sticks, or the harvest column at all. The wrapper
+ * is pointer-events-none for positioning, but the button
+ * itself is pointer-events-auto — otherwise it could
+ * never receive the tap it exists for. The button is
+ * bigger (min 64 px tall, text-xl) for a surer tap
+ * target on phone and desktop alike. Wording unchanged
+ * ("Paused — tap to resume", pinned 2026-10-26).
  */
 
 export function PausedIndicator({ onResume }: { onResume: () => void }) {
   return (
-    <div className="pointer-events-none absolute bottom-12 left-1/2 z-40 -translate-x-1/2">
+    <div className="pointer-events-none absolute inset-0 z-40 flex items-center justify-center">
       <button
         type="button"
         onClick={onResume}
-        className="pointer-events-auto min-h-[44px] rounded-full bg-black/60 px-4 py-1.5 text-sm font-medium text-[#f0ead6]"
+        className="pointer-events-auto min-h-[64px] rounded-full bg-black/60 px-8 py-4 text-xl font-medium text-[#f0ead6]"
       >
         Paused — tap to resume
       </button>

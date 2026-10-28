@@ -80,6 +80,17 @@
  * wiring caller maps the target to Background's documented
  * remove shape ('harvest:requested' with action 'remove',
  * 2003619); this layer invents no event.
+ *
+ * HARVESTED SUPPRESSION (pill fix, Adam 2026-10-28): when
+ * the caller passes harvestedIds, a target in the set
+ * renders NO Harvest button — it was just harvested, and
+ * its button must be gone by the time the pickup pill
+ * shows (the tracker hides regrowing plants until
+ * regrown, so the button returns only on re-emit). The
+ * Remove button still renders for a harvested scatter
+ * target (remove is permanent and stays available);
+ * ground targets are never marked harvested by the
+ * caller (a pile may still hold items after a take).
  */
 
 import { Fragment, type ReactNode } from 'react';
@@ -90,6 +101,12 @@ import type { UiThemeName } from './themes';
 export interface ProximityHarvestButtonsProps {
   /** In-range targets only, mapped from 'harvest:inRange' (see proximityHarvest.ts). */
   targets: HarvestTarget[];
+  /**
+   * Ids harvested since the last projection (pill fix):
+   * their Harvest button suppresses (Remove still
+   * renders). Caller-owned; omitted = no suppression.
+   */
+  harvestedIds?: ReadonlySet<string>;
   /** Called with the HarvestRequest for any button press. */
   onHarvest?: (request: HarvestRequest) => void;
   /**
@@ -113,6 +130,7 @@ export interface ProximityHarvestButtonsProps {
 
 export function ProximityHarvestButtons({
   targets,
+  harvestedIds,
   onHarvest,
   onRemove,
   removeLabel = 'Remove',
@@ -136,11 +154,13 @@ export function ProximityHarvestButtons({
         <Fragment key={target.id}>
           {target.kind === 'scatter' && onRemove ? (
             <div className="flex flex-col items-center gap-1">
-              <HarvestButton
-                target={target}
-                onHarvest={onHarvest}
-                theme={theme}
-              />
+              {!harvestedIds?.has(target.id) ? (
+                <HarvestButton
+                  target={target}
+                  onHarvest={onHarvest}
+                  theme={theme}
+                />
+              ) : null}
               <RemoveButton
                 target={target}
                 onRemove={onRemove}
@@ -148,13 +168,13 @@ export function ProximityHarvestButtons({
                 theme={theme}
               />
             </div>
-          ) : (
+          ) : !harvestedIds?.has(target.id) ? (
             <HarvestButton
               target={target}
               onHarvest={onHarvest}
               theme={theme}
             />
-          )}
+          ) : null}
         </Fragment>
       ))}
     </div>
