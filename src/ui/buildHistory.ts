@@ -45,7 +45,7 @@ const ALL_RECORDS: BuildRecord[] = [
   {
     merge: 'Merge #11',
     pr: 23,
-    sha: 'pending',
+    sha: 'df96297',
     date: '2026-10-28',
     what: 'Torches complete + placed torches, intro modal, Esc options + Esc-[X], FIND CAMP end-to-end, paper chain, LOOK state + action then parked, moon phases, placed altar + ritual staging + Waking recipes + first charm, world + individual bones, pickup-as-look, shrew effect, charm list + examination panel, charm hooks (owl night sight, bat fog, pigeon way-home, beaver/turtle exposure inputs, deer storm signal, fox speed, mole clay sense), zone coords display, frog water hint.',
     why: 'The charm system playable end to end — bones she picks up, identifies, stages, and speaks, charms that live in their own list and work from it — with zone coords and a frog\u2019s water sense to find her way, and torches, camp-finding, and moonlight along the way.',
