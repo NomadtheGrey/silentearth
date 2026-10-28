@@ -1338,6 +1338,33 @@ export class WorldRenderer {
         hg.add(houseBox(0.5, 0.5, 0.06, 0x2a2018, f / 4, 1.3, (f * 0.8) / 2 + 0.01));
         hg.add(houseBox(f + 0.06, 0.08, f * 0.8 + 0.06, 0xb09a6a, 0, 0.6, 0));
         hg.add(houseBox(f + 0.06, 0.08, f * 0.8 + 0.06, 0xb09a6a, 0, 1.7, 0));
+        // Woven texture (Adam 2026-10-28 — texture pass before
+        // the merge goes live): vertical wattle strands on all
+        // four exterior faces, interlaced with the horizontal
+        // bands above. Strands sit 0.02 proud of the wall face
+        // (box depth 0.06 centered 0.01 inside the face), so
+        // the bands (0.03 proud) pass OVER them at crossings
+        // — no coplanar faces, reads as weave from every
+        // outside angle. Front-face strands skip the door
+        // x-range (±0.4) and the window x-ranges (±f/4 ±
+        // 0.25); the openings interrupt the weave. Strands
+        // use the shared FrontSide box(): exterior-only by
+        // wall occlusion, so nothing shows inside — the
+        // interior (ff44e00) is untouched.
+        const frontFace = (f * 0.8) / 2;
+        for (let x = -f / 2 + 0.25; x < f / 2; x += 0.5) {
+          const inDoor = Math.abs(x) <= 0.4;
+          const inWindow = Math.abs(Math.abs(x) - f / 4) <= 0.25;
+          if (!inDoor && !inWindow) {
+            hg.add(box(0.06, 2.2, 0.06, 0xb09a6a, x, 1.1, frontFace - 0.01));
+          }
+          hg.add(box(0.06, 2.2, 0.06, 0xb09a6a, x, 1.1, -frontFace + 0.01));
+        }
+        const sideDepth = f * 0.8;
+        for (let z = -sideDepth / 2 + 0.25; z < sideDepth / 2; z += 0.5) {
+          hg.add(box(0.06, 2.2, 0.06, 0xb09a6a, f / 2 - 0.01, 1.1, z));
+          hg.add(box(0.06, 2.2, 0.06, 0xb09a6a, -f / 2 + 0.01, 1.1, z));
+        }
         // Floor plane, inset within the wall footprint.
         hg.add(houseBox(f - 0.2, 0.04, f * 0.8 - 0.2, 0x8a7a5a, 0, 0.02, 0));
       } else {
