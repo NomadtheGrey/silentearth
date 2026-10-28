@@ -1114,6 +1114,10 @@
  *   one optional lookNode prop on
  *   ProximityHarvestButtons (UI-owned file; claim
  *   surface grew by that prop — stated plainly).
+ *   PARKED 2026-10-28 (Adam's word — see the PARK
+ *   bullet below): the button hides behind
+ *   LOOK_PARKED; the rest of this bullet still
+ *   describes the dormant code, which stays.
  * - ALTAR PLACE + MARKER, LIVE (Adam, 2026-10-27 —
  *   DEV signal, Systems 508fcb7 + Background 8302cdc):
  *   the altar's inventory row gains Place (ITEMS.altar
@@ -1275,12 +1279,27 @@
  *   for WORLD LOOK (no item yet). The old
  *   shaping-note divergence is RESOLVED by 70f20b5
  *   (rituals.ts header now records the ruling).
- *   LOOK NOTE: Adam is considering doing
- *   away with LOOK mechanics 'for now' (tentative,
- *   NOT confirmed) — portions built as approved,
- *   LOOK not pre-removed. Parity: shared panel +
+ *   LOOK NOTE: Adam's 'for now' became a PARK
+ *   (2026-10-28, see the PARK bullet below) —
+ *   portions built as approved, button hidden,
+ *   LOOK not removed. Parity: shared panel +
  *   chips + rows, touch + desktop. New: lookPortions
  *   bone entries + AltarChip label + App wiring.
+ * - LOOK PARKED, LIVE (Adam, 2026-10-28: "We'll
+ *   park the look notion for now" — DEV signal):
+ *   the world-LOOK button/entry hides behind a
+ *   LOOK_PARKED flag (one line to unpark) — LOOK
+ *   is dormant, NOT deleted. NameSight state +
+ *   save wiring, the lookPortions table (incl. bone
+ *   entries), handleLook, and the pickup-look wiring
+ *   ALL STAY. The pickup-look helper stays ACTIVE
+ *   (it is the tier-1 gate path, not the button);
+ *   the speak-name gate stays pickup-look — parking
+ *   drops no gate. The parked render still references
+ *   lookTarget, so unparking restores the exact prior
+ *   surface (button + result line). No other file
+ *   touched. Parity: nothing visible changes except
+ *   the hidden button, touch + desktop alike.
  * POINTER DISCIPLINE: overlays are pointer-events-none except the
  * small interactive pieces (HUD buttons, panels, harvest buttons),
  * so world clicks — including the first-person mouse-capture click
@@ -4334,6 +4353,18 @@ export default function App() {
   // and show the plain name, per DEV's null rule (flagged:
   // empty looks count toward practice). No hunger gate:
   // looking is observation, not action.
+  // LOOK PARKED (Adam, 2026-10-28: "We'll park the
+  // look notion for now"): the world-LOOK button is
+  // HIDDEN, not deleted — LOOK is dormant and
+  // reversible. Everything behind it STAYS: NameSight
+  // state + save wiring, the lookPortions table,
+  // handleLook itself, and the pickup-look wiring
+  // (recordBonePickupLook) — the pickup-look helper
+  // is the tier-1 gate path, not the LOOK button, and
+  // it stays ACTIVE; the speak-name gate stays
+  // pickup-look. Unpark = set this false (one line).
+  const LOOK_PARKED = true;
+
   const handleLook = () => {
     const target = harvestTargets.find((t) => t.kind === 'scatter');
     if (!target) return;
@@ -5284,7 +5315,7 @@ export default function App() {
           onHarvest={handleHarvest}
           onRemove={handleRemove}
           lookNode={
-            lookTarget ? (
+            !LOOK_PARKED && lookTarget ? (
               <div className="flex flex-col items-center gap-1">
                 <LookButton onPress={handleLook} />
                 {lookResult && lookResult.targetId === lookTarget.id ? (
