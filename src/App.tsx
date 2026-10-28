@@ -431,6 +431,10 @@
  *   buttons live in their own z-40 overlay — above panels
  *   (z-30), below modals (z-50); a z-40 child inside the
  *   z-30 world overlay would still paint under the panels.
+ *   STATION ANCHOR (Adam, 2026-10-28, reading (b)): at a
+ *   station the column instead anchors above that station's
+ *   projected center (same z-40 overlay, never z-30);
+ *   away from stations it stays screen-fixed as above.
  *   Target data and harvest behavior are unchanged;
  *   position only. NOTE: the targets' anchorX/anchorY are
  *   no longer consumed by the buttons (the shared projection
@@ -3772,6 +3776,48 @@ export default function App() {
     return stationPresence(genRef.current, position.x, position.z);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [position.x, position.z, seed]);
+  // Station anchor (pill fix (b), Adam 2026-10-28): when
+  // standing at a station, the harvest column anchors above
+  // that station's projected center instead of sitting
+  // screen-fixed; away from stations (or when the projection
+  // is null, e.g. station behind the camera) the anchor is
+  // null and the column stays as today. Position sources are
+  // existing only: nearest stump from stumpPositions (it
+  // mirrors stationPresence exactly, so a true workstation
+  // presence guarantees a non-empty list), else nearest
+  // placed loom within HARVEST_RANGE from loomState.
+  // Projection reuses projectAnchor 'scatter' (the same
+  // above-ground point the stump chips use); the column's
+  // translate lifts it above the point like WorldAnchor's
+  // above-point placement, but inside the z-40 overlay —
+  // never the z-30 anchor overlay.
+  const stationAnchor = (() => {
+    if (!stationPresenceValue.workstation && !stationPresenceValue.loom) {
+      return null;
+    }
+    let nearest: { x: number; z: number } | null = null;
+    let nearestD = Infinity;
+    if (stationPresenceValue.workstation) {
+      for (const s of stumpPositions(genRef.current, position.x, position.z)) {
+        const d = Math.hypot(s.x - position.x, s.z - position.z);
+        if (d < nearestD) {
+          nearestD = d;
+          nearest = s;
+        }
+      }
+    }
+    if (!nearest && stationPresenceValue.loom) {
+      for (const loom of loomState.snapshot()) {
+        const d = Math.hypot(loom.x - position.x, loom.z - position.z);
+        if (d <= HARVEST_RANGE && d < nearestD) {
+          nearestD = d;
+          nearest = loom;
+        }
+      }
+    }
+    if (!nearest) return null;
+    return projectAnchor(nearest.x, nearest.z, 'scatter');
+  })();
   const availableStations: CraftingStation[] = [];
   if (stationPresenceValue.workstation) {
     availableStations.push('workstation');
@@ -5919,14 +5965,16 @@ export default function App() {
         modals (z-50). The buttons live in their own z-40 overlay
         because a z-40 child inside the z-30 overlay above would
         still paint under the z-30 panels (stacking contexts).
-        The column itself positions just above screen middle;
-        see ProximityHarvestButtons. */}
+        The column itself positions just above screen middle,
+        or above the station's projected center when
+        stationAnchor is set; see ProximityHarvestButtons. */}
       <div className="pointer-events-none absolute inset-0 z-40">
         <ProximityHarvestButtons
           targets={harvestTargets}
           harvestedIds={harvestedIds}
           onHarvest={handleHarvest}
           onRemove={handleRemove}
+          stationAnchor={stationAnchor}
           lookNode={
             !LOOK_PARKED && lookTarget ? (
               <div className="flex flex-col items-center gap-1">

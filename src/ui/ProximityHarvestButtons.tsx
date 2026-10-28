@@ -15,6 +15,15 @@
  * modals (z-50) — the caller places this component in a z-40
  * overlay for that layering to hold.
  *
+ * STATION ANCHOR (Adam, 2026-10-28, reading (b)): when the
+ * caller passes stationAnchor, the column instead sits above
+ * that projected point (translate(-50%, calc(-100% - 8px)) —
+ * the WorldAnchor above-point placement, but inside this z-40
+ * overlay, never the z-30 anchor overlay, so the behind-UI
+ * sliding stays fixed). Without stationAnchor, screen-fixed
+ * as above. The caller owns the point (nearest station's
+ * projected center); this layer only positions on it.
+ *
  * Appearance and disappearance are the caller's doing, by design:
  * the caller passes ONLY in-range targets, mapped from the bus's
  * 'harvest:inRange' event (see proximityHarvest.ts for the mapping).
@@ -124,6 +133,13 @@ export interface ProximityHarvestButtonsProps {
    * target). The caller owns its visibility and content.
    */
   lookNode?: ReactNode;
+  /**
+   * Projected station center (percent, caller-projected) to
+   * anchor the column above when standing at a station
+   * (pill fix (b)). Omitted or null = screen-fixed column
+   * as before. The column keeps its z-40 overlay either way.
+   */
+  stationAnchor?: { x: number; y: number } | null;
   /** Look for the buttons. Default "mire" (the world outside). */
   theme?: UiThemeName;
 }
@@ -135,6 +151,7 @@ export function ProximityHarvestButtons({
   onRemove,
   removeLabel = 'Remove',
   lookNode,
+  stationAnchor,
   theme = 'mire',
 }: ProximityHarvestButtonsProps) {
   if (targets.length === 0) {
@@ -148,7 +165,26 @@ export function ProximityHarvestButtons({
     // (single-row bar). 40vh still caps tall viewports, and the
     // 56 px floor keeps at least one button visible; overflow
     // scrolls inside the column, never under a top control.
-    <div className="pointer-events-auto absolute bottom-[52%] left-1/2 z-40 flex max-h-[min(40vh,max(56px,calc(48vh-112px)))] min-[480px]:max-h-[min(40vh,max(56px,calc(48vh-60px)))] w-max max-w-[calc(100vw-1rem)] -translate-x-1/2 flex-col items-center gap-2 overflow-y-auto px-1 py-1">
+    // STATION-ANCHORED case: the column hangs above the point
+    // (translate -100% - 8px), growing upward from it; the same
+    // max-height + scroll bound it, but no top-edge guarantee
+    // (the point is near the player, so mid-screen or lower
+    // in practice).
+    <div
+      className={
+        'pointer-events-auto absolute z-40 flex max-h-[min(40vh,max(56px,calc(48vh-112px)))] min-[480px]:max-h-[min(40vh,max(56px,calc(48vh-60px)))] w-max max-w-[calc(100vw-1rem)] flex-col items-center gap-2 overflow-y-auto px-1 py-1' +
+        (stationAnchor ? '' : ' bottom-[52%] left-1/2 -translate-x-1/2')
+      }
+      style={
+        stationAnchor
+          ? {
+              left: `${stationAnchor.x}%`,
+              top: `${stationAnchor.y}%`,
+              transform: 'translate(-50%, calc(-100% - 8px))',
+            }
+          : undefined
+      }
+    >
       {lookNode}
       {targets.map((target) => (
         <Fragment key={target.id}>
