@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <title>Silent Earth</title>
+  <path fill="#f0ead6" fill-rule="evenodd" d="M6 32a26 26 0 1 0 52 0 26 26 0 1 0-52 0ZM21 32a20 20 0 1 0 40 0 20 20 0 1 0-40 0Z"/>
+  <path fill="#201a15" d="M55 6 60 25h4v6H32v-6h9Z"/>
+</svg>
