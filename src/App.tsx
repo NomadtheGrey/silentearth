@@ -1176,32 +1176,111 @@
  *   boot grantFirstCharm AFTER the CharmState restore
  *   (idempotent — fresh save gains the shrew charm,
  *   loaded awakening gains nothing, full pack gains
- *   nothing) + row note 'Tier 1 · Stirs at hunger 45;
- *   drains 10% slower while carried.' computed from
- *   Systems' DRAFT constants (machinery NOT built —
- *   warning latch + drain multiplier are follow-ups).
+ *   nothing) + row note from Systems' boneNote in the
+ *   bone build below (SUPERSEDES the numbers note
+ *   'Stirs at hunger 45; drains 10% slower' computed
+ *   from the DRAFT constants — shrew's row now reads
+ *   Systems' phrase; machinery NOT built — warning
+ *   latch + drain multiplier are follow-ups).
  *   Save: stagings + awakenings ride saveNow as-is +
  *   boot restore BEFORE construction (ritualSite
  *   restore derives site positions from altarState /
  *   the stump key; boulders skipped — none exist).
  *   Regenerate clears stagings (sites gone) + closes
  *   the panel; awakenings persist (hers, like LOOK
- *   counts). FLAGGED GAPS, not hidden: (1) speak-name
- *   is currently UNREACHABLE — bone kinds have nothing
- *   to LOOK at yet (no per-kind bone objects — the
- *   bone build), so looksAt(kind) reads 0; the gate
- *   renders honestly, nothing faked. (2) Stump staging
- *   unreachable in UI (presence is booleans only — no
- *   stump position reaches the shell; needs a
- *   Background stump-position surface). (3) Awakened
- *   charms beyond shrew have no inventory row yet
- *   (other bone ids land with the bone build) — the
- *   completion feedback names the awakening and claims
- *   no item. Bone display 'Primal Bone - {shape}' with
- *   spaces is UI's presentation call (slugs are the
+ *   counts). FLAGGED GAPS, not hidden — ALL THREE
+ *   CLOSED by the individual-bone build below (kept
+ *   here as history): (1) speak-name was unreachable
+ *   (bone kinds had nothing to LOOK at) — now a bone
+ *   PICKUP records 1 LOOK at its kind (Adam's ruling),
+ *   and world bone LOOK portions exist, so the gate
+ *   reads satisfied at looks ≥ 1. (2) Stump staging
+ *   was unreachable (presence booleans only) — now
+ *   Background's stumpPositions surface feeds stump
+ *   chips + panels. (3) Awakened charms beyond shrew
+ *   had no inventory row — now every bone kind reads
+ *   its note from Systems' boneNote. The completion
+ *   feedback still names the awakening and claims no
+ *   item (the bone was consumed at staging; the
+ *   awakening record IS the charm). Bone display
+ *   'Primal Bone - {shape}' with spaces is UI's
+ *   presentation call (slugs are the
  *   shape names). Parity: shared panel + chip, touch +
  *   desktop. New RitualPanel.tsx + AltarChip button +
  *   App wiring.
+ * - INDIVIDUAL BONE DISPLAY + PICKUP, LIVE (Adam,
+ *   2026-10-28 — DEV signal, Systems 7402376 +
+ *   Background 9bf91e4): the ritual build's three
+ *   flagged gaps close here, plus the pickup ruling.
+ *   (1) INVENTORY ROWS: every carried primal bone
+ *   reads its note from Systems' boneNote — raw:
+ *   'Needs a ritual site'; awakened: 'Tier <n> ·
+ *   <effect phrase>' (tier from the awakening record;
+ *   phrase fallback 'Awakened'). Bone graphic reuses
+ *   the world bone look (Adam's direction — no
+ *   per-kind inventory art; kind via name). The shrew
+ *   row's numbers note is superseded by boneNote's
+ *   phrase (Systems-canonical; phrases DRAFT from the
+ *   bone-charms doc, flagged for Adam's pin pass).
+ *   (2) WORLD BONE LOOK: bone scatter targets gain
+ *   LOOK portions in lookPortions.ts — DEV-approved
+ *   triple ['Bone', 'pale bone', 'long pale bone'],
+ *   IDENTICAL for all 17 kinds (flagged: shape is
+ *   pickup's gift, not LOOK's). The shell resolves
+ *   the kind from the TARGET position (id-encoded
+ *   x,z via boneKindAt) and looks under the KIND key;
+ *   a malformed position looks at nothing. World
+ *   description stays PARTIAL (family first); the
+ *   picked-up description is the IDENTIFIED change
+ *   (world partial → inventory identified).
+ *   (3) PLACE-BONE CONSUMES: handleStageBone now
+ *   stages via stageBoneFromInventory (possession
+ *   check + consume 1 + record; refusals consume
+ *   nothing) — raw placeBone is no longer called
+ *   (it would leave the bone both carried and
+ *   staged). The panel MUST switch: until this
+ *   landing, staging left bones duplicated.
+ *   (4) STUMP STAGING: stumpPositions at her feet
+ *   feeds world-anchored 'Stump' chips (AltarChip
+ *   with a label prop — one chip family, label
+ *   naming the site) opening the same RitualPanel
+ *   (siteLabel 'Stump', site id 'stump:x,z'); the
+ *   selection + derivation generalized from altar
+ *   ids to site ids. A stump now has two doors
+ *   (Craft StationPanel + ritual chip) — flagged,
+ *   same object, two interactions. Completion
+ *   feedback anchors at the staged site's recorded
+ *   position (both kinds; the old altarState-only
+ *   lookup stranded stump completions at her feet).
+ *   PICKUP COUNTS AS A LOOK (Adam's ruling,
+ *   Systems 70f20b5): every successful bone pickup
+ *   grant records 1 NameSight look at its kind via
+ *   Systems' recordBonePickupLook (THE shell path —
+ *   kind from the granted item id, portions from
+ *   UI's bone table, one look per granted kind).
+ *   Three grant paths wired: harvest:completed
+ *   ('harvest' + 'remove' — a remove takes the bone
+ *   too; carried yields only, overflow-dropped piles
+ *   excluded), menu take-one/take-all, and whole-pile
+ *   pickup (touch USE + desktop button). A
+ *   failed/full-pack grant records nothing. The
+ *   panel gate already reads looksAt and shows
+ *   satisfied at ≥ 1 — no panel change. NOTE: an
+ *   earlier DEV signal instructed position-derived
+ *   kind resolution for pickups; Systems' helper
+ *   (landed after that signal) derives kind from
+ *   the item instead, and agrees with the position
+ *   derivation by construction — the helper is the
+ *   path used. Position derivation survives only
+ *   for WORLD LOOK (no item yet). The old
+ *   shaping-note divergence is RESOLVED by 70f20b5
+ *   (rituals.ts header now records the ruling).
+ *   LOOK NOTE: Adam is considering doing
+ *   away with LOOK mechanics 'for now' (tentative,
+ *   NOT confirmed) — portions built as approved,
+ *   LOOK not pre-removed. Parity: shared panel +
+ *   chips + rows, touch + desktop. New: lookPortions
+ *   bone entries + AltarChip label + App wiring.
  * POINTER DISCIPLINE: overlays are pointer-events-none except the
  * small interactive pieces (HUD buttons, panels, harvest buttons),
  * so world clicks — including the first-person mouse-capture click
@@ -1218,6 +1297,7 @@ import { pauseState } from './game/pause';
 import {
   createHarvestOutcomeListener,
   stationPresence,
+  stumpPositions,
 } from './game/harvest';
 import { BIOME_BY_ID } from './game/biomes';
 import {
@@ -1358,19 +1438,23 @@ import { torchState, type PlacedTorch as PlacedTorchEntity } from './game/torchS
 import { lightTorches, placeTorch as grantPlaceTorch, pickupTorch as grantPickupTorch } from './systems/torch';
 import { altarState, type PlacedAltar as PlacedAltarEntity } from './game/altarState';
 import { placeAltar as grantPlaceAltar } from './systems/altar';
-import { ritualSiteState } from './game/ritualSite';
+import { ritualSiteState, stumpSiteId } from './game/ritualSite';
+import { boneKindAt } from './game/boneKind';
 import {
   RITUAL_RECIPES,
   ritualRecipeFor,
   windowOpen,
+  stageBoneFromInventory,
   StagingBook,
   type SkyFacts,
 } from './systems/rituals';
 import {
   CharmState,
   grantFirstCharm,
-  FIRST_CHARM_ITEM,
-  FIRST_CHARM_EFFECT,
+  boneNote,
+  boneKindFor,
+  isBoneItem,
+  recordBonePickupLook,
 } from './systems/charms';
 import { RitualPanel } from './ui/RitualPanel';
 
@@ -1685,6 +1769,7 @@ function toInventoryItem(
     quantity: number;
   },
   inventory: PersonalInventory,
+  charms: CharmState,
 ): InventoryItem {
   return {
     id: stack.item,
@@ -1695,15 +1780,27 @@ function toInventoryItem(
     quantityText: String(stack.quantity),
     weightText: weightTextFor(stack.item, stack.quantity, inventory),
     icon: stack.item === UMBRELLA_ITEM_ID ? <UmbrellaIcon /> : undefined,
-    // First-charm row (tier-1 Waking build): the carried
-    // pocket charm reads its tier + effect note. Numbers
-    // are Systems' DRAFT effect data (warnAt 45, drain
-    // ×0.9), computed from the constants so the note
-    // tracks the data — flagged for Adam's pin pass.
-    note:
-      stack.item === FIRST_CHARM_ITEM
-        ? `Tier 1 · Stirs at hunger ${FIRST_CHARM_EFFECT.warnAt}; drains ${Math.round((1 - FIRST_CHARM_EFFECT.drainMultiplier) * 100)}% slower while carried.`
-        : undefined,
+    // Bone rows (individual-bone build, 2026-10-28):
+    // every carried primal bone reads its note from
+    // Systems' boneNote — raw: 'Needs a ritual site';
+    // awakened: 'Tier <n> · <effect phrase>' (tier from
+    // the awakening record, so tier-ups flow through;
+    // phrase fallback 'Awakened' for a kind without a
+    // drafted phrase). This SUPERSEDES the tier-1
+    // Waking build's first-charm note (which computed
+    // 'Stirs at hunger 45; drains 10% slower' from the
+    // DRAFT constants): Systems' boneNote is now the
+    // canonical note, and shrew's phrase ('Stirs when
+    // hunger falls, warning before the slowdown; small
+    // hunger bonus while carried') is Systems' adopted
+    // draft shape — the numbers no longer render.
+    // Phrases are DRAFT (bone-charms doc, not pins),
+    // flagged for Adam's pin pass. Non-bone stacks
+    // keep no note.
+    note: (() => {
+      const kind = boneKindFor(normalizeItemId(stack.item));
+      return kind === null ? undefined : boneNote(kind, charms);
+    })(),
   };
 }
 
@@ -1942,7 +2039,20 @@ export default function App() {
   // the book (the steps), never from a snapshot.
   const stagingBookRef = useRef(new StagingBook());
   const charmStateRef = useRef(new CharmState());
-  const [selectedAltarId, setSelectedAltarId] = useState<string | null>(null);
+  // The ritual site whose panel is open, by SITE ID
+  // ('altar:<n>' or 'stump:x,z' — one selection for
+  // both site kinds since the bone build; the panel +
+  // derivation are site-kind-agnostic, only the label
+  // and anchor source differ). Renamed from
+  // selectedAltarId when stump sites gained panels.
+  const [selectedSiteId, setSelectedSiteId] = useState<string | null>(null);
+  // Stump ritual anchors (bone build): stumpPositions
+  // at her feet, projected like altar anchors. State,
+  // not memo — projection needs the live container +
+  // camera, so it rides recomputeAnchors with the rest.
+  const [stumpAnchors, setStumpAnchors] = useState<
+    { siteId: string; x: number; y: number }[]
+  >([]);
   const [ritualNote, setRitualNote] = useState<string | null>(null);
   const [, setRitualVersion] = useState(0);
   const refreshRitual = () => {
@@ -1998,7 +2108,9 @@ export default function App() {
   const placementRef = useRef<PlacementMode | null>(null);
 
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>(() =>
-    inventory.stacksSnapshot().map((stack) => toInventoryItem(stack, inventory)),
+    inventory.stacksSnapshot().map((stack) =>
+      toInventoryItem(stack, inventory, charmStateRef.current),
+    ),
   );
   const [capacityText, setCapacityText] = useState(
     () =>
@@ -2022,7 +2134,9 @@ export default function App() {
 
   const refreshInventory = () => {
     setInventoryItems(
-      inventory.stacksSnapshot().map((stack) => toInventoryItem(stack, inventory)),
+      inventory.stacksSnapshot().map((stack) =>
+        toInventoryItem(stack, inventory, charmStateRef.current),
+      ),
     );
     setCapacityText(
       `Carrying ${formatLb(inventory.usedLb())} lb / ${formatLb(inventory.capacityLb())} lb`,
@@ -2263,6 +2377,28 @@ export default function App() {
       altars.push({ altar, x: anchor.x, y: anchor.y });
     }
     setAltarAnchors(altars);
+    // Stump ritual anchors (bone build): stumps in
+    // range at her feet (Background's stumpPositions —
+    // felled + grown, deduped), projected 'scatter'
+    // like altars. Same tick/event cadence as the rest
+    // of this function (not per-frame); the scan cost
+    // matches stationPresence's chunk scan on move.
+    // A stump that leaves range drops its anchor, and
+    // the live panel derivation closes its panel.
+    const stumps: { siteId: string; x: number; y: number }[] = [];
+    const player = playerRef.current;
+    if (player) {
+      for (const s of stumpPositions(genRef.current, player.x, player.z)) {
+        const anchor = projectAnchor(s.x, s.z, 'scatter');
+        if (!anchor) continue;
+        stumps.push({
+          siteId: stumpSiteId(s.x, s.z),
+          x: anchor.x,
+          y: anchor.y,
+        });
+      }
+    }
+    setStumpAnchors(stumps);
     const pileAnchorsNext: { pile: PileTarget; x: number; y: number }[] = [];
     for (const pile of pilesRef.current) {
       const anchor = projectAnchor(pile.x, pile.z, 'scatter');
@@ -2728,6 +2864,20 @@ export default function App() {
           }
           return;
         }
+        // PICKUP COUNTS AS A LOOK (same ruling):
+        // whole-pile pickup grants per kind (taken is
+        // one entry per granted kind) — a granted bone
+        // kind records 1 LOOK, before saveNow. Kinds
+        // that granted 0 never reach `taken`.
+        for (const t of outcome.taken) {
+          const kind = isBoneItem(t.item) ? boneKindFor(t.item) : null;
+          if (kind === null) continue;
+          recordBonePickupLook(
+            t.item,
+            nameSightRef.current,
+            portionsForKind(kind) ?? [],
+          );
+        }
         refreshInventory();
         saveNow();
         if (anchor) {
@@ -2866,6 +3016,40 @@ export default function App() {
     };
     window.addEventListener('pagehide', onPageHide);
     const offCompleted = bus.on('harvest:completed', (p) => {
+      // PICKUP COUNTS AS A LOOK (Adam, 2026-10-28,
+      // RULED — Systems 70f20b5 records it in rituals.ts
+      // + supplies charms.recordBonePickupLook as THE
+      // shell path): a bone pickup records 1 LOOK at
+      // that bone kind in NameSight — pickup ALONE
+      // satisfies speakName's minLooks 1. The helper
+      // derives the kind from the GRANTED ITEM id (what
+      // she actually carries — agrees with the payload
+      // position derivation by construction, since
+      // harvest yields the kind item from the target
+      // position; the helper is preferred because it
+      // also covers pile takes uniformly, where no
+      // harvest position exists). Yields are already
+      // merged by item, so one call per bone yield
+      // entry = one look per granted kind. Carried
+      // yields only (overflow dropped as piles was not
+      // picked up — a failed/full-pack grant records no
+      // look, per the helper's contract). Both 'harvest'
+      // and 'remove' completions count — a remove takes
+      // the bone too (flagged reading of 'picking it
+      // up'). Recorded BEFORE saveNow so the look
+      // persists; the panel gate reads looksAt(kind)
+      // and shows satisfied at ≥ 1.
+      for (const y of p.yields) {
+        const item = normalizeItemId(y.item);
+        if (!isBoneItem(item)) continue;
+        const kind = boneKindFor(item);
+        if (kind === null) continue;
+        recordBonePickupLook(
+          item,
+          nameSightRef.current,
+          portionsForKind(kind) ?? [],
+        );
+      }
       refreshInventory();
       saveNow();
       setProgressItems((current) =>
@@ -3036,7 +3220,7 @@ export default function App() {
     // AWAKENINGS persist — what she has awakened is hers,
     // not the world's (same rule as NameSight counts).
     stagingBookRef.current.restore([]);
-    setSelectedAltarId(null);
+    setSelectedSiteId(null);
     setRitualNote(null);
     setBiomeText(formatWeights(gen.weightsAt(spawn.x, spawn.z)));
     bus.emit('world:seedSet', { seed: nextSeed });
@@ -3400,6 +3584,28 @@ export default function App() {
     }
   };
 
+  // RITUAL SITE POSITION (both site kinds): made
+  // altars resolve through altarState; stumps resolve
+  // from their own key ('stump:x,z' — the key IS the
+  // position, Background's stumpSiteId format). Null
+  // for anything else (boulders do not exist yet).
+  const sitePositionFor = (
+    siteId: string,
+  ): { kind: 'altar' | 'stump'; x: number; z: number } | null => {
+    if (siteId.startsWith('altar:')) {
+      const altar = altarState.get(siteId);
+      return altar ? { kind: 'altar', x: altar.x, z: altar.z } : null;
+    }
+    if (siteId.startsWith('stump:')) {
+      const coords = siteId.slice('stump:'.length).split(',');
+      const x = Number(coords[0]);
+      const z = Number(coords[1]);
+      if (!Number.isFinite(x) || !Number.isFinite(z)) return null;
+      return { kind: 'stump', x, z };
+    }
+    return null;
+  };
+
   // RITUAL COMPLETION CHECK (state-based, idempotent):
   // every uncompleted staging whose window is open
   // completes at once — staged mid-window completes
@@ -3409,10 +3615,12 @@ export default function App() {
   // the 1 s timer (window-arrival path). On completion
   // the shell records the awakening, frees the site
   // (unstage — the bone awakens and leaves the site),
-  // says so at the site, and saves. The awakened charm
-  // has no inventory item yet (other bone ids land with
-  // the bone build), so the feedback names the awakening
-  // and claims no item (flagged, not hidden).
+  // says so at the site, and saves. The bone was
+  // CONSUMED at staging, so completion grants no item:
+  // the awakening record IS the charm, and the feedback
+  // names the awakening and claims no item. (A second
+  // bone of the kind, carried, shows its awakened note
+  // in the inventory — that is how a charm is carried.)
   const checkRitualCompletions = () => {
     const facts = skyFacts();
     if (!facts) return;
@@ -3428,10 +3636,14 @@ export default function App() {
       const result = staging.complete(recipe, facts);
       if (!result) continue;
       charmStateRef.current.awaken(result.kind, result.tier);
+      // Anchor BEFORE unstaging: the staged site record
+      // carries the site's true position for BOTH kinds
+      // (altar + stump) — the old altarState-only lookup
+      // stranded stump completions at her feet.
+      const staged = ritualSiteState.getStaged(entry.siteKey);
       ritualSiteState.unstageBone(entry.siteKey);
-      const site = altarState.get(entry.siteKey);
-      const anchor = site
-        ? projectAnchor(site.x, site.z, 'scatter')
+      const anchor = staged
+        ? projectAnchor(staged.site.x, staged.site.z, 'scatter')
         : null;
       const player = playerRef.current;
       const fallback = player
@@ -3454,15 +3666,12 @@ export default function App() {
     }
   };
 
-  // RITUAL STAGING, ALTAR SITES ONLY (this build): made
-  // altars carry ids + chips + positions, so the shell can
-  // target them. Stump sites have no UI surface (presence
-  // is booleans only — no stump position reaches the
-  // shell), so staging onto a stump is a flagged
-  // follow-up needing a Background stump-position
-  // surface, not built here. Boulders do not exist yet.
+  // RITUAL STAGING, ALTAR + STUMP SITES (bone build):
+  // made altars carry ids + chips + positions; stumps
+  // carry chips from Background's stumpPositions
+  // surface. Boulders do not exist yet.
   const handleStageBone = (siteId: string, kind: string) => {
-    const site = altarState.get(siteId);
+    const site = sitePositionFor(siteId);
     if (!site) {
       setRitualNote('No site there.');
       return;
@@ -3477,20 +3686,29 @@ export default function App() {
       setRitualNote('This site already holds a bone.');
       return;
     }
-    const staging = stagingBookRef.current.getOrCreate(siteId, kind);
-    const placed = staging.placeBone();
-    if (!placed.ok) {
-      setRitualNote(placed.reason ?? 'Could not stage that bone.');
-      return;
-    }
-    // No inventory move here: bone items do not exist yet
-    // (Systems' shell contract — the possession check
-    // lands with the bone build). placeBone records; the
-    // site graphic stages. Flagged, not hidden.
-    ritualSiteState.stageBone(
-      { kind: 'altar', siteId, x: site.x, z: site.z },
+    // PLACE-BONE CONSUMES (bone build — gap #3 CLOSED):
+    // stageBoneFromInventory is THE shell path now —
+    // possession check + consume 1 + record, refusals
+    // consume nothing. Raw placeBone is a record-only
+    // primitive; calling it here would leave the bone
+    // both carried and staged (a shell bug, Systems'
+    // words). No-recipe kinds refuse (shrew: no Waking
+    // — found-bone stacking stays open, flagged).
+    const staged = stageBoneFromInventory(
+      inventory,
+      stagingBookRef.current,
+      siteId,
       kind,
     );
+    if (!staged.staged) {
+      setRitualNote(staged.reason ?? 'Could not stage that bone.');
+      return;
+    }
+    ritualSiteState.stageBone(
+      { kind: site.kind, siteId, x: site.x, z: site.z },
+      kind,
+    );
+    refreshInventory();
     setRitualNote(null);
     saveNow();
     refreshRitual();
@@ -4121,7 +4339,29 @@ export default function App() {
     if (!target) return;
     const key = lookKeyForTarget(target);
     if (!key) return;
-    const result = nameSightRef.current.look(key, portionsForKind(key) ?? []);
+    // Bone scatter targets (bone build): the scatter
+    // kind is generic 'bone', but knowledge is KIND
+    // keyed — the kind resolves from the TARGET
+    // position encoded in the id ('scatter:chunk:kind:
+    // x,z', same rule as harvest yields), never the
+    // player's. A malformed position looks at nothing
+    // (no look recorded, no invented kind). Portions
+    // come from the kind's table entry (DEV-approved
+    // triple); first look shows 'Bone' (family), shape
+    // arrives via pickup identification, not LOOK.
+    let lookKey = key;
+    if (key === 'bone') {
+      const position = target.id.split(':')[3];
+      const coords = position ? position.split(',') : [];
+      const x = Number(coords[0]);
+      const z = Number(coords[1]);
+      if (!Number.isFinite(x) || !Number.isFinite(z)) return;
+      lookKey = boneKindAt(genRef.current.seed, x, z);
+    }
+    const result = nameSightRef.current.look(
+      lookKey,
+      portionsForKind(lookKey) ?? [],
+    );
     setLookResult({ targetId: target.id, text: result.display ?? target.name });
     saveNow();
   };
@@ -4257,6 +4497,22 @@ export default function App() {
           'blocked',
         );
         return;
+      }
+      // PICKUP COUNTS AS A LOOK (same ruling as the
+      // harvest path): a menu take that grants a bone
+      // records 1 LOOK at its kind, before saveNow.
+      // A failed/full-pack take (granted 0) records
+      // nothing — the return above already left.
+      {
+        const item = normalizeItemId(outcome.item);
+        const kind = isBoneItem(item) ? boneKindFor(item) : null;
+        if (kind !== null) {
+          recordBonePickupLook(
+            item,
+            nameSightRef.current,
+            portionsForKind(kind) ?? [],
+          );
+        }
       }
       refreshInventory();
       saveNow();
@@ -4397,36 +4653,43 @@ export default function App() {
       ? null
       : (torchAnchors.find((a) => a.torch.id === selectedTorch.id) ?? null);
 
-  // The altar whose ritual panel is open, with its anchor —
-  // the torch pattern, live: the panel renders from
-  // placedAltars, so a vanished altar leaves the panel
-  // with nothing. The staged bone + staging + recipe all
-  // derive live from the site singletons + book (never a
-  // tap-time snapshot), so step presses re-render the
-  // panel through ritualVersion.
-  const selectedAltar =
-    selectedAltarId === null
-      ? undefined
-      : placedAltars.find((a) => a.id === selectedAltarId);
-  const selectedAltarAnchor =
-    selectedAltar === undefined
+  // The ritual site whose panel is open, with its anchor —
+  // the torch pattern, live: the panel renders from the
+  // live site (placedAltars or stumpAnchors), so a
+  // vanished site leaves the panel with nothing. The
+  // staged bone + staging + recipe all derive live from
+  // the site singletons + book (never a tap-time
+  // snapshot), so step presses re-render the panel
+  // through ritualVersion. Site-kind-agnostic: the
+  // selection is a site id, the label follows its
+  // prefix, and only the anchor source differs.
+  const selectedSiteLabel =
+    selectedSiteId === null
       ? null
-      : (altarAnchors.find((a) => a.altar.id === selectedAltar.id) ?? null);
-  const selectedAltarStaged =
-    selectedAltar === undefined
+      : selectedSiteId.startsWith('stump:')
+        ? 'Stump'
+        : 'Altar';
+  const selectedSiteAnchor =
+    selectedSiteId === null
       ? null
-      : (ritualSiteState.getStaged(selectedAltar.id) ?? null);
-  const selectedAltarStaging =
-    selectedAltarStaged === null
+      : selectedSiteId.startsWith('stump:')
+        ? (stumpAnchors.find((a) => a.siteId === selectedSiteId) ?? null)
+        : (altarAnchors.find((a) => a.altar.id === selectedSiteId) ?? null);
+  const selectedSiteStaged =
+    selectedSiteId === null
+      ? null
+      : (ritualSiteState.getStaged(selectedSiteId) ?? null);
+  const selectedSiteStaging =
+    selectedSiteStaged === null || selectedSiteId === null
       ? null
       : (stagingBookRef.current.get(
-          selectedAltar.id,
-          selectedAltarStaged.bone,
+          selectedSiteId,
+          selectedSiteStaged.bone,
         ) ?? null);
-  const selectedAltarRecipe =
-    selectedAltarStaged === null
+  const selectedSiteRecipe =
+    selectedSiteStaged === null
       ? null
-      : (ritualRecipeFor(selectedAltarStaged.bone) ?? null);
+      : (ritualRecipeFor(selectedSiteStaged.bone) ?? null);
 
   // The pile whose menu is open, with its anchor.
   // Live menu pile: the menu renders from piles state, not a
@@ -4807,7 +5070,17 @@ export default function App() {
         {altarAnchors.map(({ altar, x, y }) => (
           <Fragment key={altar.id}>
             <WorldAnchor x={x} y={y} interactive>
-              <AltarChip onSelect={() => setSelectedAltarId(altar.id)} />
+              <AltarChip onSelect={() => setSelectedSiteId(altar.id)} />
+            </WorldAnchor>
+          </Fragment>
+        ))}
+        {stumpAnchors.map(({ siteId, x, y }) => (
+          <Fragment key={siteId}>
+            <WorldAnchor x={x} y={y} interactive>
+              <AltarChip
+                label="Stump"
+                onSelect={() => setSelectedSiteId(siteId)}
+              />
             </WorldAnchor>
           </Fragment>
         ))}
@@ -4884,37 +5157,39 @@ export default function App() {
             />
           </WorldAnchor>
         ) : null}
-        {selectedAltar && selectedAltarAnchor ? (
+        {selectedSiteId !== null &&
+        selectedSiteLabel !== null &&
+        selectedSiteAnchor ? (
           <WorldAnchor
-            x={selectedAltarAnchor.x}
-            y={selectedAltarAnchor.y}
+            x={selectedSiteAnchor.x}
+            y={selectedSiteAnchor.y}
             interactive
           >
             <RitualPanel
-              siteLabel="Altar"
+              siteLabel={selectedSiteLabel}
               staged={
-                selectedAltarStaged !== null &&
-                selectedAltarStaging !== null &&
-                selectedAltarRecipe !== null
+                selectedSiteStaged !== null &&
+                selectedSiteStaging !== null &&
+                selectedSiteRecipe !== null
                   ? (() => {
                       const facts = skyFacts();
                       return {
                         boneDisplay: boneDisplayFor(
-                          selectedAltarStaged.bone,
+                          selectedSiteStaged.bone,
                         ),
-                        bonePlaced: selectedAltarStaging.bonePlaced,
-                        offeringGiven: selectedAltarStaging.offeringGiven,
-                        nameSpoken: selectedAltarStaging.nameSpoken,
+                        bonePlaced: selectedSiteStaging.bonePlaced,
+                        offeringGiven: selectedSiteStaging.offeringGiven,
+                        nameSpoken: selectedSiteStaging.nameSpoken,
                         looks: nameSightRef.current.looksAt(
-                          selectedAltarStaged.bone,
+                          selectedSiteStaged.bone,
                         ),
-                        minLooks: selectedAltarRecipe.spokenName.minLooks,
-                        sky: selectedAltarRecipe.sky,
-                        skyLabel: skyLabelFor(selectedAltarRecipe.sky),
+                        minLooks: selectedSiteRecipe.spokenName.minLooks,
+                        sky: selectedSiteRecipe.sky,
+                        skyLabel: skyLabelFor(selectedSiteRecipe.sky),
                         windowOpen:
                           facts !== null &&
-                          windowOpen(selectedAltarRecipe.sky, facts),
-                        completed: selectedAltarStaging.completed,
+                          windowOpen(selectedSiteRecipe.sky, facts),
+                        completed: selectedSiteStaging.completed,
                       };
                     })()
                   : null
@@ -4946,22 +5221,25 @@ export default function App() {
               })()}
               note={ritualNote}
               onStageBone={(kind) =>
-                handleStageBone(selectedAltar.id, kind)
+                selectedSiteId !== null &&
+                handleStageBone(selectedSiteId, kind)
               }
               onGiveOffering={(item) =>
-                selectedAltarStaged !== null &&
+                selectedSiteId !== null &&
+                selectedSiteStaged !== null &&
                 handleGiveOffering(
-                  selectedAltar.id,
-                  selectedAltarStaged.bone,
+                  selectedSiteId,
+                  selectedSiteStaged.bone,
                   item,
                 )
               }
               onSpeakName={() =>
-                selectedAltarStaged !== null &&
-                handleSpeakName(selectedAltar.id, selectedAltarStaged.bone)
+                selectedSiteId !== null &&
+                selectedSiteStaged !== null &&
+                handleSpeakName(selectedSiteId, selectedSiteStaged.bone)
               }
               onClose={() => {
-                setSelectedAltarId(null);
+                setSelectedSiteId(null);
                 setRitualNote(null);
               }}
             />

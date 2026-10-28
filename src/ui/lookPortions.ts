@@ -16,6 +16,21 @@
  * at one bush teaches bushes (Systems' key recommendation).
  * The owl hook (+1 portion while owned) lives in NameSight;
  * this file holds content only, no progression.
+ *
+ * BONE KINDS (Adam, DEV chat 2026-10-28 — DEV-approved
+ * portions ['Bone', 'pale bone', 'long pale bone']):
+ * world bones are ONE scatter kind ('bone') whose kind
+ * derives from position (game/boneKind); the shell
+ * resolves the kind from the TARGET position and looks
+ * under the KIND key, so these entries are keyed by kind
+ * slug, not by 'bone'. The triple is IDENTICAL for all
+ * 17 kinds by approval — a world LOOK gives family +
+ * deeper generic bone, never the shape: shape arrives
+ * via PICKUP identification (inventory note), and
+ * speakName gates on looksAt(kind), which pickup also
+ * satisfies (Adam's pickup-counts-as-a-look ruling).
+ * Portions are DRAFT content, flagged for Adam's pin
+ * pass like the rest of this table.
  */
 
 /** DEV-authored DRAFT portions, 3 per kind (pin pass pending). */
@@ -38,6 +53,25 @@ export const LOOK_PORTIONS: Readonly<Record<string, readonly string[]>> = {
   reed: ['Reed bed', 'tall reeds', 'fiber'],
   stump: ['Tree stump', 'old stump', 'workstation'],
   flower: ['Meadow flower', 'wildflower', 'pretty, not food'],
+  // Bone kinds (DEV-approved triple, identical per kind —
+  // see header: shape is pickup's gift, not LOOK's).
+  'pigeon-wing-bone': ['Bone', 'pale bone', 'long pale bone'],
+  'snake-vertebra': ['Bone', 'pale bone', 'long pale bone'],
+  'turtle-shell-fragment': ['Bone', 'pale bone', 'long pale bone'],
+  'crow-beak': ['Bone', 'pale bone', 'long pale bone'],
+  'owl-talon': ['Bone', 'pale bone', 'long pale bone'],
+  'bat-wing-bone': ['Bone', 'pale bone', 'long pale bone'],
+  'mouse-spine': ['Bone', 'pale bone', 'long pale bone'],
+  'raccoon-tooth': ['Bone', 'pale bone', 'long pale bone'],
+  'groundhog-tooth': ['Bone', 'pale bone', 'long pale bone'],
+  'fox-femur': ['Bone', 'pale bone', 'long pale bone'],
+  'deer-antler-tip': ['Bone', 'pale bone', 'long pale bone'],
+  'wolf-tooth': ['Bone', 'pale bone', 'long pale bone'],
+  'frog-pelvis': ['Bone', 'pale bone', 'long pale bone'],
+  'mole-paw': ['Bone', 'pale bone', 'long pale bone'],
+  'bear-claw': ['Bone', 'pale bone', 'long pale bone'],
+  'rabbit-jaw': ['Bone', 'pale bone', 'long pale bone'],
+  'beaver-incisor': ['Bone', 'pale bone', 'long pale bone'],
 };
 
 /** Portions for a kind, or null when the kind is unlisted. */
