@@ -220,6 +220,7 @@ export const ITEM_WEIGHT_LB: Readonly<Record<string, number>> = {
   mushrooms: 0.25, // lane judgment: plural food family
   'poison-mushrooms': 0.25, // lane judgment: plural food family
   apple: 0.25,
+  [ITEMS.honey]: 0.25, // lane judgment: food cluster, flagged
   // Paper chain: dry paper lighter than damp sheets.
   [ITEMS.paper]: 0.25,
   // 0.5 lb
@@ -500,6 +501,7 @@ export const ITEM_DISPLAY_NAMES: Readonly<Record<string, string>> = {
   'edible-mushroom': 'Edible Mushroom',
   'poison-mushroom': 'Poison Mushroom',
   apple: 'Apple',
+  honey: 'Honey',
 };
 
 /**

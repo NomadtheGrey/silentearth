@@ -200,6 +200,14 @@ export const FOOD_POISON_MUSHROOM: ItemId = 'POISON_MUSHROOM';
  * +10: berry parity, LANE-DECIDED, for Adam's pin pass.
  */
 export const FOOD_APPLE: ItemId = 'APPLE';
+/**
+ * Honey — eaten as gathered, like berries (Systems, 2026-10-28,
+ * beehive follow-up to Background's wildHive landing).
+ * Nutrition +15: berry tier, LANE-DECIDED, for Adam's pin pass.
+ * Ingredient-only alternative: drop the FOOD_ITEMS entry below
+ * (one line) if Adam wants honey as an ingredient, not a food.
+ */
+export const FOOD_HONEY: ItemId = 'honey';
 
 /**
  * Plain warning carried by the poison mushroom (Adam, 2026-10-26,
@@ -212,7 +220,7 @@ export const POISON_MUSHROOM_WARNING: string =
 
 /**
  * Foods eaten directly: berries as gathered, acorns once cooked,
- * mushrooms as gathered, apples raw as gathered.
+ * mushrooms as gathered, apples raw as gathered, honey as gathered.
  * SPELLING NOTE (2026-10-26 id fix): these are the NORMALIZED
  * (kebab) ids, derived from the FOOD_* harvest-spelling constants
  * above — because this list's live consumer is App's FOOD_IDS
@@ -229,6 +237,7 @@ export const FOOD_ITEMS: ReadonlyArray<ItemId> = [
   FOOD_MUSHROOMS,
   FOOD_EDIBLE_MUSHROOM,
   FOOD_APPLE,
+  FOOD_HONEY,
 ].map(normalizeItemId);
 
 /**
@@ -256,6 +265,7 @@ export const FOOD_NUTRITION: Readonly<Record<string, number>> = {
   [FOOD_MUSHROOMS]: 15,
   [FOOD_EDIBLE_MUSHROOM]: 15,
   [FOOD_APPLE]: 15,
+  [FOOD_HONEY]: 15,
 };
 
 /**
