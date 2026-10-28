@@ -723,3 +723,49 @@ export function buildTorch(): THREE.Group {
   g.add(flameInner);
   return g;
 }
+
+/**
+ * A made ritual altar (Adam 2026-10-27 — placeable + visible
+ * ONLY, no ritual actions). The read-at-a-glance shape, my
+ * design on the draft suggestion (flagged): a flat stone
+ * TABLE on four wooden legs, with a clay bowl atop the
+ * centre. Deliberately NOT a house (no walls, no roof) and
+ * NOT a fire (no logs, no flame, no light — an altar is
+ * not a light source until a ritual says so). Symmetric, so
+ * it needs no facing. Overall ~1.4 m wide, ~1.0 m tall:
+ * person-scale, unmistakable at a glance, smaller than any
+ * house. Lambert materials throughout (lit by sun/moon
+ * like the houses — dark at night, like everything unlit).
+ */
+export function buildAltarGroup(): THREE.Group {
+  const g = new THREE.Group();
+  // Four wooden legs (frame) at the slab corners, inset.
+  const legGeo = new THREE.BoxGeometry(0.1, 0.72, 0.1);
+  const legMat = meshMat(0x6b4a2f);
+  for (const sx of [-1, 1]) {
+    for (const sz of [-1, 1]) {
+      const leg = new THREE.Mesh(legGeo, legMat);
+      leg.position.set(sx * 0.55, 0.36, sz * 0.3);
+      g.add(leg);
+    }
+  }
+  // Flat stone slab (base/table): 1.4 x 0.12 x 0.9, top at 0.84.
+  const slab = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.12, 0.9), meshMat(0x8a8a86));
+  slab.position.set(0, 0.78, 0);
+  g.add(slab);
+  // Clay bowl atop the centre: a lathe bowl (profile from
+  // foot to rim), terracotta, double-sided so the hollow
+  // reads from above instead of capping shut.
+  const profile: THREE.Vector2[] = [
+    new THREE.Vector2(0.02, 0),
+    new THREE.Vector2(0.12, 0.01),
+    new THREE.Vector2(0.22, 0.06),
+    new THREE.Vector2(0.28, 0.14),
+    new THREE.Vector2(0.3, 0.2),
+  ];
+  const bowlMat = new THREE.MeshLambertMaterial({ color: 0xb5654a, side: THREE.DoubleSide });
+  const bowl = new THREE.Mesh(new THREE.LatheGeometry(profile, 20), bowlMat);
+  bowl.position.set(0, 0.84, 0);
+  g.add(bowl);
+  return g;
+}

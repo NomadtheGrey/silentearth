@@ -27,7 +27,7 @@ import type { WorldGen } from './worldgen';
 import { PlayerController } from './player';
 import { marshWeight } from './biomes';
 import { SOURCE_FOR_KIND } from './objects';
-import { buildCampArrow, buildCandle, buildEdgeArrow, buildKindGeometry, buildTorch, buildUmbrella, buildWitch, CANDLE_FLAME_Y, TORCH_FLAME_Y, vertexLambert } from './models';
+import { buildAltarGroup, buildCampArrow, buildCandle, buildEdgeArrow, buildKindGeometry, buildTorch, buildUmbrella, buildWitch, CANDLE_FLAME_Y, TORCH_FLAME_Y, vertexLambert } from './models';
 import { ProximityTracker } from './proximity';
 import {
   harvestState,
@@ -41,6 +41,7 @@ import { riverParamsFor, riverRibbonForChunk } from './river';
 import type { RiverParams } from './river';
 import { fireState } from './fireState';
 import { torchState } from './torchState';
+import { altarState } from './altarState';
 import type { PlacedHouse } from './shelter';
 import { FIRE_DEFS } from './fire';
 import { shelterState, HOUSE_DEFS } from './shelter';
@@ -478,6 +479,8 @@ export class WorldRenderer {
       bus.on('loom:placed', rebuild),
       bus.on('torch:placed', rebuild),
       bus.on('torch:removed', rebuild),
+      bus.on('altar:placed', rebuild),
+      bus.on('altar:removed', rebuild),
     );
     this.rebuildPlacedGroup();
     // Camp arrows rebuild on house placement (houses restore
@@ -716,6 +719,8 @@ export class WorldRenderer {
     loomState.clear();
     // Placed torches belong to the old world's map too.
     torchState.clear();
+    // Placed altars belong to the old world's map too.
+    altarState.clear();
     this.rebuildPlacedGroup();
     // Camp arrows belong to the old world's houses too.
     this.rebuildCampArrows();
@@ -1202,6 +1207,20 @@ export class WorldRenderer {
       tg.add(buildTorch());
       group.add(tg);
       this.addTorchLight(torch.x, torch.z);
+    }
+    for (const altar of altarState.snapshot()) {
+      // Made ritual altar (Adam 2026-10-27 — placeable +
+      // visible ONLY, no ritual actions): the stone-table +
+      // clay-bowl graphic, sitting on the ground at the
+      // placed position. Scene-level like all placed
+      // entities — chunk reload never touches it, and save
+      // restore rebuilds it via the constructor's initial
+      // rebuildPlacedGroup (altarState.restore first). No
+      // light: an altar is not a light source.
+      const ag = new THREE.Group();
+      ag.position.set(altar.x, 0, altar.z);
+      ag.add(buildAltarGroup());
+      group.add(ag);
     }
     this.scene.add(group);
     this.placedGroup = group;
