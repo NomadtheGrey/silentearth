@@ -6419,6 +6419,14 @@ export default function App() {
               }
             >
               Inventory
+              {!isTouch ? (
+                <span
+                  aria-hidden="true"
+                  className="ml-1 rounded border border-stone-500/60 bg-black/30 px-1 font-mono text-[10px]"
+                >
+                  I
+                </span>
+              ) : null}
             </button>
             <button
               type="button"
@@ -6431,6 +6439,14 @@ export default function App() {
               }
             >
               Crafting
+              {!isTouch ? (
+                <span
+                  aria-hidden="true"
+                  className="ml-1 rounded border border-stone-500/60 bg-black/30 px-1 font-mono text-[10px]"
+                >
+                  K
+                </span>
+              ) : null}
             </button>
             <button
               type="button"
@@ -6443,6 +6459,14 @@ export default function App() {
               }
             >
               Charms
+              {!isTouch ? (
+                <span
+                  aria-hidden="true"
+                  className="ml-1 rounded border border-stone-500/60 bg-black/30 px-1 font-mono text-[10px]"
+                >
+                  L
+                </span>
+              ) : null}
             </button>
             <button
               type="button"
@@ -6936,7 +6960,10 @@ export default function App() {
         the button itself takes its own tap — that tap is the
         resume (tap-to-resume, pinned). */}
       {paused ? (
-        <PausedIndicator onResume={() => pauseState.setPaused(false)} />
+        <PausedIndicator
+          onResume={() => pauseState.setPaused(false)}
+          showKeyHint={!isTouch}
+        />
       ) : null}
 
       {/* Camera transition overlay (vignette at rest, fade on switch). */}

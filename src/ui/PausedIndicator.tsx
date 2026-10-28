@@ -27,7 +27,18 @@
  * ("Paused — tap to resume", pinned 2026-10-26).
  */
 
-export function PausedIndicator({ onResume }: { onResume: () => void }) {
+export function PausedIndicator({
+  onResume,
+  showKeyHint = false,
+}: {
+  onResume: () => void;
+  /**
+   * Desktop key hint: the shell passes !isTouch, so the P badge
+   * shows only on keyboard contexts and never adds noise to
+   * phone touch UI. Default false — badges only when asked.
+   */
+  showKeyHint?: boolean;
+}) {
   return (
     <div className="pointer-events-none absolute inset-0 z-40 flex items-center justify-center">
       <button
@@ -36,6 +47,14 @@ export function PausedIndicator({ onResume }: { onResume: () => void }) {
         className="pointer-events-auto min-h-[64px] rounded-full bg-black/60 px-8 py-4 text-xl font-medium text-[#f0ead6]"
       >
         Paused — tap to resume
+        {showKeyHint ? (
+          <span
+            aria-hidden="true"
+            className="ml-2 rounded border border-stone-500/60 bg-black/30 px-1.5 font-mono text-xs"
+          >
+            P
+          </span>
+        ) : null}
       </button>
     </div>
   );
