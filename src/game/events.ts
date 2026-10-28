@@ -240,6 +240,16 @@ export interface EventMap {
    */
   'shelter:placed': { id: string; type: HouseType; x: number; z: number };
   /**
+   * A placed house UPGRADED in place (shelterState.upgradeHouse):
+   * same id, same position, new type. Deliberately NOT
+   * 'shelter:placed' — an upgrade is not a new house, and
+   * placement-counting listeners (e.g. App's new-houses count)
+   * must not fire on it. Renderer rebuilds the placed group on
+   * this (new type = new meshes); the shell follows it with
+   * getHomeStore(id).setHouse(newType) for capacity.
+   */
+  'shelter:upgraded': { id: string; type: HouseType };
+  /**
    * A loom was placed (loomState.placeLoom). Free placement
    * — no zone/plot gate, like fires and houses. Renderer
    * rebuilds the placed group; stationPresence reads live

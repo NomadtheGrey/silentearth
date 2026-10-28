@@ -17,6 +17,22 @@
  * PINNED): each type holds more supplies safe from the elements
  * and is progressively larger.
  *
+ * UPGRADE (Adam, 2026-10-28: a lean-to upgrades INTO the
+ * wattle-and-daub hut, not in addition to it): upgradeHouse
+ * changes a placed house's type IN PLACE — same id, same
+ * position — so stored contents (App's id-keyed HomeStorage)
+ * and the save record ride along; it never calls placeHouse
+ * (which would mint a new id and leave the old house standing
+ * — the reported bug). ANY-higher-upgrades: any carried item
+ * whose tier is higher than the faced house's upgrades it,
+ * skipping intermediate tiers (lean-to + cottage skips thatch);
+ * same-or-lower returns false and the shell falls back to feet
+ * placement. The shell MUST call getHomeStore(id).setHouse
+ * (newType) on upgrade (UI pill landing) — else capacity
+ * stays the old tier. Multiplier/footprint/capacity all read
+ * HOUSE_DEFS[type] at query/render time, so nothing else
+ * needs updating on upgrade.
+ *
  * NUMBERS — READ THE LABELS:
  * - Lean-to storage 50 is PINNED (Adam, 2026-10-25).
  * - Every other number below is a LANE-DECIDED starting tunable
@@ -42,6 +58,9 @@ import type { ShelterQuery } from './weather';
 
 /** Placeable house types, in ladder order. */
 export type HouseType = 'leanTo' | 'thatchHut' | 'wovenCottage' | 'smallWoodenHut';
+
+/** Ladder order for upgrades: index is the tier (higher = later). */
+export const HOUSE_LADDER: HouseType[] = ['leanTo', 'thatchHut', 'wovenCottage', 'smallWoodenHut'];
 
 export interface HouseDef {
   id: HouseType;
@@ -152,6 +171,40 @@ class ShelterState {
     this.houses.set(id, house);
     bus.emit('shelter:placed', { id, type, x, z });
     return house;
+  }
+
+  /**
+   * Upgrade a placed house IN PLACE (Adam 2026-10-28): changes
+   * only the type — same id, same position — so stored contents
+   * and the save record ride along. ANY-higher rule: returns
+   * true + emits 'shelter:upgraded' { id, type } when newType's
+   * tier is higher than the current type's (skips allowed);
+   * returns false with NO change and NO emit when newType's
+   * tier is same-or-lower (the shell falls back to feet
+   * placement). Unknown id or a newType outside the ladder
+   * throws a readable Error (the shell surfaces it via its
+   * existing try/catch, like placement). NEVER calls placeHouse
+   * (which would mint a new id and strand the old house).
+   * Which house is "faced" is the caller's determination (the
+   * UI pill defines facing); this primitive takes an id and
+   * enforces no position or proximity gate. The shell MUST
+   * follow a true return with getHomeStore(id).setHouse
+   * (newType) — capacity otherwise stays the old tier.
+   */
+  upgradeHouse(id: string, newType: HouseType): boolean {
+    const house = this.houses.get(id);
+    if (!house) {
+      throw new Error(`No placed house with id ${id}: cannot upgrade.`);
+    }
+    const oldTier = HOUSE_LADDER.indexOf(house.type);
+    const newTier = HOUSE_LADDER.indexOf(newType);
+    if (newTier === -1) {
+      throw new Error(`Unknown house type ${newType}: cannot upgrade.`);
+    }
+    if (newTier <= oldTier) return false;
+    house.type = newType;
+    bus.emit('shelter:upgraded', { id, type: newType });
+    return true;
   }
 
   get(id: string): PlacedHouse | undefined {

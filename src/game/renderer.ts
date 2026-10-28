@@ -508,6 +508,7 @@ export class WorldRenderer {
       bus.on('fire:placed', rebuild),
       bus.on('fire:lit', rebuild),
       bus.on('shelter:placed', rebuild),
+      bus.on('shelter:upgraded', rebuild),
       bus.on('loom:placed', rebuild),
       bus.on('torch:placed', rebuild),
       bus.on('torch:removed', rebuild),
