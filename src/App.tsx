@@ -1184,8 +1184,9 @@
  *   bone build below (SUPERSEDES the numbers note
  *   'Stirs at hunger 45; drains 10% slower' computed
  *   from the DRAFT constants — shrew's row now reads
- *   Systems' phrase; machinery NOT built — warning
- *   latch + drain multiplier are follow-ups).
+ *   Systems' phrase; machinery BUILT in the
+ *   shrew-effect bullet below (latch + multiplier
+ *   wired, display live).
  *   Save: stagings + awakenings ride saveNow as-is +
  *   boot restore BEFORE construction (ritualSite
  *   restore derives site positions from altarState /
@@ -1300,6 +1301,45 @@
  *   surface (button + result line). No other file
  *   touched. Parity: nothing visible changes except
  *   the hidden button, touch + desktop alike.
+ * - SHREW EFFECT DISPLAY + WIRING, LIVE (DEV
+ *   signal, Systems 5e0af26 — latch + multiplier):
+ *   the tier-1 shrew effect is now LIVE end to end.
+ *   DISPLAY: HungerIndicator gains an optional
+ *   warning line — 'The shrew bone stirs.' under the
+ *   bar while the latch is active (steady state),
+ *   pulsing (animate-pulse) for a 2 s flash window
+ *   on the entry edge (fired), then standing steady.
+ *   The indicator holds no timers; the shell owns
+ *   the flash window. WIRING: one shell sync,
+ *   syncShrewEffect, called on every hunger change
+ *   (1 s timer, eat via refreshInventory), every
+ *   inventory change (refreshInventory), and boot
+ *   (after restore + grant — covers the boot-grant
+ *   path AND the loaded-save boot, since the
+ *   multiplier is session state, never saved). The
+ *   sync calls latch update(hunger, carried) +
+ *   setDrainMultiplier(carried && awakened ? 0.9
+ *   : 1). Carried is SHELL-SUPPLIED (today: main
+ *   inventory count; when Adam's weight-exempt
+ *   pseudo-inventory list lands, that one line
+ *   switches — no Systems change). FLAGGED
+ *   DEVIATION (DEV's blessing owed): the landed
+ *   shrewEffectActive(inventory, charms) reads the
+ *   main inventory directly, which conflicts with
+ *   the shell-supplied-carried instruction — it is
+ *   NOT used; the shell computes the same result
+ *   (carried && awakened → 0.9) from its own
+ *   carried boolean. If DEV prefers the helper,
+ *   the switch is one line + a Systems signature
+ *   change later. Latch edges honored: fires once
+ *   on entry into ≤ 45 while carried (including a
+ *   below-threshold boot), re-arms above 45, resets
+ *   when not carried. Drain note: carried but
+ *   unawakened gets NO multiplier (effect follows
+ *   awakening, not possession) — in practice the
+ *   grant awakens, so carried implies awakened.
+ *   Tier 1 only; LOOK parked. Parity: the meter +
+ *   line are shared, touch + desktop alike.
  * POINTER DISCIPLINE: overlays are pointer-events-none except the
  * small interactive pieces (HUD buttons, panels, harvest buttons),
  * so world clicks — including the first-person mouse-capture click
@@ -1474,6 +1514,10 @@ import {
   boneKindFor,
   isBoneItem,
   recordBonePickupLook,
+  HungerWarning,
+  FIRST_CHARM_ITEM,
+  FIRST_CHARM_KIND,
+  FIRST_CHARM_EFFECT,
 } from './systems/charms';
 import { RitualPanel } from './ui/RitualPanel';
 
@@ -2072,6 +2116,54 @@ export default function App() {
   const [stumpAnchors, setStumpAnchors] = useState<
     { siteId: string; x: number; y: number }[]
   >([]);
+  // SHREW EFFECT SHELL (Systems 5e0af26 — latch +
+  // drain multiplier built; display + wiring are UI's):
+  // one latch, session-only (nothing saved — first
+  // update below threshold after boot fires fresh,
+  // which is the correct behavior per the latch
+  // contract). syncShrewEffect is THE shell sync, called
+  // on every hunger change (1 s timer, eat), every
+  // inventory change (refreshInventory), and boot
+  // (after restore + grant). It reads only refs + the
+  // two stable singletons (inventory, hunger), so the
+  // boot effect's first-render closure stays correct
+  // (saveNow pattern).
+  const warningRef = useRef(new HungerWarning(FIRST_CHARM_EFFECT.warnAt));
+  const [hungerWarningActive, setHungerWarningActive] = useState(false);
+  const [hungerWarningFlash, setHungerWarningFlash] = useState(false);
+  const warningFlashTimerRef = useRef<number | undefined>(undefined);
+  const syncShrewEffect = () => {
+    // Carried source, SHELL-SIDE (DEV instruction):
+    // TODAY the main inventory count; when Adam's
+    // weight-exempt pseudo-inventory list lands, this
+    // one line switches to it — no Systems change.
+    // Deliberately NOT shrewEffectActive(inventory,
+    // charms): the landed helper reads the main
+    // inventory directly, which would bake in the
+    // source this instruction forbids. Same result
+    // today (carried && awakened → 0.9, else 1),
+    // switchable tomorrow. Flagged deviation from
+    // the landed helper, stated for DEV's blessing.
+    const shrewCarried = inventory.count(FIRST_CHARM_ITEM) > 0;
+    const result = warningRef.current.update(hunger.value(), shrewCarried);
+    // Boolean setState bails out when unchanged, so
+    // the steady state costs no re-render; fired is an
+    // edge by construction (entry only), so the flash
+    // needs no prev comparison either.
+    setHungerWarningActive(result.active);
+    if (result.fired) {
+      setHungerWarningFlash(true);
+      window.clearTimeout(warningFlashTimerRef.current);
+      warningFlashTimerRef.current = window.setTimeout(() => {
+        setHungerWarningFlash(false);
+      }, 2000);
+    }
+    hunger.setDrainMultiplier(
+      shrewCarried && charmStateRef.current.isAwakened(FIRST_CHARM_KIND)
+        ? FIRST_CHARM_EFFECT.drainMultiplier
+        : 1,
+    );
+  };
   const [ritualNote, setRitualNote] = useState<string | null>(null);
   const [, setRitualVersion] = useState(0);
   const refreshRitual = () => {
@@ -2157,6 +2249,11 @@ export default function App() {
         toInventoryItem(stack, inventory, charmStateRef.current),
       ),
     );
+    // Every inventory change re-syncs the shrew effect
+    // (carried may have flipped — grant, consume, take,
+    // drop, eat). The 1 s timer below is the backstop
+    // for any mutation path that skips this refresh.
+    syncShrewEffect();
     setCapacityText(
       `Carrying ${formatLb(inventory.usedLb())} lb / ${formatLb(inventory.capacityLb())} lb`,
     );
@@ -2793,6 +2890,16 @@ export default function App() {
       refreshInventory();
       saveNow();
     }
+    // Shrew effect boot sync (follow-up call path):
+    // runs whether or not the grant fired — a loaded
+    // save carrying shrew needs its 0.9 multiplier from
+    // boot (multiplier is session state, never saved),
+    // and a boot hunger below 45 while carried fires
+    // the latch fresh (she IS in the warning zone).
+    // refreshInventory above already synced once; this
+    // call is harmless duplication that covers the
+    // no-grant boot (loaded awakening, no refresh).
+    syncShrewEffect();
     applyShelterHouse(
       shelterAt(player.x, player.z, shelterState.snapshot()).houseId,
     );
@@ -2937,6 +3044,10 @@ export default function App() {
       hunger.tick(1);
       setHungerStage(hunger.stage());
       setHungerValue(hunger.value());
+      // Hunger changed: latch update + drain multiplier
+      // re-sync (the drain rate for the NEXT tick
+      // follows the current carried/awakened state).
+      syncShrewEffect();
       fireState.advanceLighting(Date.now());
       // Drive every tracked Systems fire's lighting clock
       // alongside the engine's (the bridge's tick half).
@@ -3142,6 +3253,7 @@ export default function App() {
     return () => {
       window.clearTimeout(timer);
       window.clearInterval(hungerTimer);
+      window.clearTimeout(warningFlashTimerRef.current);
       window.clearTimeout(transitionTimerRef.current);
       for (const timeout of feedbackTimersRef.current.values()) {
         window.clearTimeout(timeout);
@@ -5431,7 +5543,12 @@ export default function App() {
             <WitchHealth />
           </div>
           <div className="mt-2">
-            <HungerIndicator stage={hungerStage} value={hungerValue} />
+            <HungerIndicator
+              stage={hungerStage}
+              value={hungerValue}
+              warningActive={hungerWarningActive}
+              warningFlash={hungerWarningFlash}
+            />
           </div>
           <ForageHint stage={hungerStage} />
           <div className="mt-2">

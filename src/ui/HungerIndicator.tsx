@@ -37,6 +37,15 @@
  * its stage() and value() through, and no stage or value is
  * guessed in the meantime. With no stage passed, the awaiting
  * note is what the player sees, as before.
+ *
+ * SHREW WARNING LINE (2026-10-28, Systems 5e0af26 latch):
+ * when warningActive, one line under the bar reads 'The
+ * shrew bone stirs.' — the latch's steady state. When
+ * warningFlash rides with it, the line pulses
+ * (animate-pulse) for the shell's flash window — the
+ * latch's entry edge — then stands steady. The shell
+ * owns the flash timing; this element holds no timers
+ * and computes nothing about hunger itself.
  */
 
 /** Hunger stages, exactly as the task names them. */
@@ -58,6 +67,22 @@ export interface HungerIndicatorProps {
   /** Label for the element. Default "Hunger". */
   label?: string;
   className?: string;
+  /**
+   * Shrew warning, steady state (Systems' HungerWarning
+   * latch, active): when true, the stir line shows under
+   * the bar. False/absent = no line (no charm, or hunger
+   * above the warn threshold).
+   */
+  warningActive?: boolean;
+  /**
+   * Shrew warning, entry edge (the latch's fired): when
+   * true WITH warningActive, the stir line pulses
+   * (Tailwind animate-pulse) for the shell's flash
+   * window, then the shell clears it and the line
+   * stands steady. The component holds no timers —
+   * the shell owns the flash window.
+   */
+  warningFlash?: boolean;
 }
 
 const STAGE_WORD: Record<HungerStage, string> = {
@@ -78,6 +103,8 @@ export function HungerIndicator({
   value,
   label = 'Hunger',
   className,
+  warningActive = false,
+  warningFlash = false,
 }: HungerIndicatorProps) {
   // Bar fill uses the clamped raw value; the number beside it
   // is the rounded integer — never the raw float. A non-finite
@@ -132,6 +159,15 @@ export function HungerIndicator({
       {stage === 'too-hungry' ? (
         <span className="text-xs text-stone-400">
           Traps, campfire cooking, or nuts and berries can bring her back.
+        </span>
+      ) : null}
+      {warningActive ? (
+        <span
+          className={
+            'text-xs text-amber-200 ' + (warningFlash ? 'animate-pulse' : '')
+          }
+        >
+          The shrew bone stirs.
         </span>
       ) : null}
     </div>
