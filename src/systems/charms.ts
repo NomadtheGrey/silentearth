@@ -217,6 +217,9 @@ export const FIRST_CHARM_EFFECT: FirstCharmEffect = {
 export const SNAKE_EFFECT = { drainMultiplier: 0.9 };
 export const MOUSE_EFFECT = { storageBonus: 25 };
 export const BEAR_EFFECT = { capacityBonusLb: 10 };
+export const RABBIT_EFFECT = { fleeFactor: 0.8 };
+export const RACCOON_EFFECT = { bonusPoints: 25 };
+export const WOLF_EFFECT = { signRangeFactor: 2 };
 
 /** Snake drain factor: 0.9 when carried + awakened, else 1. */
 export function snakeDrainFactor(
@@ -246,6 +249,51 @@ export function bearCapacityBonusLb(
   return carried && charms.isAwakened('bear-claw')
     ? BEAR_EFFECT.capacityBonusLb
     : 0;
+}
+
+/**
+ * Rabbit flee factor (remaining charms, 2026-10-28):
+ * 0.8 when carried + awakened, else 1. Helper only —
+ * no trapping system exists; trapping multiplies
+ * flee radius by it when trapping lands.
+ */
+export function rabbitFleeFactor(
+  carried: boolean,
+  charms: CharmState,
+): number {
+  return carried && charms.isAwakened('rabbit-jaw')
+    ? RABBIT_EFFECT.fleeFactor
+    : 1;
+}
+
+/**
+ * Raccoon loot bonus in percentage points (remaining
+ * charms, 2026-10-28): 25 when carried + awakened,
+ * else 0. Helper only — loot adds it when the loot
+ * system lands.
+ */
+export function raccoonBonusPoints(
+  carried: boolean,
+  charms: CharmState,
+): number {
+  return carried && charms.isAwakened('raccoon-tooth')
+    ? RACCOON_EFFECT.bonusPoints
+    : 0;
+}
+
+/**
+ * Wolf sign-range factor (remaining charms,
+ * 2026-10-28): 2 when carried + awakened, else 1.
+ * Helper only — signs multiply range by it when the
+ * signs system lands.
+ */
+export function wolfSignRangeFactor(
+  carried: boolean,
+  charms: CharmState,
+): number {
+  return carried && charms.isAwakened('wolf-tooth')
+    ? WOLF_EFFECT.signRangeFactor
+    : 1;
 }
 
 /** One awakening's saved shape (see CharmState.snapshot). */
