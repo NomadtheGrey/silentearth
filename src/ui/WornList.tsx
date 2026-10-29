@@ -72,8 +72,11 @@ export interface WornListProps {
   /** Called when the player presses Remove on a worn garment. */
   onRemove?: (garment: WornGarment) => void;
   /**
-   * One-line protection note, caller-supplied from the engine's
-   * garment table (e.g. "Protection: rain 49% · wind 30%").
+   * One-line protection note, caller-supplied (e.g.
+   * "Protection: rain 49% · wind 30%"). Its rain figure
+   * composes garments + a carried umbrella (the caller's
+   * composition, through Systems' helper) since the fold
+   * (Adam, 2026-10-29); the other axes are garment-only.
    * Omitted = no note line.
    */
   protectionNote?: string;
@@ -82,14 +85,6 @@ export interface WornListProps {
    * Wardrobe (e.g. "Carrying bonus +9"). Omitted = no line.
    */
   capacityNote?: string;
-  /**
-   * One-line umbrella rain-protection note, caller-supplied
-   * (e.g. "Umbrella: rain −40%" once a mechanic supplies the
-   * number, or a plain qualitative line until then). Omitted
-   * = no line. This component holds no umbrella mechanic and
-   * computes no rain number.
-   */
-  umbrellaNote?: string;
   /**
    * Whether an umbrella is carried, caller-supplied (the
    * shell's carriesUmbrella read). The Umbrella ROW is
@@ -131,7 +126,6 @@ export function WornList({
   onRemove,
   protectionNote,
   capacityNote,
-  umbrellaNote,
   umbrellaCarried = false,
   note,
   comfortable = false,
@@ -183,10 +177,11 @@ export function WornList({
         })}
         {/* Umbrella row (Adam, 2026-10-29): permanent, in
           the garment idiom, but never a button — carried,
-          not worn. The umbrellaNote below stays the effect
-          line (it carries the precipitation number; this
-          row carries only the state word), so nothing
-          prints twice. */}
+          not worn. This row carries only the state word;
+          the umbrella's precipitation number lives in the
+          caller's Protection line (folded in the same day
+          on Adam's word — the separate umbrella note line
+          retired, one home per fact). */}
         <li className="flex items-center justify-between gap-2">
           <span>
             Umbrella{' '}
@@ -201,9 +196,6 @@ export function WornList({
       ) : null}
       {capacityNote ? (
         <p className="text-xs text-stone-400">{capacityNote}</p>
-      ) : null}
-      {umbrellaNote ? (
-        <p className="text-xs text-stone-400">{umbrellaNote}</p>
       ) : null}
       {note ? <p className="text-xs text-red-300">{note}</p> : null}
     </div>

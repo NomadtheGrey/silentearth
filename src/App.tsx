@@ -213,14 +213,18 @@
  *   crafted output or an ingredient) wherever it appears.
  *   App maps Systems' item id (see UMBRELLA_ITEM_ID above)
  *   to the icon in both places. The worn/clothes display
- *   gains one umbrella rain note line (WornList umbrellaNote,
- *   under the protection + capacity notes), shown only while
- *   an umbrella is carried, with its number from Systems'
- *   single constant (60% precipitation, a starting value
- *   for Adam's pin pass, not pinned — revised from 35%
- *   rain-only) — the UI holds no rain table of its own.
+ *   carries a permanent Umbrella row in the WornList
+ *   (carried / not owned, no button — it is carried, not
+ *   worn), and its precipitation effect folds into the
+ *   Protection line's rain figure through Systems'
+ *   applyUmbrellaToPrecipitationRemaining (the separate
+ *   umbrella note line retired 2026-10-29 on Adam's word
+ *   — one home per fact; the constant is 60%
+ *   precipitation, a starting value for his pin pass,
+ *   not pinned — revised from 35% rain-only) — the UI
+ *   holds no rain table of its own.
  *   No separate umbrella panel is built, per the brief;
- *   the icon and the note ride existing surfaces.
+ *   the icon and the row ride existing surfaces.
  * - LOOM PLACE, LIVE (gap-closing round, presence b39f0aa):
  *   a carried loom item gains the same Place button +
  *   preview + Place here flow as fires and houses (free
@@ -1593,7 +1597,7 @@ import type { CameraMode, BiomeWeights } from './types';
 import { Wardrobe, GARMENTS, WORN_CAPACITY_BONUS } from './systems/clothes';
 import {
   carriesUmbrella,
-  UMBRELLA_PRECIPITATION_PROTECTION,
+  applyUmbrellaToPrecipitationRemaining,
 } from './systems/umbrella';
 import { HudShell } from './ui/HudShell';
 import { WitchHealth } from './ui/WitchHealth';
@@ -6958,20 +6962,28 @@ export default function App() {
     (g) => inventory.count(g.item) > 0,
   ).map((g) => g.backgroundId);
   const wornRemaining = clothingRemaining(wornGarments);
+  // UMBRELLA IN THE PROTECTION LINE (Adam, 2026-10-29 —
+  // 'it would look nice there though, the umbrella'):
+  // the rain figure composes the umbrella through
+  // Systems' helper (multiplicative, precipitation axis
+  // only — wind/cold/wet stay garment-only), so the
+  // readout matches the exposure math, which already
+  // composed it. 'Protection: none' now requires BOTH
+  // no garments worn AND no umbrella carried; an
+  // umbrella alone reads rain 60% · 0% · 0% · 0%. The
+  // separate umbrella note line is retired — its number
+  // lives here now (one home per fact).
+  const rainRemaining = applyUmbrellaToPrecipitationRemaining(
+    wornRemaining.rain,
+    inventory,
+  );
   const protectionNote =
-    wornGarments.length === 0
+    wornGarments.length === 0 && !carriesUmbrella(inventory)
       ? 'Protection: none'
-      : `Protection: rain ${Math.round((1 - wornRemaining.rain) * 100)}% · wind ${Math.round((1 - wornRemaining.wind) * 100)}% · cold ${Math.round((1 - wornRemaining.cold) * 100)}% · wet ${Math.round((1 - wornRemaining.wet) * 100)}%`;
+      : `Protection: rain ${Math.round((1 - rainRemaining) * 100)}% · wind ${Math.round((1 - wornRemaining.wind) * 100)}% · cold ${Math.round((1 - wornRemaining.cold) * 100)}% · wet ${Math.round((1 - wornRemaining.wet) * 100)}%`;
   const capacityBonus = wardrobe.wornCapacityBonus();
   const capacityNote =
     capacityBonus > 0 ? `Carrying bonus +${capacityBonus} lb` : undefined;
-  // Umbrella precipitation note (see the coordination above):
-  // shown only while an umbrella is carried, and its number
-  // comes from Systems' single constant — never a UI-side
-  // table.
-  const umbrellaNote = carriesUmbrella(inventory)
-    ? `Umbrella: precipitation −${Math.round(UMBRELLA_PRECIPITATION_PROTECTION * 100)}%`
-    : undefined;
 
   // Home-storage section for the sheltering house, when
   // sheltered: rows come from the HomeStorage counts (the
@@ -9213,7 +9225,6 @@ export default function App() {
               comfortable={isTouch}
               protectionNote={protectionNote}
               capacityNote={capacityNote}
-              umbrellaNote={umbrellaNote}
               umbrellaCarried={carriesUmbrella(inventory)}
               note={wardrobeNote}
             />
