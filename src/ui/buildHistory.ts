@@ -43,6 +43,14 @@ export interface BuildRecord {
 
 const ALL_RECORDS: BuildRecord[] = [
   {
+    merge: 'Merge #25',
+    pr: 51,
+    sha: 'pending', // corrected to the real merge sha by the follow-up merge, per the standing drill
+    date: '2026-10-29',
+    what: 'Cloud saves made whole + resume re-lock: the cloud list now reads the save box\u2019s real index, so saved worlds actually appear in the panel, and a visible Load from cloud door lets typed words reach them. Resuming from pause in first-person now captures the mouse in the same click that unpauses \u2014 no second click to play.',
+    why: 'A save you cannot see is not a save, and resume should put you back in the game in one gesture.',
+  },
+  {
     merge: 'Merge #24',
     pr: 49,
     sha: '6258e17',
