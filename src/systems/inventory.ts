@@ -550,6 +550,154 @@ export function displayNameFor(item: ItemId): string {
   return ITEM_DISPLAY_NAMES[normalizeItemId(item)] ?? item;
 }
 
+// ---------------------------------------------------------------------------
+// Item descriptors — one brief, truthful line per item (2026-10-29)
+// ---------------------------------------------------------------------------
+
+/**
+ * Brief descriptor for every known item, keyed by NORMALIZED
+ * id (same ownership + normalization as ITEM_DISPLAY_NAMES).
+ * Adam's ask (2026-10-29): "We should have a brief descriptor
+ * for these craftables, pretty much all of them if we know
+ * what they do" — shown in the Inventory row, and the same
+ * line serves the crafting row for the recipe's output.
+ *
+ * EVERY LINE IS DRAFT for Adam's pin pass (bone-phrase
+ * precedent: the bone effect phrases shipped draft the same
+ * way). Grounding rule: NO invented mechanics — each line
+ * states only what the code does today (live mechanics
+ * first, then recipe notes / prototype text, then intended-
+ * but-unbuilt stated honestly as not-yet). Numbers stay
+ * qualitative except carrying numbers the UI already shows
+ * (basket/apron/worn/trundle +lb). "No known use yet." is
+ * AUTHORED per item below, never a fallback: an id missing
+ * from this table returns undefined from descriptionFor().
+ *
+ * PRIMAL BONES ARE NOT HERE: the dynamic primal-bone-* ids
+ * are covered by the bone note (UI precedence: boneNote
+ * first, this table second). Generic 'bone' IS here (a
+ * calcified fragment with no recipe use).
+ */
+export const ITEM_DESCRIPTIONS: Readonly<Record<string, string>> = {
+  // Harvested materials.
+  'snap-wood': 'Snapped branches. Split into dry kindling for fires, and frame half of what you build.',
+  'tender-vines': 'Vines. Twist them into cordage; weave them into baskets and thatch.',
+  'peat-moss': 'Soft moss. Insulation in walls and mittens, and the cover on a pitfall.',
+  'downed-oak': 'Oak logs. The heavy building wood.',
+  'river-silt': 'Silt. The binder in daub walls and garden beds.',
+  'river-stone': 'The whetstone — sharpens the trowel, kept, not consumed — and building stone besides.',
+  'luminous-spores': 'Pale glowing spores. An ingredient for the moss cradle.',
+  'dry-kindling': 'Split snap-wood, dry and ready. One piece lights a fire by friction.',
+  clay: 'Clay. Pots, bricks, and daub — shaped, then fired.',
+  flint: 'Strikes a fire fast. Kept, never consumed.',
+  'old-stump': 'An old stump. A workstation where it stands, and an altar for the rites.',
+  dirt: 'Scooped earth. No known use yet.',
+  mud: 'Scooped mud. No known use yet.',
+  grass: 'Cut grass. Fibre for pulp, and stuffing for bedding.',
+  'salt-crystal': 'Salt from the flats. No known use yet.',
+  bone: 'A calcified fragment. No known use yet.',
+  // Tools (owning is using; the ladder gates harder ground).
+  'garden-trowel': 'The first tool. Digs and works soft ground.',
+  'sharp-trowel': 'The garden trowel, whetstone-sharp. Works ground the plain trowel cannot.',
+  spade: 'A spade. Digs pits and heavy ground.',
+  'axe-trowel': 'Part axe, part trowel. Chops and digs in one tool.',
+  'spade-axe': 'Spade and axe joined. The ladder, one rung from the top.',
+  'trundle-tool': 'The top of the tool ladder, on wheels. Digs, chops, and hauls +50 lb while you hold it.',
+  // Houses (placed shelters with home storage).
+  'primitive-lean-to': 'The first shelter. A little roof, and a little storage.',
+  'thatch-hut': 'A step above the lean-to. More shelter, more storage.',
+  'wattle-and-daub-hut': 'The wattle-and-daub cottage. Builds as the Woven Cottage.',
+  'woven-cottage': 'Wattle-and-daub walls, woven through. A real cottage, with room to store.',
+  'small-wooden-hut': 'Plank walls and a stone footing. The roomiest house yet.',
+  // Stations and fires.
+  'moss-cradle': 'A cultivated garden plot, for growing crops. Nothing to grow in it yet.',
+  campfire: 'An open fire. Cooks acorns, lights torches, pushes back the dark.',
+  hearth: 'Stone and clay, a lasting fire. Cooks, and gives light.',
+  kiln: 'A clay kiln. Fires pottery and bricks.',
+  bloomery: 'Smelts bog iron.',
+  'stumpy-workstation': 'A stump fed wood and cordage, grown into a workbench. A workstation for crafting.',
+  'crafted-workstation': 'A built workbench. A workstation for crafting, where you place it.',
+  'potters-wheel': "A wheel for shaping clay, on the clay's way to the kiln.",
+  loom: 'A loom. Clothes and bedding are woven here.',
+  altar: 'A ritual altar. Stage a bone here and speak its name to wake a charm.',
+  // Crafted goods.
+  'twined-cordage': 'Twined cord. It ties and binds half of everything you build.',
+  'clay-pot': 'A fired clay pot. Stores food — and sunk in a creek, it is a pot trap. Not a cooking pot.',
+  'clay-brick': 'A kiln-fired brick. No use for it yet.',
+  torch: 'A torch, unlit. Light it from a fire, or with flint and stone.',
+  'lit-torch': 'A lit torch. Bright light, and it never burns out.',
+  'plant-pulp': 'Mashed plant fibre. Press it into sheets, on the way to paper.',
+  'pressed-sheets': 'Pressed fibre sheets. Bind them into paper.',
+  paper: 'Handmade paper. Bind it into a grimoire.',
+  grimoire: 'A hand-bound book. No use for it yet.',
+  // Carrying and worn (numbers are the readout's own).
+  'small-basket': 'A woven basket. Holds +25 lb.',
+  'large-basket': "A big woven basket. Holds +50 lb — it replaces the small basket's room.",
+  apron: 'A woven apron. Holds +10 lb in its pockets.',
+  'hooded-cloak': 'Worn against rain and wind. Holds +6 lb while worn.',
+  shawl: 'Worn against the cold. Holds +3 lb while worn.',
+  'pointy-hat': 'Worn against the rain. Holds +1 lb while worn.',
+  'mossy-mittens': 'Worn against the cold. No extra carrying room.',
+  'bog-boots': 'Worn in the bog. Drier feet, and less drag in the wet.',
+  umbrella: 'Carried against the rain. Keeps the wet off.',
+  // Traps (crafting one sets it where you stand).
+  snare: 'Stakes and a loop. Set where you craft it; it catches passing game.',
+  'fish-weir-trap': 'A woven funnel. Set where you craft it; it catches passing game.',
+  'pot-trap': 'A clay pot sunk in the creek. Set where you craft it; it catches passing game.',
+  pitfall: 'A dug pit under a moss cover. Set where you craft it — digging one takes a spade-tier tool.',
+  deadfall: 'Oak and stone, weighted to fall. Set where you craft it; it catches passing game.',
+  // Trap catches (not food; no sink yet).
+  'rabbit-carcass': 'A caught rabbit. No use for it yet.',
+  'squirrel-carcass': 'A caught squirrel. No use for it yet.',
+  'muskrat-carcass': 'A caught muskrat. No use for it yet.',
+  'fish-carcass': 'A caught fish. No use for it yet.',
+  'eel-carcass': 'A caught eel. No use for it yet.',
+  'crayfish-carcass': 'A caught crayfish. No use for it yet.',
+  'frog-carcass': 'A caught frog. No use for it yet.',
+  'opossum-carcass': 'A caught opossum. No use for it yet.',
+  'groundhog-carcass': 'A caught groundhog. No use for it yet.',
+  'raccoon-carcass': 'A caught raccoon. No use for it yet.',
+  // Foods (qualitative — no nutrition numbers, per the brief).
+  acorns: 'Raw acorns. Cook them at an open fire before eating.',
+  'cooked-acorns': 'Acorns, cooked at the fire. Eat them to restore hunger.',
+  'bog-berries': 'Bog berries. Eat them to restore hunger.',
+  elderberries: 'Elderberries. Eat them to restore hunger.',
+  mushrooms: 'Foraged mushrooms. Eat them to restore hunger.',
+  'edible-mushroom': 'An edible mushroom. Eat it to restore hunger.',
+  'poison-mushroom': 'Poisonous — do not eat.',
+  'poison-mushrooms': 'Poisonous — do not eat.',
+  apple: 'An orchard apple. Eat it to restore hunger.',
+  honey: 'Wild honey. Eat it to restore hunger.',
+  // Camping.
+  'sleeping-bag': 'Bedding you can carry. A bed wherever you stop.',
+  tent: 'A portable shelter. Pitch it where you stand; pack it up when you move.',
+  // Flowers (three are food; the rest have no use yet).
+  'white-yarrow': 'A picked white yarrow. No known use yet.',
+  'gold-coneflower': 'A picked gold coneflower. No known use yet.',
+  'purple-clover': 'A picked purple clover. No known use yet.',
+  'yellow-dandelion': 'Edible greens. Eat it to restore hunger.',
+  'pink-milkweed': 'A picked pink milkweed. No known use yet.',
+  'red-poppy': 'A picked red poppy. No known use yet.',
+  'tall-sunflower': 'Eat it for the seeds — a small bite of food.',
+  'blue-aster': 'A picked blue aster. No known use yet.',
+  'white-trillium': 'A picked white trillium. No known use yet.',
+  'wood-violet': 'A small edible flower. Eat it — a bite of food.',
+  'creek-iris': 'A picked creek iris. No known use yet.',
+  'white-water-lily': 'A picked white water lily. No known use yet.',
+};
+
+/**
+ * Brief descriptor for an item in either code spelling
+ * ('SNAP_WOOD' and 'snap-wood' resolve the same). Returns
+ * undefined for an id with no authored line — a missing id
+ * is a table gap to fill, never papered over with a generic
+ * fallback (UI renders nothing, or its own boneNote for
+ * primal bones, which are deliberately not in this table).
+ */
+export function descriptionFor(item: ItemId): string | undefined {
+  return ITEM_DESCRIPTIONS[normalizeItemId(item)];
+}
+
 /**
  * Large-basket question, as an explicit switch. No default exists:
  * PersonalInventoryOptions requires this field.
