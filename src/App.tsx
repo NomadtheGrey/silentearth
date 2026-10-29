@@ -736,10 +736,12 @@
  *   createSleepListener (Fill-in's sleep.ts, landed in
  *   parallel as 69f5393): it checks night, then shelter
  *   from the position, and jumps the sky to dawn,
- *   time-only, no restore. Outcomes 'sleep:completed' /
- *   'sleep:failed' need no UI action (the dawn jump hides
- *   the button via the night gate; failures show nothing
- *   per the brief's no-invented-text rule). REPAIR NOTE:
+ *   time-only, no restore. Outcomes: 'sleep:failed'
+ *   needs no UI action (failures show nothing per the
+ *   brief's no-invented-text rule), and 'sleep:completed'
+ *   showed nothing until 2026-10-29, when Adam ordered
+ *   the WAKE MESSAGE (the transient dawning notice —
+ *   see handleSleep). REPAIR NOTE:
  *   the first push of this landing (cf5f813) was built
  *   from a stale base and its whole-file events.ts
  *   clobbered Fill-in's landed sleep contract (the three
@@ -1759,6 +1761,7 @@ import { CrowArrows } from './ui/CrowArrows';
 import { RitualPanel } from './ui/RitualPanel';
 import { CharmsPanel } from './ui/CharmsPanel';
 import { StormWarning } from './ui/StormWarning';
+import { WakeNotice } from './ui/WakeNotice';
 
 type BusHarvestTarget = EventMap['harvest:inRange']['targets'][number];
 
@@ -2267,10 +2270,12 @@ export default function App() {
   // then shelter (from the position), and jumps the sky
   // to dawn, time-only, no restore. The one listener lives
   // in the boot effect below (createSleepListener);
-  // outcomes 'sleep:completed'/'sleep:failed' need no UI
-  // action — the dawn jump disables the row via the night
-  // gate, and failures show nothing per the brief's
-  // no-invented-text rule. Daytime shows the row disabled
+  // outcomes: 'sleep:failed' needs no UI action (failures
+  // show nothing per the brief's no-invented-text rule);
+  // 'sleep:completed' raises the WAKE MESSAGE since
+  // 2026-10-29 (Adam's order — see the consumer beside
+  // handleSleep); the dawn jump disables the row via the
+  // night gate either way. Daytime shows the row disabled
   // with a "Night only" note; the menu stays open after
   // a Rest press.
   const handleSleep = (): void => {
@@ -2278,6 +2283,29 @@ export default function App() {
     if (!player) return;
     bus.emit('sleep:requested', { x: player.x, z: player.z });
   };
+
+  // WAKE MESSAGE (Adam, 2026-10-29: a completed sleep
+  // showed NOTHING — the dawn jump was the only signal;
+  // "We need a message indicating that we have done so,
+  // and it's dawning"): a third consumer of
+  // 'sleep:completed' (beside groundhog wake + the quest
+  // flag, in the boot effect) — it sets a transient
+  // screen-level notice that clears itself after a few
+  // seconds. 'sleep:failed' has no consumer here:
+  // failures stay silent, as before. Copy is DRAFT for
+  // Adam's pin pass.
+  const [wakeNote, setWakeNote] = useState<string | null>(null);
+  useEffect(() => {
+    const off = bus.on('sleep:completed', () => {
+      setWakeNote("You slept through the night. It's dawning.");
+    });
+    return off;
+  }, []);
+  useEffect(() => {
+    if (wakeNote === null) return;
+    const timer = setTimeout(() => setWakeNote(null), 5000);
+    return () => clearTimeout(timer);
+  }, [wakeNote]);
 
   // Gap-closing state (see the header): one Systems FireState
   // per placed fire (the cooking vessel), the engine lighting
@@ -9716,6 +9744,11 @@ export default function App() {
           showKeyHint={!isTouch}
         />
       ) : null}
+
+      {/* Wake notice: transient, screen-level, after a
+        completed sleep (see the consumer beside
+        handleSleep). Renders nothing when no note. */}
+      <WakeNotice text={wakeNote} />
 
       {/* Camera transition overlay (vignette at rest, fade on switch). */}
       <CameraTransition switching={switching} />
