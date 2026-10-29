@@ -45,8 +45,7 @@ const ALL_RECORDS: BuildRecord[] = [
   {
     merge: 'Merge #20',
     pr: 41,
-    // Second merge replaces this with the real merge sha.
-    sha: 'pending',
+    sha: '05bc426',
     date: '2026-10-28',
     what: 'World name field (save carries worldName; cloud envelope name rides it) + first-run dialog (name + seed before the intro, Begin opens the intro, Esc guard, Begin-only, persists at first save; the intro itself untouched).',
     why: 'A world should have a name before it has a story: the first run asks for the name and seed up front, and the name travels with the save into the cloud envelope later. New Game is not in this merge — it rides after cloud.',
