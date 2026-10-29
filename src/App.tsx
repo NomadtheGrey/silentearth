@@ -8237,6 +8237,28 @@ export default function App() {
   // and turns.
   const useWinner = computeUseWinner();
 
+  // ONE TARGET AT A TIME (Adam, 2026-10-29, screenshot:
+  // the column offered two scatter targets at once —
+  // "Another case of Dual Selection. One target should
+  // be available at a time"): the proximity column
+  // presents ONLY the current target — this same
+  // winner. A scatter/ground winner contributes its
+  // target row(s); a trap or hive winner contributes
+  // its row; a pile or menu-kind winner (pile / site /
+  // fire / tent / torch / home / scry) contributes
+  // NOTHING to the column — its menu or modal is its
+  // presentation. Presentation only: the tracker still
+  // emits every in-range target (Shift+E's nearest-
+  // scatter and the dispatch fallbacks keep their
+  // inputs); the column just stops offering the rest.
+  const presentedTargets =
+    useWinner !== null &&
+    (useWinner.kind === 'scatter' || useWinner.kind === 'ground')
+      ? [useWinner.target]
+      : [];
+  const presentedTrap = useWinner?.kind === 'trap' ? trapRowTrap : null;
+  const presentedHive = useWinner?.kind === 'hive' ? hiveRowHive : null;
+
   // DESKTOP PILE PICKUP (see the header): the mouse twin
   // of R's pile second — shown only when the faced
   // winner IS a pile, so the button never contradicts
@@ -8618,14 +8640,14 @@ export default function App() {
         stationAnchor is set; see ProximityHarvestButtons. */}
       <div className="pointer-events-none absolute inset-0 z-40">
         <ProximityHarvestButtons theme={lookThemes.world}
-          targets={harvestTargets}
+          targets={presentedTargets}
           harvestedIds={harvestedIds}
           onHarvest={handleHarvest}
           onRemove={handleRemove}
           stationAnchor={stationAnchor}
-          trap={trapRowTrap}
+          trap={presentedTrap}
           onCollectTrap={handleCollectTrap}
-          hive={hiveRowHive}
+          hive={presentedHive}
           onHarvestHive={handleHarvestHive}
           showKeyHints={!isTouch}
           lookNode={
