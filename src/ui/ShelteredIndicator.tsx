@@ -53,7 +53,7 @@ export function ShelteredIndicator({
         aria-label={
           houseName ? `Sheltered at ${houseName}` : 'Sheltered'
         }
-        className="rounded bg-black/50 px-2 py-1 text-sm text-stone-100"
+        className="rounded bg-black/45 px-2 py-1 text-sm text-stone-100"
       >
         Sheltered{houseName ? ` at ${houseName}` : ''}
       </div>

@@ -27,6 +27,8 @@
  * ("Paused — tap to resume", pinned 2026-10-26).
  */
 
+import { KEY_BADGE_CLASS } from './themes';
+
 export function PausedIndicator({
   onResume,
   showKeyHint = false,
@@ -50,7 +52,7 @@ export function PausedIndicator({
         {showKeyHint ? (
           <span
             aria-hidden="true"
-            className="ml-2 rounded border border-stone-500/60 bg-black/30 px-1.5 font-mono text-xs"
+            className={'ml-1 ' + KEY_BADGE_CLASS}
           >
             P
           </span>

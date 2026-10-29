@@ -132,7 +132,7 @@
 import { Fragment, type ReactNode } from 'react';
 import { HarvestButton, RemoveButton } from './HarvestButton';
 import type { HarvestTarget, HarvestRequest } from './proximityHarvest';
-import { UI_THEMES, type UiThemeName } from './themes';
+import { KEY_BADGE_CLASS, UI_THEMES, type UiThemeName } from './themes';
 
 export interface ProximityHarvestButtonsProps {
   /** In-range targets only, mapped from 'harvest:inRange' (see proximityHarvest.ts). */
@@ -186,6 +186,15 @@ export interface ProximityHarvestButtonsProps {
   hive?: { x: number; z: number; label: string } | null;
   /** Called with the hive coords for a hive-row press. */
   onHarvestHive?: (x: number, z: number) => void;
+  /**
+   * Show PC key badges on the keyed rows (trap row "E",
+   * hive row "E" — USE dispatches to the faced target's
+   * common action, Adam 2026-10-29). Caller passes
+   * !isTouch (the PausedIndicator showKeyHint
+   * precedent): hint only, handlers and sizing
+   * untouched. Default false = no badges.
+   */
+  showKeyHints?: boolean;
   /** Look for the buttons. Default "mire" (the world outside). */
   theme?: UiThemeName;
 }
@@ -202,6 +211,7 @@ export function ProximityHarvestButtons({
   onCollectTrap,
   hive,
   onHarvestHive,
+  showKeyHints = false,
   theme = 'mire',
 }: ProximityHarvestButtonsProps) {
   const t = UI_THEMES[theme];
@@ -291,6 +301,14 @@ export function ProximityHarvestButtons({
           }
         >
           <span className="font-medium">{trap.label}</span>
+          {showKeyHints ? (
+            <span
+              aria-hidden="true"
+              className={KEY_BADGE_CLASS}
+            >
+              E
+            </span>
+          ) : null}
         </button>
       ) : null}
       {hive && onHarvestHive ? (
@@ -304,6 +322,14 @@ export function ProximityHarvestButtons({
           }
         >
           <span className="font-medium">{hive.label}</span>
+          {showKeyHints ? (
+            <span
+              aria-hidden="true"
+              className={KEY_BADGE_CLASS}
+            >
+              E
+            </span>
+          ) : null}
         </button>
       ) : null}
     </div>

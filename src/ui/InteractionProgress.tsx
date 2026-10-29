@@ -28,6 +28,8 @@ export interface InteractionProgressProps {
 const FILL_CLASSES: Record<UiThemeName, string> = {
   mire: 'bg-lime-600',
   hearth: 'bg-amber-600',
+  parchment: 'bg-stone-600',
+  ember: 'bg-amber-600',
 };
 
 export function InteractionProgress({

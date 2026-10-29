@@ -1623,7 +1623,9 @@ import {
   OptionsModal,
   fontClassFor,
   loadFontChoice,
+  loadLookChoice,
   saveFontChoice,
+  saveLookChoice,
   type FontId,
 } from './ui/OptionsModal';
 import { IntroModal } from './ui/IntroModal';
@@ -1634,7 +1636,7 @@ import { ProximityHarvestButtons } from './ui/ProximityHarvestButtons';
 import { InteractionProgress } from './ui/InteractionProgress';
 import { ObjectFeedback } from './ui/ObjectFeedback';
 import { WorldAnchor } from './ui/WorldAnchor';
-import { UI_THEMES } from './ui/themes';
+import { KEY_BADGE_CLASS, LOOK_THEMES, UI_THEMES } from './ui/themes';
 import { CameraTransition } from './ui/CameraTransition';
 import { CAMERA_TRANSITION } from './ui/cameraPresentation';
 import { projectWorldToScreen } from './ui/worldProjection';
@@ -6973,6 +6975,40 @@ export default function App() {
       ? null
       : (ritualRecipeFor(selectedSiteStaged.bone) ?? null);
 
+  // Ritual panel option lists, hoisted from the panel's
+  // JSX so the PC-key digit dispatch (below) reads the
+  // SAME lists the panel renders — one source, no
+  // divergence. Computed only while a site is selected
+  // (the panel's own condition); [] otherwise.
+  const selectedSiteKindOptions =
+    selectedSiteId === null
+      ? []
+      : RITUAL_RECIPES.filter(
+          (recipe) => charmStateRef.current.tierOf(recipe.boneKind) === 0,
+        ).map((recipe) => ({
+          kind: recipe.boneKind,
+          display: boneDisplayFor(recipe.boneKind),
+          skyLabel:
+            recipe.sky === 'none' ? 'Any sky' : skyLabelFor(recipe.sky),
+        }));
+  const selectedSiteFoodOptions =
+    selectedSiteId === null
+      ? []
+      : (() => {
+          const byItem = new Map<string, number>();
+          for (const stack of inventory.stacksSnapshot()) {
+            const id = normalizeItemId(stack.item);
+            if ((FOOD_ITEMS as readonly string[]).includes(id)) {
+              byItem.set(id, (byItem.get(id) ?? 0) + stack.quantity);
+            }
+          }
+          return [...byItem.entries()].map(([id, count]) => ({
+            item: id,
+            display: displayNameFor(id),
+            count,
+          }));
+        })();
+
   // The pile whose menu is open, with its anchor.
   // Live menu pile: the menu renders from piles state, not a
   // tap-time snapshot (see the state comment above).
@@ -7067,6 +7103,8 @@ export default function App() {
     if (!nearest) return null;
     return {
       id: nearest.id,
+      x: nearest.x,
+      z: nearest.z,
       label:
         nearest.catch !== null
           ? `Collect ${nearest.catch}`
@@ -7134,6 +7172,15 @@ export default function App() {
   // persisted in its own localStorage key — never the Systems
   // save file. No stored choice reads as IM Fell English.
   const [font, setFont] = useState<FontId>(loadFontChoice);
+
+  // Options look (beautification phase 2, Adam 2026-10-29:
+  // switchable looks in Settings): shell-owned UI setting
+  // in the SAME settings key as the font. The look names
+  // the two theme slots (world / dialog) the shell passes
+  // down to the themed surfaces. No stored choice reads
+  // as the current look (mire + hearth).
+  const [look, setLook] = useState(loadLookChoice);
+  const lookThemes = LOOK_THEMES[look];
 
   // ESC TOGGLE (Adam, 2026-10-27 — Esc opens Options; extended
   // 2026-10-28 — Esc closes the topmost layer first): with
@@ -7239,6 +7286,10 @@ export default function App() {
     setFont(next);
     saveFontChoice(next);
   };
+  const handleLookChange = (next: typeof look): void => {
+    setLook(next);
+    saveLookChoice(next);
+  };
 
   // Visible thin scrollbars on the touch scroll containers
   // (Adam: "put in scrollbars"): native mobile scrollbars are
@@ -7337,37 +7388,44 @@ export default function App() {
     }
   };
 
-  // USE / still-tap interact: the nearest in-range object,
-  // pressed through the engine's pressUse (which fires the
-  // existing harvest:requested event; the outcome listener
-  // re-validates range + permit, so a stale press fails
-  // safely). Scatter is preferred and ground is the
-  // fallback — USE never harvests dirt while a bush is in
-  // range. With no target at all, pressUse is not called
-  // (menus and HUD buttons stay direct taps).
+  // USE DISPATCH (Adam, 2026-10-29 — the common-action
+  // principle, superseding the per-thing keys T/H/F/Q of
+  // the earlier buttons landing): there are no per-thing
+  // keys. USE — the touch USE button, the E key, and the
+  // pointer-locked click, all through handleUseInteract —
+  // activates the COMMON ACTION of the one target she is
+  // more or less FACING: harvest for a plant, Collect for
+  // a trap, Harvest honey for a hive, OPEN for the things
+  // whose interaction is a screen (pile menu, ritual
+  // panel, torch/tent/fire menus, home menu), Scry for
+  // the scry button. R fires the SAME target's SECOND
+  // action where one exists today (handleSecondInteract).
   //
-  // PILE FALLBACK, FIXED (Adam, 2026-10-27 — BUG FIX, see
-  // the header bullet): a pile in range is picked up by
-  // this same USE press when no SCATTER target is nearer.
-  // The tracker sorts piles nearest first, so piles[0] is
-  // the nearest pile; the scatter candidate's distance
-  // comes from the raw bus target (the UI target shape
-  // carries no distance field), falling back to a
-  // shell-computed distance if the bus entry is gone. The
-  // pile wins on a tie (no scatter target is NEARER then).
-  // Ground NEVER competes: ground sits at distance 0 and
-  // is always eligible in third/behind (and whenever
-  // looking down in first-person), so under the old
-  // scatter-first rule any pile at a nonzero distance
-  // lost to ground and USE harvested dirt instead of
-  // picking up. The one shared pileWouldWin rule below
-  // drives this press, the touch PICK UP label, and the
-  // desktop button, so all three always agree.
-  // NOTE: this is the touch USE path only. Desktop has no USE
-  // affordance (harvest is by button click), so desktop pile
-  // pickup is a visible button instead — see DESKTOP PILE
-  // PICKUP in the header and the computation before return.
-  // Touch keeps USE; the button is desktop-only.
+  // TARGET SELECTION = FACING (Adam: "if we're more or
+  // less facing one target, that's the one we should be
+  // paying attention to, not the grass, not the loom
+  // behind her"). Candidates are in range (per-kind caps
+  // as the rows use: HARVEST_RANGE; home via
+  // shelterHouseId) AND faced — the game's existing faced
+  // definition, the upgrade pill's (46a617d): forward =
+  // (sin facing, cos facing) from player.facing — one
+  // read in every camera mode (first-person facing
+  // tracks the look, third is travel direction, behind
+  // is look-synced, player.ts) — angle < 45 degrees (dot
+  // > SQRT1_2); distance 0 faced, and < 1 m counts as
+  // faced (hut interiors vs the house center, a pile at
+  // her feet). Behind-her candidates are OUT even when
+  // nearer. Winner = the nearest of the faced set, with
+  // ONE preserved sub-rule: pile vs scatter inside the
+  // set resolves by pileWouldWin (pile takes ties).
+  // Ground is never a faced candidate (it has no
+  // direction — it is where she stands): it stays the
+  // categorical last fallback after scry, so the grass
+  // at her feet can never steal a faced target (the
+  // aa6e88b bug was exactly ground winning by distance).
+  // ONE shared computeUseWinner() feeds the press, the
+  // R press, the touch USE label, and the desktop pile
+  // button, so the tell can never disagree with the act.
   const pileWouldWin = (
     pile: PileTarget | undefined,
     scatter: HarvestTarget | undefined,
@@ -7381,39 +7439,366 @@ export default function App() {
       Math.hypot(scatter.worldX - fromX, scatter.worldZ - fromZ);
     return pile.distance <= scatterDistance;
   };
-  // Shared USE path (PC keys, 2026-10-28): the touch USE
-  // button, the E key, and the pointer-locked click all call
-  // this one handler — scatter-first from harvestTargets +
-  // pileWouldWin pile fallback + ground fallback. Renamed
-  // from handleTouchInteract (same body); nothing here is
-  // touch-specific. The zero-arg player.pressUse() path is
-  // NOT used (its shell query has no callers).
-  const handleUseInteract = (): void => {
+
+  type UseWinner =
+    | { kind: 'scatter' | 'ground'; target: HarvestTarget; distance: number }
+    | { kind: 'pile'; pile: PileTarget; distance: number }
+    | { kind: 'trap'; id: string; distance: number }
+    | { kind: 'hive'; x: number; z: number; distance: number }
+    | { kind: 'site'; siteId: string; distance: number }
+    | { kind: 'fire' | 'tent' | 'torch'; id: string; distance: number }
+    | { kind: 'home'; distance: number }
+    | { kind: 'scry'; distance: number };
+
+  const computeUseWinner = (): UseWinner | null => {
     const player = playerRef.current;
-    if (!player) return;
+    if (!player) return null;
+    const forwardX = Math.sin(player.facing);
+    const forwardZ = Math.cos(player.facing);
+    const facingOf = (
+      x: number,
+      z: number,
+    ): { isFaced: boolean; distance: number } => {
+      const dx = x - player.x;
+      const dz = z - player.z;
+      const distance = Math.hypot(dx, dz);
+      if (distance < 1) return { isFaced: true, distance };
+      return {
+        isFaced: (dx * forwardX + dz * forwardZ) / distance > Math.SQRT1_2,
+        distance,
+      };
+    };
+    // The harvest pair first: scatter + pile, resolved by
+    // pileWouldWin inside the faced set.
     const scatter = harvestTargets.find(
       (candidate) => candidate.kind === 'scatter',
     );
-    const pile = piles[0];
-    if (pile && pileWouldWin(pile, scatter, player.x, player.z)) {
-      bus.emit('pile:pickup-requested', { pileId: pile.id });
-      return;
+    const scatterFacing = scatter
+      ? facingOf(scatter.worldX, scatter.worldZ)
+      : null;
+    const scatterDistance = scatter
+      ? (busTargetsRef.current.find((t) => t.id === scatter.id)?.distance ??
+        scatterFacing!.distance)
+      : null;
+    let pairWinner: UseWinner | null = null;
+    const facedPile = piles.find(
+      (pile) => facingOf(pile.x, pile.z).isFaced,
+    );
+    if (facedPile && scatter && scatterFacing!.isFaced) {
+      pairWinner = pileWouldWin(facedPile, scatter, player.x, player.z)
+        ? { kind: 'pile', pile: facedPile, distance: facedPile.distance }
+        : { kind: 'scatter', target: scatter, distance: scatterDistance! };
+    } else if (facedPile) {
+      pairWinner = {
+        kind: 'pile',
+        pile: facedPile,
+        distance: facedPile.distance,
+      };
+    } else if (scatter && scatterFacing!.isFaced) {
+      pairWinner = {
+        kind: 'scatter',
+        target: scatter,
+        distance: scatterDistance!,
+      };
     }
-    const target = scatter ?? harvestTargets[0];
-    if (!target) return;
-    player.pressUse({
-      targetId: target.id,
-      sourceId: target.sourceId,
-      kind: target.kind,
-      x: target.worldX,
-      z: target.worldZ,
-    });
+    // The rest of the field, in tie order (the pair winner
+    // keeps ties — challengers must be strictly nearer).
+    const challengers: UseWinner[] = [];
+    if (trapRowTrap) {
+      const f = facingOf(trapRowTrap.x, trapRowTrap.z);
+      if (f.isFaced) {
+        challengers.push({
+          kind: 'trap',
+          id: trapRowTrap.id,
+          distance: f.distance,
+        });
+      }
+    }
+    if (hiveRowHive) {
+      const f = facingOf(hiveRowHive.x, hiveRowHive.z);
+      if (f.isFaced) {
+        challengers.push({
+          kind: 'hive',
+          x: hiveRowHive.x,
+          z: hiveRowHive.z,
+          distance: f.distance,
+        });
+      }
+    }
+    let siteBest: UseWinner | null = null;
+    const considerSite = (siteId: string, x: number, z: number): void => {
+      const f = facingOf(x, z);
+      if (
+        f.isFaced &&
+        f.distance <= HARVEST_RANGE &&
+        (siteBest === null || f.distance < siteBest.distance)
+      ) {
+        siteBest = { kind: 'site', siteId, distance: f.distance };
+      }
+    };
+    for (const pos of stumpPositions(genRef.current, player.x, player.z)) {
+      considerSite(stumpSiteId(pos.x, pos.z), pos.x, pos.z);
+    }
+    for (const altar of placedAltars) {
+      considerSite(altar.id, altar.x, altar.z);
+    }
+    if (siteBest !== null) challengers.push(siteBest);
+    const considerPlaced = (
+      kind: 'fire' | 'tent' | 'torch',
+      id: string,
+      x: number,
+      z: number,
+    ): void => {
+      const f = facingOf(x, z);
+      if (f.isFaced && f.distance <= HARVEST_RANGE) {
+        challengers.push({ kind, id, distance: f.distance });
+      }
+    };
+    for (const fire of placedFires) {
+      considerPlaced('fire', fire.id, fire.x, fire.z);
+    }
+    for (const tent of placedTents) {
+      considerPlaced('tent', tent.id, tent.x, tent.z);
+    }
+    for (const torch of placedTorches) {
+      considerPlaced('torch', torch.id, torch.x, torch.z);
+    }
+    if (homeHouse !== undefined) {
+      const f = facingOf(homeHouse.x, homeHouse.z);
+      if (f.isFaced) {
+        challengers.push({ kind: 'home', distance: f.distance });
+      }
+    }
+    let winner = pairWinner;
+    for (const challenger of challengers) {
+      if (winner === null || challenger.distance < winner.distance) {
+        winner = challenger;
+      }
+    }
+    if (winner !== null) return winner;
+    // Fallbacks: scry (visible; it has no world position,
+    // so it never outranks a positioned target), then
+    // ground, then nothing.
+    if (scryVisible) return { kind: 'scry', distance: Infinity };
+    const ground = harvestTargets.find(
+      (candidate) => candidate.kind === 'ground',
+    );
+    if (ground) return { kind: 'ground', target: ground, distance: 0 };
+    return null;
   };
 
+  // The USE press itself: fire the winner's common
+  // action through the SAME handler its button, row, or
+  // chip tap calls. Harvest presses go through the
+  // engine's pressUse (the outcome listener re-validates
+  // range + permit, so a stale press fails safely). The
+  // zero-arg player.pressUse() path is NOT used (its
+  // shell query has no callers).
+  const handleUseInteract = (): void => {
+    const player = playerRef.current;
+    if (!player) return;
+    const winner = computeUseWinner();
+    if (winner === null) return;
+    switch (winner.kind) {
+      case 'scatter':
+      case 'ground':
+        player.pressUse({
+          targetId: winner.target.id,
+          sourceId: winner.target.sourceId,
+          kind: winner.target.kind,
+          x: winner.target.worldX,
+          z: winner.target.worldZ,
+        });
+        break;
+      case 'pile':
+        selectedPileIdRef.current = winner.pile.id;
+        setSelectedPileId(winner.pile.id);
+        break;
+      case 'trap':
+        handleCollectTrap(winner.id);
+        break;
+      case 'hive':
+        handleHarvestHive(winner.x, winner.z);
+        break;
+      case 'site':
+        setSelectedSiteId(winner.siteId);
+        break;
+      case 'fire':
+        setSelectedFireId(winner.id);
+        break;
+      case 'tent':
+        setSelectedTentId(winner.id);
+        break;
+      case 'torch':
+        setSelectedTorchId(winner.id);
+        break;
+      case 'home':
+        setHomeMenuOpen(true);
+        break;
+      case 'scry':
+        handleScry();
+        break;
+    }
+  };
+
+  // R — the winner's SECOND action (Adam, 2026-10-29,
+  // tentative made real for the seconds that exist
+  // today): scatter → Remove (the SAME confirm Shift+E
+  // arms — R sits ALONGSIDE Shift+E, which stays as
+  // pinned; the difference is scope: Shift+E reaches
+  // the nearest scatter whatever the winner is, R acts
+  // on the winner); pile → pick up the WHOLE pile on
+  // the existing pickup path (Adam pinned: "R can pick
+  // up the whole pile if possible" — the grant's own
+  // capacity behavior, no second rule); torch → Pick
+  // up; tent → Take down; home → Rest (night-gated
+  // exactly as its menu disables it). Trap, hive, fire,
+  // site, scry, and ground have no second action today:
+  // R is a no-op there (hive Relocate is an unbuilt
+  // seed, named not built).
+  const handleSecondInteract = (): void => {
+    const winner = computeUseWinner();
+    if (winner === null) return;
+    switch (winner.kind) {
+      case 'scatter':
+        setPendingRemoveTarget(winner.target);
+        break;
+      case 'pile':
+        bus.emit('pile:pickup-requested', { pileId: winner.pile.id });
+        break;
+      case 'torch':
+        handleTorchAction(winner.id, 'pick-up');
+        break;
+      case 'tent':
+        handleTentAction(winner.id, 'take-down');
+        break;
+      case 'home': {
+        const rest = homeMenuActions().find((a) => a.id === 'rest');
+        if (rest && rest.disabled !== true) handleHomeMenuAction('rest');
+        break;
+      }
+      default:
+        break;
+    }
+  };
+
+  // MENU KEYS (carried from the buttons landing, as
+  // amended): digits 1-9 fire an open world menu's
+  // actions in render order; Enter confirms an armed
+  // placement. Dispatch precedence among open menus
+  // mirrors the Esc chain's topmost order (home → pile
+  // → torch → tent → fire → site). The ritual panel's
+  // digit dispatch reads the hoisted kind/food lists
+  // below, so the panel and the keys can never disagree
+  // about order. Panel-internal key navigation beyond
+  // digits is OUT (the mouse layer, Adam's call if he
+  // wants it); phone unchanged.
+  const flattenMenuTargets = (
+    actions: ContextAction[],
+  ): { id: string; disabled: boolean }[] =>
+    actions.flatMap((action) =>
+      action.arrows
+        ? action.arrows.map((arrow) => ({
+            id: arrow.id,
+            disabled: arrow.disabled === true,
+          }))
+        : [{ id: action.id, disabled: action.disabled === true }],
+    );
+
+  const dispatchWorldMenuDigit = (digit: number): void => {
+    if (homeMenuOpen) {
+      const target = flattenMenuTargets(homeMenuActions())[digit - 1];
+      if (target && !target.disabled) handleHomeMenuAction(target.id);
+      return;
+    }
+    if (selectedPile !== null) {
+      const target = flattenMenuTargets(pileMenuActions(selectedPile))[
+        digit - 1
+      ];
+      if (target && !target.disabled) {
+        handlePileAction(selectedPile, target.id);
+      }
+      return;
+    }
+    if (selectedTorch !== undefined) {
+      const target = flattenMenuTargets(torchMenuActions())[digit - 1];
+      if (target && !target.disabled) {
+        handleTorchAction(selectedTorch.id, target.id);
+      }
+      return;
+    }
+    if (selectedTent !== undefined) {
+      const target = flattenMenuTargets(tentMenuActions())[digit - 1];
+      if (target && !target.disabled) {
+        handleTentAction(selectedTent.id, target.id);
+      }
+      return;
+    }
+    if (selectedFire !== undefined) {
+      const target = flattenMenuTargets(fireMenuActions(selectedFire))[
+        digit - 1
+      ];
+      if (target && !target.disabled) {
+        handleFireAction(selectedFire.id, target.id);
+      }
+      return;
+    }
+    if (selectedSiteId !== null) {
+      // The ritual panel's buttons are panel-composed,
+      // not ContextActions: unstaged = the kind list;
+      // staged = offering foods, then Speak — the
+      // panel's own render order, from the hoisted
+      // lists the panel renders.
+      const siteId = selectedSiteId;
+      if (selectedSiteStaged === null) {
+        const option = selectedSiteKindOptions[digit - 1];
+        if (option) handleStageBone(siteId, option.kind);
+        return;
+      }
+      if (
+        selectedSiteStaging !== null &&
+        !selectedSiteStaging.completed &&
+        selectedSiteRecipe !== null
+      ) {
+        const bone = selectedSiteStaged.bone;
+        const steps: (() => void)[] = [];
+        if (!selectedSiteStaging.offeringGiven) {
+          for (const food of selectedSiteFoodOptions) {
+            steps.push(() => handleGiveOffering(siteId, bone, food.item));
+          }
+        }
+        if (
+          !selectedSiteStaging.nameSpoken &&
+          nameSightRef.current.looksAt(bone) >=
+            selectedSiteRecipe.spokenName.minLooks
+        ) {
+          steps.push(() => handleSpeakName(siteId, bone));
+        }
+        const step = steps[digit - 1];
+        if (step) step();
+      }
+      return;
+    }
+  };
+
+  // Q: open the nearest chip menu/panel in reach. Every
+  // candidate is range-gated like its row (HARVEST_RANGE)
+  // except home — shelterHouseId is itself the proximity
+  // read (shelter radius), so home competes on true
+  // distance with no second gate. Ties keep the earlier
+  // kind in the pinned order (site → home → pile → fire
+  // → tent → torch): a candidate replaces the best only
+  // when STRICTLY nearer.
   // PC KEYS (Adam, 2026-10-28 — every frequent action without
-  // Esc): E harvests (the shared USE path, same as the touch
-  // USE button), Shift+E arms Remove (confirm dialog), I/K/L
-  // toggle Inventory/Crafting/Charms, P toggles pause.
+  // Esc): E is USE (the shared dispatch above, same as the
+  // touch USE button), Shift+E arms Remove on the nearest
+  // scatter (confirm dialog), R fires the USE target's
+  // second action, I/K/L toggle Inventory/Crafting/Charms,
+  // P toggles pause. Digits fire an open world menu's
+  // actions and Enter confirms an armed placement (the
+  // helpers + dispatch sit directly above). Letter
+  // keys fire with or without Shift (only E reads Shift,
+  // for Remove).
   // Guards: typing (text input/textarea/select focus) swallows
   // everything; paused allows P only (resume); any modal open
   // (Options, intro, trap confirm, remove confirm, first-run
@@ -7447,6 +7832,31 @@ export default function App() {
         return;
       }
       const key = e.key.toLowerCase();
+      // Placement armed: Enter confirms, every other
+      // action key waits (Esc cancels, in the Esc
+      // listener above).
+      if (placement !== null) {
+        if (key === 'enter') handlePlaceConfirm();
+        return;
+      }
+      // A world menu/panel is open: digits fire its
+      // actions in render order, every other key waits
+      // (Esc closes, in the Esc listener above). Above
+      // the panel toggles, mirroring the Esc chain —
+      // menus close before panels.
+      if (
+        homeMenuOpen ||
+        selectedPileId !== null ||
+        selectedTorchId !== null ||
+        selectedTentId !== null ||
+        selectedFireId !== null ||
+        selectedSiteId !== null
+      ) {
+        if (/^[1-9]$/.test(key)) {
+          dispatchWorldMenuDigit(Number(key));
+        }
+        return;
+      }
       if (inventoryOpen || craftingOpen || charmsOpen) {
         if (key === 'i' && inventoryOpen) setInventoryOpen(false);
         else if (key === 'k' && craftingOpen) setCraftingOpen(false);
@@ -7460,6 +7870,8 @@ export default function App() {
           (candidate) => candidate.kind === 'scatter',
         );
         if (scatter) setPendingRemoveTarget(scatter);
+      } else if (key === 'r') {
+        handleSecondInteract();
       } else if (key === 'i') {
         setInventoryOpen((open) => !open);
       } else if (key === 'k') {
@@ -7482,8 +7894,18 @@ export default function App() {
     craftingOpen,
     charmsOpen,
     handleUseInteract,
+    handleSecondInteract,
     openCharmsPanel,
     firstRunDone,
+    placement,
+    handlePlaceConfirm,
+    homeMenuOpen,
+    selectedPileId,
+    selectedTorchId,
+    selectedTentId,
+    selectedFireId,
+    selectedSiteId,
+    dispatchWorldMenuDigit,
   ]);
   // PC-KEYS CLICK (Adam, 2026-10-28): click-to-harvest while
   // pointer-locked — the same shared USE path as E. Gated on
@@ -7693,50 +8115,118 @@ export default function App() {
     return () => cancelAnimationFrame(raf);
   }, []);
 
-  // DESKTOP PILE PICKUP (see the header): the nearest pile,
-  // but only when it would win under the touch USE rules —
-  // otherwise the button would contradict what USE would do.
-  // The tracker already limits piles to 2.5 m and sorts
-  // nearest first, so piles[0] is the candidate; the shared
-  // pileWouldWin rule (scatter-only candidate, ground never
-  // competes; bus distance, shell-computed fallback from
-  // position state, which re-renders on the 10 Hz moved tick
-  // — so the button appears and disappears as she moves).
-  // Null on touch (USE already exists there) and null when
-  // a nearer scatter target wins: harvest that first, then
-  // the pile button appears. Pressing emits
-  // pile:pickup-requested; Systems' listener grants, the
-  // existing subscriber refreshes, saves, and feeds back.
-  // Label names the whole pile (total count) when it holds
-  // many kinds — the grant takes everything, so naming
-  // only the first kind would understate the action.
-  const desktopPilePickup =
-    !isTouch &&
-    pileWouldWin(
-      piles[0],
-      harvestTargets.find((candidate) => candidate.kind === 'scatter'),
-      position.x,
-      position.z,
-    )
-      ? piles[0]
-      : null;
+  // THE SHARED WINNER, computed once per render: the
+  // touch USE label, the desktop pile button, and the
+  // desktop controls hint all read it, so every tell
+  // agrees with what USE/R will do. Position state
+  // (10 Hz tick) drives the re-renders, so the tells
+  // appear and disappear as she moves and turns.
+  const useWinner = computeUseWinner();
 
-  // TOUCH PILE LABEL: the same shared rule, touch-only —
-  // when a pile would win the USE press, the USE button
-  // reads "PICK UP" (see TouchControls interactLabel).
-  // Position state (10 Hz tick) drives it, so the label
-  // appears and disappears as she moves, exactly like the
-  // desktop button.
-  const touchPilePickup =
-    isTouch &&
-    pileWouldWin(
-      piles[0],
-      harvestTargets.find((candidate) => candidate.kind === 'scatter'),
-      position.x,
-      position.z,
-    )
-      ? piles[0]
-      : null;
+  // DESKTOP PILE PICKUP (see the header): the mouse twin
+  // of R's pile second — shown only when the faced
+  // winner IS a pile, so the button never contradicts
+  // the dispatch. Pressing emits pile:pickup-requested
+  // (the existing path); Systems' listener grants, the
+  // existing subscriber refreshes, saves, and feeds
+  // back. Label names the whole pile (total count) when
+  // it holds many kinds — the grant takes everything,
+  // so naming only the first kind would understate it.
+  const desktopPilePickup =
+    !isTouch && useWinner?.kind === 'pile' ? useWinner.pile : null;
+
+  // TOUCH USE LABEL: names the winner's action family
+  // (TouchControls interactLabel; undefined keeps the
+  // plain "USE"). Scatter/ground stay unlabelled — plain
+  // USE is the harvest read she already knows.
+  const useWinnerLabel =
+    useWinner === null
+      ? undefined
+      : useWinner.kind === 'pile'
+        ? 'OPEN'
+        : useWinner.kind === 'trap'
+          ? 'COLLECT'
+          : useWinner.kind === 'hive'
+            ? 'HARVEST'
+            : useWinner.kind === 'site' ||
+                useWinner.kind === 'fire' ||
+                useWinner.kind === 'tent' ||
+                useWinner.kind === 'torch' ||
+                useWinner.kind === 'home'
+              ? 'OPEN'
+              : useWinner.kind === 'scry'
+                ? 'SCRY'
+                : undefined;
+
+  // CONTROLS HINT (Adam, 2026-10-29: "We'll need a
+  // little HUD element for these controls, even as
+  // simple as they are"): the desktop tell for the
+  // target system — a small bottom-center line naming
+  // the faced target and what E (and R, when the target
+  // has a second) will do. Contextual, not a static
+  // legend: it reads the same shared winner, so it can
+  // never promise what the keys won't do, and it is
+  // also R's only tell. Desktop only — the phone's tell
+  // is the touch USE label above. Hidden whenever a
+  // menu, panel, modal, or placement owns the screen.
+  const controlsHint = ((): { target: string; use: string; second?: string } | null => {
+    if (isTouch || useWinner === null || placement !== null) return null;
+    if (
+      inventoryOpen ||
+      craftingOpen ||
+      charmsOpen ||
+      optionsOpen ||
+      introOpen ||
+      pendingTrapRecipe ||
+      pendingRemoveTarget !== null ||
+      paused ||
+      homeMenuOpen ||
+      selectedPileId !== null ||
+      selectedTorchId !== null ||
+      selectedTentId !== null ||
+      selectedFireId !== null ||
+      selectedSiteId !== null
+    ) {
+      return null;
+    }
+    switch (useWinner.kind) {
+      case 'scatter':
+        return {
+          target: useWinner.target.name,
+          use: 'Harvest',
+          second: 'Remove',
+        };
+      case 'ground':
+        return { target: useWinner.target.name, use: 'Harvest' };
+      case 'pile':
+        return { target: 'Pile', use: 'Open', second: 'Pick up pile' };
+      case 'trap':
+        return {
+          target: trapRowTrap?.label ?? 'Trap',
+          use: trapRowTrap?.label.startsWith('Collect') ? 'Collect' : 'Check',
+        };
+      case 'hive':
+        return { target: 'Hive', use: 'Harvest honey' };
+      case 'site':
+        return { target: 'Ritual site', use: 'Open' };
+      case 'fire':
+        return { target: 'Campfire', use: 'Open' };
+      case 'tent':
+        return { target: 'Tent', use: 'Open', second: 'Take down' };
+      case 'torch':
+        return { target: 'Torch', use: 'Open', second: 'Pick up' };
+      case 'home': {
+        const rest = homeMenuActions().find((a) => a.id === 'rest');
+        return {
+          target: 'Home',
+          use: 'Open',
+          second: rest && rest.disabled !== true ? 'Sleep' : undefined,
+        };
+      }
+      case 'scry':
+        return { target: 'Still water', use: 'Scry' };
+    }
+  })();
 
   return (
     <div
@@ -7894,10 +8384,11 @@ export default function App() {
             y={selectedFireAnchor.y}
             interactive
           >
-            <ContextMenu
+            <ContextMenu theme={lookThemes.world}
               objectName={FIRE_NAME[selectedFire.type]}
               header={lightingBarFor(selectedFire)}
               actions={fireMenuActions(selectedFire)}
+              showKeyHints={!isTouch}
               onSelect={(id) => handleFireAction(selectedFire.id, id)}
               onClose={() => setSelectedFireId(null)}
             />
@@ -7909,9 +8400,10 @@ export default function App() {
             y={selectedTorchAnchor.y}
             interactive
           >
-            <ContextMenu
+            <ContextMenu theme={lookThemes.world}
               objectName="Lit Torch"
               actions={torchMenuActions()}
+              showKeyHints={!isTouch}
               onSelect={(id) => handleTorchAction(selectedTorch.id, id)}
               onClose={() => setSelectedTorchId(null)}
             />
@@ -7923,9 +8415,10 @@ export default function App() {
             y={selectedTentAnchor.y}
             interactive
           >
-            <ContextMenu
+            <ContextMenu theme={lookThemes.world}
               objectName="Tent"
               actions={tentMenuActions()}
+              showKeyHints={!isTouch}
               onSelect={(id) => handleTentAction(selectedTent.id, id)}
               onClose={() => setSelectedTentId(null)}
             />
@@ -7937,7 +8430,7 @@ export default function App() {
               type="button"
               onClick={() => setHomeMenuOpen(true)}
               aria-label={`Open ${shelterHouseName ?? 'Home'} menu`}
-              className="flex min-h-[44px] items-center rounded bg-black/50 px-2 py-1 text-sm text-stone-100"
+              className="flex min-h-[44px] items-center rounded-full bg-black/60 px-2 py-1 text-sm text-stone-100"
             >
               {shelterHouseName ?? 'Home'}
             </button>
@@ -7953,7 +8446,7 @@ export default function App() {
               type="button"
               onClick={() => handleUpgradePress(upgradePill)}
               aria-label={`Upgrade ${upgradePill.placedName} to ${upgradePill.carriedName}`}
-              className="flex min-h-[44px] items-center rounded bg-black/50 px-2 py-1 text-sm text-stone-100"
+              className="flex min-h-[44px] items-center rounded-full bg-black/60 px-2 py-1 text-sm text-stone-100"
             >
               Upgrade to {upgradePill.carriedName}
             </button>
@@ -7961,7 +8454,7 @@ export default function App() {
         ) : null}
         {homeMenuOpen && homeHouse !== undefined && homeChipAnchor ? (
           <WorldAnchor x={homeChipAnchor.x} y={homeChipAnchor.y} interactive>
-            <ContextMenu
+            <ContextMenu theme={lookThemes.world}
               objectName={shelterHouseName ?? 'Home'}
               header={
                 <>
@@ -7978,6 +8471,7 @@ export default function App() {
                 </>
               }
               actions={homeMenuActions()}
+              showKeyHints={!isTouch}
               onSelect={(id) => handleHomeMenuAction(id)}
               onClose={() => setHomeMenuOpen(false)}
             />
@@ -7991,7 +8485,7 @@ export default function App() {
             y={selectedSiteAnchor.y}
             interactive
           >
-            <RitualPanel
+            <RitualPanel theme={lookThemes.world}
               siteLabel={selectedSiteLabel}
               staged={
                 selectedSiteStaged !== null &&
@@ -8020,32 +8514,10 @@ export default function App() {
                     })()
                   : null
               }
-              kindOptions={RITUAL_RECIPES.filter(
-                (recipe) =>
-                  charmStateRef.current.tierOf(recipe.boneKind) === 0,
-              ).map((recipe) => ({
-                kind: recipe.boneKind,
-                display: boneDisplayFor(recipe.boneKind),
-                skyLabel:
-                  recipe.sky === 'none'
-                    ? 'Any sky'
-                    : skyLabelFor(recipe.sky),
-              }))}
-              foodOptions={(() => {
-                const byItem = new Map<string, number>();
-                for (const stack of inventory.stacksSnapshot()) {
-                  const id = normalizeItemId(stack.item);
-                  if ((FOOD_ITEMS as readonly string[]).includes(id)) {
-                    byItem.set(id, (byItem.get(id) ?? 0) + stack.quantity);
-                  }
-                }
-                return [...byItem.entries()].map(([id, count]) => ({
-                  item: id,
-                  display: displayNameFor(id),
-                  count,
-                }));
-              })()}
+              kindOptions={selectedSiteKindOptions}
+              foodOptions={selectedSiteFoodOptions}
               note={ritualNote}
+              showKeyHints={!isTouch}
               onStageBone={(kind) =>
                 selectedSiteId !== null &&
                 handleStageBone(selectedSiteId, kind)
@@ -8082,7 +8554,7 @@ export default function App() {
         {progressItems.map((item) => (
           <Fragment key={item.targetId}>
             <WorldAnchor x={item.x} y={item.y}>
-              <InteractionProgress
+              <InteractionProgress theme={lookThemes.dialog}
                 fraction={item.fraction}
                 label={item.label}
               />
@@ -8099,7 +8571,7 @@ export default function App() {
         or above the station's projected center when
         stationAnchor is set; see ProximityHarvestButtons. */}
       <div className="pointer-events-none absolute inset-0 z-40">
-        <ProximityHarvestButtons
+        <ProximityHarvestButtons theme={lookThemes.world}
           targets={harvestTargets}
           harvestedIds={harvestedIds}
           onHarvest={handleHarvest}
@@ -8109,6 +8581,7 @@ export default function App() {
           onCollectTrap={handleCollectTrap}
           hive={hiveRowHive}
           onHarvestHive={handleHarvestHive}
+          showKeyHints={!isTouch}
           lookNode={
             !LOOK_PARKED && lookTarget ? (
               <div className="flex flex-col items-center gap-1">
@@ -8140,6 +8613,25 @@ export default function App() {
               : `Pick up ${displayNameFor(desktopPilePickup.item)} × ${desktopPilePickup.quantity}`}
           </button>
         ) : null}
+        {controlsHint ? (
+          <div className="pointer-events-none absolute bottom-4 left-1/2 flex -translate-x-1/2 items-center gap-2 rounded-full bg-black/45 px-3 py-1.5 text-xs text-[#f0ead6]">
+            <span className="text-[#f0ead6]/70">{controlsHint.target}</span>
+            <span>
+              <span className={'mr-1 ' + KEY_BADGE_CLASS}>
+                E
+              </span>
+              {controlsHint.use}
+            </span>
+            {controlsHint.second ? (
+              <span>
+                <span className={'mr-1 ' + KEY_BADGE_CLASS}>
+                  R
+                </span>
+                {controlsHint.second}
+              </span>
+            ) : null}
+          </div>
+        ) : null}
         {/* PILL FIX: pickup feedback lives HERE, last in the
           z-40 overlay (after the buttons + pile button), so
           it paints ABOVE the menu instead of under it (it
@@ -8165,7 +8657,7 @@ export default function App() {
         on touch (the slot is not gated by collapse).
         It hides only while a panel or the modal is open
         (rule unchanged by the move). */}
-      <HudShell
+      <HudShell theme={lookThemes.world}
         hideNeeds={isTouch && hudCollapsed}
         topReadout={
           !inventoryOpen &&
@@ -8173,7 +8665,7 @@ export default function App() {
           !charmsOpen &&
           !optionsOpen &&
           !introOpen ? (
-            <LocationChip
+            <LocationChip theme={lookThemes.world}
               x={position.x}
               z={position.z}
               biomeName={dominantBiome.name}
@@ -8233,15 +8725,15 @@ export default function App() {
               aria-pressed={inventoryOpen}
               className={
                 isTouch
-                  ? 'rounded bg-[#3a4436] px-3 py-2 text-sm min-h-[44px] hover:bg-[#4a5546]'
-                  : 'rounded bg-[#3a4436] px-3 py-1 text-xs hover:bg-[#4a5546]'
+                  ? 'rounded bg-moss-deep px-3 py-2 text-sm min-h-[44px] hover:bg-moss'
+                  : 'rounded bg-moss-deep px-3 py-1 text-xs hover:bg-moss'
               }
             >
               Inventory
               {!isTouch ? (
                 <span
                   aria-hidden="true"
-                  className="ml-1 rounded border border-stone-500/60 bg-black/30 px-1 font-mono text-[10px]"
+                  className={'ml-1 ' + KEY_BADGE_CLASS}
                 >
                   I
                 </span>
@@ -8253,15 +8745,15 @@ export default function App() {
               aria-pressed={craftingOpen}
               className={
                 isTouch
-                  ? 'rounded bg-[#3a4436] px-3 py-2 text-sm min-h-[44px] hover:bg-[#4a5546]'
-                  : 'rounded bg-[#3a4436] px-3 py-1 text-xs hover:bg-[#4a5546]'
+                  ? 'rounded bg-moss-deep px-3 py-2 text-sm min-h-[44px] hover:bg-moss'
+                  : 'rounded bg-moss-deep px-3 py-1 text-xs hover:bg-moss'
               }
             >
               Crafting
               {!isTouch ? (
                 <span
                   aria-hidden="true"
-                  className="ml-1 rounded border border-stone-500/60 bg-black/30 px-1 font-mono text-[10px]"
+                  className={'ml-1 ' + KEY_BADGE_CLASS}
                 >
                   K
                 </span>
@@ -8273,15 +8765,15 @@ export default function App() {
               aria-pressed={charmsOpen}
               className={
                 isTouch
-                  ? 'rounded bg-[#3a4436] px-3 py-2 text-sm min-h-[44px] hover:bg-[#4a5546]'
-                  : 'rounded bg-[#3a4436] px-3 py-1 text-xs hover:bg-[#4a5546]'
+                  ? 'rounded bg-moss-deep px-3 py-2 text-sm min-h-[44px] hover:bg-moss'
+                  : 'rounded bg-moss-deep px-3 py-1 text-xs hover:bg-moss'
               }
             >
               Charms
               {!isTouch ? (
                 <span
                   aria-hidden="true"
-                  className="ml-1 rounded border border-stone-500/60 bg-black/30 px-1 font-mono text-[10px]"
+                  className={'ml-1 ' + KEY_BADGE_CLASS}
                 >
                   L
                 </span>
@@ -8292,8 +8784,8 @@ export default function App() {
               onClick={() => setOptionsOpen(true)}
               className={
                 isTouch
-                  ? 'rounded bg-[#3a4436] px-3 py-2 text-sm min-h-[44px] hover:bg-[#4a5546]'
-                  : 'rounded bg-[#3a4436] px-3 py-1 text-xs hover:bg-[#4a5546]'
+                  ? 'rounded bg-moss-deep px-3 py-2 text-sm min-h-[44px] hover:bg-moss'
+                  : 'rounded bg-moss-deep px-3 py-1 text-xs hover:bg-moss'
               }
             >
               Options
@@ -8345,7 +8837,7 @@ export default function App() {
                   workstation addition reads 'Workbench'
                   (the panel's own 'workstation' kind),
                   a plain stump reads 'Tree stump'. */}
-              <StationPanel
+              <StationPanel theme={lookThemes.world}
                 stationKind={
                   nearestStump !== null &&
                   stumpState.isWorkbench(nearestStump.x, nearestStump.z)
@@ -8364,7 +8856,7 @@ export default function App() {
             </div>
           ) : null}
           {placement ? (
-            <div className="mt-2 rounded bg-black/50 px-2 py-1 text-sm">
+            <div className="mt-2 rounded bg-black/45 px-2 py-1 text-sm">
               <p>Placing {placement.label} at your feet.</p>
               <div className="mt-1 flex gap-2">
                 {/* UPGRADE PILL: one confirm at a time —
@@ -8376,11 +8868,19 @@ export default function App() {
                     onClick={handlePlaceConfirm}
                     className={
                       isTouch
-                        ? 'rounded bg-[#3a4436] px-3 py-2 text-sm min-h-[44px] hover:bg-[#4a5546]'
-                        : 'rounded bg-[#3a4436] px-2 py-0.5 text-xs hover:bg-[#4a5546]'
+                        ? 'rounded bg-moss-deep px-3 py-2 text-sm min-h-[44px] hover:bg-moss'
+                        : 'rounded bg-moss-deep px-2 py-0.5 text-xs hover:bg-moss'
                     }
                   >
                     Place here
+                    {!isTouch ? (
+                      <span
+                        aria-hidden="true"
+                        className={'ml-1 ' + KEY_BADGE_CLASS}
+                      >
+                        Enter
+                      </span>
+                    ) : null}
                   </button>
                 )}
                 <button
@@ -8388,8 +8888,8 @@ export default function App() {
                   onClick={handlePlaceCancel}
                   className={
                     isTouch
-                      ? 'rounded bg-[#3a4436] px-3 py-2 text-sm min-h-[44px] hover:bg-[#4a5546]'
-                      : 'rounded bg-[#3a4436] px-2 py-0.5 text-xs hover:bg-[#4a5546]'
+                      ? 'rounded bg-moss-deep px-3 py-2 text-sm min-h-[44px] hover:bg-moss'
+                      : 'rounded bg-moss-deep px-2 py-0.5 text-xs hover:bg-moss'
                   }
                 >
                   Cancel
@@ -8414,7 +8914,7 @@ export default function App() {
             <button
               type="button"
               onClick={() => setHudCollapsed(false)}
-              className="min-h-[44px] rounded bg-[#3a4436] px-3 py-2 text-sm hover:bg-[#4a5546]"
+              className="min-h-[44px] rounded bg-moss-deep px-3 py-2 text-sm hover:bg-moss"
             >
               Show HUD
             </button>
@@ -8422,7 +8922,7 @@ export default function App() {
               type="button"
               onClick={() => setInventoryOpen((open) => !open)}
               aria-pressed={inventoryOpen}
-              className="min-h-[44px] rounded bg-[#3a4436] px-3 py-2 text-sm hover:bg-[#4a5546]"
+              className="min-h-[44px] rounded bg-moss-deep px-3 py-2 text-sm hover:bg-moss"
             >
               Inventory
             </button>
@@ -8430,7 +8930,7 @@ export default function App() {
               type="button"
               onClick={() => setCraftingOpen((open) => !open)}
               aria-pressed={craftingOpen}
-              className="min-h-[44px] rounded bg-[#3a4436] px-3 py-2 text-sm hover:bg-[#4a5546]"
+              className="min-h-[44px] rounded bg-moss-deep px-3 py-2 text-sm hover:bg-moss"
             >
               Crafting
             </button>
@@ -8438,14 +8938,14 @@ export default function App() {
               type="button"
               onClick={openCharmsPanel}
               aria-pressed={charmsOpen}
-              className="min-h-[44px] rounded bg-[#3a4436] px-3 py-2 text-sm hover:bg-[#4a5546]"
+              className="min-h-[44px] rounded bg-moss-deep px-3 py-2 text-sm hover:bg-moss"
             >
               Charms
             </button>
             <button
               type="button"
               onClick={() => setOptionsOpen(true)}
-              className="min-h-[44px] rounded bg-[#3a4436] px-3 py-2 text-sm hover:bg-[#4a5546]"
+              className="min-h-[44px] rounded bg-moss-deep px-3 py-2 text-sm hover:bg-moss"
             >
               Options
             </button>
@@ -8466,7 +8966,7 @@ export default function App() {
               setCharmsOpen(false);
             }}
             aria-label="Hide HUD panels to reveal the game"
-            className="pointer-events-auto absolute right-2 top-2 z-40 min-h-[44px] rounded bg-black/50 px-3 py-2 text-sm"
+            className="pointer-events-auto absolute right-2 top-2 z-40 min-h-[44px] rounded bg-black/60 px-3 py-2 text-sm"
           >
             Hide HUD
           </button>
@@ -8483,13 +8983,14 @@ export default function App() {
         }
       >
         {selectedPile ? (
-          <PileInventoryModal
+          <PileInventoryModal theme={lookThemes.world}
             title={
               selectedPile.stacks.length === 1
                 ? `${displayNameFor(selectedPile.stacks[0].item)} × ${selectedPile.stacks[0].quantity}`
                 : `Pile × ${selectedPile.stacks.reduce((sum, stack) => sum + stack.quantity, 0)} (${selectedPile.stacks.length} kinds)`
             }
             actions={pileMenuActions(selectedPile)}
+            showKeyHints={!isTouch}
             onSelect={(id) => handlePileAction(selectedPile, id)}
             onClose={() => {
               selectedPileIdRef.current = null;
@@ -8498,7 +8999,7 @@ export default function App() {
           />
         ) : null}
         {inventoryOpen ? (
-          <InventoryPanel
+          <InventoryPanel theme={lookThemes.world}
             items={inventoryItems.filter(
               (item) => !wornGear.ids.has(normalizeItemId(item.id as ItemId)),
             )}
@@ -8530,7 +9031,7 @@ export default function App() {
           />
         ) : null}
         {craftingOpen ? (
-          <CraftingMenu
+          <CraftingMenu theme={lookThemes.dialog}
             recipes={orderedCraftingRecipes}
             sections={craftingSections}
             stationNote={stationNote}
@@ -8542,7 +9043,7 @@ export default function App() {
           />
         ) : null}
         {charmsOpen ? (
-          <CharmsPanel
+          <CharmsPanel theme={lookThemes.world}
             charms={charmEntries}
             selectedKind={selectedCharmKind}
             onSelectKind={setSelectedCharmKind}
@@ -8551,37 +9052,37 @@ export default function App() {
           />
         ) : null}
         {craftNote ? (
-          <p className="rounded bg-black/50 px-2 py-1 text-xs text-stone-200">
+          <p className="rounded bg-black/45 px-2 py-1 text-xs text-stone-200">
             {craftNote}
           </p>
         ) : null}
         {eatNote ? (
-          <p className="rounded bg-black/50 px-2 py-1 text-xs text-stone-200">
+          <p className="rounded bg-black/45 px-2 py-1 text-xs text-stone-200">
             {eatNote}
           </p>
         ) : null}
         {torchNote ? (
-          <p className="rounded bg-black/50 px-2 py-1 text-xs text-stone-200">
+          <p className="rounded bg-black/45 px-2 py-1 text-xs text-stone-200">
             {torchNote}
           </p>
         ) : null}
         {tentNote ? (
-          <p className="rounded bg-black/50 px-2 py-1 text-xs text-stone-200">
+          <p className="rounded bg-black/45 px-2 py-1 text-xs text-stone-200">
             {tentNote}
           </p>
         ) : null}
         {altarNote ? (
-          <p className="rounded bg-black/50 px-2 py-1 text-xs text-stone-200">
+          <p className="rounded bg-black/45 px-2 py-1 text-xs text-stone-200">
             {altarNote}
           </p>
         ) : null}
         {fireNote ? (
-          <p className="rounded bg-black/50 px-2 py-1 text-xs text-stone-200">
+          <p className="rounded bg-black/45 px-2 py-1 text-xs text-stone-200">
             {fireNote}
           </p>
         ) : null}
         {dropNote ? (
-          <p className="rounded bg-black/50 px-2 py-1 text-xs text-stone-200">
+          <p className="rounded bg-black/45 px-2 py-1 text-xs text-stone-200">
             {dropNote}
           </p>
         ) : null}
@@ -8599,11 +9100,11 @@ export default function App() {
           onKeyDown={(e) => {
             if (e.key === 'Enter') regenerate();
           }}
-          className="bg-[#1e241c] border border-[#3a4436] px-2 py-1 text-xs w-48 outline-none"
+          className="bg-[#1e241c] border border-moss-deep px-2 py-1 text-xs w-48 outline-none"
         />
         <button
           onClick={() => regenerate()}
-          className="bg-[#3a4436] hover:bg-[#4a5546] px-3 py-1 text-xs"
+          className="bg-moss-deep hover:bg-moss px-3 py-1 text-xs"
         >
           Regenerate
         </button>
@@ -8629,13 +9130,13 @@ export default function App() {
           onTurn={applyTurn}
           onLook={applyTouchLook}
           onInteract={handleUseInteract}
-          interactLabel={touchPilePickup ? 'PICK UP' : undefined}
+          interactLabel={useWinnerLabel}
         />
       ) : null}
 
       {/* Options modal (tabbed; Settings first: font + perspective). */}
       {optionsOpen ? (
-        <OptionsModal
+        <OptionsModal theme={lookThemes.world} look={look} onLookChange={handleLookChange}
           font={font}
           onFontChange={handleFontChange}
           perspective={cameraMode}
@@ -8657,7 +9158,7 @@ export default function App() {
         Cancel aborts with nothing consumed. Standalone
         dialog (not Popup) so its Enter/Esc is the single
         path — the App Esc listener yields while it is open. */}
-      <RemoveConfirm
+      <RemoveConfirm theme={lookThemes.world}
         open={pendingRemoveTarget !== null}
         targetName={pendingRemoveTarget?.name ?? ''}
         onConfirm={() => {
@@ -8674,7 +9175,7 @@ export default function App() {
         Renders before the intro modal; Begin opens the
         intro (firstRunDone gate + explicit setIntroOpen). */}
       {firstRunDialogOpen ? (
-        <FirstRunDialog
+        <FirstRunDialog theme={lookThemes.world}
           onBegin={handleFirstRunBegin}
           comfortable={isTouch}
         />
@@ -8685,7 +9186,7 @@ export default function App() {
         (firstRunDone gate). Same z-50 shell as OptionsModal; the two
         never stack (opening the intro closes Options). */}
       {introOpen ? (
-        <IntroModal
+        <IntroModal theme={lookThemes.world}
           onClose={() => setIntroOpen(false)}
           comfortable={isTouch}
         />
@@ -8697,7 +9198,7 @@ export default function App() {
         will be replaced. Confirm parks the current local
         and installs the cloud save (write + reload);
         Cancel (or Esc) changes nothing. */}
-      <Popup
+      <Popup theme={lookThemes.dialog}
         open={cloudPendingBring !== null}
         title="Bring this world here?"
         onClose={() => setCloudPendingBring(null)}
@@ -8727,7 +9228,7 @@ export default function App() {
               <button
                 type="button"
                 className={
-                  'rounded bg-[#3a4436] hover:bg-[#4a5546] px-3 py-1 text-sm text-stone-100 ' +
+                  'rounded bg-moss-deep hover:bg-moss px-3 py-1 text-sm text-stone-100 ' +
                   (isTouch ? 'min-h-[44px] px-3 py-2' : '')
                 }
                 onClick={confirmCloudBring}
@@ -8737,7 +9238,7 @@ export default function App() {
               <button
                 type="button"
                 className={
-                  'rounded bg-[#3a4436] hover:bg-[#4a5546] px-3 py-1 text-sm text-stone-100 ' +
+                  'rounded bg-moss-deep hover:bg-moss px-3 py-1 text-sm text-stone-100 ' +
                   (isTouch ? 'min-h-[44px] px-3 py-2' : '')
                 }
                 onClick={() => setCloudPendingBring(null)}
@@ -8753,7 +9254,7 @@ export default function App() {
         Removing the cloud copy does NOT turn off
         mirroring — the next save copies this world to
         the cloud again (disclosure, required). */}
-      <Popup
+      <Popup theme={lookThemes.dialog}
         open={cloudPendingRemove !== null}
         title="Remove from cloud?"
         onClose={() => setCloudPendingRemove(null)}
@@ -8774,7 +9275,7 @@ export default function App() {
               <button
                 type="button"
                 className={
-                  'rounded bg-[#3a4436] hover:bg-[#4a5546] px-3 py-1 text-sm text-stone-100 ' +
+                  'rounded bg-moss-deep hover:bg-moss px-3 py-1 text-sm text-stone-100 ' +
                   (isTouch ? 'min-h-[44px] px-3 py-2' : '')
                 }
                 onClick={() => {
@@ -8786,7 +9287,7 @@ export default function App() {
               <button
                 type="button"
                 className={
-                  'rounded bg-[#3a4436] hover:bg-[#4a5546] px-3 py-1 text-sm text-stone-100 ' +
+                  'rounded bg-moss-deep hover:bg-moss px-3 py-1 text-sm text-stone-100 ' +
                   (isTouch ? 'min-h-[44px] px-3 py-2' : '')
                 }
                 onClick={() => setCloudPendingRemove(null)}
@@ -8800,7 +9301,7 @@ export default function App() {
 
       {/* Parked restore confirm: the swap — the current
         world parks in turn, so restore never deletes. */}
-      <Popup
+      <Popup theme={lookThemes.dialog}
         open={cloudPendingRestore !== null}
         title="Restore parked save?"
         onClose={() => setCloudPendingRestore(null)}
@@ -8820,7 +9321,7 @@ export default function App() {
               <button
                 type="button"
                 className={
-                  'rounded bg-[#3a4436] hover:bg-[#4a5546] px-3 py-1 text-sm text-stone-100 ' +
+                  'rounded bg-moss-deep hover:bg-moss px-3 py-1 text-sm text-stone-100 ' +
                   (isTouch ? 'min-h-[44px] px-3 py-2' : '')
                 }
                 onClick={confirmCloudRestore}
@@ -8830,7 +9331,7 @@ export default function App() {
               <button
                 type="button"
                 className={
-                  'rounded bg-[#3a4436] hover:bg-[#4a5546] px-3 py-1 text-sm text-stone-100 ' +
+                  'rounded bg-moss-deep hover:bg-moss px-3 py-1 text-sm text-stone-100 ' +
                   (isTouch ? 'min-h-[44px] px-3 py-2' : '')
                 }
                 onClick={() => setCloudPendingRestore(null)}
@@ -8848,7 +9349,7 @@ export default function App() {
         current save, clears the save key, and reloads
         into the first-run dialog; Cancel (or Esc)
         changes nothing. */}
-      <Popup
+      <Popup theme={lookThemes.dialog}
         open={cloudPendingNewGame !== null}
         title="Start a new game?"
         onClose={() => setCloudPendingNewGame(null)}
@@ -8872,7 +9373,7 @@ export default function App() {
               <button
                 type="button"
                 className={
-                  'rounded bg-[#3a4436] hover:bg-[#4a5546] px-3 py-1 text-sm text-stone-100 ' +
+                  'rounded bg-moss-deep hover:bg-moss px-3 py-1 text-sm text-stone-100 ' +
                   (isTouch ? 'min-h-[44px] px-3 py-2' : '')
                 }
                 onClick={confirmNewGame}
@@ -8882,7 +9383,7 @@ export default function App() {
               <button
                 type="button"
                 className={
-                  'rounded bg-[#3a4436] hover:bg-[#4a5546] px-3 py-1 text-sm text-stone-100 ' +
+                  'rounded bg-moss-deep hover:bg-moss px-3 py-1 text-sm text-stone-100 ' +
                   (isTouch ? 'min-h-[44px] px-3 py-2' : '')
                 }
                 onClick={() => setCloudPendingNewGame(null)}
@@ -8900,7 +9401,7 @@ export default function App() {
         Popup shell is the staged dialog (z-50 modal); the
         buttons match the placement banner's touch sizing. */}
       {pendingTrapRecipe ? (
-        <Popup
+        <Popup theme={lookThemes.dialog}
           open={true}
           title="PLACE TRAP HERE?"
           onClose={handleTrapConfirmNo}
@@ -8915,8 +9416,8 @@ export default function App() {
               onClick={handleTrapConfirmYes}
               className={
                 isTouch
-                  ? 'min-h-[44px] rounded bg-[#3a4436] px-3 py-2 text-sm hover:bg-[#4a5546]'
-                  : 'rounded bg-[#3a4436] px-2 py-0.5 text-xs hover:bg-[#4a5546]'
+                  ? 'min-h-[44px] rounded bg-moss-deep px-3 py-2 text-sm hover:bg-moss'
+                  : 'rounded bg-moss-deep px-2 py-0.5 text-xs hover:bg-moss'
               }
             >
               Yes
@@ -8956,7 +9457,7 @@ export default function App() {
       !pendingTrapRecipe &&
       !paused ? (
         <div className="pointer-events-none absolute bottom-12 left-1/2 z-40 -translate-x-1/2">
-          <ScryButton onPress={handleScry} />
+          <ScryButton onPress={handleScry} showKeyHint={!isTouch} />
         </div>
       ) : null}
 
@@ -8975,7 +9476,7 @@ export default function App() {
       !introOpen &&
       !pendingTrapRecipe &&
       !paused ? (
-        <FrogHint
+        <FrogHint theme={lookThemes.world}
           dx={frogHint.dx}
           dz={frogHint.dz}
           distanceMeters={frogHint.distance}
@@ -8999,7 +9500,7 @@ export default function App() {
       !pendingTrapRecipe &&
       pendingRemoveTarget === null &&
       !paused ? (
-        <CrowArrows
+        <CrowArrows theme={lookThemes.world}
           arrows={crowArrows}
           lifted={frogHint !== null || scryVisible}
         />
@@ -9028,7 +9529,7 @@ export default function App() {
           <p
             className={
               'whitespace-nowrap rounded px-2 py-1 text-xs text-stone-100 ' +
-              UI_THEMES['mire'].overlay
+              UI_THEMES[lookThemes.world].overlay
             }
           >
             {nearestScatter.name}
@@ -9053,7 +9554,7 @@ export default function App() {
       !pendingTrapRecipe &&
       pendingRemoveTarget === null &&
       !paused ? (
-        <AnimalTag
+        <AnimalTag theme={lookThemes.world}
           getAnimals={() => rendererRef.current?.getVisibleAnimals() ?? []}
           getPlayerPos={() => {
             const player = playerRef.current;
@@ -9077,7 +9578,7 @@ export default function App() {
       !introOpen &&
       !pendingTrapRecipe &&
       !firstRunDialogOpen ? (
-        <p className="pointer-events-none absolute bottom-2 right-2 z-30 rounded bg-black/50 px-2 py-1 text-xs text-stone-300">
+        <p className="pointer-events-none absolute bottom-2 right-2 z-30 rounded bg-black/45 px-2 py-1 text-xs text-stone-300">
           Esc — Options
         </p>
       ) : null}

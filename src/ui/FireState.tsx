@@ -127,7 +127,7 @@ export function FireState({
       </>
     );
   const style =
-    'flex items-center gap-2 rounded bg-black/50 px-2 py-1 text-sm text-stone-100 ' +
+    'flex items-center gap-2 rounded bg-black/45 px-2 py-1 text-sm text-stone-100 ' +
     (className ?? '');
   if (onSelect) {
     return (

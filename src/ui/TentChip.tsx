@@ -32,7 +32,7 @@ export function TentChip({ onSelect }: TentChipProps) {
         e.stopPropagation();
       }}
       aria-label="Tent"
-      className="pointer-events-auto flex min-h-[44px] items-center gap-2 rounded bg-black/50 px-2 py-1 text-sm text-stone-100"
+      className="pointer-events-auto flex min-h-[44px] items-center gap-2 rounded-full bg-black/60 px-2 py-1 text-sm text-stone-100"
     >
       Tent
     </button>

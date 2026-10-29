@@ -118,7 +118,7 @@ export function HungerIndicator({
     <div
       aria-label={label}
       className={
-        'flex flex-col gap-0.5 rounded bg-black/50 px-2 py-1 text-sm text-stone-100 ' +
+        'flex flex-col gap-0.5 rounded bg-black/45 px-2 py-1 text-sm text-stone-100 ' +
         (className ?? '')
       }
     >

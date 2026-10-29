@@ -49,7 +49,7 @@ export function ForageHint({ stage }: ForageHintProps) {
   return (
     <div
       aria-label="Forage hint"
-      className="mt-2 rounded bg-black/50 px-2 py-1 text-sm text-stone-100"
+      className="mt-2 rounded bg-black/45 px-2 py-1 text-sm text-stone-100"
     >
       Forage: brush → elderberries · bog growth → bog berries · ground
       acorns → acorns (cook first).

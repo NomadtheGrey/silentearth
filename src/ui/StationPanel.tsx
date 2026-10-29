@@ -85,7 +85,7 @@ export function StationPanel({
     ? 'rounded px-3 py-2 text-sm min-h-[44px] ' + t.primary
     : 'rounded px-3 py-1 text-sm ' + t.primary;
   return (
-    <section aria-label={`Station: ${name}`} className={'rounded p-3 ' + t.panel}>
+    <section aria-label={`Station: ${name}`} className={'rounded-2xl p-3 ' + t.panel}>
       <h2 className="font-medium">{name}</h2>
       <div className="mt-2 flex flex-col gap-2">
         {actions.map((action) => (

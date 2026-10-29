@@ -375,7 +375,7 @@ export function TouchControls({
           interactLabel ??
           'Use: interact with the nearest in-range target'
         }
-        className="pointer-events-auto absolute bottom-32 left-1/2 flex h-16 w-16 -translate-x-1/2 touch-none items-center justify-center whitespace-nowrap rounded-full border-2 border-[#f0ead6]/80 bg-[#3a4436]/90 text-sm font-bold text-[#f0ead6]"
+        className="pointer-events-auto absolute bottom-32 left-1/2 flex h-16 w-16 -translate-x-1/2 touch-none items-center justify-center whitespace-nowrap rounded-full border-2 border-[#f0ead6]/80 bg-moss-deep/90 text-sm font-bold text-[#f0ead6]"
         onTouchStart={(e) => {
           e.preventDefault();
           onInteract?.();

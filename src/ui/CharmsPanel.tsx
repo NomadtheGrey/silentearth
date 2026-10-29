@@ -55,8 +55,8 @@ export function CharmsPanel({
 }: CharmsPanelProps) {
   const t = UI_THEMES[theme];
   const rowBtn = comfortable
-    ? 'rounded bg-[#3a4436] px-3 py-2 text-sm min-h-[44px] w-full text-left hover:bg-[#4a5546]'
-    : 'rounded bg-[#3a4436] px-2 py-1 text-xs w-full text-left hover:bg-[#4a5546]';
+    ? 'rounded bg-moss-deep px-3 py-2 text-sm min-h-[44px] w-full text-left hover:bg-moss'
+    : 'rounded bg-moss-deep px-2 py-1 text-xs w-full text-left hover:bg-moss';
   const closeBtn = comfortable
     ? 'rounded px-3 py-2 text-sm min-h-[44px] ' + t.button
     : 'rounded px-2 py-1 text-sm ' + t.button;
@@ -65,7 +65,7 @@ export function CharmsPanel({
       ? undefined
       : charms.find((charm) => charm.kind === selectedKind);
   return (
-    <section aria-label="Charms" className={'rounded p-3 ' + t.panel}>
+    <section aria-label="Charms" className={'rounded-2xl p-3 ' + t.panel}>
       <div className="mb-1 flex items-center justify-between gap-2">
         <h2 className={'text-base font-semibold ' + t.heading}>Charms</h2>
         {onClose ? (

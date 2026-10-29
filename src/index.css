@@ -1,5 +1,15 @@
 @import "tailwindcss";
 
+/* Named palette tokens (beautification pass, 2026-10-29):
+   the touch/HUD moss greens that used to be raw hex
+   arbitrary values scattered across App + panels.
+   moss-deep #3a4436, moss #4a5546 — same colours, one
+   name each, so the palette can move in one place. */
+@theme {
+  --color-moss-deep: #3a4436;
+  --color-moss: #4a5546;
+}
+
 /* UI font families (Options modal font setting). Each carries a
    serif fallback stack if the webfont fails to load; the 3D
    canvas never uses these classes. */

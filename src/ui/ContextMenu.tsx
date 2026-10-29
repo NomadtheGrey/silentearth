@@ -18,7 +18,7 @@
 
 import type { ReactNode } from 'react';
 import type { ContextAction } from './types';
-import { UI_THEMES, type UiThemeName } from './themes';
+import { KEY_BADGE_CLASS, UI_THEMES, type UiThemeName } from './themes';
 
 export interface ContextMenuProps {
   /** The object the menu belongs to, in the caller's words. */
@@ -33,6 +33,16 @@ export interface ContextMenuProps {
   header?: ReactNode;
   /** Id of the highlighted action, if any. Undefined = none. */
   selectedActionId?: string;
+  /**
+   * Show PC digit badges (button-keys map, Adam
+   * 2026-10-29): every dispatchable button numbered in
+   * the shell's digit-dispatch flatten order (actions
+   * in order; an arrows row contributes its arrows in
+   * order), capped at 9. Caller passes !isTouch. Hint
+   * only — the header Close button is never numbered
+   * (Esc closes). Default false = no badges.
+   */
+  showKeyHints?: boolean;
   /** Called when the player picks an action. Optional. */
   onSelect?: (id: string) => void;
   /** Called when the menu is closed. Optional. */
@@ -46,13 +56,24 @@ export function ContextMenu({
   actions,
   header,
   selectedActionId,
+  showKeyHints = false,
   onSelect,
   onClose,
   theme = 'mire',
 }: ContextMenuProps) {
   const t = UI_THEMES[theme];
+  // Digit-badge counter, consumed in render order by
+  // the action rows below (see the prop doc): a plain
+  // action takes one number, an arrows row takes one
+  // per arrow. Beyond 9 there is no digit, so no badge.
+  let hintCount = 0;
+  const nextHint = (): number | null => {
+    hintCount += 1;
+    return showKeyHints && hintCount <= 9 ? hintCount : null;
+  };
+  const hintClass = 'ml-1 ' + KEY_BADGE_CLASS;
   return (
-    <section aria-label={`${objectName} actions`} className={'w-56 max-h-[70vh] overflow-y-auto rounded p-2 ' + t.panel}>
+    <section aria-label={`${objectName} actions`} className={'w-56 max-h-[70vh] overflow-y-auto rounded-2xl p-2 ' + t.panel}>
       <div className="mb-1 flex items-center justify-between gap-2">
         <h2 className={'text-sm font-semibold ' + t.heading}>{objectName}</h2>
         {onClose ? (
@@ -93,18 +114,26 @@ export function ContextMenu({
                       ) : null}
                     </span>
                     <span className="mt-1 flex gap-1">
-                      {action.arrows.map((arrow) => (
-                        <button
-                          key={arrow.id}
-                          type="button"
-                          disabled={arrow.disabled}
-                          onClick={() => onSelect?.(arrow.id)}
-                          aria-label={arrow.ariaLabel}
-                          className="min-h-[44px] min-w-[44px] flex-1 rounded text-base disabled:cursor-not-allowed disabled:opacity-40 hover:bg-stone-800"
-                        >
-                          <span aria-hidden="true">{arrow.glyph}</span>
-                        </button>
-                      ))}
+                      {action.arrows.map((arrow) => {
+                        const hint = nextHint();
+                        return (
+                          <button
+                            key={arrow.id}
+                            type="button"
+                            disabled={arrow.disabled}
+                            onClick={() => onSelect?.(arrow.id)}
+                            aria-label={arrow.ariaLabel}
+                            className="min-h-[44px] min-w-[44px] flex-1 rounded text-base disabled:cursor-not-allowed disabled:opacity-40 hover:bg-stone-800"
+                          >
+                            <span aria-hidden="true">{arrow.glyph}</span>
+                            {hint !== null ? (
+                              <span aria-hidden="true" className={hintClass}>
+                                {hint}
+                              </span>
+                            ) : null}
+                          </button>
+                        );
+                      })}
                     </span>
                     {action.disabledNote ? (
                       <span className={'mt-0.5 block text-xs ' + t.muted}>
@@ -115,6 +144,7 @@ export function ContextMenu({
                 </li>
               );
             }
+            const hint = nextHint();
             return (
               <li key={action.id}>
                 <button
@@ -128,7 +158,14 @@ export function ContextMenu({
                   }
                 >
                   <span className="flex items-baseline justify-between gap-2">
-                    <span>{action.label}</span>
+                    <span>
+                      {action.label}
+                      {hint !== null ? (
+                        <span aria-hidden="true" className={hintClass}>
+                          {hint}
+                        </span>
+                      ) : null}
+                    </span>
                     {action.hint ? (
                       <span className={t.muted}>{action.hint}</span>
                     ) : null}

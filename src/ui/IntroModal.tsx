@@ -87,7 +87,7 @@ export function IntroModal({
       <section
         aria-label="Introduction"
         className={
-          'absolute flex flex-col overflow-hidden rounded ' +
+          'absolute flex flex-col overflow-hidden rounded-2xl ' +
           t.panel +
           (comfortable
             ? ' left-2 right-2 bottom-2 max-h-[70vh]'

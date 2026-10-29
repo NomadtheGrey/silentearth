@@ -124,8 +124,8 @@ export function WornList({
   className,
 }: WornListProps) {
   const actionBtn = comfortable
-    ? 'pointer-events-auto rounded bg-[#3a4436] px-3 py-2 text-sm min-h-[44px] hover:bg-[#4a5546]'
-    : 'pointer-events-auto rounded bg-[#3a4436] px-2 py-0.5 text-xs hover:bg-[#4a5546]';
+    ? 'pointer-events-auto rounded bg-moss-deep px-3 py-2 text-sm min-h-[44px] hover:bg-moss'
+    : 'pointer-events-auto rounded bg-moss-deep px-2 py-0.5 text-xs hover:bg-moss';
   return (
     <div
       aria-label="Wardrobe"

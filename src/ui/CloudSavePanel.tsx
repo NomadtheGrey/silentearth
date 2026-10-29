@@ -102,10 +102,10 @@ export function CloudSavePanel({
   const [renameInput, setRenameInput] = useState(currentName ?? '');
 
   const buttonClass =
-    'rounded bg-[#3a4436] hover:bg-[#4a5546] px-3 py-1 text-sm text-stone-100 disabled:opacity-50 ' +
+    'rounded bg-moss-deep hover:bg-moss px-3 py-1 text-sm text-stone-100 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime-200/70 ' +
     (comfortable ? 'min-h-[44px] px-3 py-2' : '');
   const inputClass =
-    'bg-[#1e241c] border border-[#3a4436] px-2 py-1 text-sm text-stone-100 outline-none ' +
+    'bg-[#1e241c] border border-moss-deep px-2 py-1 text-sm text-stone-100 outline-none ' +
     (comfortable ? 'min-h-[44px]' : '');
 
   let syncLine = 'Cloud off';
@@ -369,7 +369,7 @@ export function CloudSavePanel({
         branches above, so it shows whether cloud is on,
         off, or wordless. The App handler owns the
         confirm + park; this button only asks. */}
-      <div className="flex flex-col gap-1 border-t border-[#3a4436] pt-3">
+      <div className="flex flex-col gap-1 border-t border-moss-deep pt-3">
         <button
           type="button"
           className={buttonClass + ' self-start'}
@@ -386,7 +386,7 @@ export function CloudSavePanel({
 
       {busy ? <p className="text-xs opacity-70">Working…</p> : null}
       {note !== null ? (
-        <p className="rounded bg-black/50 px-2 py-1 text-xs text-stone-200">
+        <p className="rounded bg-black/45 px-2 py-1 text-xs text-stone-200">
           {note}
         </p>
       ) : null}

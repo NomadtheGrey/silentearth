@@ -9,7 +9,8 @@
  * scaffold: OPTIONS_TABS lists the tabs, and adding a later
  * tab means adding one entry plus its panel branch — no other
  * tab and no other setting is invented here. The Settings tab
- * holds exactly one setting for now: the UI font dropdown.
+ * holds the UI font dropdown and (beautification phase 2,
+ * 2026-10-29) the Look dropdown beside it.
  * The SECOND tab is Build history (Adam, 2026-10-26): the
  * recent build records from buildHistory.ts, newest first,
  * capped at 20, each with what changed, why, the date, and
@@ -49,7 +50,7 @@ import {
   CloudSavePanel,
   type CloudSavePanelProps,
 } from './CloudSavePanel';
-import { UI_THEMES, type UiThemeName } from './themes';
+import { UI_THEMES, type UiLookId, type UiThemeName } from './themes';
 import { BUILD_HISTORY } from './buildHistory';
 import { CameraToggle } from './CameraToggle';
 import type { CameraPerspective } from './types';
@@ -93,12 +94,69 @@ export function loadFontChoice(): FontId {
 
 /** Persist the font choice in its own settings key. */
 export function saveFontChoice(font: FontId): void {
+  writeSettings({ font });
+}
+
+/**
+ * Merge-write the settings key (font + look share it,
+ * 2026-10-29): each saver preserves the other choice
+ * instead of overwriting the whole record.
+ */
+function writeSettings(patch: Record<string, string>): void {
   try {
-    window.localStorage.setItem(SETTINGS_KEY, JSON.stringify({ font }));
+    let current: Record<string, unknown> = {};
+    const raw = window.localStorage.getItem(SETTINGS_KEY);
+    if (raw) {
+      const parsed: unknown = JSON.parse(raw);
+      if (typeof parsed === 'object' && parsed !== null) {
+        current = parsed as Record<string, unknown>;
+      }
+    }
+    window.localStorage.setItem(
+      SETTINGS_KEY,
+      JSON.stringify({ ...current, ...patch }),
+    );
   } catch {
     // Private mode or blocked storage: the choice still applies
     // for this session; it simply will not survive a refresh.
   }
+}
+
+export const LOOK_OPTIONS: Array<{ id: UiLookId; label: string }> = [
+  { id: 'mire-hearth', label: 'Mire & Hearth' },
+  { id: 'parchment', label: 'Parchment & Ink' },
+  { id: 'ember', label: 'Ember Night' },
+];
+
+/** No stored choice reads as the current look. */
+export const DEFAULT_LOOK_ID: UiLookId = 'mire-hearth';
+
+const LOOK_IDS = new Set<string>(LOOK_OPTIONS.map((option) => option.id));
+
+/** Read the stored look choice; anything unreadable is the default. */
+export function loadLookChoice(): UiLookId {
+  try {
+    const raw = window.localStorage.getItem(SETTINGS_KEY);
+    if (!raw) return DEFAULT_LOOK_ID;
+    const parsed: unknown = JSON.parse(raw);
+    if (
+      typeof parsed === 'object' &&
+      parsed !== null &&
+      'look' in parsed &&
+      typeof (parsed as { look: unknown }).look === 'string' &&
+      LOOK_IDS.has((parsed as { look: string }).look)
+    ) {
+      return (parsed as { look: UiLookId }).look;
+    }
+  } catch {
+    // Corrupt or unavailable storage reads as the default.
+  }
+  return DEFAULT_LOOK_ID;
+}
+
+/** Persist the look choice in the shared settings key. */
+export function saveLookChoice(look: UiLookId): void {
+  writeSettings({ look });
 }
 
 /** Root font class for a choice (defined in src/index.css). */
@@ -129,6 +187,10 @@ export interface OptionsModalProps {
   font: FontId;
   /** Called when the player picks a font. */
   onFontChange?: (font: FontId) => void;
+  /** Current UI look choice, owned by the caller. */
+  look: UiLookId;
+  /** Called when the player picks a look. */
+  onLookChange?: (look: UiLookId) => void;
   /**
    * Current camera perspective, owned by the caller.
    * Omitted = no Perspective section (the modal stays usable
@@ -166,6 +228,8 @@ export interface OptionsModalProps {
 export function OptionsModal({
   font,
   onFontChange,
+  look,
+  onLookChange,
   perspective,
   onPerspectiveChange,
   onShowIntro,
@@ -198,7 +262,7 @@ export function OptionsModal({
       <section
         aria-label="Options"
         className={
-          'absolute flex flex-col overflow-hidden rounded ' +
+          'absolute flex flex-col overflow-hidden rounded-2xl ' +
           t.panel +
           (comfortable
             ? ' left-2 right-2 bottom-2 max-h-[70vh]'
@@ -276,6 +340,30 @@ export function OptionsModal({
               <p className={'mt-3 text-lg ' + fontClassFor(font)}>
                 {selectedLabel}
               </p>
+              <label
+                htmlFor="options-look"
+                className={'mb-1 mt-4 block text-sm font-medium ' + t.heading}
+              >
+                Look
+              </label>
+              <select
+                id="options-look"
+                value={look}
+                onChange={(e) => onLookChange?.(e.target.value as UiLookId)}
+                className={
+                  'w-full rounded bg-[#121612] px-3 text-stone-100 ' +
+                  (comfortable ? 'py-2 text-base min-h-[44px]' : 'py-1 text-sm')
+                }
+              >
+                {LOOK_OPTIONS.map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+              <p className={'mt-2 text-sm ' + t.muted}>
+                Saved on this device — a refresh keeps your look.
+              </p>
               {perspective !== undefined ? (
                 <div className="mt-4">
                   <p
@@ -287,6 +375,7 @@ export function OptionsModal({
                     perspective={perspective}
                     comfortable={comfortable}
                     onChange={onPerspectiveChange}
+                    theme={theme}
                   />
                 </div>
               ) : null}
