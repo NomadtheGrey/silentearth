@@ -47,6 +47,8 @@ import type { ScatterKind } from '../types';
 import type { MeshSpec } from './objects';
 import type { AnimalKind } from './animals';
 import { hashSeed, mulberry32 } from './seed';
+import { sunDirection, sunElevationAtCycle } from './sky';
+import { dayFraction } from './weather';
 
 /** Ground-cover disc radii per kind (disc-shaped sources only). */
 /** Ground-disc radii by scatter kind (shared with waterProximity's pond edge). */
@@ -473,11 +475,14 @@ export function buildKindGeometry(spec: MeshSpec, kind: ScatterKind): THREE.Buff
         part(cyl(0.06, 0.06, 0.02, 8), e, { p: [0, 0.48, 0] }),
       ]);
     case 'flowerTallDisc':
-      // Tall sunflower: tall thick stem + large disc + dark centre.
+      // Tall sunflower STEM ONLY (Adam, 2026-10-29, pinned): the
+      // stem stands 2.0 m and the head is a separate pivot
+      // geometry the renderer aims at the sun — see
+      // buildSunflowerHeadGeometry below. (Before: a 1.0 m stem
+      // with the disc baked horizontal at the top, a plate
+      // facing the sky.)
       return merge([
-        part(cyl(0.03, 0.04, 1.0, 4), STEM_GREEN, { p: [0, 0.5, 0] }),
-        part(cyl(0.3, 0.3, 0.04, 10), c, { p: [0, 1.02, 0] }),
-        part(sphere(0.1, 8, 6), e, { p: [0, 1.06, 0] }),
+        part(cyl(0.035, 0.05, SUNFLOWER_STEM_HEIGHT_M, 5), STEM_GREEN, { p: [0, SUNFLOWER_STEM_HEIGHT_M / 2, 0] }),
       ]);
     case 'flowerTrillium':
       // White trillium: low stem + 3 white petal discs in a triangle
@@ -536,6 +541,99 @@ export function buildKindGeometry(spec: MeshSpec, kind: ScatterKind): THREE.Buff
       ]);
     }
   }
+}
+
+// ---------------------------------------------------------------------------
+// Tall sunflower head (Adam, 2026-10-29, pinned Option A): the stem
+// above is ordinary static scatter; the HEAD is a separate pivot
+// geometry, instanced per chunk by the renderer and re-aimed at the
+// sun on the renderer's 2 s world tick. Everything here is a pure
+// function of the worldgen object + the sky cycle — deterministic,
+// no RNG, no saved state.
+// ---------------------------------------------------------------------------
+
+/** Stem height in metres (Adam PINNED 2.0, 2026-10-29): the head
+ *  centre rides at this height x instance scale — above her 1.7 m
+ *  eye line at scale 1.0, up to 2.8 m at the top of the scale range. */
+export const SUNFLOWER_STEM_HEIGHT_M = 2.0;
+
+/** Head pitch clamp (DRAFT radians, 55°): a face tilts toward the
+ *  sun but never past flower-plausible, and never nods below
+ *  upright — it reads as trying, not as a radar dish. */
+const SUNFLOWER_MAX_PITCH_RAD = (55 * Math.PI) / 180;
+/** Night rest pitch (DRAFT, 5°): near-upright, facing east. */
+const SUNFLOWER_NIGHT_PITCH_RAD = (5 * Math.PI) / 180;
+
+/**
+ * The sunflower head, built around its own pivot (the origin),
+ * facing local +z: petal disc (r 0.3, the size it always was)
+ * standing in the facing plane, the dark centre dome proud of the
+ * face, and a short neck stub behind meeting the stem top.
+ * Colours ride the source spec, like every other kind geometry.
+ */
+export function buildSunflowerHeadGeometry(spec: MeshSpec): THREE.BufferGeometry {
+  const c = spec.color;
+  const e = spec.extraColor ?? c;
+  return merge([
+    part(cyl(0.3, 0.3, 0.04, 12), c, { r: [Math.PI / 2, 0, 0] }),
+    part(sphere(0.13, 8, 6), e, { p: [0, 0, 0.02], s: [1, 1, 0.45] }),
+    part(cyl(0.028, 0.028, 0.1, 5), STEM_GREEN, { r: [Math.PI / 2, 0, 0], p: [0, 0, -0.06] }),
+  ]);
+}
+
+/**
+ * Where every sunflower head aims at a sky-cycle position:
+ * yaw follows the sun's azimuth (the codebase facing convention,
+ * atan2(x, z)); pitch is the sun's elevation clamped to
+ * [0, SUNFLOWER_MAX_PITCH_RAD]. At night (sun below the horizon)
+ * the target RESTS facing east, near-upright — young sunflowers
+ * re-face east overnight; there is nothing to face in the dark.
+ */
+export function sunflowerHeadOrientation(
+  cycleT: number,
+  month: number,
+): { yaw: number; pitch: number } {
+  const elev = sunElevationAtCycle(cycleT, month);
+  if (elev <= 0) {
+    return { yaw: Math.PI / 2, pitch: SUNFLOWER_NIGHT_PITCH_RAD };
+  }
+  const dir = sunDirection(cycleT / dayFraction(month), month);
+  return {
+    yaw: Math.atan2(dir.x, dir.z),
+    pitch: Math.min(elev, SUNFLOWER_MAX_PITCH_RAD),
+  };
+}
+
+/**
+ * Compose one head's instance matrix: position at the stem top
+ * (obj.y + STEM_HEIGHT x effective scale), orientation from
+ * sunflowerHeadOrientation plus a small deterministic per-head
+ * yaw jitter (from the object's own rotY) so a field reads grown,
+ * not cloned. effectiveScale is the renderer's composed instance
+ * scale (obj.scale, x SHRINK_SCALE while regrowing) — the same
+ * scale its stem renders at, so a regrowing sunflower's head
+ * rides its shrunk stem instead of floating.
+ */
+export function sunflowerHeadMatrix(
+  obj: { x: number; y: number; z: number; rotY: number },
+  effectiveScale: number,
+  orientation: { yaw: number; pitch: number },
+  out: THREE.Matrix4,
+): THREE.Matrix4 {
+  const jitter = Math.sin(obj.rotY * 12.9898) * 0.08;
+  const q = new THREE.Quaternion().setFromEuler(
+    new THREE.Euler(-orientation.pitch, orientation.yaw + jitter, 0, 'YXZ'),
+  );
+  out.compose(
+    new THREE.Vector3(
+      obj.x,
+      obj.y + SUNFLOWER_STEM_HEIGHT_M * effectiveScale,
+      obj.z,
+    ),
+    q,
+    new THREE.Vector3(effectiveScale, effectiveScale, effectiveScale),
+  );
+  return out;
 }
 
 /** Shared vertex-colored material for merged kind geometry. */

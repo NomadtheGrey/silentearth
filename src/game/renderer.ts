@@ -27,7 +27,7 @@ import type { WorldGen } from './worldgen';
 import { PlayerController } from './player';
 import { marshWeight } from './biomes';
 import { SOURCE_FOR_KIND } from './objects';
-import { buildAltarGroup, buildAnimal, buildCampArrow, buildCandle, buildEdgeArrow, buildKindGeometry, buildStagedBone, buildTorch, buildUmbrella, buildWitch, CANDLE_FLAME_Y, TORCH_FLAME_Y, vertexLambert } from './models';
+import { buildAltarGroup, buildAnimal, buildCampArrow, buildCandle, buildEdgeArrow, buildKindGeometry, buildStagedBone, buildSunflowerHeadGeometry, buildTorch, buildUmbrella, buildWitch, CANDLE_FLAME_Y, sunflowerHeadMatrix, sunflowerHeadOrientation, TORCH_FLAME_Y, vertexLambert } from './models';
 import { spawnAnimalsForChunk, updateAnimal } from './animals';
 import type { AnimalInstance, AnimalKind } from './animals';
 import { crowGlowIntensity, CROW_GLOW_EMISSIVE } from './crow';
@@ -185,6 +185,14 @@ const KIND_RENDER: Record<ScatterKind, KindRender> = (() => {
   return table;
 })();
 
+/** Tall-sunflower head geometry, built once and shared by every
+ *  chunk's head InstancedMesh (the KIND_RENDER perf model). */
+let sunflowerHeadGeometryCache: THREE.BufferGeometry | null = null;
+function sunflowerHeadGeometry(): THREE.BufferGeometry {
+  sunflowerHeadGeometryCache ??= buildSunflowerHeadGeometry(SOURCE_FOR_KIND.sunflower.mesh);
+  return sunflowerHeadGeometryCache;
+}
+
 /** Shared river water material (one band, translucent like standing water). */
 const RIVER_MATERIAL = new THREE.MeshLambertMaterial({
   color: 0x35708c,
@@ -200,6 +208,19 @@ interface LoadedChunk {
   river: THREE.Mesh | null;
   /** Ambient animals: instance state (animals.ts) + its group. */
   animals: { instance: AnimalInstance; group: THREE.Group }[];
+  /**
+   * Tall-sunflower heads (Adam, 2026-10-29): a second InstancedMesh
+   * carrying only the pivot heads, re-aimed at the sun on the world
+   * tick (see aimSunflowerHeads). The mesh also sits in `meshes`,
+   * so unload disposal is the ordinary path, and this record is
+   * the whole registry — it dies with the chunk.
+   */
+  sunflowerHeads: {
+    mesh: THREE.InstancedMesh;
+    objs: { kind: string; x: number; y: number; z: number; scale: number; rotY: number }[];
+    cx: number;
+    cz: number;
+  } | null;
 }
 
 /**
@@ -1021,6 +1042,24 @@ export class WorldRenderer {
       // (models.ts), so one instanced mesh carries the whole model.
     }
 
+    // Tall-sunflower heads (Adam, 2026-10-29): the ONE exception
+    // to the merged-geometry rule above — a head must TURN, so it
+    // rides its own InstancedMesh (same shared-material model),
+    // aimed by aimSunflowerHeads at build and on every world
+    // tick. The stem above is the ordinary static kind mesh.
+    let sunflowerHeads: LoadedChunk['sunflowerHeads'] = null;
+    const sunflowerObjs = byKind.get('sunflower');
+    if (sunflowerObjs && sunflowerObjs.length > 0) {
+      const headMesh = new THREE.InstancedMesh(
+        sunflowerHeadGeometry(),
+        KIND_RENDER.sunflower.material,
+        sunflowerObjs.length,
+      );
+      group.add(headMesh);
+      meshes.push(headMesh);
+      sunflowerHeads = { mesh: headMesh, objs: sunflowerObjs, cx, cz };
+    }
+
     // River: the world's winding water band (Adam 2026-10-27,
     // visibility only). One ribbon segment per chunk, quads
     // owned by midpoint — no overlaps, no gaps at borders.
@@ -1077,7 +1116,8 @@ export class WorldRenderer {
     }
 
     this.scene.add(group);
-    this.chunks.set(key, { group, meshes, ground, river, animals });
+    this.chunks.set(key, { group, meshes, ground, river, animals, sunflowerHeads });
+    this.aimSunflowerHeads();
     bus.emit('world:chunkLoaded', { cx, cz, objectCount: data.objects.length });
   }
 
@@ -1156,6 +1196,41 @@ export class WorldRenderer {
     // is pause-safe by construction).
     const sky = this.snapshotSky();
     if (sky) trapState.checkHour(sky.cycleT);
+    // Sunflower heads re-aim on the same 2 s boundary (below).
+    this.aimSunflowerHeads();
+  }
+
+  /**
+   * Aim every loaded sunflower head at the sun (Adam, 2026-10-29):
+   * recompose each head instance's matrix from the sky cycle —
+   * called at chunk load and on every world tick (2 s), never per
+   * frame, and never while paused (the tick halts with the loop).
+   * Each head's effective scale recomputes exactly as chunk build
+   * composes it, shrink included, so heads and stems never part.
+   */
+  private aimSunflowerHeads(): void {
+    let any = false;
+    for (const loaded of this.chunks.values()) {
+      if (loaded.sunflowerHeads) { any = true; break; }
+    }
+    if (!any) return;
+    const orientation = sunflowerHeadOrientation(this.sky?.cycleT ?? 0, SEASON_START_MONTH);
+    const now = Date.now();
+    const m = new THREE.Matrix4();
+    for (const loaded of this.chunks.values()) {
+      const heads = loaded.sunflowerHeads;
+      if (!heads) continue;
+      heads.objs.forEach((obj, i) => {
+        const s =
+          obj.scale *
+          (harvestState.isRegrowing(scatterTargetId(heads.cx, heads.cz, obj), now)
+            ? SHRINK_SCALE
+            : 1);
+        sunflowerHeadMatrix(obj, s, orientation, m);
+        heads.mesh.setMatrixAt(i, m);
+      });
+      heads.mesh.instanceMatrix.needsUpdate = true;
+    }
   }
 
   /**
