@@ -115,6 +115,14 @@ export interface CraftingRecipe {
   id: string;
   name: string;
   description?: string;
+  /**
+   * Housing ladder line (caller-supplied; the four house
+   * recipes only), rendered under the description. A
+   * truthful placement note — NOT a requirement: houses
+   * upgrade in place or place on their own, and nothing
+   * in the row is gated by it. Optional.
+   */
+  ladderLine?: string;
   ingredients: RecipeIngredient[];
   canCraft: boolean;
   /** Why crafting is or is not available, in the caller's words. Optional. */

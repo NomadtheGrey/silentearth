@@ -37,13 +37,13 @@
  * - Pockets base: 10 lb. Apron: +10 lb. Small Basket: +25 lb.
  *   Large Basket: 50 lb (all Adam, 2026-10-25). Trundle-Tool:
  *   +50 lb (PINNED by Adam, 2026-10-26 — previously "hefty, size
- *   TBD"). Full kit: 130 lb (10 + 10 + 50 + 50 + 10 worn) —
- *   FLAGGED for Adam's pin pass (the trundle is wheeled, but
- *   130 is his call to keep or trim).
+ *   TBD"). Full kit: 130 lb (10 pockets + 50 large + 50 trundle
+ *   + 20 worn) — FLAGGED for Adam's pin pass (the trundle is
+ *   wheeled, but 130 is his call to keep or trim).
  *
  * PINNED (Adam, main chat 2026-10-27, "for simplicity"):
  *     LARGE BASKET REPLACES SMALL BASKET. Total with pockets
- *     + apron + large = 70 lb; the small basket's +25 lb does
+ *     + worn apron + large = 70 lb; the small basket's +25 lb does
  *     NOT stack with the large basket's 50 lb (the 'stack'
  *     total, 95 lb, is closed — it survives only as the
  *     unruled branch of the `largeBasketMode` option, which
@@ -115,13 +115,16 @@
  * IMPLEMENTATION CHOICES (not pinned rulings — Adam can overturn):
  * - Carrying gear grants capacity and is NOT counted against it.
  *   Rationale: the doc's totals read as contents capacity, and a
- *   basket you just crafted must be carryable. Gear = apron, small
- *   basket, large basket, Trundle-Tool. Every other item counts
+ *   basket you just crafted must be carryable. Gear = small
+ *   basket, large basket, Trundle-Tool. (The apron was gear
+ *   until 2026-10-29, when Adam made it a garment — clothes.ts;
+ *   its +10 is worn-gated now, and an unworn apron counts its
+ *   weight like any other item.) Every other item counts
  *   toward used capacity — tools count (ladder tools at their
  *   table weights; the Trundle-Tool itself is gear, not counted),
  *   and the umbrella counts (1 lb, not gear).
  * - A gear bonus applies once per gear TYPE owned, not per unit:
- *   two aprons do not give +20 lb.
+ *   two small baskets do not give +50 lb.
  * - add() enforces capacity with a HARD cap (throws
  *   InventoryCapacityError). The soft-cap brainstorm
  *   (overfill-but-slow) was NOT picked, and movement speed lives in
@@ -181,7 +184,9 @@ import { ITEMS, type ItemId, type Recipe } from './recipes';
 
 /** Pinned numbers, in POUNDS — see the header. Change only on Adam's word. */
 export const POCKETS_BASE_CAPACITY = 10;
-export const APRON_BONUS = 10;
+// No APRON_BONUS here since 2026-10-29: the apron is a
+// garment, and its +10 lives in clothes.ts (GARMENTS +
+// WORN_CAPACITY_BONUS), worn-gated like every garment's.
 export const SMALL_BASKET_BONUS = 25;
 export const LARGE_BASKET_BONUS = 50;
 /** PINNED by Adam 2026-10-26 (was "hefty, size TBD"). Pounds. */
@@ -336,11 +341,14 @@ export function weightUnits(item: ItemId): number {
  * used capacity (implementation choice, see header).
  */
 export const CARRYING_GEAR: ReadonlySet<ItemId> = new Set([
-  ITEMS.apron,
   ITEMS.smallBasket,
   ITEMS.largeBasket,
   ITEMS.trundleTool,
 ]);
+// The apron is NOT here: it is a garment (clothes.ts) since
+// 2026-10-29 (Adam: "people wear aprons") — its +10 lb counts
+// only while WORN, through WORN_CAPACITY_BONUS, and an unworn
+// apron counts its weight like any ordinary item.
 
 export function isCarryingGear(item: ItemId): boolean {
   return CARRYING_GEAR.has(item);
@@ -633,7 +641,7 @@ export const ITEM_DESCRIPTIONS: Readonly<Record<string, string>> = {
   // Carrying and worn (numbers are the readout's own).
   'small-basket': 'A woven basket. Holds +25 lb.',
   'large-basket': "A big woven basket. Holds +50 lb — it replaces the small basket's room.",
-  apron: 'A woven apron. Holds +10 lb in its pockets.',
+  apron: 'A woven apron. Holds +10 lb in its pockets while worn.',
   'hooded-cloak': 'Worn against rain and wind. Holds +6 lb while worn.',
   shawl: 'Worn against the cold. Holds +3 lb while worn.',
   'pointy-hat': 'Worn against the rain. Holds +1 lb while worn.',
@@ -716,11 +724,15 @@ export interface PersonalInventoryOptions {
 /** All values in POUNDS (weight model, 2026-10-27). */
 export interface CapacityBreakdown {
   pockets: number;
-  apron: number;
   smallBasket: number;
   largeBasket: number;
   trundleTool: number;
-  /** PINNED worn bonuses total (hat +1 lb, shawl +3 lb, cloak +6 lb). */
+  /**
+   * PINNED worn bonuses total (hat +1 lb, shawl +3 lb,
+   * cloak +6 lb, apron +10 lb). No separate apron field
+   * since 2026-10-29: the apron is a garment, so its +10
+   * arrives HERE when worn (and nowhere when unworn).
+   */
   worn: number;
   /** Charm bonus in pounds (bear, Track B; 0 with no bear charm). */
   charms: number;
@@ -930,7 +942,6 @@ export class PersonalInventory implements CraftingInventory {
 
   /** Per-source breakdown, in pounds. */
   capacityBreakdown(): CapacityBreakdown {
-    const hasApron = this.count(ITEMS.apron) >= 1;
     const hasSmallBasket = this.count(ITEMS.smallBasket) >= 1;
     const hasLargeBasket = this.count(ITEMS.largeBasket) >= 1;
     const hasTrundleTool = this.count(ITEMS.trundleTool) >= 1;
@@ -956,7 +967,6 @@ export class PersonalInventory implements CraftingInventory {
 
     const breakdown: CapacityBreakdown = {
       pockets: POCKETS_BASE_CAPACITY,
-      apron: hasApron ? APRON_BONUS : 0,
       smallBasket,
       largeBasket: hasLargeBasket ? LARGE_BASKET_BONUS : 0,
       trundleTool: hasTrundleTool ? TRUNDLE_TOOL_BONUS : 0,
@@ -968,7 +978,6 @@ export class PersonalInventory implements CraftingInventory {
     };
     breakdown.total =
       breakdown.pockets +
-      breakdown.apron +
       breakdown.smallBasket +
       breakdown.largeBasket +
       breakdown.trundleTool +

@@ -14,7 +14,10 @@
  * SHAPE (brief's pieces, as rendered here):
  * - Unstaged site: a kind list to stage — one button per
  *   bone kind not yet awakened, each hinted with its sky
- *   condition. (Shrew skull never appears: the first
+ *   condition. Kinds she doesn't carry render DISABLED
+ *   but visible (the collection shows what remains to
+ *   find); digit badges number the carried rows only.
+ *   (Shrew skull never appears: the first
  *   charm is given outright, no ritual.)
  * - Staged site: the required recipe as rows — bone,
  *   offering, spoken name — each showing done or missing,
@@ -39,6 +42,17 @@ export interface RitualKindOption {
   kind: string;
   display: string;
   skyLabel: string;
+  /**
+   * How many of this kind's bone item she carries
+   * (shell-counted). Zero renders the row DISABLED but
+   * visible (Adam, 2026-10-29 — the list is the Waking
+   * collection; greyed rows show what remains to find,
+   * instead of a live button that answers 'No such bone
+   * carried.'). Disabled rows take no click/touch and
+   * consume no digit badge — digits number the carried
+   * rows only, matching the shell's digit dispatch.
+   */
+  carried: number;
 }
 
 /** One carried food kind the player may offer. */
@@ -153,23 +167,46 @@ export function RitualPanel({
             </p>
           ) : (
             <div className="mt-2 flex flex-col gap-1">
-              {kindOptions.map((option) => (
-                <button
-                  key={option.kind}
-                  type="button"
-                  onClick={() => onStageBone(option.kind)}
-                  onTouchStart={(e) => {
-                    e.stopPropagation();
-                  }}
-                  className={'min-h-[44px] rounded px-3 py-2 text-left text-sm ' + t.button}
-                >
-                  {option.display}
-                  {hintBadge(nextHint())}
-                  <span className={'block text-xs ' + t.muted}>
-                    {option.skyLabel}
-                  </span>
-                </button>
-              ))}
+              {kindOptions.map((option) =>
+                option.carried > 0 ? (
+                  <button
+                    key={option.kind}
+                    type="button"
+                    onClick={() => onStageBone(option.kind)}
+                    onTouchStart={(e) => {
+                      e.stopPropagation();
+                    }}
+                    className={'min-h-[44px] rounded px-3 py-2 text-left text-sm ' + t.button}
+                  >
+                    {option.display}
+                    {hintBadge(nextHint())}
+                    <span className={'block text-xs ' + t.muted}>
+                      {option.skyLabel}
+                    </span>
+                  </button>
+                ) : (
+                  // Not carried: visible but inert — no
+                  // handler, no badge (nextHint is never
+                  // called, so carried rows number from 1
+                  // in display order, the shell's dispatch
+                  // rule too).
+                  <button
+                    key={option.kind}
+                    type="button"
+                    disabled
+                    aria-disabled="true"
+                    className={
+                      'min-h-[44px] cursor-not-allowed rounded px-3 py-2 text-left text-sm opacity-50 ' +
+                      t.button
+                    }
+                  >
+                    {option.display}
+                    <span className={'block text-xs ' + t.muted}>
+                      {option.skyLabel}
+                    </span>
+                  </button>
+                ),
+              )}
             </div>
           )}
         </>

@@ -4,24 +4,28 @@
  * PINNED (Adam, 2026-10-26):
  * - The loom is a forked upgrade to a crafted workstation,
  *   SEPARATE from the potter's wheel, and REQUIRED for clothes:
- *   all five garment recipes carry station 'loom' (see
+ *   all six garment recipes carry station 'loom' (see
  *   recipes.ts; the loom recipe itself already exists as a draft
  *   fork, and its note now records the requirement).
- * - Five garments, five distinct slots, all wearable AT ONCE.
+ * - Six garments, six distinct slots, all wearable AT ONCE.
  *   There is no equip-choice step: wearing is per-slot, not a
  *   single held slot — the owning=using spirit (owning the tool
  *   is sufficient to use it) applied to clothes. Wearing does
  *   not consume the garment: wear() records the slot from an
  *   owned item, and the garment stays carried (see the inventory
  *   note below).
- * - Worn capacity bonuses, ADDITIVE with pockets / apron /
- *   baskets / Trundle-Tool: Pointy Hat +1, Shawl +3, Cloak +6.
+ * - Worn capacity bonuses, ADDITIVE with pockets / baskets /
+ *   Trundle-Tool: Pointy Hat +1, Shawl +3, Cloak +6, Apron +10.
  *   Mossy Mittens and bog boots add no capacity (their bonuses
- *   are weather, not carrying).
+ *   are weather, not carrying). THE APRON (Adam, 2026-10-29:
+ *   "people wear aprons, that's just how they work") was
+ *   carried gear until this date — its +10 moved here from
+ *   inventory.ts's CARRYING_GEAR and is now worn-gated like
+ *   every garment's; an unworn apron is an ordinary item.
  *
  * INVENTORY NOTE: worn garments are carrying-gear-like — a worn
  * garment is not counted against personal capacity (mirroring
- * the apron/basket/Trundle rule in inventory.ts), and its bonus
+ * the basket/Trundle rule in inventory.ts), and its bonus
  * counts. PersonalInventory reads the worn list through
  * setWorn(): wiring calls inventory.setWorn(wardrobe.wornItemIds())
  * after any wear/remove, so the one capacity number stays
@@ -35,8 +39,8 @@
  * module exposes the worn list in exactly the shape that table
  * expects: wornGarments() returns Background GarmentIds
  * ('cloak' | 'shawl' | 'pointyHat' | 'mossyMittens' |
- * 'bogBoots'), for the weather ExposureModifiers.clothing
- * input. Bog boots' less-slow travel effect lives in
+ * 'bogBoots' | 'apron'), for the weather
+ * ExposureModifiers.clothing input. Bog boots' less-slow travel effect lives in
  * movement.ts behind a BogBootsQuery — bogBootsWorn() feeds
  * that query. This module computes NO weather percentages.
  *
@@ -52,7 +56,13 @@ import { ITEMS, type ItemId } from './recipes';
 // Garments, slots, and the Background shape
 // ---------------------------------------------------------------------------
 
-export type GarmentSlot = 'cloak' | 'shawl' | 'hat' | 'mittens' | 'boots';
+export type GarmentSlot =
+  | 'cloak'
+  | 'shawl'
+  | 'hat'
+  | 'mittens'
+  | 'boots'
+  | 'apron';
 
 /** Background weather.ts GarmentId, same order as its table. */
 export type BackgroundGarmentId =
@@ -60,7 +70,8 @@ export type BackgroundGarmentId =
   | 'shawl'
   | 'pointyHat'
   | 'mossyMittens'
-  | 'bogBoots';
+  | 'bogBoots'
+  | 'apron';
 
 export interface GarmentDef {
   item: ItemId;
@@ -102,6 +113,17 @@ export const GARMENTS: ReadonlyArray<GarmentDef> = [
     backgroundId: 'bogBoots',
     capacityBonus: 0,
   },
+  {
+    // The apron is a GARMENT (Adam, 2026-10-29: "people
+    // wear aprons, that's just how they work") — it moved
+    // here from inventory.ts's carried CARRYING_GEAR, and
+    // its +10 lb (the number is unchanged) now counts ONLY
+    // while worn, through this table, like every garment.
+    item: ITEMS.apron,
+    slot: 'apron',
+    backgroundId: 'apron',
+    capacityBonus: 10,
+  },
 ];
 
 const GARMENT_BY_ITEM = new Map<ItemId, GarmentDef>(
@@ -111,6 +133,9 @@ const GARMENT_BY_ITEM = new Map<ItemId, GarmentDef>(
 /**
  * Worn capacity bonus per garment item id. PINNED (Adam,
  * 2026-10-26): cloak +6, shawl +3, hat +1, mittens +0, boots +0.
+ * Apron +10 joined 2026-10-29 when the apron became a garment
+ * (the number itself is the old carried APRON_BONUS, unchanged;
+ * it is now WORN-gated like the rest of this table).
  * PersonalInventory imports this table (clothes.ts imports no
  * inventory module, so there is no cycle).
  */
@@ -120,6 +145,7 @@ export const WORN_CAPACITY_BONUS: Readonly<Record<string, number>> = {
   [ITEMS.pointyHat]: 1,
   [ITEMS.mossyMittens]: 0,
   [ITEMS.bogBoots]: 0,
+  [ITEMS.apron]: 10,
 };
 
 export function isGarment(item: ItemId): boolean {
@@ -188,7 +214,7 @@ export class Wardrobe {
     return this.worn.get('boots') === ITEMS.bogBoots;
   }
 
-  /** PINNED worn capacity bonus total (cloak +6, shawl +3, hat +1). */
+  /** PINNED worn capacity bonus total (cloak +6, shawl +3, hat +1, apron +10). */
   wornCapacityBonus(): number {
     let total = 0;
     for (const item of this.worn.values()) {

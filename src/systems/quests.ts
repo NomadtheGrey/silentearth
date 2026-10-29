@@ -45,9 +45,22 @@
  *   in a pile, none held/lit/placed, reads undone
  *   (minor; a fifth flag is the alternative, not
  *   proposed).
- * Item/house/fire id literals below are verified
- * against recipes.ts (ITEMS), game/fire.ts
- * (FireType), and shelter.ts (HouseItem) at origin.
+ * Literal vocabularies below — each facts field speaks
+ * its OWN (2026-10-29 correction; the original note here
+ * claimed house literals were verified against shelter.ts
+ * HouseItem, which was exactly wrong): inventory literals
+ * are ITEM ids (recipes.ts ITEMS); fire literals are
+ * ENGINE FireType values (fire.ts); HOUSE literals are
+ * ENGINE HouseType values (game/shelter.ts — 'leanTo',
+ * 'thatchHut', 'wovenCottage', 'smallWoodenHut'), NOT the
+ * house ITEM ids ('primitive-lean-to', 'thatch-hut').
+ * QuestFacts.houses is shell-mapped from the shelter
+ * snapshot, whose type is the engine type (App maps item
+ * -> engine type at placement). Comparing it against an
+ * item id made make-lean-to and better-house impossible
+ * to complete (Adam's live find, 2026-10-29) — any new
+ * literal against a shell-mapped snapshot field must be
+ * checked against the ENGINE vocabulary, not the item's.
  */
 
 import type { PersonalInventory } from './inventory';
@@ -55,13 +68,20 @@ import { FOOD_ITEMS } from './hunger';
 import { FIRST_CHARM_KIND, boneItemFor } from './charms';
 import { RITUAL_RECIPES } from './rituals';
 
-/** One placed fire, shell-mapped from the fire snapshot. */
+/**
+ * One placed fire, shell-mapped from the fire snapshot.
+ * (type is an ENGINE FireType value, e.g. 'campfire'.)
+ */
 export interface QuestFire {
   type: string;
   lit: boolean;
 }
 
-/** One placed house, shell-mapped from the house snapshot. */
+/**
+ * One placed house, shell-mapped from the house snapshot.
+ * (type is an ENGINE HouseType value — 'leanTo' etc. —
+ * never the house item id; see the header note.)
+ */
 export interface QuestHouse {
   type: string;
 }
@@ -151,7 +171,7 @@ export const QUEST_DEFINITIONS: readonly QuestDefinition[] = [
     id: 'make-lean-to',
     title: 'Make Lean-To',
     isDone: (facts) =>
-      facts.houses.some((house) => house.type === 'primitive-lean-to'),
+      facts.houses.some((house) => house.type === 'leanTo'),
   },
   {
     id: 'rest',
@@ -195,8 +215,17 @@ export const QUEST_DEFINITIONS: readonly QuestDefinition[] = [
   {
     id: 'better-house',
     title: 'Build a Better House',
+    // ANY house beyond the lean-to (engine HouseType values):
+    // a fresh-placed woven cottage completes this without
+    // ever passing through thatch, and upgrades change a
+    // house's type in place up the same ladder.
     isDone: (facts) =>
-      facts.houses.some((house) => house.type === 'thatch-hut'),
+      facts.houses.some(
+        (house) =>
+          house.type === 'thatchHut' ||
+          house.type === 'wovenCottage' ||
+          house.type === 'smallWoodenHut',
+      ),
   },
   {
     id: 'find-bone',

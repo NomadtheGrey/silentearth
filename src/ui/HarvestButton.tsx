@@ -54,6 +54,24 @@ export interface HarvestButtonProps {
   disabled?: boolean;
   /** Why the button is unavailable, in the caller's words. Optional. */
   disabledNote?: string;
+  /**
+   * Multi-step progress for THIS target (pill-fill, Adam
+   * 2026-10-29): while a multi-step harvest is in progress,
+   * the pill IS the progress display — its background fills
+   * with the retired world bar's orange to `fraction`, the
+   * verb swaps to the source's verb, and the press count
+   * shows. All values arrive from the caller's
+   * 'harvest:progress' payload (pressIndex / pressesTotal /
+   * verb carried on the event since the Systems rider) —
+   * nothing is derived here. Null/absent = an ordinary
+   * pill (single-press harvests never carry progress).
+   */
+  progress?: {
+    fraction: number;
+    verb: string;
+    pressIndex: number;
+    pressesTotal: number;
+  } | null;
   /** Look for the button. Default "mire" (the world outside). */
   theme?: UiThemeName;
 }
@@ -141,26 +159,55 @@ export function HarvestButton({
   onHarvest,
   disabled,
   disabledNote,
+  progress,
   theme = 'mire',
 }: HarvestButtonProps) {
   const t = UI_THEMES[theme];
-  const action = target.actionLabel ?? 'Harvest';
+  const action = progress ? progress.verb : (target.actionLabel ?? 'Harvest');
+  const fillPct = progress
+    ? Math.min(100, Math.max(0, progress.fraction * 100))
+    : 0;
   return (
     <button
       type="button"
       disabled={disabled}
       onClick={() => onHarvest?.(harvestRequestFor(target))}
-      aria-label={`${action} ${target.name}`}
+      aria-label={
+        `${action} ${target.name}` +
+        (progress
+          ? `, press ${progress.pressIndex} of ${progress.pressesTotal}`
+          : '')
+      }
       className={
-        'flex min-h-[44px] items-center gap-2 rounded-full px-3 py-1.5 text-sm shadow-lg transition-transform hover:scale-105 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:scale-100 ' +
+        'relative flex min-h-[44px] items-center gap-2 overflow-hidden rounded-full px-3 py-1.5 text-sm shadow-lg transition-transform hover:scale-105 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:scale-100 ' +
         t.panel
       }
     >
-      <KindGlyph kind={target.kind} />
-      <span className="font-medium">{action}</span>
-      <span className={t.muted}>{target.name}</span>
+      {progress ? (
+        // The fill: the retired world bar's orange
+        // (InteractionProgress hearth fill, bg-amber-600),
+        // translucent so the label stays readable over it;
+        // content spans carry `relative` to paint above it.
+        <span
+          aria-hidden="true"
+          className="absolute inset-y-0 left-0 bg-amber-600/60"
+          style={{ width: `${fillPct}%` }}
+        />
+      ) : null}
+      <span className="relative inline-flex">
+        <KindGlyph kind={target.kind} />
+      </span>
+      <span className="relative font-medium">{action}</span>
+      <span className={'relative ' + t.muted}>{target.name}</span>
+      {progress ? (
+        <span className={'relative text-xs ' + t.muted}>
+          {progress.pressIndex} of {progress.pressesTotal}
+        </span>
+      ) : null}
       {disabledNote ? (
-        <span className={'text-xs italic ' + t.muted}>{disabledNote}</span>
+        <span className={'relative text-xs italic ' + t.muted}>
+          {disabledNote}
+        </span>
       ) : null}
     </button>
   );

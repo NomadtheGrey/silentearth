@@ -29,7 +29,8 @@
  *   'harvest:completed' yields as carried, 'harvest:failed'
  *   reasons as carried (with attempted yields named on
  *   'inventory-full' only, as the event defines), and
- *   'harvest:progress' fractions as carried. Nothing here
+ *   'harvest:progress' fractions, press counts, verbs, and
+ *   struggle/success lines as carried. Nothing here
  *   invents a yield, a reason, or a progress value.
  * - Station presence: crafting checks the real presence query
  *   (stationPresence on the current generator at her position,
@@ -212,14 +213,18 @@
  *   crafted output or an ingredient) wherever it appears.
  *   App maps Systems' item id (see UMBRELLA_ITEM_ID above)
  *   to the icon in both places. The worn/clothes display
- *   gains one umbrella rain note line (WornList umbrellaNote,
- *   under the protection + capacity notes), shown only while
- *   an umbrella is carried, with its number from Systems'
- *   single constant (60% precipitation, a starting value
- *   for Adam's pin pass, not pinned — revised from 35%
- *   rain-only) — the UI holds no rain table of its own.
+ *   carries a permanent Umbrella row in the WornList
+ *   (carried / not owned, no button — it is carried, not
+ *   worn), and its precipitation effect folds into the
+ *   Protection line's rain figure through Systems'
+ *   applyUmbrellaToPrecipitationRemaining (the separate
+ *   umbrella note line retired 2026-10-29 on Adam's word
+ *   — one home per fact; the constant is 60%
+ *   precipitation, a starting value for his pin pass,
+ *   not pinned — revised from 35% rain-only) — the UI
+ *   holds no rain table of its own.
  *   No separate umbrella panel is built, per the brief;
- *   the icon and the note ride existing surfaces.
+ *   the icon and the row ride existing surfaces.
  * - LOOM PLACE, LIVE (gap-closing round, presence b39f0aa):
  *   a carried loom item gains the same Place button +
  *   preview + Place here flow as fires and houses (free
@@ -1592,7 +1597,7 @@ import type { CameraMode, BiomeWeights } from './types';
 import { Wardrobe, GARMENTS, WORN_CAPACITY_BONUS } from './systems/clothes';
 import {
   carriesUmbrella,
-  UMBRELLA_PRECIPITATION_PROTECTION,
+  applyUmbrellaToPrecipitationRemaining,
 } from './systems/umbrella';
 import { HudShell } from './ui/HudShell';
 import { WitchHealth } from './ui/WitchHealth';
@@ -1633,7 +1638,6 @@ import { RemoveConfirm } from './ui/RemoveConfirm';
 import { InventoryPanel } from './ui/InventoryPanel';
 import { CraftingMenu } from './ui/CraftingMenu';
 import { ProximityHarvestButtons } from './ui/ProximityHarvestButtons';
-import { InteractionProgress } from './ui/InteractionProgress';
 import { ObjectFeedback } from './ui/ObjectFeedback';
 import { WorldAnchor } from './ui/WorldAnchor';
 import { KEY_BADGE_CLASS, LOOK_THEMES, UI_THEMES } from './ui/themes';
@@ -1751,6 +1755,7 @@ import {
   snakeDrainFactor,
   boneNote,
   boneKindFor,
+  boneItemFor,
   isBoneItem,
   recordBonePickupLook,
   HungerWarning,
@@ -1776,13 +1781,22 @@ interface FeedbackItem {
   y: number;
 }
 
-/** One in-progress multi-step harvest, anchored at its object. */
-interface ProgressItem {
+/**
+ * One in-progress multi-step harvest, for the pill-fill
+ * display (Adam, 2026-10-29): the target's Harvest pill
+ * fills with this fraction and shows the verb + press
+ * count. Every field arrives on the 'harvest:progress'
+ * payload (the Systems rider — pressIndex / pressesTotal
+ * / verb are computed at the emit site from the def,
+ * never derived here). The world-anchored progress bar
+ * it replaces is retired: one element per anchor.
+ */
+interface HarvestProgressState {
   targetId: string;
   fraction: number;
-  label: string;
-  x: number;
-  y: number;
+  pressIndex: number;
+  pressesTotal: number;
+  verb: string;
 }
 
 // BELOW-PERMIT WORDING (Adam, 2026-10-26 — "below permit" is too
@@ -2117,6 +2131,36 @@ function itemNoteFor(item: string, charms: CharmState): string | undefined {
   return kind === null ? descriptionFor(item) : boneNote(kind, charms);
 }
 
+/**
+ * HOUSING LADDER LINES (Adam, 2026-10-29 — he didn't know
+ * the feature existed: placing a higher house item facing
+ * a lower placed house upgrades it in place, while facing
+ * open ground places another house; BOTH paths stay, no
+ * craft gate — the panel states the ladder truthfully,
+ * display only, and never as a 'Requires:'). Keyed by the
+ * house ITEM ids; the step order mirrors HOUSE_LADDER in
+ * src/game/shelter.ts (leanTo → thatchHut → wovenCottage
+ * → smallWoodenHut, item ids primitive-lean-to →
+ * thatch-hut → woven-cottage → small-wooden-hut) — if
+ * that order ever changes, these lines must change with
+ * it. Copy is DRAFT for Adam's pin pass. Non-house items
+ * are absent from the table = no line.
+ */
+const HOUSING_LADDER_LINES: Record<string, string> = {
+  'primitive-lean-to':
+    'House ladder, step 1 of 4 — the first house; bigger houses can upgrade it in place.',
+  'thatch-hut':
+    'House ladder, step 2 of 4 — place it facing a Lean-To to upgrade it in place, or place it on its own.',
+  'woven-cottage':
+    'House ladder, step 3 of 4 — upgrades a placed Lean-To or Thatch Hut in place, or place it on its own.',
+  'small-wooden-hut':
+    'House ladder, step 4 of 4 — upgrades any placed house below it in place, or place it on its own.',
+};
+
+function housingLadderLineFor(item: string): string | undefined {
+  return HOUSING_LADDER_LINES[normalizeItemId(item)];
+}
+
 /** One inventory stack as a panel row, with the umbrella icon attached. */
 function toInventoryItem(
   stack: {
@@ -2424,12 +2468,14 @@ export default function App() {
     setTraps(trapState.snapshot());
   };
   const pilesRef = useRef<PileTarget[]>([]);
-  // Harvest outcome feedback + multi-step progress, rendered
-  // through WorldAnchor + ObjectFeedback / InteractionProgress.
+  // Harvest outcome feedback, rendered through WorldAnchor
+  // + ObjectFeedback; multi-step progress rides the
+  // target's pill (harvestProgress below), not a world bar.
   // Populated only by the outcome events (see the header) — never
   // by invented yields or progress.
   const [feedbacks, setFeedbacks] = useState<FeedbackItem[]>([]);
-  const [progressItems, setProgressItems] = useState<ProgressItem[]>([]);
+  const [harvestProgress, setHarvestProgress] =
+    useState<HarvestProgressState | null>(null);
 
   // Placed fires (engine singleton, read fresh on every event),
   // their projected anchors, the fire whose menu is open, and
@@ -4410,22 +4456,33 @@ export default function App() {
       }
       refreshInventory();
       saveNow();
-      setProgressItems((current) =>
-        current.filter((item) => item.targetId !== p.targetId),
+      setHarvestProgress((current) =>
+        current?.targetId === p.targetId ? null : current,
       );
       const anchor = anchorForOutcome(p.targetId, p.kind);
       if (anchor) {
-        showFeedback(
-          p.yields.map((y) => `${y.item} × ${y.quantity}`).join(', '),
-          'gain',
-          anchor.x,
-          anchor.y,
-        );
+        // A multi-step finish carries the def's success
+        // line (Systems rider): it IS the finish chip —
+        // shown INSTEAD of the yields chip, because two
+        // chips at one anchor would print over each other
+        // (Adam's standing rule). The yields still land
+        // in inventory above; single-press completions
+        // (no successMessage) keep the yields chip.
+        if (p.successMessage) {
+          showFeedback(p.successMessage, 'info', anchor.x, anchor.y);
+        } else {
+          showFeedback(
+            p.yields.map((y) => `${y.item} × ${y.quantity}`).join(', '),
+            'gain',
+            anchor.x,
+            anchor.y,
+          );
+        }
       }
     });
     const offFailed = bus.on('harvest:failed', (p) => {
-      setProgressItems((current) =>
-        current.filter((item) => item.targetId !== p.targetId),
+      setHarvestProgress((current) =>
+        current?.targetId === p.targetId ? null : current,
       );
       const anchor = anchorForOutcome(p.targetId, p.kind);
       if (!anchor) return;
@@ -4438,28 +4495,22 @@ export default function App() {
       showFeedback(text, 'blocked', anchor.x, anchor.y);
     });
     const offProgress = bus.on('harvest:progress', (p) => {
-      const target = busTargetsRef.current.find(
-        (t) => t.id === p.targetId,
-      );
-      const anchor = target
-        ? projectAnchor(target.x, target.z, target.kind)
-        : null;
-      if (!anchor) return;
-      setProgressItems((current) => {
-        const rest = current.filter(
-          (item) => item.targetId !== p.targetId,
-        );
-        return [
-          ...rest,
-          {
-            targetId: p.targetId,
-            fraction: p.progress,
-            label: target.name,
-            x: anchor.x,
-            y: anchor.y,
-          },
-        ];
+      // Pill-fill (Adam, 2026-10-29): the pill carries the
+      // progress now — state from the payload verbatim
+      // (fraction, press index/total, verb, all computed
+      // at the emit site). The struggle line rides the
+      // ordinary feedback chip at the target's anchor.
+      setHarvestProgress({
+        targetId: p.targetId,
+        fraction: p.progress,
+        pressIndex: p.pressIndex,
+        pressesTotal: p.pressesTotal,
+        verb: p.verb,
       });
+      const anchor = anchorForOutcome(p.targetId, 'scatter');
+      if (anchor) {
+        showFeedback(p.struggleMessage, 'info', anchor.x, anchor.y);
+      }
     });
     const offLoaded = bus.on('world:chunkLoaded', () =>
       setChunkCount(renderer.loadedChunkCount),
@@ -4873,6 +4924,11 @@ export default function App() {
             ? `${outputDescriptor} (×${recipe.output.quantity})`
             : outputDescriptor
           : `Makes ${recipe.output.quantity} × ${displayNameFor(recipe.output.item)}.`,
+      // Housing ladder line (2026-10-29): present only
+      // on the four house recipes (see the table beside
+      // itemNoteFor); display only — canCraft above is
+      // untouched by it.
+      ladderLine: housingLadderLineFor(recipe.output.item),
       ingredients: [
         ...recipe.ingredients.map((ingredient) => ({
           name: ingredient.item,
@@ -6495,14 +6551,16 @@ export default function App() {
   // move up beside the avatar portrait, out of the droppable
   // row list, and are NEVER droppable from the UI. The
   // portrait section lists worn ∩ carried garments (slot
-  // order via wornItemIds), carried storage gear (apron,
-  // small basket, large basket), and the owned tool only
+  // order via wornItemIds), carried storage gear (small
+  // basket, large basket), and the owned tool only
   // (ownedToolItem; 'none' when no tool). Carried-but-unworn
   // garments stay normal rows (loose until worn); the
   // umbrella is not gear (counts 1 lb) and stays a normal
   // row. Bonuses are the systems numbers: garments from
-  // WORN_CAPACITY_BONUS (mittens/boots 0 → worn mark only);
-  // apron +10, large basket +50, small basket +25 — except
+  // WORN_CAPACITY_BONUS (mittens/boots 0 → worn mark only;
+  // the apron's +10 rides there too since it became a
+  // garment, 2026-10-29);
+  // large basket +50, small basket +25 — except
   // when large is also carried, small shows +0 ("large
   // basket carries": large REPLACES small, pinned). The
   // owned tool rides free; Trundle-Tool adds +50 lb.
@@ -6542,10 +6600,13 @@ export default function App() {
     // in the total — capacity math is unchanged.
     const storage: string[] = ['Pockets — +10 lb'];
     const largeCarried = inventory.count(ITEMS.largeBasket) >= 1;
-    if (inventory.count(ITEMS.apron) >= 1) {
-      ids.push(ITEMS.apron);
-      storage.push(`${displayNameFor(ITEMS.apron)} — +10 lb`);
-    }
+    // NO APRON BLOCK HERE (removed 2026-10-29, Adam's
+    // overrule — "people wear aprons"): the apron is a
+    // garment now, so a WORN apron lists under Clothing
+    // above via wornItemIds + WORN_CAPACITY_BONUS, and an
+    // unworn one is an ordinary row. The old block here
+    // claimed "+10 lb" for merely carrying one and
+    // double-listed a worn one.
     if (inventory.count(ITEMS.smallBasket) >= 1) {
       ids.push(ITEMS.smallBasket);
       storage.push(
@@ -6906,20 +6967,28 @@ export default function App() {
     (g) => inventory.count(g.item) > 0,
   ).map((g) => g.backgroundId);
   const wornRemaining = clothingRemaining(wornGarments);
+  // UMBRELLA IN THE PROTECTION LINE (Adam, 2026-10-29 —
+  // 'it would look nice there though, the umbrella'):
+  // the rain figure composes the umbrella through
+  // Systems' helper (multiplicative, precipitation axis
+  // only — wind/cold/wet stay garment-only), so the
+  // readout matches the exposure math, which already
+  // composed it. 'Protection: none' now requires BOTH
+  // no garments worn AND no umbrella carried; an
+  // umbrella alone reads rain 60% · 0% · 0% · 0%. The
+  // separate umbrella note line is retired — its number
+  // lives here now (one home per fact).
+  const rainRemaining = applyUmbrellaToPrecipitationRemaining(
+    wornRemaining.rain,
+    inventory,
+  );
   const protectionNote =
-    wornGarments.length === 0
+    wornGarments.length === 0 && !carriesUmbrella(inventory)
       ? 'Protection: none'
-      : `Protection: rain ${Math.round((1 - wornRemaining.rain) * 100)}% · wind ${Math.round((1 - wornRemaining.wind) * 100)}% · cold ${Math.round((1 - wornRemaining.cold) * 100)}% · wet ${Math.round((1 - wornRemaining.wet) * 100)}%`;
+      : `Protection: rain ${Math.round((1 - rainRemaining) * 100)}% · wind ${Math.round((1 - wornRemaining.wind) * 100)}% · cold ${Math.round((1 - wornRemaining.cold) * 100)}% · wet ${Math.round((1 - wornRemaining.wet) * 100)}%`;
   const capacityBonus = wardrobe.wornCapacityBonus();
   const capacityNote =
     capacityBonus > 0 ? `Carrying bonus +${capacityBonus} lb` : undefined;
-  // Umbrella precipitation note (see the coordination above):
-  // shown only while an umbrella is carried, and its number
-  // comes from Systems' single constant — never a UI-side
-  // table.
-  const umbrellaNote = carriesUmbrella(inventory)
-    ? `Umbrella: precipitation −${Math.round(UMBRELLA_PRECIPITATION_PROTECTION * 100)}%`
-    : undefined;
 
   // Home-storage section for the sheltering house, when
   // sheltered: rows come from the HomeStorage counts (the
@@ -7051,8 +7120,46 @@ export default function App() {
     homeHouse !== undefined
       ? projectAnchor(homeHouse.x, homeHouse.z, 'scatter')
       : null;
-  const homeChipVisible =
-    sheltered && homeChipAnchor !== null && !paused;
+  // WHOLE-HUT ANCHOR (Adam, 2026-10-29, same ruling): a
+  // scatter anchor is null whenever the center sits
+  // off-screen or behind her — inside a hut, most facings
+  // (at 1 m the center projects below the screen's bottom
+  // edge even faced squarely) — so the chip vanished with
+  // a turn, and an OPEN menu unmounted on turning around
+  // (its state stayed open; the render gate was the
+  // anchor). The center's own projection cannot rescue
+  // the behind-her case (the projection itself is null
+  // there, any kind), so inside the footprint (same
+  // radius rule as the USE race) the fallback anchor is
+  // the GROUND projection of the point one meter ahead
+  // of her: a ground point in front always projects (it
+  // clamps to the screen's bottom edge rather than
+  // dropping — her own feet do NOT work: at the camera's
+  // exact xz the projection itself is null), so the chip
+  // stays usable and the menu survives turning and
+  // moving within the footprint, re-seating on the house
+  // the moment the center projects again. Outside the
+  // footprint the anchor is today's exactly; leaving the
+  // shelter zone still ends both (homeHouse goes
+  // undefined, and the chip also gates on sheltered).
+  const insideHomeFootprintNow = (() => {
+    const p = playerRef.current;
+    if (homeHouse === undefined || !p) return false;
+    return (
+      Math.hypot(p.x - homeHouse.x, p.z - homeHouse.z) <=
+      HOUSE_DEFS[homeHouse.type].footprint / 2
+    );
+  })();
+  const homeFallbackAnchor =
+    insideHomeFootprintNow && playerRef.current
+      ? projectAnchor(
+          playerRef.current.x + Math.sin(playerRef.current.facing),
+          playerRef.current.z + Math.cos(playerRef.current.facing),
+          'ground',
+        )
+      : null;
+  const homeAnchor = homeChipAnchor ?? homeFallbackAnchor;
+  const homeChipVisible = sheltered && homeAnchor !== null && !paused;
 
   // HOUSE-UPGRADE PILL (Adam, 2026-10-28): while
   // placing a house item, the faced upgradeable house
@@ -7230,17 +7337,36 @@ export default function App() {
   // SAME lists the panel renders — one source, no
   // divergence. Computed only while a site is selected
   // (the panel's own condition); [] otherwise.
+  // Panel honesty (Adam, 2026-10-29 — the list offered
+  // every unawakened kind as a live button and pressing
+  // one she doesn't carry answered 'No such bone
+  // carried.'): each option now carries its CARRIED
+  // COUNT (boneItemFor against inventory, the same
+  // stacks read the food options below use), and the
+  // panel renders uncarried kinds disabled-but-visible
+  // — the list is the Waking collection; greyed rows
+  // show what remains to find. Systems' stageBone
+  // refusal stays as backstop.
   const selectedSiteKindOptions =
     selectedSiteId === null
       ? []
-      : RITUAL_RECIPES.filter(
-          (recipe) => charmStateRef.current.tierOf(recipe.boneKind) === 0,
-        ).map((recipe) => ({
-          kind: recipe.boneKind,
-          display: boneDisplayFor(recipe.boneKind),
-          skyLabel:
-            recipe.sky === 'none' ? 'Any sky' : skyLabelFor(recipe.sky),
-        }));
+      : (() => {
+          const counts = new Map<string, number>();
+          for (const stack of inventory.stacksSnapshot()) {
+            const id = normalizeItemId(stack.item);
+            counts.set(id, (counts.get(id) ?? 0) + stack.quantity);
+          }
+          return RITUAL_RECIPES.filter(
+            (recipe) => charmStateRef.current.tierOf(recipe.boneKind) === 0,
+          ).map((recipe) => ({
+            kind: recipe.boneKind,
+            display: boneDisplayFor(recipe.boneKind),
+            skyLabel:
+              recipe.sky === 'none' ? 'Any sky' : skyLabelFor(recipe.sky),
+            carried:
+              counts.get(normalizeItemId(boneItemFor(recipe.boneKind))) ?? 0,
+          }));
+        })();
   const selectedSiteFoodOptions =
     selectedSiteId === null
       ? []
@@ -7851,7 +7977,20 @@ export default function App() {
     }
     if (homeHouse !== undefined) {
       const f = facingOf(homeHouse.x, homeHouse.z);
-      if (f.isFaced) {
+      // WHOLE-HUT ZONE (Adam, 2026-10-29 — inside his hut
+      // the menu 'appears only in a very small location';
+      // the zone should be as large as the hut): inside
+      // the sheltering house's footprint — center distance
+      // ≤ footprint/2, read from the engine table, no new
+      // constant — the home candidate joins the race on
+      // PRESENCE alone, facing waived; she is standing in
+      // the house, so the door is the house. Outside the
+      // footprint the faced-center rule is exactly as
+      // before, and the race distance stays the center
+      // distance either way.
+      const insideHomeFootprint =
+        f.distance <= HOUSE_DEFS[homeHouse.type].footprint / 2;
+      if (f.isFaced || insideHomeFootprint) {
         challengers.push({ kind: 'home', distance: f.distance });
       }
     }
@@ -8048,7 +8187,14 @@ export default function App() {
       // lists the panel renders.
       const siteId = selectedSiteId;
       if (selectedSiteStaged === null) {
-        const option = selectedSiteKindOptions[digit - 1];
+        // Digits number the CARRIED rows only, in display
+        // order — the panel badges by the same rule, so a
+        // badge never sits on a row its digit can't stage
+        // (uncarried rows are disabled; panel honesty,
+        // 2026-10-29).
+        const option = selectedSiteKindOptions.filter(
+          (candidate) => candidate.carried > 0,
+        )[digit - 1];
         if (option) handleStageBone(siteId, option.kind);
         return;
       }
@@ -8755,8 +8901,8 @@ export default function App() {
             />
           </WorldAnchor>
         ) : null}
-        {homeChipVisible && homeChipAnchor ? (
-          <WorldAnchor x={homeChipAnchor.x} y={homeChipAnchor.y} interactive>
+        {homeChipVisible && homeAnchor ? (
+          <WorldAnchor x={homeAnchor.x} y={homeAnchor.y} interactive>
             <button
               type="button"
               onClick={() => setHomeMenuOpen(true)}
@@ -8783,8 +8929,8 @@ export default function App() {
             </button>
           </WorldAnchor>
         ) : null}
-        {homeMenuOpen && homeHouse !== undefined && homeChipAnchor ? (
-          <WorldAnchor x={homeChipAnchor.x} y={homeChipAnchor.y} interactive>
+        {homeMenuOpen && homeHouse !== undefined && homeAnchor ? (
+          <WorldAnchor x={homeAnchor.x} y={homeAnchor.y} interactive>
             <ContextMenu theme={lookThemes.world}
               objectName={shelterHouseName ?? 'Home'}
               header={
@@ -8882,16 +9028,12 @@ export default function App() {
             valid
           />
         ) : null}
-        {progressItems.map((item) => (
-          <Fragment key={item.targetId}>
-            <WorldAnchor x={item.x} y={item.y}>
-              <InteractionProgress theme={lookThemes.dialog}
-                fraction={item.fraction}
-                label={item.label}
-              />
-            </WorldAnchor>
-          </Fragment>
-        ))}
+        {/* The world-anchored harvest progress bar RETIRED
+          here (Adam, 2026-10-29): its fill, verb, and count
+          moved onto the target's pill (pill-fill), and its
+          name label — the ghost duplicate that printed
+          beside the pills — goes with it. One element per
+          anchor: the pill is the target's one display. */}
       </div>
 
       {/* Screen-fixed harvest buttons: above panels (z-30), below
@@ -8905,6 +9047,7 @@ export default function App() {
         <ProximityHarvestButtons theme={lookThemes.world}
           targets={presentedTargets}
           harvestedIds={harvestedIds}
+          progress={harvestProgress}
           onHarvest={handleHarvest}
           onRemove={handleRemove}
           stationAnchor={stationAnchor}
@@ -9138,7 +9281,7 @@ export default function App() {
               comfortable={isTouch}
               protectionNote={protectionNote}
               capacityNote={capacityNote}
-              umbrellaNote={umbrellaNote}
+              umbrellaCarried={carriesUmbrella(inventory)}
               note={wardrobeNote}
             />
           </div>

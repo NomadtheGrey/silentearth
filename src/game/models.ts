@@ -1119,6 +1119,82 @@ function raccoonDetail(p: AnimalModelParams): RaccoonDetail {
 }
 
 /**
+ * Opossum detail (Adam 2026-10-29 — a live opossum read as a
+ * tan box with a ball head and cube snout; his words: opossums
+ * have "long skinny tails and a pointy face and ears"): a
+ * tapered PALE face (a smaller head sphere + cone snout), two
+ * small dark upright EARS, and a LONG SKINNY TAIL — a tapered
+ * cylinder, roughly body-length, trailing behind with its tip
+ * raised, in naked-tail pinkish grey. Opossum only: every
+ * other kind keeps the shared generic parts untouched. The
+ * kind's sizes stay (length 0.6 / height 0.35 in
+ * ANIMAL_MODEL_PARAMS) and the body tint stays 0x9a9a9a —
+ * already a grizzled grey; the read comes from the face /
+ * ear / tail contrast. Colours and proportions are visual
+ * drafts for Adam's sighting.
+ */
+const OPOSSUM_FACE = 0xe9e3d7;
+const OPOSSUM_EAR = 0x2e2a26;
+const OPOSSUM_TAIL = 0xc9a49c;
+const OPOSSUM_TAIL_RAISE_RAD = 0.35;
+
+interface OpossumDetail {
+  head: THREE.BufferGeometry;
+  snout: THREE.BufferGeometry;
+  earL: THREE.BufferGeometry;
+  earR: THREE.BufferGeometry;
+  tail: THREE.BufferGeometry;
+  faceMat: THREE.MeshLambertMaterial;
+  earMat: THREE.MeshLambertMaterial;
+  tailMat: THREE.MeshLambertMaterial;
+}
+
+let opossumDetailCache: OpossumDetail | null = null;
+
+function opossumDetail(p: AnimalModelParams): OpossumDetail {
+  if (opossumDetailCache) return opossumDetailCache;
+  const headR = p.height * 0.45;
+  // Smaller head sphere than the generic ball (0.8x) — the
+  // taper comes from the snout cone in front of it.
+  const head = new THREE.SphereGeometry(headR * 0.8, 8, 8);
+  // Pointy snout: cone apex forward (+z); its base embeds in
+  // the head sphere (the sphere's cross-section there is
+  // wider than the cone's base), so the join never gaps.
+  const snout = new THREE.ConeGeometry(headR * 0.55, p.length * 0.34, 6);
+  snout.rotateX(Math.PI / 2);
+  snout.translate(0, 0, headR * 0.85);
+  // Ears: small upright cones straddling the crown, bases
+  // sunk into the head sphere, tips proud.
+  const earL = new THREE.ConeGeometry(0.032, 0.075, 5);
+  earL.translate(-headR * 0.46, headR * 0.78, -headR * 0.12);
+  const earR = new THREE.ConeGeometry(0.032, 0.075, 5);
+  earR.translate(headR * 0.46, headR * 0.78, -headR * 0.12);
+  // Long skinny tail: tapered cylinder (thin tip at the far
+  // end), rotated to trail behind (-z) with the tip raised
+  // by OPOSSUM_TAIL_RAISE_RAD, root at the body's rear —
+  // offsets baked, the raccoon tail's idiom.
+  const tailLen = p.length * 0.95;
+  const tail = new THREE.CylinderGeometry(0.007, 0.016, tailLen, 5);
+  tail.rotateX(OPOSSUM_TAIL_RAISE_RAD - Math.PI / 2);
+  tail.translate(
+    0,
+    Math.sin(OPOSSUM_TAIL_RAISE_RAD) * (tailLen / 2),
+    -Math.cos(OPOSSUM_TAIL_RAISE_RAD) * (tailLen / 2) - p.length / 2,
+  );
+  opossumDetailCache = {
+    head,
+    snout,
+    earL,
+    earR,
+    tail,
+    faceMat: meshMat(OPOSSUM_FACE),
+    earMat: meshMat(OPOSSUM_EAR),
+    tailMat: meshMat(OPOSSUM_TAIL),
+  };
+  return opossumDetailCache;
+}
+
+/**
  * Subsurface swimmers (Adam 2026-10-29 — a fish read as a
  * crate standing ON the water): fish and eels are built
  * around the group origin as the WATER LINE — the body rides
@@ -1228,7 +1304,7 @@ export function buildAnimal(kind: AnimalKind): THREE.Group {
     body.position.set(0, kind === 'eels' ? -p.height * 0.375 : p.height / 2, 0);
     g.add(body);
   }
-  if (parts.head && kind !== 'fish' && kind !== 'eels') {
+  if (parts.head && kind !== 'fish' && kind !== 'eels' && kind !== 'opossum') {
     const head = new THREE.Mesh(parts.head, mat);
     head.position.set(0, p.height * 0.7, p.length / 2);
     g.add(head);
@@ -1243,7 +1319,7 @@ export function buildAnimal(kind: AnimalKind): THREE.Group {
     g.add(wingR);
     wings.push(wingL, wingR);
   }
-  if (parts.tail && kind !== 'raccoon' && kind !== 'fish') {
+  if (parts.tail && kind !== 'raccoon' && kind !== 'fish' && kind !== 'opossum') {
     const tail = new THREE.Mesh(parts.tail, mat);
     tail.position.set(0, p.height * 0.5, -p.length / 2 - p.length * 0.1);
     g.add(tail);
@@ -1265,6 +1341,29 @@ export function buildAnimal(kind: AnimalKind): THREE.Group {
     const mask = new THREE.Mesh(detail.mask, detail.darkMat);
     mask.position.set(0, p.height * 0.7, p.length / 2);
     g.add(mask);
+  }
+  if (kind === 'opossum') {
+    // Pointy pale face + dark ears + long naked tail replace
+    // the generic head sphere and tail box (see opossumDetail).
+    // Every offset is baked; the face parts ride at the
+    // generic head's own position and the tail at the generic
+    // tail's height, so the pose math never learns about them.
+    const detail = opossumDetail(p);
+    const headPos = new THREE.Vector3(0, p.height * 0.7, p.length / 2);
+    const head = new THREE.Mesh(detail.head, detail.faceMat);
+    head.position.copy(headPos);
+    g.add(head);
+    const snout = new THREE.Mesh(detail.snout, detail.faceMat);
+    snout.position.copy(headPos);
+    g.add(snout);
+    for (const earGeo of [detail.earL, detail.earR]) {
+      const ear = new THREE.Mesh(earGeo, detail.earMat);
+      ear.position.copy(headPos);
+      g.add(ear);
+    }
+    const tail = new THREE.Mesh(detail.tail, detail.tailMat);
+    tail.position.set(0, p.height * 0.5, 0);
+    g.add(tail);
   }
   if (kind === 'fish') {
     // Subsurface build (see fishDetail): ellipsoid body +
