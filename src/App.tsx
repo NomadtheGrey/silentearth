@@ -9903,7 +9903,18 @@ export default function App() {
         veil); the component owns the surface. */}
       {paused ? (
         <PausedIndicator
-          onResume={() => pauseState.setPaused(false)}
+          onResume={() => {
+            // Unpause FIRST, then re-lock in the same click
+            // (Adam, live on #24: the veil click unpaused
+            // but left the cursor free — 'a second canvas
+            // click should be unnecessary'). The seam
+            // decides by mode (first-person + no lock held
+            // only; every other state no-ops) and swallows
+            // refusal silently, so the call is
+            // unconditional here.
+            pauseState.setPaused(false);
+            playerRef.current?.requestResumeLock();
+          }}
           showKeyHint={!isTouch}
         />
       ) : null}
