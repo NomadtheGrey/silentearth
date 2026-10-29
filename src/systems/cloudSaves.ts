@@ -134,7 +134,13 @@ export interface CloudSyncState {
   lastMirror: CloudSyncNote | null;
 }
 
-/** Mirror outcome. mirrored:false + ok:true = cloud off (no-op, not an error). */
+/**
+ * Mirror outcome. mirrored:false + ok:true = no PUT was
+ * needed/performed by this call and nothing failed: cloud
+ * off, the record already mirrored identically, or the
+ * record coalesced into the pending flush (see the
+ * coalescing note at mirrorSave).
+ */
 export interface MirrorResult {
   mirrored: boolean;
   ok: boolean;
@@ -148,7 +154,13 @@ export interface MirrorResult {
  */
 export type CloudFetch = (
   url: string,
-  init: { method: string; headers: Record<string, string>; body?: string },
+  init: {
+    method: string;
+    headers: Record<string, string>;
+    body?: string;
+    /** Set on PUTs so a pagehide flush survives unload. */
+    keepalive?: boolean;
+  },
 ) => Promise<{
   ok: boolean;
   status: number;
@@ -166,13 +178,19 @@ interface CloudWordsBlob {
 
 function defaultFetch(
   url: string,
-  init: { method: string; headers: Record<string, string>; body?: string },
+  init: {
+    method: string;
+    headers: Record<string, string>;
+    body?: string;
+    keepalive?: boolean;
+  },
 ): Promise<{ ok: boolean; status: number; text: () => Promise<string> }> {
   return globalThis
     .fetch(url, {
       method: init.method,
       headers: init.headers,
       body: init.body,
+      ...(init.keepalive ? { keepalive: true } : {}),
     })
     .then((res) => ({
       ok: res.ok,
@@ -317,6 +335,9 @@ export function turnOn(words: CloudWords): CloudAction {
  * save untouched; cloud copy stays (remove is separate).
  */
 export function turnOff(): CloudAction {
+  // A pending coalesced mirror dies with the opt-in: it
+  // must not PUT after the player turned cloud off.
+  cancelPendingMirror();
   const cleared = writeWordsBlob({ words: null, enabled: false });
   try {
     globalThis.localStorage?.removeItem(CLOUD_SYNC_KEY);
@@ -404,6 +425,9 @@ async function requestJson(
       method,
       headers: { [CLOUD_SECRET_HEADER]: secret },
       ...(body !== undefined ? { body } : {}),
+      // PUTs ride keepalive so a mirror flush fired on
+      // pagehide can still land while the page unloads.
+      ...(method === 'PUT' ? { keepalive: true } : {}),
     });
   } catch {
     return { ok: false, status: null, reason: 'Could not reach the cloud box.' };
@@ -640,20 +664,220 @@ export function readParked(): SaveData | null {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Mirror coalescing (2026-10-29 — Adam, on the KV daily-limit
+// alert: saveNow fires on every harvest/drop/etc., and a PUT
+// per saveNow burned ~500 of the free tier's 1,000 daily
+// writes by mid-afternoon; coalescing is the design fix, not
+// the paid tier)
+// ---------------------------------------------------------------------------
+//
+// At most one PUT per CLOUD_MIRROR_WINDOW_MS while changes
+// keep coming. mirrorSave calls inside the window REPLACE
+// the single pending record (latest wins — never a queue of
+// stale records) and one timer flushes at the window's end;
+// a call after an idle window PUTs immediately (leading
+// edge). A pagehide / visibility-hidden flush (self-
+// registered below, guarded, once) sends the pending record
+// at the same moment the shell saves locally, so closing
+// the tab loses nothing. A record identical to the last
+// successfully mirrored one is skipped entirely. A failed
+// PUT keeps the record pending and retries only at the
+// next window/flush — no retry loop, and the failure note
+// is the only surface (never a throw, never a crash).
+
+/** Minimum spacing between mirror PUTs, in milliseconds. */
+export const CLOUD_MIRROR_WINDOW_MS = 60_000;
+
+/** Clock/timer seams (probes inject fakes; defaults are real). */
+export interface MirrorTiming {
+  now?: () => number;
+  setTimer?: (fn: () => void, ms: number) => unknown;
+  clearTimer?: (handle: unknown) => void;
+}
+
+interface PendingMirror {
+  baseUrl: string;
+  words: CloudWords;
+  saveData: SaveData;
+  /** Identity key of saveData (see mirrorRecordKey). */
+  key: string;
+  fetchFn: CloudFetch;
+  /** True when the caller passed words explicitly (manual sync / probes). */
+  explicit: boolean;
+  now: () => number;
+  setTimer: (fn: () => void, ms: number) => unknown;
+  clearTimer: (handle: unknown) => void;
+}
+
+let pendingMirror: PendingMirror | null = null;
+let lastMirrorPutAt: number | null = null;
+let lastMirroredKey: string | null = null;
+let mirrorTimer: unknown = null;
+let mirrorTimerClear: ((handle: unknown) => void) | null = null;
+let mirrorFlushInFlight = false;
+let hideFlushRegistered = false;
+
+const defaultSetTimer = (fn: () => void, ms: number): unknown =>
+  setTimeout(fn, ms);
+const defaultClearTimer = (handle: unknown): void => {
+  clearTimeout(handle as ReturnType<typeof setTimeout>);
+};
+
+/**
+ * Identity of a record for the identical-skip: the
+ * serialized record WITHOUT its volatile savedAt stamp
+ * (every saveNow re-stamps savedAt, and the envelope
+ * re-stamps updatedAt — neither is a content change).
+ */
+function mirrorRecordKey(saveData: SaveData): string {
+  const copy: Record<string, unknown> = {
+    ...(saveData as unknown as Record<string, unknown>),
+  };
+  delete copy['savedAt'];
+  return JSON.stringify(copy);
+}
+
+function clearMirrorTimer(): void {
+  if (mirrorTimer !== null && mirrorTimerClear !== null) {
+    try {
+      mirrorTimerClear(mirrorTimer);
+    } catch {
+      // A timer that cannot be cleared still fires into a
+      // guarded flush (no pending = no-op).
+    }
+  }
+  mirrorTimer = null;
+  mirrorTimerClear = null;
+}
+
+function scheduleMirrorFlush(ctx: PendingMirror, delayMs: number): void {
+  clearMirrorTimer();
+  mirrorTimerClear = ctx.clearTimer;
+  mirrorTimer = ctx.setTimer(() => {
+    mirrorTimer = null;
+    mirrorTimerClear = null;
+    void flushPendingMirror();
+  }, Math.max(0, delayMs));
+}
+
+/** Drop any pending mirror + its timer (turnOff's hook). */
+function cancelPendingMirror(): void {
+  pendingMirror = null;
+  clearMirrorTimer();
+}
+
+/**
+ * Self-register the closing-time flush, once, in a browser:
+ * pagehide and visibility-hidden fire at the same moment
+ * the shell makes its final local save, so the pending
+ * mirror rides along (PUTs carry keepalive — see
+ * requestJson). No-op outside a browser (probes, tooling).
+ */
+function registerHideFlush(): void {
+  if (hideFlushRegistered) return;
+  hideFlushRegistered = true;
+  try {
+    const w = globalThis as unknown as {
+      addEventListener?: (type: string, fn: () => void) => void;
+      document?: {
+        addEventListener?: (type: string, fn: () => void) => void;
+        visibilityState?: string;
+      };
+    };
+    if (typeof w.addEventListener !== 'function') return;
+    const flush = () => {
+      void flushPendingMirror();
+    };
+    w.addEventListener('pagehide', flush);
+    w.document?.addEventListener?.('visibilitychange', () => {
+      if (w.document?.visibilityState === 'hidden') flush();
+    });
+  } catch {
+    // Registration is best-effort; the window timer still
+    // flushes during normal play.
+  }
+}
+
+/**
+ * Send the pending coalesced mirror NOW, if one exists —
+ * the pagehide/visibility flush calls this, and the shell
+ * may too. Returns null when nothing was pending. Honors
+ * the failure law: a failed PUT keeps the record pending
+ * and schedules the next window's retry. A non-explicit
+ * pending whose stored words changed (turned off, or a new
+ * phrase entered) since it was queued is dropped silently
+ * — mirroring under a phrase the player replaced would be
+ * wrong. Never throws.
+ */
+export async function flushPendingMirror(): Promise<MirrorResult | null> {
+  const pending = pendingMirror;
+  if (pending === null || mirrorFlushInFlight) return null;
+  if (!pending.explicit) {
+    const stored = getWords();
+    if (
+      stored === null ||
+      !isCloudEnabled() ||
+      stored.join(' ') !== pending.words.join(' ')
+    ) {
+      if (pendingMirror === pending) pendingMirror = null;
+      clearMirrorTimer();
+      return null;
+    }
+  }
+  if (pending.key === lastMirroredKey) {
+    if (pendingMirror === pending) pendingMirror = null;
+    clearMirrorTimer();
+    return { mirrored: false, ok: true };
+  }
+  mirrorFlushInFlight = true;
+  try {
+    const put = await putCloudSave(
+      pending.baseUrl,
+      pending.words,
+      buildCloudEnvelope(pending.saveData),
+      pending.fetchFn,
+    );
+    lastMirrorPutAt = pending.now();
+    if (put.ok === true) {
+      lastMirroredKey = pending.key;
+      if (pendingMirror === pending) pendingMirror = null;
+      clearMirrorTimer();
+      noteCloudSync({ at: pending.now(), ok: true });
+      return { mirrored: true, ok: true };
+    }
+    noteCloudSync({ at: pending.now(), ok: false, reason: put.reason });
+    // Failure: the record STAYS pending; the only retry is
+    // the next window's flush — no loop, no burst.
+    if (pendingMirror === pending) {
+      scheduleMirrorFlush(pending, CLOUD_MIRROR_WINDOW_MS);
+    }
+    return { mirrored: true, ok: false, reason: put.reason };
+  } catch {
+    return { mirrored: true, ok: false, reason: 'Unexpected mirror error.' };
+  } finally {
+    mirrorFlushInFlight = false;
+  }
+}
+
 /**
  * Mirror one save to the cloud — the SINGLE mirror
- * implementation. saveNow calls it after the local write
- * succeeds; UI may call it for a manual sync. With explicit
- * words, the caller’s intent is explicit (live probes,
- * manual sync); without them, the stored words gate it and
- * cloud-off is a no-op (mirrored:false + ok:true, not an
- * error). Oversize envelopes are refused before sending.
- * Never throws, never touches local.
+ * implementation, coalesced (see the section header).
+ * saveNow calls it after the local write succeeds; UI may
+ * call it for a manual sync. With explicit words, the
+ * caller’s intent is explicit (live probes, manual sync);
+ * without them, the stored words gate it and cloud-off is
+ * a no-op (mirrored:false + ok:true, not an error).
+ * Oversize envelopes are refused before sending (immediate,
+ * never pended). Inside the 60 s window the call returns
+ * mirrored:false + ok:true once the record is pended; the
+ * PUT itself happens at the flush. Never throws, never
+ * touches local.
  */
 export async function mirrorSave(
   baseUrl: string = CLOUD_BASE_URL,
   saveData: SaveData,
-  opts?: { words?: CloudWords; fetchFn?: CloudFetch },
+  opts?: { words?: CloudWords; fetchFn?: CloudFetch } & MirrorTiming,
 ): Promise<MirrorResult> {
   try {
     const words = opts?.words ?? getWords();
@@ -667,13 +891,36 @@ export async function mirrorSave(
       noteCloudSync({ at: Date.now(), ok: false, reason });
       return { mirrored: true, ok: false, reason };
     }
-    const put = await putCloudSave(baseUrl, words, envelope, fetchFn);
-    if (put.ok) {
-      noteCloudSync({ at: Date.now(), ok: true });
+    const key = mirrorRecordKey(saveData);
+    if (key === lastMirroredKey) {
+      // Already the mirrored record — nothing to send.
+      // Any pending is superseded too: the player's latest
+      // state IS what the cloud holds, so a queued older
+      // change must never land after it.
+      if (pendingMirror !== null) cancelPendingMirror();
       return { mirrored: true, ok: true };
     }
-    noteCloudSync({ at: Date.now(), ok: false, reason: put.reason });
-    return { mirrored: true, ok: false, reason: put.reason };
+    const now = opts?.now ?? Date.now;
+    const pending: PendingMirror = {
+      baseUrl,
+      words,
+      saveData,
+      key,
+      fetchFn,
+      explicit: opts?.words !== undefined,
+      now,
+      setTimer: opts?.setTimer ?? defaultSetTimer,
+      clearTimer: opts?.clearTimer ?? defaultClearTimer,
+    };
+    pendingMirror = pending;
+    registerHideFlush();
+    const nowMs = now();
+    if (lastMirrorPutAt === null || nowMs - lastMirrorPutAt >= CLOUD_MIRROR_WINDOW_MS) {
+      // Leading edge: idle window — PUT now.
+      return (await flushPendingMirror()) ?? { mirrored: false, ok: true };
+    }
+    scheduleMirrorFlush(pending, lastMirrorPutAt + CLOUD_MIRROR_WINDOW_MS - nowMs);
+    return { mirrored: false, ok: true };
   } catch {
     return { mirrored: true, ok: false, reason: 'Unexpected mirror error.' };
   }
