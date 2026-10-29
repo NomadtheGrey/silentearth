@@ -1522,7 +1522,12 @@ export class WorldRenderer {
         hg.add(houseFloorDisc(f / 2 + 0.02, 0.12, 0x8a7355, 0, 0.04, 0, house.x, house.z));
       } else if (house.type === 'wovenCottage') {
         hg.add(houseBox(f, 2.2, f * 0.8, 0xd8c9a8, 0, 1.1, 0));
-        const roof = houseRoof(new THREE.ConeGeometry(f * 0.75, 1.4, 4), 0x8a7a4a);
+        // Roof cone OPEN-ENDED (Adam, 2026-10-29 — the
+        // thatch treatment, 349db1b, extended on his order):
+        // the cone's default base cap was a flat fan ceiling
+        // at 2.2; open, the sloped underside (DoubleSide via
+        // houseRoof) is the ceiling.
+        const roof = houseRoof(new THREE.ConeGeometry(f * 0.75, 1.4, 4, 1, true), 0x8a7a4a);
         roof.position.y = 2.9;
         roof.rotation.y = Math.PI / 4;
         hg.add(roof);
@@ -1563,7 +1568,12 @@ export class WorldRenderer {
         hg.add(houseBox(f - 0.2, 0.04, f * 0.8 - 0.2, 0x8a7a5a, 0, 0.02, 0));
       } else {
         hg.add(houseBox(f, 2.6, f * 0.85, 0x7a5a38, 0, 1.3, 0));
-        const roof = houseRoof(new THREE.ConeGeometry(f * 0.72, 1.6, 4), 0x5a3d24);
+        // Roof cone OPEN-ENDED (Adam, 2026-10-29 — the
+        // thatch treatment, 349db1b, extended on his order):
+        // the cone's default base cap was a flat fan ceiling
+        // at 2.6; open, the sloped underside (DoubleSide via
+        // houseRoof) is the ceiling.
+        const roof = houseRoof(new THREE.ConeGeometry(f * 0.72, 1.6, 4, 1, true), 0x5a3d24);
         roof.position.y = 3.4;
         roof.rotation.y = Math.PI / 4;
         hg.add(roof);
