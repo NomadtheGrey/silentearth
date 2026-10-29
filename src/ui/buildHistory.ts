@@ -45,8 +45,7 @@ const ALL_RECORDS: BuildRecord[] = [
   {
     merge: 'Merge #23',
     pr: 47,
-    // Second merge replaces this with the real merge sha.
-    sha: 'pending',
+    sha: '6132ede',
     date: '2026-10-29',
     what: 'PC keys rework + beautification + typing-leak fix: E now runs one USE action on the target she faces (R is that target\u2019s second action), with a desktop controls hint and digit badges on open menus (piles and the ritual panel included). The UI gains a consistency pass and three switchable looks (Mire & Hearth, Parchment & Ink, Ember Night) with the current look kept for comparison. And typing in a text field no longer moves her or flips the camera.',
     why: 'The keyboard should work without unlocking the mouse and hunting for buttons, the panels should feel like one game, and a text field should only ever type.',
