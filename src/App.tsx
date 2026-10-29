@@ -6551,14 +6551,16 @@ export default function App() {
   // move up beside the avatar portrait, out of the droppable
   // row list, and are NEVER droppable from the UI. The
   // portrait section lists worn ∩ carried garments (slot
-  // order via wornItemIds), carried storage gear (apron,
-  // small basket, large basket), and the owned tool only
+  // order via wornItemIds), carried storage gear (small
+  // basket, large basket), and the owned tool only
   // (ownedToolItem; 'none' when no tool). Carried-but-unworn
   // garments stay normal rows (loose until worn); the
   // umbrella is not gear (counts 1 lb) and stays a normal
   // row. Bonuses are the systems numbers: garments from
-  // WORN_CAPACITY_BONUS (mittens/boots 0 → worn mark only);
-  // apron +10, large basket +50, small basket +25 — except
+  // WORN_CAPACITY_BONUS (mittens/boots 0 → worn mark only;
+  // the apron's +10 rides there too since it became a
+  // garment, 2026-10-29);
+  // large basket +50, small basket +25 — except
   // when large is also carried, small shows +0 ("large
   // basket carries": large REPLACES small, pinned). The
   // owned tool rides free; Trundle-Tool adds +50 lb.
@@ -6598,10 +6600,13 @@ export default function App() {
     // in the total — capacity math is unchanged.
     const storage: string[] = ['Pockets — +10 lb'];
     const largeCarried = inventory.count(ITEMS.largeBasket) >= 1;
-    if (inventory.count(ITEMS.apron) >= 1) {
-      ids.push(ITEMS.apron);
-      storage.push(`${displayNameFor(ITEMS.apron)} — +10 lb`);
-    }
+    // NO APRON BLOCK HERE (removed 2026-10-29, Adam's
+    // overrule — "people wear aprons"): the apron is a
+    // garment now, so a WORN apron lists under Clothing
+    // above via wornItemIds + WORN_CAPACITY_BONUS, and an
+    // unworn one is an ordinary row. The old block here
+    // claimed "+10 lb" for merely carrying one and
+    // double-listed a worn one.
     if (inventory.count(ITEMS.smallBasket) >= 1) {
       ids.push(ITEMS.smallBasket);
       storage.push(
@@ -9277,7 +9282,6 @@ export default function App() {
               protectionNote={protectionNote}
               capacityNote={capacityNote}
               umbrellaCarried={carriesUmbrella(inventory)}
-              apronCarried={inventory.count(ITEMS.apron) > 0}
               note={wardrobeNote}
             />
           </div>

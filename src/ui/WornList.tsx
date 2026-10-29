@@ -5,13 +5,19 @@
  * Silent Earth redesign — wardrobe display + wear/remove
  * (UI lane, presentation only).
  *
- * The wardrobe section in the HUD: the five garments, one row
+ * The wardrobe section in the HUD: the six garments, one row
  * each, with what she is doing about it — worn, carried (with
- * a Wear button), or not owned — plus permanent Umbrella
- * and Apron rows in the same idiom (carried / not owned,
- * never a button: both are carried, not worn), plus two note lines at most:
+ * a Wear button), or not owned — plus a permanent Umbrella
+ * row in the same idiom (carried / not owned, never a button:
+ * it is carried, not worn), plus two note lines at most:
  * a protection note and a carrying-bonus note. It is light on
  * purpose: short rows and two lines, never a heavy panel.
+ * THE APRON is the sixth garment (Adam, 2026-10-29 —
+ * "people wear aprons, that's just how they work"): a true
+ * worn garment whose +10 lb is gated on WEARING, like the
+ * cloak's +6. It briefly shipped as a carried-only row
+ * (3ca484b) before his overrule; that bespoke row is gone —
+ * the apron rides the garment machinery like the other five.
  * It owns no wardrobe logic: the caller passes the worn set,
  * the carried set, and both note texts, and reports wear /
  * remove presses through callbacks. The caller (App, which may
@@ -20,8 +26,9 @@
  *
  * GARMENT IDS mirror the engine's GarmentId in game/weather.ts
  * by name ('cloak' | 'shawl' | 'pointyHat' | 'mossyMittens' |
- * 'bogBoots'); display names are the plain words for them
- * (hooded cloak, shawl, Pointy Hat, Mossy Mittens, bog boots).
+ * 'bogBoots' | 'apron'); display names are the plain words
+ * for them (hooded cloak, shawl, Pointy Hat, Mossy Mittens,
+ * bog boots, apron).
  * This file defines its own id type rather than importing game
  * code, keeping the src/ui/ boundary this directory holds.
  *
@@ -29,15 +36,19 @@
  * separate):
  * - Carrying bonus (PINNED, Adam 2026-10-26, via Systems'
  *   Wardrobe.wornCapacityBonus): cloak +6, shawl +3, Pointy
- *   Hat +1, mittens +0, bog boots +0 — extra carrying room
- *   while the garment is worn AND carried. Wearing does not
- *   consume the garment, and a worn garment is not counted
- *   against personal capacity.
+ *   Hat +1, mittens +0, bog boots +0, apron +10 (apron added
+ *   2026-10-29 on Adam's overrule; its number is unchanged
+ *   from its carried-gear days, now worn-gated) — extra
+ *   carrying room while the garment is worn AND carried.
+ *   Wearing does not consume the garment, and a worn
+ *   garment is not counted against personal capacity.
  * - Weather protection (engine table, game/weather.ts,
  *   lane-decided percentages flagged for Adam's pin pass):
  *   cloak rain 40% / wind 30%, shawl cold 30%, Pointy Hat
  *   rain 15%, Mossy Mittens cold 15%, bog boots wet 40%
- *   (plus the boots' separate bog-travel mitigation).
+ *   (plus the boots' separate bog-travel mitigation);
+ *   the apron's table row is empty — it protects against
+ *   nothing; its gift is the pockets.
  * The caller supplies each note from its own source; this
  * component holds NO table and computes NO number, so it
  * cannot drift from either source.
@@ -60,7 +71,8 @@ export type WornGarment =
   | 'shawl'
   | 'pointyHat'
   | 'mossyMittens'
-  | 'bogBoots';
+  | 'bogBoots'
+  | 'apron';
 
 export interface WornListProps {
   /** Garments currently worn, caller-supplied. */
@@ -96,20 +108,6 @@ export interface WornListProps {
    * action for a button to offer. Default false.
    */
   umbrellaCarried?: boolean;
-  /**
-   * Whether an apron is held, caller-supplied (the shell's
-   * ITEMS.apron count). The Apron ROW is permanent, in the
-   * garment idiom ("Apron — carried" / "Apron — not
-   * owned", Adam 2026-10-29: 'The Apron would be nice to
-   * see in the Clothing also'). NO Wear/Remove button
-   * ever: the apron is not a garment — no slot, no Wear
-   * step; its +10 lb is granted by carrying and already
-   * lives in the capacity readouts, so the row carries
-   * the state word only (one home per fact). It sits
-   * beside the Umbrella row — the list's other
-   * carried-not-worn entry. Default false.
-   */
-  apronCarried?: boolean;
   /** Caller-supplied note line (e.g. a wear/remove error). */
   note?: string | null;
   /** Thumb-sized Wear/Remove buttons (44 px targets) on touch. Default false. */
@@ -123,6 +121,7 @@ const WORN_ORDER: WornGarment[] = [
   'pointyHat',
   'mossyMittens',
   'bogBoots',
+  'apron',
 ];
 
 const WORN_WORD: Record<WornGarment, string> = {
@@ -131,6 +130,7 @@ const WORN_WORD: Record<WornGarment, string> = {
   pointyHat: 'Pointy Hat',
   mossyMittens: 'Mossy Mittens',
   bogBoots: 'Bog boots',
+  apron: 'Apron',
 };
 
 export function WornList({
@@ -141,7 +141,6 @@ export function WornList({
   protectionNote,
   capacityNote,
   umbrellaCarried = false,
-  apronCarried = false,
   note,
   comfortable = false,
   className,
@@ -202,21 +201,6 @@ export function WornList({
             Umbrella{' '}
             <span className="text-xs text-stone-400">
               {umbrellaCarried ? '— carried' : '— not owned'}
-            </span>
-          </span>
-        </li>
-        {/* Apron row (Adam, 2026-10-29): permanent, same
-          idiom, seated beside the Umbrella row — the
-          list's carried-not-worn entries. Never a button:
-          there is no wearing interaction for it; its
-          bonus is by carrying and already reads in the
-          capacity figures, so the row is the state word
-          only. */}
-        <li className="flex items-center justify-between gap-2">
-          <span>
-            Apron{' '}
-            <span className="text-xs text-stone-400">
-              {apronCarried ? '— carried' : '— not owned'}
             </span>
           </span>
         </li>
