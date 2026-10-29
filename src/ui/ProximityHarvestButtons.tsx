@@ -175,6 +175,21 @@ export interface ProximityHarvestButtonsProps {
   /** Verb for the remove button. Default "Remove" (lane's pick). */
   removeLabel?: string;
   /**
+   * Multi-step progress for one target (pill-fill, Adam
+   * 2026-10-29): forwarded to the matching target's
+   * HarvestButton only (targetId match); every other pill
+   * renders ordinary. Caller-owned from the
+   * 'harvest:progress' payload; null = nothing in
+   * progress.
+   */
+  progress?: {
+    targetId: string;
+    fraction: number;
+    verb: string;
+    pressIndex: number;
+    pressesTotal: number;
+  } | null;
+  /**
    * Optional node rendered first in the column, above the
    * harvest buttons (e.g. a LOOK action for the nearest
    * target). The caller owns its visibility and content.
@@ -225,6 +240,7 @@ export function ProximityHarvestButtons({
   onHarvest,
   onRemove,
   removeLabel = 'Remove',
+  progress,
   lookNode,
   stationAnchor,
   trap,
@@ -291,6 +307,11 @@ export function ProximityHarvestButtons({
                 <HarvestButton
                   target={target}
                   onHarvest={onHarvest}
+                  progress={
+                    progress && progress.targetId === target.id
+                      ? progress
+                      : null
+                  }
                   theme={theme}
                 />
               ) : null}
@@ -305,6 +326,11 @@ export function ProximityHarvestButtons({
             <HarvestButton
               target={target}
               onHarvest={onHarvest}
+              progress={
+                progress && progress.targetId === target.id
+                  ? progress
+                  : null
+              }
               theme={theme}
             />
           ) : null}

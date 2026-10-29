@@ -29,7 +29,8 @@
  *   'harvest:completed' yields as carried, 'harvest:failed'
  *   reasons as carried (with attempted yields named on
  *   'inventory-full' only, as the event defines), and
- *   'harvest:progress' fractions as carried. Nothing here
+ *   'harvest:progress' fractions, press counts, verbs, and
+ *   struggle/success lines as carried. Nothing here
  *   invents a yield, a reason, or a progress value.
  * - Station presence: crafting checks the real presence query
  *   (stationPresence on the current generator at her position,
@@ -1633,7 +1634,6 @@ import { RemoveConfirm } from './ui/RemoveConfirm';
 import { InventoryPanel } from './ui/InventoryPanel';
 import { CraftingMenu } from './ui/CraftingMenu';
 import { ProximityHarvestButtons } from './ui/ProximityHarvestButtons';
-import { InteractionProgress } from './ui/InteractionProgress';
 import { ObjectFeedback } from './ui/ObjectFeedback';
 import { WorldAnchor } from './ui/WorldAnchor';
 import { KEY_BADGE_CLASS, LOOK_THEMES, UI_THEMES } from './ui/themes';
@@ -1776,13 +1776,22 @@ interface FeedbackItem {
   y: number;
 }
 
-/** One in-progress multi-step harvest, anchored at its object. */
-interface ProgressItem {
+/**
+ * One in-progress multi-step harvest, for the pill-fill
+ * display (Adam, 2026-10-29): the target's Harvest pill
+ * fills with this fraction and shows the verb + press
+ * count. Every field arrives on the 'harvest:progress'
+ * payload (the Systems rider — pressIndex / pressesTotal
+ * / verb are computed at the emit site from the def,
+ * never derived here). The world-anchored progress bar
+ * it replaces is retired: one element per anchor.
+ */
+interface HarvestProgressState {
   targetId: string;
   fraction: number;
-  label: string;
-  x: number;
-  y: number;
+  pressIndex: number;
+  pressesTotal: number;
+  verb: string;
 }
 
 // BELOW-PERMIT WORDING (Adam, 2026-10-26 — "below permit" is too
@@ -2424,12 +2433,14 @@ export default function App() {
     setTraps(trapState.snapshot());
   };
   const pilesRef = useRef<PileTarget[]>([]);
-  // Harvest outcome feedback + multi-step progress, rendered
-  // through WorldAnchor + ObjectFeedback / InteractionProgress.
+  // Harvest outcome feedback, rendered through WorldAnchor
+  // + ObjectFeedback; multi-step progress rides the
+  // target's pill (harvestProgress below), not a world bar.
   // Populated only by the outcome events (see the header) — never
   // by invented yields or progress.
   const [feedbacks, setFeedbacks] = useState<FeedbackItem[]>([]);
-  const [progressItems, setProgressItems] = useState<ProgressItem[]>([]);
+  const [harvestProgress, setHarvestProgress] =
+    useState<HarvestProgressState | null>(null);
 
   // Placed fires (engine singleton, read fresh on every event),
   // their projected anchors, the fire whose menu is open, and
@@ -4410,22 +4421,33 @@ export default function App() {
       }
       refreshInventory();
       saveNow();
-      setProgressItems((current) =>
-        current.filter((item) => item.targetId !== p.targetId),
+      setHarvestProgress((current) =>
+        current?.targetId === p.targetId ? null : current,
       );
       const anchor = anchorForOutcome(p.targetId, p.kind);
       if (anchor) {
-        showFeedback(
-          p.yields.map((y) => `${y.item} × ${y.quantity}`).join(', '),
-          'gain',
-          anchor.x,
-          anchor.y,
-        );
+        // A multi-step finish carries the def's success
+        // line (Systems rider): it IS the finish chip —
+        // shown INSTEAD of the yields chip, because two
+        // chips at one anchor would print over each other
+        // (Adam's standing rule). The yields still land
+        // in inventory above; single-press completions
+        // (no successMessage) keep the yields chip.
+        if (p.successMessage) {
+          showFeedback(p.successMessage, 'info', anchor.x, anchor.y);
+        } else {
+          showFeedback(
+            p.yields.map((y) => `${y.item} × ${y.quantity}`).join(', '),
+            'gain',
+            anchor.x,
+            anchor.y,
+          );
+        }
       }
     });
     const offFailed = bus.on('harvest:failed', (p) => {
-      setProgressItems((current) =>
-        current.filter((item) => item.targetId !== p.targetId),
+      setHarvestProgress((current) =>
+        current?.targetId === p.targetId ? null : current,
       );
       const anchor = anchorForOutcome(p.targetId, p.kind);
       if (!anchor) return;
@@ -4438,28 +4460,22 @@ export default function App() {
       showFeedback(text, 'blocked', anchor.x, anchor.y);
     });
     const offProgress = bus.on('harvest:progress', (p) => {
-      const target = busTargetsRef.current.find(
-        (t) => t.id === p.targetId,
-      );
-      const anchor = target
-        ? projectAnchor(target.x, target.z, target.kind)
-        : null;
-      if (!anchor) return;
-      setProgressItems((current) => {
-        const rest = current.filter(
-          (item) => item.targetId !== p.targetId,
-        );
-        return [
-          ...rest,
-          {
-            targetId: p.targetId,
-            fraction: p.progress,
-            label: target.name,
-            x: anchor.x,
-            y: anchor.y,
-          },
-        ];
+      // Pill-fill (Adam, 2026-10-29): the pill carries the
+      // progress now — state from the payload verbatim
+      // (fraction, press index/total, verb, all computed
+      // at the emit site). The struggle line rides the
+      // ordinary feedback chip at the target's anchor.
+      setHarvestProgress({
+        targetId: p.targetId,
+        fraction: p.progress,
+        pressIndex: p.pressIndex,
+        pressesTotal: p.pressesTotal,
+        verb: p.verb,
       });
+      const anchor = anchorForOutcome(p.targetId, 'scatter');
+      if (anchor) {
+        showFeedback(p.struggleMessage, 'info', anchor.x, anchor.y);
+      }
     });
     const offLoaded = bus.on('world:chunkLoaded', () =>
       setChunkCount(renderer.loadedChunkCount),
@@ -8882,16 +8898,12 @@ export default function App() {
             valid
           />
         ) : null}
-        {progressItems.map((item) => (
-          <Fragment key={item.targetId}>
-            <WorldAnchor x={item.x} y={item.y}>
-              <InteractionProgress theme={lookThemes.dialog}
-                fraction={item.fraction}
-                label={item.label}
-              />
-            </WorldAnchor>
-          </Fragment>
-        ))}
+        {/* The world-anchored harvest progress bar RETIRED
+          here (Adam, 2026-10-29): its fill, verb, and count
+          moved onto the target's pill (pill-fill), and its
+          name label — the ghost duplicate that printed
+          beside the pills — goes with it. One element per
+          anchor: the pill is the target's one display. */}
       </div>
 
       {/* Screen-fixed harvest buttons: above panels (z-30), below
@@ -8905,6 +8917,7 @@ export default function App() {
         <ProximityHarvestButtons theme={lookThemes.world}
           targets={presentedTargets}
           harvestedIds={harvestedIds}
+          progress={harvestProgress}
           onHarvest={handleHarvest}
           onRemove={handleRemove}
           stationAnchor={stationAnchor}
