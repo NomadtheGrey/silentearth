@@ -5140,11 +5140,47 @@ export default function App() {
     display: boneDisplayFor(charm.kind),
   }));
 
+  // PANEL FAMILY (Adam, 2026-10-29: the three HUD
+  // panels SWAP — "switch out without any further
+  // intervention"): Inventory / Crafting / Charms are
+  // a radio family. Opening one closes the other two;
+  // the toggles close the open one. Keys and both
+  // button rows all ride these helpers, so the rule
+  // holds however a panel is opened. Options is NOT
+  // in the family — it overlays (its own door + the
+  // modal guards), never swapped out, never swapped
+  // in by a panel key.
+  const openInventoryPanel = () => {
+    setInventoryOpen(true);
+    setCraftingOpen(false);
+    setCharmsOpen(false);
+  };
+  const openCraftingPanel = () => {
+    setCraftingOpen(true);
+    setInventoryOpen(false);
+    setCharmsOpen(false);
+  };
+  const toggleInventoryPanel = () => {
+    if (inventoryOpen) setInventoryOpen(false);
+    else openInventoryPanel();
+  };
+  const toggleCraftingPanel = () => {
+    if (craftingOpen) setCraftingOpen(false);
+    else openCraftingPanel();
+  };
+  const toggleCharmsPanel = () => {
+    if (charmsOpen) setCharmsOpen(false);
+    else openCharmsPanel();
+  };
+
   // Open the charms panel with a valid selection: keep
   // the current one if it is still listed (awakenings
-  // never drop), else fall to the first charm.
+  // never drop), else fall to the first charm. Radio
+  // family: opening closes the other two.
   const openCharmsPanel = () => {
     setCharmsOpen(true);
+    setInventoryOpen(false);
+    setCraftingOpen(false);
     setSelectedCharmKind((current) =>
       charmEntries.some((charm) => charm.kind === current)
         ? current
@@ -7855,10 +7891,17 @@ export default function App() {
         }
         return;
       }
+      // Panel family (Adam, 2026-10-29: the panels
+      // SWAP): with one panel open, another panel's
+      // key replaces it in the same press; the open
+      // panel's own key closes it; every other key
+      // waits. (Before this, only the open panel's own
+      // key did anything here — I then K was blocked
+      // by the open Inventory. That was the bug.)
       if (inventoryOpen || craftingOpen || charmsOpen) {
-        if (key === 'i' && inventoryOpen) setInventoryOpen(false);
-        else if (key === 'k' && craftingOpen) setCraftingOpen(false);
-        else if (key === 'l' && charmsOpen) setCharmsOpen(false);
+        if (key === 'i') toggleInventoryPanel();
+        else if (key === 'k') toggleCraftingPanel();
+        else if (key === 'l') toggleCharmsPanel();
         return;
       }
       if (key === 'e' && !e.shiftKey) {
@@ -7871,12 +7914,11 @@ export default function App() {
       } else if (key === 'r') {
         handleSecondInteract();
       } else if (key === 'i') {
-        setInventoryOpen((open) => !open);
+        toggleInventoryPanel();
       } else if (key === 'k') {
-        setCraftingOpen((open) => !open);
+        toggleCraftingPanel();
       } else if (key === 'l') {
-        if (charmsOpen) setCharmsOpen(false);
-        else openCharmsPanel();
+        toggleCharmsPanel();
       } else if (key === 'p') {
         pauseState.setPaused(!pausedRef.current);
       }
@@ -7894,6 +7936,9 @@ export default function App() {
     handleUseInteract,
     handleSecondInteract,
     openCharmsPanel,
+    toggleInventoryPanel,
+    toggleCraftingPanel,
+    toggleCharmsPanel,
     firstRunDone,
     placement,
     handlePlaceConfirm,
@@ -8632,7 +8677,7 @@ export default function App() {
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <button
               type="button"
-              onClick={() => setInventoryOpen((open) => !open)}
+              onClick={toggleInventoryPanel}
               aria-pressed={inventoryOpen}
               className={
                 isTouch
@@ -8652,7 +8697,7 @@ export default function App() {
             </button>
             <button
               type="button"
-              onClick={() => setCraftingOpen((open) => !open)}
+              onClick={toggleCraftingPanel}
               aria-pressed={craftingOpen}
               className={
                 isTouch
@@ -8672,7 +8717,7 @@ export default function App() {
             </button>
             <button
               type="button"
-              onClick={openCharmsPanel}
+              onClick={toggleCharmsPanel}
               aria-pressed={charmsOpen}
               className={
                 isTouch
@@ -8767,7 +8812,7 @@ export default function App() {
                   {
                     id: 'craft',
                     label: 'Craft',
-                    onSelect: () => setCraftingOpen(true),
+                    onSelect: () => openCraftingPanel(),
                   },
                 ]}
                 comfortable={isTouch}
@@ -8839,7 +8884,7 @@ export default function App() {
             </button>
             <button
               type="button"
-              onClick={() => setInventoryOpen((open) => !open)}
+              onClick={toggleInventoryPanel}
               aria-pressed={inventoryOpen}
               className="min-h-[44px] rounded bg-moss-deep px-3 py-2 text-sm hover:bg-moss"
             >
@@ -8847,7 +8892,7 @@ export default function App() {
             </button>
             <button
               type="button"
-              onClick={() => setCraftingOpen((open) => !open)}
+              onClick={toggleCraftingPanel}
               aria-pressed={craftingOpen}
               className="min-h-[44px] rounded bg-moss-deep px-3 py-2 text-sm hover:bg-moss"
             >
@@ -8855,7 +8900,7 @@ export default function App() {
             </button>
             <button
               type="button"
-              onClick={openCharmsPanel}
+              onClick={toggleCharmsPanel}
               aria-pressed={charmsOpen}
               className="min-h-[44px] rounded bg-moss-deep px-3 py-2 text-sm hover:bg-moss"
             >
