@@ -1371,6 +1371,51 @@ export class WorldRenderer {
       mat.side = THREE.DoubleSide;
       return new THREE.Mesh(geo, mat);
     };
+    // Packed-earth floor disc (Adam, 2026-10-29, Floor
+    // Option A): vertex-colour mottling gives the flat disc
+    // real detail for the eye to hold (the scatter idiom —
+    // a vertexColors Lambert), and the rim shades darker
+    // so a raised edge reads as a step. The mottle is a
+    // pure function of local position + the house's world
+    // position — deterministic, no RNG state, identical on
+    // every rebuild. houseCyl's flat colour can't carry
+    // this, hence its own builder.
+    const houseFloorDisc = (
+      radius: number,
+      height: number,
+      color: number,
+      px: number,
+      py: number,
+      pz: number,
+      worldX: number,
+      worldZ: number,
+    ): THREE.Mesh => {
+      const geo = new THREE.CylinderGeometry(radius, radius, height, 12);
+      const posAttr = geo.getAttribute('position');
+      const norAttr = geo.getAttribute('normal');
+      const colors = new Float32Array(posAttr.count * 3);
+      const base = new THREE.Color(color);
+      for (let i = 0; i < posAttr.count; i++) {
+        const lx = posAttr.getX(i);
+        const lz = posAttr.getZ(i);
+        const ny = norAttr.getY(i);
+        const s = Math.sin((lx + worldX) * 12.9898 + (lz + worldZ) * 78.233) * 43758.5453;
+        const h = s - Math.floor(s);
+        // Draft bands: top face mottles 0.86–1.08, the rim
+        // sits at 0.78 (the step read), underside 0.70
+        // (never seen, kept consistent).
+        const f = ny > 0.5 ? 0.86 + h * 0.22 : ny < -0.5 ? 0.7 : 0.78;
+        colors[i * 3] = base.r * f;
+        colors[i * 3 + 1] = base.g * f;
+        colors[i * 3 + 2] = base.b * f;
+      }
+      geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+      const mat = new THREE.MeshLambertMaterial({ vertexColors: true });
+      mat.side = THREE.DoubleSide;
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.position.set(px, py, pz);
+      return mesh;
+    };
     for (const fire of fireState.snapshot()) {
       const fg = new THREE.Group();
       fg.position.set(fire.x, 0, fire.z);
@@ -1465,8 +1510,16 @@ export class WorldRenderer {
         hg.add(houseBox(0.7, 1.3, 0.1, 0x3a2812, 0, 0.65, f / 2 + 0.01));
         hg.add(houseBox(0.9, 0.1, 0.5, 0x8a8a86, 0, 0.05, f / 2 + 0.25));
         hg.add(houseCyl(0.09, 0.09, 0.3, 0x1a1a1a, 0, 3.1, 0));
-        // Floor disc, inset within the round wall.
-        hg.add(houseCyl(f / 2 - 0.1, f / 2 - 0.1, 0.04, 0x9a8a6a, 0, 0.02, 0, 12));
+        // Floor (Adam, 2026-10-29, Floor Option A — presence):
+        // the radius runs OUT to the wall and 0.02 past it,
+        // closing the old inset ring gap (bare ground showing
+        // below floor level between disc edge and wall); the
+        // top sits at 0.10 with its rim as the step in (the
+        // stoop outside already tops at 0.10 — they meet
+        // level), and the slab sinks 0.02 below ground so no
+        // cap lies coplanar with the terrain. Packed-earth
+        // tone, draft; the mottle lives in houseFloorDisc.
+        hg.add(houseFloorDisc(f / 2 + 0.02, 0.12, 0x8a7355, 0, 0.04, 0, house.x, house.z));
       } else if (house.type === 'wovenCottage') {
         hg.add(houseBox(f, 2.2, f * 0.8, 0xd8c9a8, 0, 1.1, 0));
         const roof = houseRoof(new THREE.ConeGeometry(f * 0.75, 1.4, 4), 0x8a7a4a);
