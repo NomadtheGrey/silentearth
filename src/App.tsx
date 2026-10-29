@@ -9277,6 +9277,7 @@ export default function App() {
               protectionNote={protectionNote}
               capacityNote={capacityNote}
               umbrellaCarried={carriesUmbrella(inventory)}
+              apronCarried={inventory.count(ITEMS.apron) > 0}
               note={wardrobeNote}
             />
           </div>

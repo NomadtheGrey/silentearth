@@ -7,9 +7,9 @@
  *
  * The wardrobe section in the HUD: the five garments, one row
  * each, with what she is doing about it — worn, carried (with
- * a Wear button), or not owned — plus a permanent Umbrella
- * row in the same idiom (carried / not owned, never a button:
- * it is carried, not worn), plus two note lines at most:
+ * a Wear button), or not owned — plus permanent Umbrella
+ * and Apron rows in the same idiom (carried / not owned,
+ * never a button: both are carried, not worn), plus two note lines at most:
  * a protection note and a carrying-bonus note. It is light on
  * purpose: short rows and two lines, never a heavy panel.
  * It owns no wardrobe logic: the caller passes the worn set,
@@ -96,6 +96,20 @@ export interface WornListProps {
    * action for a button to offer. Default false.
    */
   umbrellaCarried?: boolean;
+  /**
+   * Whether an apron is held, caller-supplied (the shell's
+   * ITEMS.apron count). The Apron ROW is permanent, in the
+   * garment idiom ("Apron — carried" / "Apron — not
+   * owned", Adam 2026-10-29: 'The Apron would be nice to
+   * see in the Clothing also'). NO Wear/Remove button
+   * ever: the apron is not a garment — no slot, no Wear
+   * step; its +10 lb is granted by carrying and already
+   * lives in the capacity readouts, so the row carries
+   * the state word only (one home per fact). It sits
+   * beside the Umbrella row — the list's other
+   * carried-not-worn entry. Default false.
+   */
+  apronCarried?: boolean;
   /** Caller-supplied note line (e.g. a wear/remove error). */
   note?: string | null;
   /** Thumb-sized Wear/Remove buttons (44 px targets) on touch. Default false. */
@@ -127,6 +141,7 @@ export function WornList({
   protectionNote,
   capacityNote,
   umbrellaCarried = false,
+  apronCarried = false,
   note,
   comfortable = false,
   className,
@@ -187,6 +202,21 @@ export function WornList({
             Umbrella{' '}
             <span className="text-xs text-stone-400">
               {umbrellaCarried ? '— carried' : '— not owned'}
+            </span>
+          </span>
+        </li>
+        {/* Apron row (Adam, 2026-10-29): permanent, same
+          idiom, seated beside the Umbrella row — the
+          list's carried-not-worn entries. Never a button:
+          there is no wearing interaction for it; its
+          bonus is by carrying and already reads in the
+          capacity figures, so the row is the state word
+          only. */}
+        <li className="flex items-center justify-between gap-2">
+          <span>
+            Apron{' '}
+            <span className="text-xs text-stone-400">
+              {apronCarried ? '— carried' : '— not owned'}
             </span>
           </span>
         </li>
