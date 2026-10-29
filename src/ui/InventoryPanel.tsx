@@ -188,7 +188,7 @@ export function InventoryPanel({
     ? 'rounded px-3 py-2 text-sm min-h-[44px] ' + t.button
     : 'rounded px-2 py-1 text-sm ' + t.button;
   return (
-    <section aria-label="Inventory" className={'rounded-2xl p-3 ' + t.panel}>
+    <section aria-label="Inventory" className={'@container rounded-2xl p-3 ' + t.panel}>
       <div className="mb-1 flex items-center justify-between gap-2">
         <h2 className={'text-base font-semibold ' + t.heading}>Inventory</h2>
         {onClose ? (
@@ -317,19 +317,50 @@ export function InventoryPanel({
         // Row layout (narrow-width fix, 2026-10-29 — Adam's
         // screenshot: descriptors wrapped one word per line
         // and the meta line printed OVER the descriptor):
-        // the old single-line 3-column subgrid (name+note |
+        // the single-line 3-column subgrid (name+note |
         // nowrap meta | button cluster) starves the text
-        // column at phone width — meta ~170 px + touch
-        // buttons ~150 px + padding leave the name column
-        // a sliver, and the overflowing centered meta
-        // overprints the note. Below sm the row STACKS in
-        // normal flow (name+note full width, meta on its
-        // own line, buttons on their own line — overlap is
-        // impossible); at sm and up the original 3-column
-        // grid returns unchanged. All three lists in this
-        // panel (personal, pile, storage) share the shape
-        // and the fix.
-        <ul className="flex flex-col gap-y-2 sm:grid sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:gap-x-2 sm:gap-y-1">
+        // column at phone width — meta + buttons + padding
+        // leave the name column a sliver, and the note's
+        // text paints out of its collapsed box over the
+        // meta. The first fix stacked the row below the
+        // sm VIEWPORT breakpoint — but the panel never
+        // gets a viewport-sized box (desktop stack caps at
+        // max-w-sm, the touch stack at 46vw), so the grid
+        // still engaged inside ~360 px on every desktop
+        // window and landscape phone and Adam hit the same
+        // screenshot on the merged build. Now the switch
+        // is keyed to the PANEL's own width: the section
+        // is a CSS container (@container) and the grid
+        // returns only at @xl (panel ≥ 36 rem, where meta
+        // + the widest button cluster + a readable text
+        // column genuinely fit — verified by measurement:
+        // starved at 358/371 px containers, healthy at
+        // 559). Below that the row STACKS.
+        //
+        // TITLE-ROW SHAPE (Adam, later the same day:
+        // "Still could put the one liner next to the
+        // item's title, get it out of the way"): in the
+        // stack, the meta does NOT get a line of its own
+        // — it rides the title row, name left (flexing,
+        // truncating past a min-w stub), meta right,
+        // nowrap; the descriptor takes the full width
+        // beneath, unobstructed, and the buttons keep
+        // their own row (flex-wrap, for the ~150 px
+        // portrait touch column). If name + meta
+        // genuinely can't share the title line, the
+        // header wraps: the meta drops to its own line
+        // UNDER the name, still above the descriptor —
+        // it never spills into the descriptor's space.
+        // At @xl the header div dissolves (@xl:contents)
+        // and name / meta / buttons take their subgrid
+        // columns on row 1 while the descriptor moves to
+        // row 2 under the name (the li spans both rows) —
+        // so the wide form's noted rows stand one
+        // descriptor-line taller than the original
+        // single-row grid, the one visible change there.
+        // All three lists in this panel (personal, pile,
+        // storage) share the shape and the fix.
+        <ul className="flex flex-col gap-y-2 @xl:grid @xl:grid-cols-[minmax(0,1fr)_auto_auto] @xl:gap-x-2 @xl:gap-y-1">
           {items.map((item) => {
             const selected = item.id === selectedItemId;
             const placeable = placeableIds?.has(item.id) ?? false;
@@ -337,38 +368,57 @@ export function InventoryPanel({
             return (
               <li
                 key={item.id}
-                className="flex flex-col gap-y-1 sm:col-span-3 sm:grid sm:grid-cols-subgrid sm:items-center"
+                className={
+                  'flex flex-col gap-y-1 @xl:col-span-3 @xl:grid @xl:grid-cols-subgrid @xl:items-center' +
+                  (item.note
+                    ? ' @xl:row-span-2 @xl:grid-rows-subgrid'
+                    : '')
+                }
               >
-                <button
-                  type="button"
-                  onClick={() => onSelectItem?.(item.id)}
-                  aria-pressed={selected}
-                  className={
-                    'rounded px-2 py-1 text-left ' +
-                    (selected ? t.selected : 'hover:bg-stone-800')
-                  }
-                >
-                  <span className="flex items-center gap-1.5">
-                    {item.icon ? (
-                      <span className="inline-flex shrink-0">{item.icon}</span>
-                    ) : null}
-                    <span className="min-w-0">{item.name}</span>
-                  </span>
-                  {item.note ? (
-                    <span className={'block text-sm ' + t.muted}>
-                      {item.note}
+                {/* Title row: name left, the one-line meta
+                  right on the SAME line, the descriptor
+                  unobstructed beneath (Adam's shape — see
+                  the row-layout comment above). */}
+                <div className="flex flex-wrap items-center gap-x-2 @xl:contents">
+                  <button
+                    type="button"
+                    onClick={() => onSelectItem?.(item.id)}
+                    aria-pressed={selected}
+                    className={
+                      'min-w-[8ch] flex-1 rounded px-2 py-1 text-left @xl:col-start-1 @xl:row-start-1 ' +
+                      (item.note ? 'rounded-b-none ' : '') +
+                      (selected ? t.selected : 'hover:bg-stone-800')
+                    }
+                  >
+                    <span className="flex items-center gap-1.5">
+                      {item.icon ? (
+                        <span className="inline-flex shrink-0">{item.icon}</span>
+                      ) : null}
+                      <span className="min-w-0 truncate">{item.name}</span>
                     </span>
-                  ) : null}
-                </button>
-                <span className="whitespace-nowrap text-left text-sm tabular-nums text-stone-300 sm:text-right">
-                  {[item.quantityText, item.weightText]
-                    .filter(
-                      (part): part is string =>
-                        part !== undefined && part !== '',
-                    )
-                    .join(' · ')}
-                </span>
-                <span className="flex gap-1">
+                  </button>
+                  <span className="whitespace-nowrap text-right text-sm tabular-nums text-stone-300 @xl:col-start-2 @xl:row-start-1">
+                    {[item.quantityText, item.weightText]
+                      .filter(
+                        (part): part is string =>
+                          part !== undefined && part !== '',
+                      )
+                      .join(' · ')}
+                  </span>
+                </div>
+                {item.note ? (
+                  <span
+                    onClick={() => onSelectItem?.(item.id)}
+                    className={
+                      'block cursor-pointer rounded-b px-2 pb-1 text-sm @xl:col-start-1 @xl:row-start-2 ' +
+                      (selected ? t.selected + ' ' : '') +
+                      t.muted
+                    }
+                  >
+                    {item.note}
+                  </span>
+                ) : null}
+                <span className="flex flex-wrap gap-1 @xl:col-start-3 @xl:row-start-1">
                 {placeable && onPlaceItem ? (
                   <button
                     type="button"
@@ -442,19 +492,21 @@ export function InventoryPanel({
           <h3 className={'text-base font-semibold ' + t.heading}>
             Nearby pile
           </h3>
-          <ul className="flex flex-col gap-y-2 sm:grid sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:gap-x-2 sm:gap-y-1">
+          <ul className="flex flex-col gap-y-2 @xl:grid @xl:grid-cols-[minmax(0,1fr)_auto_auto] @xl:gap-x-2 @xl:gap-y-1">
             {nearbyPile.kinds.map((kind) => (
               <li
                 key={kind.id}
-                className="flex flex-col gap-y-1 sm:col-span-3 sm:grid sm:grid-cols-subgrid sm:items-center"
+                className="flex flex-col gap-y-1 @xl:col-span-3 @xl:grid @xl:grid-cols-subgrid @xl:items-center"
               >
-                <span className="rounded px-2 py-1 text-left text-sm">
-                  {kind.name}
-                </span>
-                <span className="whitespace-nowrap text-left text-sm tabular-nums text-stone-300 sm:text-right">
-                  pile ×{kind.pileQuantity} · carried ×{kind.carriedQuantity}
-                </span>
-                <span className="flex gap-1">
+                <div className="flex flex-wrap items-center gap-x-2 @xl:contents">
+                  <span className="min-w-[8ch] flex-1 truncate rounded px-2 py-1 text-left text-sm @xl:col-start-1 @xl:row-start-1">
+                    {kind.name}
+                  </span>
+                  <span className="whitespace-nowrap text-right text-sm tabular-nums text-stone-300 @xl:col-start-2 @xl:row-start-1">
+                    pile ×{kind.pileQuantity} · carried ×{kind.carriedQuantity}
+                  </span>
+                </div>
+                <span className="flex flex-wrap gap-1 @xl:col-start-3 @xl:row-start-1">
                 {onTakeItem ? (
                   <button
                     type="button"
@@ -495,37 +547,49 @@ export function InventoryPanel({
           {storage.items.length === 0 ? (
             <p className={'italic ' + t.muted}>Nothing stored here yet.</p>
           ) : (
-            <ul className="flex flex-col gap-y-2 sm:grid sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:gap-x-2 sm:gap-y-1">
+            <ul className="flex flex-col gap-y-2 @xl:grid @xl:grid-cols-[minmax(0,1fr)_auto_auto] @xl:gap-x-2 @xl:gap-y-1">
               {storage.items.map((item) => (
                 <li
                   key={item.id}
-                  className="flex flex-col gap-y-1 sm:col-span-3 sm:grid sm:grid-cols-subgrid sm:items-center"
+                  className={
+                    'flex flex-col gap-y-1 @xl:col-span-3 @xl:grid @xl:grid-cols-subgrid @xl:items-center' +
+                    (item.note
+                      ? ' @xl:row-span-2 @xl:grid-rows-subgrid'
+                      : '')
+                  }
                 >
-                  <span className="rounded px-2 py-1 text-left">
-                    <span className="flex items-center gap-1.5">
-                      {item.icon ? (
-                        <span className="inline-flex shrink-0">
-                          {item.icon}
-                        </span>
-                      ) : null}
-                      <span className="min-w-0">{item.name}</span>
-                    </span>
-                    {/* Row note, same block as the personal
-                      rows (descriptor wiring, 2026-10-29):
-                      storage rows carry notes by the same
-                      rule, so they render them the same
-                      way — before this, a stored item's
-                      note had nowhere to show. */}
-                    {item.note ? (
-                      <span className={'block text-sm ' + t.muted}>
-                        {item.note}
+                  <div className="flex flex-wrap items-center gap-x-2 @xl:contents">
+                    <span className="min-w-[8ch] flex-1 rounded px-2 py-1 text-left @xl:col-start-1 @xl:row-start-1">
+                      <span className="flex items-center gap-1.5">
+                        {item.icon ? (
+                          <span className="inline-flex shrink-0">
+                            {item.icon}
+                          </span>
+                        ) : null}
+                        <span className="min-w-0 truncate">{item.name}</span>
                       </span>
-                    ) : null}
-                  </span>
-                  <span className="whitespace-nowrap text-left text-sm tabular-nums text-stone-300 sm:text-right">
-                    {item.quantityText ?? null}
-                  </span>
-                  <span className="flex gap-1">
+                    </span>
+                    <span className="whitespace-nowrap text-right text-sm tabular-nums text-stone-300 @xl:col-start-2 @xl:row-start-1">
+                      {item.quantityText ?? null}
+                    </span>
+                  </div>
+                  {/* Row note, same shape as the personal
+                    rows (descriptor wiring, 2026-10-29):
+                    storage rows carry notes by the same
+                    rule, so they render them the same
+                    way — full width beneath the title
+                    row. */}
+                  {item.note ? (
+                    <span
+                      className={
+                        'block px-2 pb-1 text-sm @xl:col-start-1 @xl:row-start-2 ' +
+                        t.muted
+                      }
+                    >
+                      {item.note}
+                    </span>
+                  ) : null}
+                  <span className="flex flex-wrap gap-1 @xl:col-start-3 @xl:row-start-1">
                   {storage.onWithdrawItem ? (
                     <button
                       type="button"
