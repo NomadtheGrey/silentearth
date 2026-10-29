@@ -1751,6 +1751,7 @@ import {
   snakeDrainFactor,
   boneNote,
   boneKindFor,
+  boneItemFor,
   isBoneItem,
   recordBonePickupLook,
   HungerWarning,
@@ -7246,17 +7247,36 @@ export default function App() {
   // SAME lists the panel renders — one source, no
   // divergence. Computed only while a site is selected
   // (the panel's own condition); [] otherwise.
+  // Panel honesty (Adam, 2026-10-29 — the list offered
+  // every unawakened kind as a live button and pressing
+  // one she doesn't carry answered 'No such bone
+  // carried.'): each option now carries its CARRIED
+  // COUNT (boneItemFor against inventory, the same
+  // stacks read the food options below use), and the
+  // panel renders uncarried kinds disabled-but-visible
+  // — the list is the Waking collection; greyed rows
+  // show what remains to find. Systems' stageBone
+  // refusal stays as backstop.
   const selectedSiteKindOptions =
     selectedSiteId === null
       ? []
-      : RITUAL_RECIPES.filter(
-          (recipe) => charmStateRef.current.tierOf(recipe.boneKind) === 0,
-        ).map((recipe) => ({
-          kind: recipe.boneKind,
-          display: boneDisplayFor(recipe.boneKind),
-          skyLabel:
-            recipe.sky === 'none' ? 'Any sky' : skyLabelFor(recipe.sky),
-        }));
+      : (() => {
+          const counts = new Map<string, number>();
+          for (const stack of inventory.stacksSnapshot()) {
+            const id = normalizeItemId(stack.item);
+            counts.set(id, (counts.get(id) ?? 0) + stack.quantity);
+          }
+          return RITUAL_RECIPES.filter(
+            (recipe) => charmStateRef.current.tierOf(recipe.boneKind) === 0,
+          ).map((recipe) => ({
+            kind: recipe.boneKind,
+            display: boneDisplayFor(recipe.boneKind),
+            skyLabel:
+              recipe.sky === 'none' ? 'Any sky' : skyLabelFor(recipe.sky),
+            carried:
+              counts.get(normalizeItemId(boneItemFor(recipe.boneKind))) ?? 0,
+          }));
+        })();
   const selectedSiteFoodOptions =
     selectedSiteId === null
       ? []
@@ -8064,7 +8084,14 @@ export default function App() {
       // lists the panel renders.
       const siteId = selectedSiteId;
       if (selectedSiteStaged === null) {
-        const option = selectedSiteKindOptions[digit - 1];
+        // Digits number the CARRIED rows only, in display
+        // order — the panel badges by the same rule, so a
+        // badge never sits on a row its digit can't stage
+        // (uncarried rows are disabled; panel honesty,
+        // 2026-10-29).
+        const option = selectedSiteKindOptions.filter(
+          (candidate) => candidate.carried > 0,
+        )[digit - 1];
         if (option) handleStageBone(siteId, option.kind);
         return;
       }
