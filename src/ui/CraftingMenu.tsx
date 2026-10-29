@@ -110,6 +110,11 @@ export function CraftingMenu({
               {recipe.description}
             </span>
           ) : null}
+          {recipe.ladderLine ? (
+            <span className={'mt-0.5 block text-sm ' + t.muted}>
+              {recipe.ladderLine}
+            </span>
+          ) : null}
         </button>
         {recipe.disabledLabel ? (
           <p className={'mt-1 block text-sm ' + t.muted}>

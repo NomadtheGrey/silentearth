@@ -2127,6 +2127,36 @@ function itemNoteFor(item: string, charms: CharmState): string | undefined {
   return kind === null ? descriptionFor(item) : boneNote(kind, charms);
 }
 
+/**
+ * HOUSING LADDER LINES (Adam, 2026-10-29 — he didn't know
+ * the feature existed: placing a higher house item facing
+ * a lower placed house upgrades it in place, while facing
+ * open ground places another house; BOTH paths stay, no
+ * craft gate — the panel states the ladder truthfully,
+ * display only, and never as a 'Requires:'). Keyed by the
+ * house ITEM ids; the step order mirrors HOUSE_LADDER in
+ * src/game/shelter.ts (leanTo → thatchHut → wovenCottage
+ * → smallWoodenHut, item ids primitive-lean-to →
+ * thatch-hut → woven-cottage → small-wooden-hut) — if
+ * that order ever changes, these lines must change with
+ * it. Copy is DRAFT for Adam's pin pass. Non-house items
+ * are absent from the table = no line.
+ */
+const HOUSING_LADDER_LINES: Record<string, string> = {
+  'primitive-lean-to':
+    'House ladder, step 1 of 4 — the first house; bigger houses can upgrade it in place.',
+  'thatch-hut':
+    'House ladder, step 2 of 4 — place it facing a Lean-To to upgrade it in place, or place it on its own.',
+  'woven-cottage':
+    'House ladder, step 3 of 4 — upgrades a placed Lean-To or Thatch Hut in place, or place it on its own.',
+  'small-wooden-hut':
+    'House ladder, step 4 of 4 — upgrades any placed house below it in place, or place it on its own.',
+};
+
+function housingLadderLineFor(item: string): string | undefined {
+  return HOUSING_LADDER_LINES[normalizeItemId(item)];
+}
+
 /** One inventory stack as a panel row, with the umbrella icon attached. */
 function toInventoryItem(
   stack: {
@@ -4890,6 +4920,11 @@ export default function App() {
             ? `${outputDescriptor} (×${recipe.output.quantity})`
             : outputDescriptor
           : `Makes ${recipe.output.quantity} × ${displayNameFor(recipe.output.item)}.`,
+      // Housing ladder line (2026-10-29): present only
+      // on the four house recipes (see the table beside
+      // itemNoteFor); display only — canCraft above is
+      // untouched by it.
+      ladderLine: housingLadderLineFor(recipe.output.item),
       ingredients: [
         ...recipe.ingredients.map((ingredient) => ({
           name: ingredient.item,
