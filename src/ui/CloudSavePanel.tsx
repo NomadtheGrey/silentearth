@@ -63,6 +63,7 @@ export interface CloudSavePanelProps {
   onRemove: (slot: string) => void;
   onRestoreParked: () => void;
   onRename: (name: string) => void;
+  onNewGame: () => void;
   theme?: UiThemeName;
   comfortable?: boolean;
 }
@@ -88,6 +89,7 @@ export function CloudSavePanel({
   onRemove,
   onRestoreParked,
   onRename,
+  onNewGame,
   theme = 'mire',
   comfortable = false,
 }: CloudSavePanelProps) {
@@ -361,6 +363,26 @@ export function CloudSavePanel({
           ) : null}
         </div>
       ) : null}
+
+      {/* New Game: a local action, not a cloud one — it
+        sits at the panel's bottom, outside the cloud
+        branches above, so it shows whether cloud is on,
+        off, or wordless. The App handler owns the
+        confirm + park; this button only asks. */}
+      <div className="flex flex-col gap-1 border-t border-[#3a4436] pt-3">
+        <button
+          type="button"
+          className={buttonClass + ' self-start'}
+          disabled={busy}
+          onClick={onNewGame}
+        >
+          New Game
+        </button>
+        <p className="text-xs opacity-70">
+          Start a fresh world — your current save is parked, not
+          deleted.
+        </p>
+      </div>
 
       {busy ? <p className="text-xs opacity-70">Working…</p> : null}
       {note !== null ? (
