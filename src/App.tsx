@@ -1671,6 +1671,7 @@ import {
 import { FireState as SystemsFireState, cook } from './systems/fire';
 import { HomeStorage } from './systems/shelter';
 import {
+  clearSave,
   loadSave,
   saveGame,
   serializeSave,
@@ -3006,6 +3007,10 @@ export default function App() {
   } | null>(null);
   const [cloudPendingRestore, setCloudPendingRestore] =
     useState<SaveData | null>(null);
+  const [cloudPendingNewGame, setCloudPendingNewGame] = useState<{
+    local: SaveData;
+    parked: SaveData | null;
+  } | null>(null);
 
   const refreshCloudState = () => {
     setCloudSync(syncState());
@@ -3209,6 +3214,47 @@ export default function App() {
     setWorldName(name === '' ? undefined : name);
   };
 
+  // New Game (Adam's pin: "it's a new game or it's not" —
+  // FULLY FRESH, like first run). The mechanism is the
+  // reload route, not regenerate: park the current save,
+  // clearSave() (removes the save key ONLY — the park,
+  // the cloud words/sync keys, and the settings key all
+  // survive), then reload. A no-save boot is fully fresh
+  // by construction (every default), and the existing
+  // boot predicate opens the first-run dialog, whose
+  // Begin (verbatim) re-opens the intro. A park failure
+  // cancels BEFORE the clear: nothing changes.
+  const runNewGame = () => {
+    const current = loadSave();
+    if (current !== null && !parkLocal(current)) {
+      setCloudNote(
+        'Could not park the current save — new game cancelled, nothing changed.',
+      );
+      return;
+    }
+    clearSave();
+    window.location.reload();
+  };
+
+  const handleNewGame = () => {
+    // Nothing displaced, nothing to confirm or park —
+    // run directly (mirrors bring-down's no-local case).
+    const current = loadSave();
+    if (current === null) {
+      runNewGame();
+      return;
+    }
+    setCloudPendingNewGame({ local: current, parked: readParked() });
+  };
+
+  const confirmNewGame = () => {
+    setCloudPendingNewGame(null);
+    // runNewGame re-reads loadSave() at run time (the
+    // bring/restore freshness pattern), so what parks is
+    // the last saved state, not the press-time snapshot.
+    runNewGame();
+  };
+
   const cloudPanelProps = {
     sync: cloudSync,
     words: cloudWords,
@@ -3233,6 +3279,7 @@ export default function App() {
       if (parked !== null) setCloudPendingRestore(parked);
     },
     onRename: handleCloudRename,
+    onNewGame: handleNewGame,
   };
 
   // Project one world point to a screen anchor. Reads refs only, so
@@ -8787,6 +8834,58 @@ export default function App() {
                   (isTouch ? 'min-h-[44px] px-3 py-2' : '')
                 }
                 onClick={() => setCloudPendingRestore(null)}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : null}
+      </Popup>
+
+      {/* New Game confirm: names the current save
+        (press-time snapshot) + the park warning when a
+        parked save will be replaced. Confirm parks the
+        current save, clears the save key, and reloads
+        into the first-run dialog; Cancel (or Esc)
+        changes nothing. */}
+      <Popup
+        open={cloudPendingNewGame !== null}
+        title="Start a new game?"
+        onClose={() => setCloudPendingNewGame(null)}
+        comfortable={isTouch}
+      >
+        {cloudPendingNewGame !== null ? (
+          <div className="flex flex-col gap-3 p-3 text-sm">
+            <p>
+              Start a fresh world? Your current world “
+              {cloudPendingNewGame.local.worldName ?? 'Main save'}”
+              will be parked, not deleted — the Restore parked
+              save door brings it back. Nothing carries over to
+              the new world.
+            </p>
+            {cloudPendingNewGame.parked !== null ? (
+              <p className="text-xs opacity-80">
+                Your existing parked save will be replaced.
+              </p>
+            ) : null}
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                className={
+                  'rounded bg-[#3a4436] hover:bg-[#4a5546] px-3 py-1 text-sm text-stone-100 ' +
+                  (isTouch ? 'min-h-[44px] px-3 py-2' : '')
+                }
+                onClick={confirmNewGame}
+              >
+                New Game
+              </button>
+              <button
+                type="button"
+                className={
+                  'rounded bg-[#3a4436] hover:bg-[#4a5546] px-3 py-1 text-sm text-stone-100 ' +
+                  (isTouch ? 'min-h-[44px] px-3 py-2' : '')
+                }
+                onClick={() => setCloudPendingNewGame(null)}
               >
                 Cancel
               </button>
