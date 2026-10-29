@@ -7115,8 +7115,46 @@ export default function App() {
     homeHouse !== undefined
       ? projectAnchor(homeHouse.x, homeHouse.z, 'scatter')
       : null;
-  const homeChipVisible =
-    sheltered && homeChipAnchor !== null && !paused;
+  // WHOLE-HUT ANCHOR (Adam, 2026-10-29, same ruling): a
+  // scatter anchor is null whenever the center sits
+  // off-screen or behind her — inside a hut, most facings
+  // (at 1 m the center projects below the screen's bottom
+  // edge even faced squarely) — so the chip vanished with
+  // a turn, and an OPEN menu unmounted on turning around
+  // (its state stayed open; the render gate was the
+  // anchor). The center's own projection cannot rescue
+  // the behind-her case (the projection itself is null
+  // there, any kind), so inside the footprint (same
+  // radius rule as the USE race) the fallback anchor is
+  // the GROUND projection of the point one meter ahead
+  // of her: a ground point in front always projects (it
+  // clamps to the screen's bottom edge rather than
+  // dropping — her own feet do NOT work: at the camera's
+  // exact xz the projection itself is null), so the chip
+  // stays usable and the menu survives turning and
+  // moving within the footprint, re-seating on the house
+  // the moment the center projects again. Outside the
+  // footprint the anchor is today's exactly; leaving the
+  // shelter zone still ends both (homeHouse goes
+  // undefined, and the chip also gates on sheltered).
+  const insideHomeFootprintNow = (() => {
+    const p = playerRef.current;
+    if (homeHouse === undefined || !p) return false;
+    return (
+      Math.hypot(p.x - homeHouse.x, p.z - homeHouse.z) <=
+      HOUSE_DEFS[homeHouse.type].footprint / 2
+    );
+  })();
+  const homeFallbackAnchor =
+    insideHomeFootprintNow && playerRef.current
+      ? projectAnchor(
+          playerRef.current.x + Math.sin(playerRef.current.facing),
+          playerRef.current.z + Math.cos(playerRef.current.facing),
+          'ground',
+        )
+      : null;
+  const homeAnchor = homeChipAnchor ?? homeFallbackAnchor;
+  const homeChipVisible = sheltered && homeAnchor !== null && !paused;
 
   // HOUSE-UPGRADE PILL (Adam, 2026-10-28): while
   // placing a house item, the faced upgradeable house
@@ -7934,7 +7972,20 @@ export default function App() {
     }
     if (homeHouse !== undefined) {
       const f = facingOf(homeHouse.x, homeHouse.z);
-      if (f.isFaced) {
+      // WHOLE-HUT ZONE (Adam, 2026-10-29 — inside his hut
+      // the menu 'appears only in a very small location';
+      // the zone should be as large as the hut): inside
+      // the sheltering house's footprint — center distance
+      // ≤ footprint/2, read from the engine table, no new
+      // constant — the home candidate joins the race on
+      // PRESENCE alone, facing waived; she is standing in
+      // the house, so the door is the house. Outside the
+      // footprint the faced-center rule is exactly as
+      // before, and the race distance stays the center
+      // distance either way.
+      const insideHomeFootprint =
+        f.distance <= HOUSE_DEFS[homeHouse.type].footprint / 2;
+      if (f.isFaced || insideHomeFootprint) {
         challengers.push({ kind: 'home', distance: f.distance });
       }
     }
@@ -8845,8 +8896,8 @@ export default function App() {
             />
           </WorldAnchor>
         ) : null}
-        {homeChipVisible && homeChipAnchor ? (
-          <WorldAnchor x={homeChipAnchor.x} y={homeChipAnchor.y} interactive>
+        {homeChipVisible && homeAnchor ? (
+          <WorldAnchor x={homeAnchor.x} y={homeAnchor.y} interactive>
             <button
               type="button"
               onClick={() => setHomeMenuOpen(true)}
@@ -8873,8 +8924,8 @@ export default function App() {
             </button>
           </WorldAnchor>
         ) : null}
-        {homeMenuOpen && homeHouse !== undefined && homeChipAnchor ? (
-          <WorldAnchor x={homeChipAnchor.x} y={homeChipAnchor.y} interactive>
+        {homeMenuOpen && homeHouse !== undefined && homeAnchor ? (
+          <WorldAnchor x={homeAnchor.x} y={homeAnchor.y} interactive>
             <ContextMenu theme={lookThemes.world}
               objectName={shelterHouseName ?? 'Home'}
               header={
