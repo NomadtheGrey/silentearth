@@ -209,29 +209,94 @@ export function InventoryPanel({
         <WitchPortrait />
       </div>
 
-      {/* Worn gear, directly under the portrait: one wrapping
-          line per section, display only — no buttons here. */}
+      {/* Worn gear, directly under the portrait, display
+          only — no buttons here. COLUMNATED (Adam,
+          2026-10-29 — the header ran together as prose):
+          each section is a small table — title as the
+          heading, then one row per entry with the name
+          left and its detail right. Entries arrive as
+          "Name — detail" by construction in the caller
+          (every section's entries use that one shape), so
+          the split is a render rule, not new data; an
+          entry with no separator renders as a name-only
+          row. Wording is untouched — layout only. */}
       {worn !== undefined &&
       worn.some((section) => section.entries.length > 0) ? (
-        <div className="mb-2 flex flex-col gap-0.5">
+        <div className="mb-2 flex flex-col gap-2">
           {worn
             .filter((section) => section.entries.length > 0)
             .map((section) => (
-              <p key={section.title} className="text-sm">
-                <span className={t.muted}>{section.title}: </span>
-                {section.entries.join(' · ')}
-              </p>
+              <div key={section.title}>
+                <p className={'text-sm ' + t.muted}>{section.title}:</p>
+                <ul className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-3">
+                  {section.entries.map((entry) => {
+                    const splitAt = entry.indexOf(' — ');
+                    const name =
+                      splitAt >= 0 ? entry.slice(0, splitAt) : entry;
+                    const detail =
+                      splitAt >= 0 ? entry.slice(splitAt + 3) : null;
+                    return (
+                      <li
+                        key={entry}
+                        className="col-span-2 grid grid-cols-subgrid text-sm"
+                      >
+                        <span>{name}</span>
+                        {detail !== null ? (
+                          <span className="text-right tabular-nums">
+                            {detail}
+                          </span>
+                        ) : null}
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
             ))}
         </div>
       ) : null}
 
+      {/* Carrying total: its own row under the tables
+          (same columnation) — the caller text is
+          "Carrying <used> lb / <cap> lb"; the label and
+          the figures split at the first space so the
+          figures right-align with the bonuses above. A
+          text that does not start with "Carrying" renders
+          whole, as before. */}
       {capacityText ? (
-        <p className={'mb-2 text-sm ' + t.muted}>{capacityText}</p>
+        (() => {
+          const match = /^Carrying\s+(.*)$/.exec(capacityText);
+          return (
+            <p className="mb-2 flex items-baseline justify-between gap-3 text-sm">
+              <span className={t.muted}>
+                {match ? 'Carrying' : capacityText}
+              </span>
+              {match ? (
+                <span className="tabular-nums">{match[1]}</span>
+              ) : null}
+            </p>
+          );
+        })()
       ) : null}
-      <p className={'mb-2 text-xs ' + t.muted}>
-        ↓ Drop one at feet · ↓↓ Drop all at feet · ↑ Take one from pile · ↑↑
-        Take all from pile
-      </p>
+      {/* Arrow legend as a 2×2 grid (Adam, 2026-10-29):
+          Drop actions in one column pair, Take in the
+          other, arrows in their own aligned cells so the
+          eye pairs symbol → meaning without parsing a
+          sentence. Wording exactly as the prose line read. */}
+      <div
+        className={
+          'mb-2 grid grid-cols-[auto_1fr_auto_1fr] items-baseline gap-x-2 gap-y-0.5 text-xs ' +
+          t.muted
+        }
+      >
+        <span className="text-center">↓</span>
+        <span>Drop one at feet</span>
+        <span className="text-center">↑</span>
+        <span>Take one from pile</span>
+        <span className="text-center">↓↓</span>
+        <span>Drop all at feet</span>
+        <span className="text-center">↑↑</span>
+        <span>Take all from pile</span>
+      </div>
       {/* Deposit destination (Adam, 2026-10-29 — the buttons
         appeared beside a plant outdoors and the destination
         read nowhere near them): while home storage is open,
