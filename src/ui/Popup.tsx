@@ -80,7 +80,7 @@ export function Popup({
       aria-label={title}
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
     >
-      <div className={'flex max-w-lg items-start gap-4 rounded p-4 ' + t.panel}>
+      <div className={'flex max-w-lg items-start gap-4 rounded-2xl p-4 ' + t.panel}>
         {showWitch ? <WitchPortrait size={84} /> : null}
         <div className="min-w-0 flex-1">
           <div className="mb-2 flex items-center justify-between gap-2">

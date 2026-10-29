@@ -47,8 +47,10 @@ export const UI_THEMES: Record<UiThemeName, UiTheme> = {
     heading: 'text-lime-100',
     muted: 'text-stone-400',
     selected: 'bg-lime-900/60 outline outline-1 outline-lime-600',
-    button: 'bg-stone-700 hover:bg-stone-600',
-    primary: 'bg-lime-800 hover:bg-lime-700',
+    button:
+      'bg-stone-700 hover:bg-stone-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime-200/70',
+    primary:
+      'bg-lime-800 hover:bg-lime-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime-200/70',
     active: 'bg-lime-800',
     overlay: 'bg-lime-950/60',
   },
@@ -57,9 +59,20 @@ export const UI_THEMES: Record<UiThemeName, UiTheme> = {
     heading: 'text-amber-100',
     muted: 'text-stone-400',
     selected: 'bg-amber-800/60 outline outline-1 outline-amber-500',
-    button: 'bg-stone-700 hover:bg-stone-600',
-    primary: 'bg-amber-700 hover:bg-amber-600',
+    button:
+      'bg-stone-700 hover:bg-stone-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-200/70',
+    primary:
+      'bg-amber-700 hover:bg-amber-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-200/70',
     active: 'bg-amber-700',
     overlay: 'bg-amber-950/60',
   },
 };
+
+/**
+ * The ONE key-badge class (beautification pass, 2026-10-29):
+ * every PC key hint in the UI — menu digit badges, row key
+ * badges, the scry badge — renders with exactly this.
+ * Margins stay at the call site (they are layout, not look).
+ */
+export const KEY_BADGE_CLASS =
+  'rounded border border-stone-500/60 bg-black/30 px-1 font-mono text-[10px]';

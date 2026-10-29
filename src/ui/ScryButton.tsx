@@ -24,6 +24,8 @@
  * the look field beneath.
  */
 
+import { KEY_BADGE_CLASS } from './themes';
+
 export interface ScryButtonProps {
   /** Called when the player presses the button. */
   onPress?: () => void;
@@ -49,7 +51,7 @@ export function ScryButton({ onPress, showKeyHint = false }: ScryButtonProps) {
       {showKeyHint ? (
         <span
           aria-hidden="true"
-          className="ml-2 rounded border border-stone-500/60 bg-black/30 px-1.5 font-mono text-xs"
+          className={'ml-1 ' + KEY_BADGE_CLASS}
         >
           E
         </span>

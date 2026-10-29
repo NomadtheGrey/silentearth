@@ -51,7 +51,7 @@ export function FirstRunDialog({
       <section
         aria-label="New world"
         className={
-          'absolute flex flex-col overflow-hidden rounded ' +
+          'absolute flex flex-col overflow-hidden rounded-2xl ' +
           t.panel +
           (comfortable
             ? ' left-2 right-2 bottom-2 max-h-[70vh]'
@@ -81,7 +81,7 @@ export function FirstRunDialog({
               onChange={(e) => setName(e.target.value)}
               placeholder="Name this world"
               className={
-                'bg-[#1e241c] border border-[#3a4436] px-2 py-1 text-sm text-stone-100 outline-none ' +
+                'bg-[#1e241c] border border-moss-deep px-2 py-1 text-sm text-stone-100 outline-none ' +
                 (comfortable ? 'min-h-[44px]' : '')
               }
             />
@@ -93,7 +93,7 @@ export function FirstRunDialog({
               onChange={(e) => setSeed(e.target.value)}
               placeholder="Leave blank for the default world"
               className={
-                'bg-[#1e241c] border border-[#3a4436] px-2 py-1 text-sm text-stone-100 outline-none ' +
+                'bg-[#1e241c] border border-moss-deep px-2 py-1 text-sm text-stone-100 outline-none ' +
                 (comfortable ? 'min-h-[44px]' : '')
               }
             />

@@ -157,7 +157,7 @@ export function CraftingMenu({
   const isEmpty =
     sections !== undefined ? shownSections.length === 0 : recipes.length === 0;
   return (
-    <section aria-label="Crafting" className={'rounded p-3 ' + t.panel}>
+    <section aria-label="Crafting" className={'rounded-2xl p-3 ' + t.panel}>
       <div className="mb-2 flex items-center justify-between gap-2">
         <h2
           className={'flex items-center gap-2 text-base font-semibold ' + t.heading}

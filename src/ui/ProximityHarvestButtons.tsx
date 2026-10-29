@@ -132,7 +132,7 @@
 import { Fragment, type ReactNode } from 'react';
 import { HarvestButton, RemoveButton } from './HarvestButton';
 import type { HarvestTarget, HarvestRequest } from './proximityHarvest';
-import { UI_THEMES, type UiThemeName } from './themes';
+import { KEY_BADGE_CLASS, UI_THEMES, type UiThemeName } from './themes';
 
 export interface ProximityHarvestButtonsProps {
   /** In-range targets only, mapped from 'harvest:inRange' (see proximityHarvest.ts). */
@@ -304,7 +304,7 @@ export function ProximityHarvestButtons({
           {showKeyHints ? (
             <span
               aria-hidden="true"
-              className="rounded border border-stone-500/60 bg-black/30 px-1 font-mono text-[10px]"
+              className={KEY_BADGE_CLASS}
             >
               E
             </span>
@@ -325,7 +325,7 @@ export function ProximityHarvestButtons({
           {showKeyHints ? (
             <span
               aria-hidden="true"
-              className="rounded border border-stone-500/60 bg-black/30 px-1 font-mono text-[10px]"
+              className={KEY_BADGE_CLASS}
             >
               E
             </span>

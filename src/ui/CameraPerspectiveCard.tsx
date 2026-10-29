@@ -31,7 +31,7 @@ export function CameraPerspectiveCard({
   const framing = CAMERA_FRAMING[mode];
   const t = UI_THEMES[theme];
   return (
-    <section aria-label={`${framing.title} camera`} className={'rounded p-3 ' + t.panel}>
+    <section aria-label={`${framing.title} camera`} className={'rounded-2xl p-3 ' + t.panel}>
       <h2 className={'text-base font-semibold ' + t.heading}>{framing.title}</h2>
       <p className="mt-1 text-sm text-stone-200">{framing.feel}</p>
       <ul className="mt-2 flex flex-col gap-0.5 text-sm text-stone-300">

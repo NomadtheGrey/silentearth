@@ -30,12 +30,12 @@
  * exact x/z (the handler's verbatim coords). Worn-gear
  * rules ride pileMenuActions (no deposit arrows for worn
  * kinds; carried-only worn kinds get no entry; Take
- * stays). The desktop USE whole-pile take is untouched
- * (separate path, not a menu/modal action).
+ * stays). Whole-pile take is not a modal action (it is
+ * R's pile second action + the desktop pile button).
  */
 
 import type { ContextAction } from './types';
-import { UI_THEMES, type UiThemeName } from './themes';
+import { KEY_BADGE_CLASS, UI_THEMES, type UiThemeName } from './themes';
 import { VineDivider } from './WitchyArt';
 
 export interface PileInventoryModalProps {
@@ -47,6 +47,16 @@ export interface PileInventoryModalProps {
   onSelect: (id: string) => void;
   /** Closes the modal (clears ref + state, menu parity). */
   onClose: () => void;
+  /**
+   * Show PC digit badges (beautification rider, 2026-10-29):
+   * every dispatchable target numbered in the shell's
+   * digit-dispatch flatten order (actions in order; an
+   * arrows row contributes its arrows in order), capped
+   * at 9 — the ContextMenu rule, so the modal and the
+   * menus tell the same story. Caller passes !isTouch.
+   * Hint only. Default false = no badges.
+   */
+  showKeyHints?: boolean;
   /** Look for the modal. Default "mire". */
   theme?: UiThemeName;
 }
@@ -56,11 +66,21 @@ export function PileInventoryModal({
   actions,
   onSelect,
   onClose,
+  showKeyHints = false,
   theme = 'mire',
 }: PileInventoryModalProps) {
   const t = UI_THEMES[theme];
+  // Digit-badge counter, consumed in render order (see
+  // the prop doc): a plain action takes one number, an
+  // arrows row takes one per arrow. Beyond 9 there is
+  // no digit, so no badge.
+  let hintCount = 0;
+  const nextHint = (): number | null => {
+    hintCount += 1;
+    return showKeyHints && hintCount <= 9 ? hintCount : null;
+  };
   return (
-    <section aria-label={title} className={'rounded p-3 ' + t.panel}>
+    <section aria-label={title} className={'rounded-2xl p-3 ' + t.panel}>
       <div className="mb-1 flex items-center justify-between gap-2">
         <h2 className={'text-base font-semibold ' + t.heading}>{title}</h2>
         <button
@@ -111,22 +131,36 @@ export function PileInventoryModal({
                   ) : null}
                 </span>
                 <span className="flex gap-1">
-                  {action.arrows.map((arrow) => (
-                    <button
-                      key={arrow.id}
-                      type="button"
-                      disabled={arrow.disabled}
-                      onClick={() => onSelect(arrow.id)}
-                      aria-label={arrow.ariaLabel}
-                      className="min-h-[44px] min-w-[44px] rounded text-base disabled:cursor-not-allowed disabled:opacity-40 hover:bg-stone-800"
-                    >
-                      <span aria-hidden="true">{arrow.glyph}</span>
-                    </button>
-                  ))}
+                  {action.arrows.map((arrow) => {
+                    const hint = nextHint();
+                    return (
+                      <button
+                        key={arrow.id}
+                        type="button"
+                        disabled={arrow.disabled}
+                        onClick={() => onSelect(arrow.id)}
+                        aria-label={arrow.ariaLabel}
+                        className="relative min-h-[44px] min-w-[44px] rounded text-base disabled:cursor-not-allowed disabled:opacity-40 hover:bg-stone-800"
+                      >
+                        <span aria-hidden="true">{arrow.glyph}</span>
+                        {hint !== null ? (
+                          <span
+                            aria-hidden="true"
+                            className={
+                              'absolute -right-1 -top-1 ' + KEY_BADGE_CLASS
+                            }
+                          >
+                            {hint}
+                          </span>
+                        ) : null}
+                      </button>
+                    );
+                  })}
                 </span>
               </li>
             );
           }
+          const hint = nextHint();
           return (
             <li key={action.id} className="col-span-3">
               <button
@@ -136,6 +170,11 @@ export function PileInventoryModal({
                 className="w-full rounded px-2 py-2 text-left text-sm disabled:cursor-not-allowed disabled:opacity-40 hover:bg-stone-800"
               >
                 {action.label}
+                {hint !== null ? (
+                  <span aria-hidden="true" className={'ml-1 ' + KEY_BADGE_CLASS}>
+                    {hint}
+                  </span>
+                ) : null}
               </button>
               {action.disabledNote ? (
                 <span className={'mt-0.5 block text-xs ' + t.muted}>

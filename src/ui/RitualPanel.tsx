@@ -64,6 +64,9 @@ export interface RitualStagedDisplay {
   completed: boolean;
 }
 
+import type { ReactNode } from 'react';
+import { KEY_BADGE_CLASS, UI_THEMES, type UiThemeName } from './themes';
+
 export interface RitualPanelProps {
   siteLabel: string;
   staged: RitualStagedDisplay | null;
@@ -74,6 +77,17 @@ export interface RitualPanelProps {
   onGiveOffering: (item: string) => void;
   onSpeakName: () => void;
   onClose: () => void;
+  /**
+   * Show PC digit badges (beautification rider, 2026-10-29):
+   * the dispatchable buttons numbered in the shell's
+   * digit-dispatch order (kind list when unstaged;
+   * offering foods then Speak when staged), capped at 9
+   * — the ContextMenu rule. Caller passes !isTouch. Hint
+   * only. Default false = no badges.
+   */
+  showKeyHints?: boolean;
+  /** Look for the panel. Default "mire". */
+  theme?: UiThemeName;
 }
 
 export function RitualPanel({
@@ -86,11 +100,28 @@ export function RitualPanel({
   onGiveOffering,
   onSpeakName,
   onClose,
+  showKeyHints = false,
+  theme = 'mire',
 }: RitualPanelProps) {
+  const t = UI_THEMES[theme];
+  // Digit-badge counter, consumed in render order (see
+  // the prop doc). Beyond 9 there is no digit, so no
+  // badge.
+  let hintCount = 0;
+  const nextHint = (): number | null => {
+    hintCount += 1;
+    return showKeyHints && hintCount <= 9 ? hintCount : null;
+  };
+  const hintBadge = (hint: number | null): ReactNode =>
+    hint !== null ? (
+      <span aria-hidden="true" className={'ml-1 ' + KEY_BADGE_CLASS}>
+        {hint}
+      </span>
+    ) : null;
   return (
     <section
       aria-label={`${siteLabel} ritual`}
-      className="w-72 max-h-[70vh] overflow-y-auto rounded bg-black/60 p-2 text-stone-100"
+      className={'w-72 max-h-[70vh] overflow-y-auto rounded-2xl p-2 ' + t.panel}
     >
       <div className="flex items-center justify-between gap-2">
         <h3 className="text-sm font-medium">{siteLabel} ritual</h3>
@@ -107,7 +138,7 @@ export function RitualPanel({
         </button>
       </div>
       {note ? (
-        <p className="mt-1 rounded bg-black/50 px-2 py-1 text-xs text-stone-200">
+        <p className="mt-1 rounded bg-black/45 px-2 py-1 text-xs text-stone-200">
           {note}
         </p>
       ) : null}
@@ -130,10 +161,11 @@ export function RitualPanel({
                   onTouchStart={(e) => {
                     e.stopPropagation();
                   }}
-                  className="min-h-[44px] rounded bg-stone-800 px-3 py-2 text-left text-sm text-stone-100"
+                  className={'min-h-[44px] rounded px-3 py-2 text-left text-sm ' + t.button}
                 >
                   {option.display}
-                  <span className="block text-xs text-stone-400">
+                  {hintBadge(nextHint())}
+                  <span className={'block text-xs ' + t.muted}>
                     {option.skyLabel}
                   </span>
                 </button>
@@ -166,9 +198,10 @@ export function RitualPanel({
                   onTouchStart={(e) => {
                     e.stopPropagation();
                   }}
-                  className="min-h-[44px] rounded bg-stone-800 px-3 py-2 text-left text-sm text-stone-100"
+                  className={'min-h-[44px] rounded px-3 py-2 text-left text-sm ' + t.button}
                 >
                   Offer {food.display} ×{food.count}
+                  {hintBadge(nextHint())}
                 </button>
               ))}
             </div>
@@ -182,9 +215,10 @@ export function RitualPanel({
               onTouchStart={(e) => {
                 e.stopPropagation();
               }}
-              className="min-h-[44px] rounded bg-stone-800 px-3 py-2 text-left text-sm text-stone-100"
+              className={'min-h-[44px] rounded px-3 py-2 text-left text-sm ' + t.button}
             >
               Speak its name
+              {hintBadge(nextHint())}
             </button>
           ) : (
             <p>

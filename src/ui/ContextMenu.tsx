@@ -18,7 +18,7 @@
 
 import type { ReactNode } from 'react';
 import type { ContextAction } from './types';
-import { UI_THEMES, type UiThemeName } from './themes';
+import { KEY_BADGE_CLASS, UI_THEMES, type UiThemeName } from './themes';
 
 export interface ContextMenuProps {
   /** The object the menu belongs to, in the caller's words. */
@@ -71,10 +71,9 @@ export function ContextMenu({
     hintCount += 1;
     return showKeyHints && hintCount <= 9 ? hintCount : null;
   };
-  const hintClass =
-    'ml-1 rounded border border-stone-500/60 bg-black/30 px-1 font-mono text-[10px]';
+  const hintClass = 'ml-1 ' + KEY_BADGE_CLASS;
   return (
-    <section aria-label={`${objectName} actions`} className={'w-56 max-h-[70vh] overflow-y-auto rounded p-2 ' + t.panel}>
+    <section aria-label={`${objectName} actions`} className={'w-56 max-h-[70vh] overflow-y-auto rounded-2xl p-2 ' + t.panel}>
       <div className="mb-1 flex items-center justify-between gap-2">
         <h2 className={'text-sm font-semibold ' + t.heading}>{objectName}</h2>
         {onClose ? (

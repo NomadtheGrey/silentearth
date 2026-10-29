@@ -1634,7 +1634,7 @@ import { ProximityHarvestButtons } from './ui/ProximityHarvestButtons';
 import { InteractionProgress } from './ui/InteractionProgress';
 import { ObjectFeedback } from './ui/ObjectFeedback';
 import { WorldAnchor } from './ui/WorldAnchor';
-import { UI_THEMES } from './ui/themes';
+import { KEY_BADGE_CLASS, UI_THEMES } from './ui/themes';
 import { CameraTransition } from './ui/CameraTransition';
 import { CAMERA_TRANSITION } from './ui/cameraPresentation';
 import { projectWorldToScreen } from './ui/worldProjection';
@@ -8415,7 +8415,7 @@ export default function App() {
               type="button"
               onClick={() => setHomeMenuOpen(true)}
               aria-label={`Open ${shelterHouseName ?? 'Home'} menu`}
-              className="flex min-h-[44px] items-center rounded bg-black/50 px-2 py-1 text-sm text-stone-100"
+              className="flex min-h-[44px] items-center rounded-full bg-black/60 px-2 py-1 text-sm text-stone-100"
             >
               {shelterHouseName ?? 'Home'}
             </button>
@@ -8431,7 +8431,7 @@ export default function App() {
               type="button"
               onClick={() => handleUpgradePress(upgradePill)}
               aria-label={`Upgrade ${upgradePill.placedName} to ${upgradePill.carriedName}`}
-              className="flex min-h-[44px] items-center rounded bg-black/50 px-2 py-1 text-sm text-stone-100"
+              className="flex min-h-[44px] items-center rounded-full bg-black/60 px-2 py-1 text-sm text-stone-100"
             >
               Upgrade to {upgradePill.carriedName}
             </button>
@@ -8502,6 +8502,7 @@ export default function App() {
               kindOptions={selectedSiteKindOptions}
               foodOptions={selectedSiteFoodOptions}
               note={ritualNote}
+              showKeyHints={!isTouch}
               onStageBone={(kind) =>
                 selectedSiteId !== null &&
                 handleStageBone(selectedSiteId, kind)
@@ -8601,14 +8602,14 @@ export default function App() {
           <div className="pointer-events-none absolute bottom-4 left-1/2 flex -translate-x-1/2 items-center gap-2 rounded-full bg-black/45 px-3 py-1.5 text-xs text-[#f0ead6]">
             <span className="text-[#f0ead6]/70">{controlsHint.target}</span>
             <span>
-              <span className="mr-1 rounded border border-stone-500/60 bg-black/30 px-1 font-mono text-[10px]">
+              <span className={'mr-1 ' + KEY_BADGE_CLASS}>
                 E
               </span>
               {controlsHint.use}
             </span>
             {controlsHint.second ? (
               <span>
-                <span className="mr-1 rounded border border-stone-500/60 bg-black/30 px-1 font-mono text-[10px]">
+                <span className={'mr-1 ' + KEY_BADGE_CLASS}>
                   R
                 </span>
                 {controlsHint.second}
@@ -8709,15 +8710,15 @@ export default function App() {
               aria-pressed={inventoryOpen}
               className={
                 isTouch
-                  ? 'rounded bg-[#3a4436] px-3 py-2 text-sm min-h-[44px] hover:bg-[#4a5546]'
-                  : 'rounded bg-[#3a4436] px-3 py-1 text-xs hover:bg-[#4a5546]'
+                  ? 'rounded bg-moss-deep px-3 py-2 text-sm min-h-[44px] hover:bg-moss'
+                  : 'rounded bg-moss-deep px-3 py-1 text-xs hover:bg-moss'
               }
             >
               Inventory
               {!isTouch ? (
                 <span
                   aria-hidden="true"
-                  className="ml-1 rounded border border-stone-500/60 bg-black/30 px-1 font-mono text-[10px]"
+                  className={'ml-1 ' + KEY_BADGE_CLASS}
                 >
                   I
                 </span>
@@ -8729,15 +8730,15 @@ export default function App() {
               aria-pressed={craftingOpen}
               className={
                 isTouch
-                  ? 'rounded bg-[#3a4436] px-3 py-2 text-sm min-h-[44px] hover:bg-[#4a5546]'
-                  : 'rounded bg-[#3a4436] px-3 py-1 text-xs hover:bg-[#4a5546]'
+                  ? 'rounded bg-moss-deep px-3 py-2 text-sm min-h-[44px] hover:bg-moss'
+                  : 'rounded bg-moss-deep px-3 py-1 text-xs hover:bg-moss'
               }
             >
               Crafting
               {!isTouch ? (
                 <span
                   aria-hidden="true"
-                  className="ml-1 rounded border border-stone-500/60 bg-black/30 px-1 font-mono text-[10px]"
+                  className={'ml-1 ' + KEY_BADGE_CLASS}
                 >
                   K
                 </span>
@@ -8749,15 +8750,15 @@ export default function App() {
               aria-pressed={charmsOpen}
               className={
                 isTouch
-                  ? 'rounded bg-[#3a4436] px-3 py-2 text-sm min-h-[44px] hover:bg-[#4a5546]'
-                  : 'rounded bg-[#3a4436] px-3 py-1 text-xs hover:bg-[#4a5546]'
+                  ? 'rounded bg-moss-deep px-3 py-2 text-sm min-h-[44px] hover:bg-moss'
+                  : 'rounded bg-moss-deep px-3 py-1 text-xs hover:bg-moss'
               }
             >
               Charms
               {!isTouch ? (
                 <span
                   aria-hidden="true"
-                  className="ml-1 rounded border border-stone-500/60 bg-black/30 px-1 font-mono text-[10px]"
+                  className={'ml-1 ' + KEY_BADGE_CLASS}
                 >
                   L
                 </span>
@@ -8768,8 +8769,8 @@ export default function App() {
               onClick={() => setOptionsOpen(true)}
               className={
                 isTouch
-                  ? 'rounded bg-[#3a4436] px-3 py-2 text-sm min-h-[44px] hover:bg-[#4a5546]'
-                  : 'rounded bg-[#3a4436] px-3 py-1 text-xs hover:bg-[#4a5546]'
+                  ? 'rounded bg-moss-deep px-3 py-2 text-sm min-h-[44px] hover:bg-moss'
+                  : 'rounded bg-moss-deep px-3 py-1 text-xs hover:bg-moss'
               }
             >
               Options
@@ -8840,7 +8841,7 @@ export default function App() {
             </div>
           ) : null}
           {placement ? (
-            <div className="mt-2 rounded bg-black/50 px-2 py-1 text-sm">
+            <div className="mt-2 rounded bg-black/45 px-2 py-1 text-sm">
               <p>Placing {placement.label} at your feet.</p>
               <div className="mt-1 flex gap-2">
                 {/* UPGRADE PILL: one confirm at a time —
@@ -8852,15 +8853,15 @@ export default function App() {
                     onClick={handlePlaceConfirm}
                     className={
                       isTouch
-                        ? 'rounded bg-[#3a4436] px-3 py-2 text-sm min-h-[44px] hover:bg-[#4a5546]'
-                        : 'rounded bg-[#3a4436] px-2 py-0.5 text-xs hover:bg-[#4a5546]'
+                        ? 'rounded bg-moss-deep px-3 py-2 text-sm min-h-[44px] hover:bg-moss'
+                        : 'rounded bg-moss-deep px-2 py-0.5 text-xs hover:bg-moss'
                     }
                   >
                     Place here
                     {!isTouch ? (
                       <span
                         aria-hidden="true"
-                        className="ml-1 rounded border border-stone-500/60 bg-black/30 px-1 font-mono text-[10px]"
+                        className={'ml-1 ' + KEY_BADGE_CLASS}
                       >
                         Enter
                       </span>
@@ -8872,8 +8873,8 @@ export default function App() {
                   onClick={handlePlaceCancel}
                   className={
                     isTouch
-                      ? 'rounded bg-[#3a4436] px-3 py-2 text-sm min-h-[44px] hover:bg-[#4a5546]'
-                      : 'rounded bg-[#3a4436] px-2 py-0.5 text-xs hover:bg-[#4a5546]'
+                      ? 'rounded bg-moss-deep px-3 py-2 text-sm min-h-[44px] hover:bg-moss'
+                      : 'rounded bg-moss-deep px-2 py-0.5 text-xs hover:bg-moss'
                   }
                 >
                   Cancel
@@ -8898,7 +8899,7 @@ export default function App() {
             <button
               type="button"
               onClick={() => setHudCollapsed(false)}
-              className="min-h-[44px] rounded bg-[#3a4436] px-3 py-2 text-sm hover:bg-[#4a5546]"
+              className="min-h-[44px] rounded bg-moss-deep px-3 py-2 text-sm hover:bg-moss"
             >
               Show HUD
             </button>
@@ -8906,7 +8907,7 @@ export default function App() {
               type="button"
               onClick={() => setInventoryOpen((open) => !open)}
               aria-pressed={inventoryOpen}
-              className="min-h-[44px] rounded bg-[#3a4436] px-3 py-2 text-sm hover:bg-[#4a5546]"
+              className="min-h-[44px] rounded bg-moss-deep px-3 py-2 text-sm hover:bg-moss"
             >
               Inventory
             </button>
@@ -8914,7 +8915,7 @@ export default function App() {
               type="button"
               onClick={() => setCraftingOpen((open) => !open)}
               aria-pressed={craftingOpen}
-              className="min-h-[44px] rounded bg-[#3a4436] px-3 py-2 text-sm hover:bg-[#4a5546]"
+              className="min-h-[44px] rounded bg-moss-deep px-3 py-2 text-sm hover:bg-moss"
             >
               Crafting
             </button>
@@ -8922,14 +8923,14 @@ export default function App() {
               type="button"
               onClick={openCharmsPanel}
               aria-pressed={charmsOpen}
-              className="min-h-[44px] rounded bg-[#3a4436] px-3 py-2 text-sm hover:bg-[#4a5546]"
+              className="min-h-[44px] rounded bg-moss-deep px-3 py-2 text-sm hover:bg-moss"
             >
               Charms
             </button>
             <button
               type="button"
               onClick={() => setOptionsOpen(true)}
-              className="min-h-[44px] rounded bg-[#3a4436] px-3 py-2 text-sm hover:bg-[#4a5546]"
+              className="min-h-[44px] rounded bg-moss-deep px-3 py-2 text-sm hover:bg-moss"
             >
               Options
             </button>
@@ -8950,7 +8951,7 @@ export default function App() {
               setCharmsOpen(false);
             }}
             aria-label="Hide HUD panels to reveal the game"
-            className="pointer-events-auto absolute right-2 top-2 z-40 min-h-[44px] rounded bg-black/50 px-3 py-2 text-sm"
+            className="pointer-events-auto absolute right-2 top-2 z-40 min-h-[44px] rounded bg-black/60 px-3 py-2 text-sm"
           >
             Hide HUD
           </button>
@@ -8974,6 +8975,7 @@ export default function App() {
                 : `Pile × ${selectedPile.stacks.reduce((sum, stack) => sum + stack.quantity, 0)} (${selectedPile.stacks.length} kinds)`
             }
             actions={pileMenuActions(selectedPile)}
+            showKeyHints={!isTouch}
             onSelect={(id) => handlePileAction(selectedPile, id)}
             onClose={() => {
               selectedPileIdRef.current = null;
@@ -9035,37 +9037,37 @@ export default function App() {
           />
         ) : null}
         {craftNote ? (
-          <p className="rounded bg-black/50 px-2 py-1 text-xs text-stone-200">
+          <p className="rounded bg-black/45 px-2 py-1 text-xs text-stone-200">
             {craftNote}
           </p>
         ) : null}
         {eatNote ? (
-          <p className="rounded bg-black/50 px-2 py-1 text-xs text-stone-200">
+          <p className="rounded bg-black/45 px-2 py-1 text-xs text-stone-200">
             {eatNote}
           </p>
         ) : null}
         {torchNote ? (
-          <p className="rounded bg-black/50 px-2 py-1 text-xs text-stone-200">
+          <p className="rounded bg-black/45 px-2 py-1 text-xs text-stone-200">
             {torchNote}
           </p>
         ) : null}
         {tentNote ? (
-          <p className="rounded bg-black/50 px-2 py-1 text-xs text-stone-200">
+          <p className="rounded bg-black/45 px-2 py-1 text-xs text-stone-200">
             {tentNote}
           </p>
         ) : null}
         {altarNote ? (
-          <p className="rounded bg-black/50 px-2 py-1 text-xs text-stone-200">
+          <p className="rounded bg-black/45 px-2 py-1 text-xs text-stone-200">
             {altarNote}
           </p>
         ) : null}
         {fireNote ? (
-          <p className="rounded bg-black/50 px-2 py-1 text-xs text-stone-200">
+          <p className="rounded bg-black/45 px-2 py-1 text-xs text-stone-200">
             {fireNote}
           </p>
         ) : null}
         {dropNote ? (
-          <p className="rounded bg-black/50 px-2 py-1 text-xs text-stone-200">
+          <p className="rounded bg-black/45 px-2 py-1 text-xs text-stone-200">
             {dropNote}
           </p>
         ) : null}
@@ -9083,11 +9085,11 @@ export default function App() {
           onKeyDown={(e) => {
             if (e.key === 'Enter') regenerate();
           }}
-          className="bg-[#1e241c] border border-[#3a4436] px-2 py-1 text-xs w-48 outline-none"
+          className="bg-[#1e241c] border border-moss-deep px-2 py-1 text-xs w-48 outline-none"
         />
         <button
           onClick={() => regenerate()}
-          className="bg-[#3a4436] hover:bg-[#4a5546] px-3 py-1 text-xs"
+          className="bg-moss-deep hover:bg-moss px-3 py-1 text-xs"
         >
           Regenerate
         </button>
@@ -9211,7 +9213,7 @@ export default function App() {
               <button
                 type="button"
                 className={
-                  'rounded bg-[#3a4436] hover:bg-[#4a5546] px-3 py-1 text-sm text-stone-100 ' +
+                  'rounded bg-moss-deep hover:bg-moss px-3 py-1 text-sm text-stone-100 ' +
                   (isTouch ? 'min-h-[44px] px-3 py-2' : '')
                 }
                 onClick={confirmCloudBring}
@@ -9221,7 +9223,7 @@ export default function App() {
               <button
                 type="button"
                 className={
-                  'rounded bg-[#3a4436] hover:bg-[#4a5546] px-3 py-1 text-sm text-stone-100 ' +
+                  'rounded bg-moss-deep hover:bg-moss px-3 py-1 text-sm text-stone-100 ' +
                   (isTouch ? 'min-h-[44px] px-3 py-2' : '')
                 }
                 onClick={() => setCloudPendingBring(null)}
@@ -9258,7 +9260,7 @@ export default function App() {
               <button
                 type="button"
                 className={
-                  'rounded bg-[#3a4436] hover:bg-[#4a5546] px-3 py-1 text-sm text-stone-100 ' +
+                  'rounded bg-moss-deep hover:bg-moss px-3 py-1 text-sm text-stone-100 ' +
                   (isTouch ? 'min-h-[44px] px-3 py-2' : '')
                 }
                 onClick={() => {
@@ -9270,7 +9272,7 @@ export default function App() {
               <button
                 type="button"
                 className={
-                  'rounded bg-[#3a4436] hover:bg-[#4a5546] px-3 py-1 text-sm text-stone-100 ' +
+                  'rounded bg-moss-deep hover:bg-moss px-3 py-1 text-sm text-stone-100 ' +
                   (isTouch ? 'min-h-[44px] px-3 py-2' : '')
                 }
                 onClick={() => setCloudPendingRemove(null)}
@@ -9304,7 +9306,7 @@ export default function App() {
               <button
                 type="button"
                 className={
-                  'rounded bg-[#3a4436] hover:bg-[#4a5546] px-3 py-1 text-sm text-stone-100 ' +
+                  'rounded bg-moss-deep hover:bg-moss px-3 py-1 text-sm text-stone-100 ' +
                   (isTouch ? 'min-h-[44px] px-3 py-2' : '')
                 }
                 onClick={confirmCloudRestore}
@@ -9314,7 +9316,7 @@ export default function App() {
               <button
                 type="button"
                 className={
-                  'rounded bg-[#3a4436] hover:bg-[#4a5546] px-3 py-1 text-sm text-stone-100 ' +
+                  'rounded bg-moss-deep hover:bg-moss px-3 py-1 text-sm text-stone-100 ' +
                   (isTouch ? 'min-h-[44px] px-3 py-2' : '')
                 }
                 onClick={() => setCloudPendingRestore(null)}
@@ -9356,7 +9358,7 @@ export default function App() {
               <button
                 type="button"
                 className={
-                  'rounded bg-[#3a4436] hover:bg-[#4a5546] px-3 py-1 text-sm text-stone-100 ' +
+                  'rounded bg-moss-deep hover:bg-moss px-3 py-1 text-sm text-stone-100 ' +
                   (isTouch ? 'min-h-[44px] px-3 py-2' : '')
                 }
                 onClick={confirmNewGame}
@@ -9366,7 +9368,7 @@ export default function App() {
               <button
                 type="button"
                 className={
-                  'rounded bg-[#3a4436] hover:bg-[#4a5546] px-3 py-1 text-sm text-stone-100 ' +
+                  'rounded bg-moss-deep hover:bg-moss px-3 py-1 text-sm text-stone-100 ' +
                   (isTouch ? 'min-h-[44px] px-3 py-2' : '')
                 }
                 onClick={() => setCloudPendingNewGame(null)}
@@ -9399,8 +9401,8 @@ export default function App() {
               onClick={handleTrapConfirmYes}
               className={
                 isTouch
-                  ? 'min-h-[44px] rounded bg-[#3a4436] px-3 py-2 text-sm hover:bg-[#4a5546]'
-                  : 'rounded bg-[#3a4436] px-2 py-0.5 text-xs hover:bg-[#4a5546]'
+                  ? 'min-h-[44px] rounded bg-moss-deep px-3 py-2 text-sm hover:bg-moss'
+                  : 'rounded bg-moss-deep px-2 py-0.5 text-xs hover:bg-moss'
               }
             >
               Yes
@@ -9561,7 +9563,7 @@ export default function App() {
       !introOpen &&
       !pendingTrapRecipe &&
       !firstRunDialogOpen ? (
-        <p className="pointer-events-none absolute bottom-2 right-2 z-30 rounded bg-black/50 px-2 py-1 text-xs text-stone-300">
+        <p className="pointer-events-none absolute bottom-2 right-2 z-30 rounded bg-black/45 px-2 py-1 text-xs text-stone-300">
           Esc — Options
         </p>
       ) : null}
