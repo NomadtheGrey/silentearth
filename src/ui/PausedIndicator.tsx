@@ -18,13 +18,25 @@
  * underneath is playable, so the control takes the
  * middle instead of sitting bottom-centre above the
  * LocationChip — it no longer competes with the chip,
- * the sticks, or the harvest column at all. The wrapper
- * is pointer-events-none for positioning, but the button
- * itself is pointer-events-auto — otherwise it could
- * never receive the tap it exists for. The button is
- * bigger (min 64 px tall, text-xl) for a surer tap
+ * the sticks, or the harvest column at all. The button
+ * is bigger (min 64 px tall, text-xl) for a surer tap
  * target on phone and desktop alike. Wording unchanged
  * ("Paused — tap to resume", pinned 2026-10-26).
+ *
+ * CLICK ANYWHERE TO RESUME (Adam, 2026-10-29: "Tap to
+ * Resume kinda works. I should be able to click
+ * anyplace on screen to resume"): the VEIL is the
+ * resume surface now, not just the button — the
+ * full-screen wrapper takes the click itself
+ * (pointer-events-auto + onClick), and the button is
+ * the visual label (its click bubbles up to the
+ * wrapper; there is deliberately one handler). Before
+ * this, the wrapper was pointer-events-none and only
+ * the button took the tap, so every other click fell
+ * through to the canvas. Layering keeps modal clicks
+ * the modal's: this veil is z-40 and the modals are
+ * full-screen z-50 roots, so a click that lands on an
+ * open modal never reaches here.
  */
 
 import { KEY_BADGE_CLASS } from './themes';
@@ -42,11 +54,13 @@ export function PausedIndicator({
   showKeyHint?: boolean;
 }) {
   return (
-    <div className="pointer-events-none absolute inset-0 z-40 flex items-center justify-center">
+    <div
+      onClick={onResume}
+      className="pointer-events-auto absolute inset-0 z-40 flex cursor-pointer items-center justify-center"
+    >
       <button
         type="button"
-        onClick={onResume}
-        className="pointer-events-auto min-h-[64px] rounded-full bg-black/60 px-8 py-4 text-xl font-medium text-[#f0ead6]"
+        className="min-h-[64px] rounded-full bg-black/60 px-8 py-4 text-xl font-medium text-[#f0ead6]"
       >
         Paused — tap to resume
         {showKeyHint ? (

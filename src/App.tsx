@@ -9628,9 +9628,10 @@ export default function App() {
 
       {/* Paused control: only while the engine flag is set. It
         renders regardless of panels (a global state control,
-        not a panel). The wrapper is pointer-events-none, but
-        the button itself takes its own tap — that tap is the
-        resume (tap-to-resume, pinned). */}
+        not a panel). The whole veil is the resume surface
+        (click anywhere resumes, Adam 2026-10-29 — the
+        tap-to-resume pin, widened from the button to the
+        veil); the component owns the surface. */}
       {paused ? (
         <PausedIndicator
           onResume={() => pauseState.setPaused(false)}
