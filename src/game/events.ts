@@ -131,6 +131,13 @@ export interface EventMap {
      * fit. UI renders granted + dropped separately.
      */
     dropped?: { item: string; quantity: number }[];
+    /**
+     * The def's success message, present ONLY when this press
+     * finished a multi-step harvest (pill-fill UI, 2026-10-29).
+     * Absent on single-press completions, remove, pile and ground
+     * completions — their shape is unchanged for other consumers.
+     */
+    successMessage?: string;
   };
   /**
    * A multi-step harvest (prototype TUG/STOMP) advanced but has not
@@ -142,6 +149,17 @@ export interface EventMap {
     targetId: string;
     sourceId: string;
     progress: number;
+    /**
+     * Pill-fill fields (2026-10-29), all read from the source's
+     * MultiStep def in the game layer (never derived in App):
+     * which press this was (1-based), how many presses the def
+     * takes in total, the def's verb (TUG / STOMP), and the def's
+     * struggle message for this unfinished press.
+     */
+    pressIndex: number;
+    pressesTotal: number;
+    verb: string;
+    struggleMessage: string;
   };
   /**
    * A harvest press that granted NOTHING (failure/feedback event).

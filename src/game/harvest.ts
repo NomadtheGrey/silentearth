@@ -117,7 +117,11 @@
  *     adds the source's step to stored progress and emits
  *     'harvest:progress' with no grant and no shrink until
  *     progress reaches 1. Only then do yields, capacity, grant,
- *     and the after-harvest step happen.
+ *     and the after-harvest step happen. Pill-fill payloads
+ *     (2026-10-29): progress events also carry pressIndex /
+ *     pressesTotal / verb / struggleMessage from the def, and
+ *     the finishing press's 'harvest:completed' carries the
+ *     def's successMessage (absent on every other completion).
  *  5. Yields: primary base + a bonus roll (rng() < bonusChance ?
  *     bonus : 0); each secondary drop rolls its own chance for +1;
  *     tool-gated yields (clay on silt, Adam-pinned) pay their table
@@ -181,6 +185,7 @@ import {
   harvestYieldForTool,
   type GroundMaterialDef,
   type HarvestSourceDef,
+  type MultiStep,
   type ToolTier,
 } from './objects';
 import {
@@ -893,6 +898,11 @@ export function createHarvestOutcomeListener(
       fail(req, 'regrowing');
       return;
     }
+    // Pill-fill (2026-10-29): when this press FINISHES a
+    // multi-step harvest, the completion below carries the
+    // def's successMessage; progress presses carry the pill
+    // fields (pressIndex / pressesTotal / verb / struggle).
+    let finishedMultiStep: MultiStep | undefined;
     if (source.multiStep) {
       const progress = Math.min(1, state.progressFor(req.targetId) + source.multiStep.step);
       if (progress < 1) {
@@ -901,9 +911,14 @@ export function createHarvestOutcomeListener(
           targetId: req.targetId,
           sourceId: req.sourceId,
           progress,
+          pressIndex: Math.round(progress / source.multiStep.step),
+          pressesTotal: Math.ceil(1 / source.multiStep.step - 1e-9),
+          verb: source.multiStep.action,
+          struggleMessage: source.multiStep.struggleMessage,
         });
         return;
       }
+      finishedMultiStep = source.multiStep;
       // Progress reaches 1: fall through to grant. The grant
       // always succeeds (overflow piles — see step 6), so the
       // after-harvest step below clears progress via shrink /
@@ -990,6 +1005,9 @@ export function createHarvestOutcomeListener(
       yields: granted,
       action: 'harvest',
       ...(dropped.length > 0 ? { dropped } : {}),
+      ...(finishedMultiStep
+        ? { successMessage: finishedMultiStep.successMessage }
+        : {}),
     });
   });
 
