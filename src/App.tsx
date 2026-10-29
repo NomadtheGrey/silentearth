@@ -835,15 +835,13 @@
  *   untouched. Panels (inventory/crafting) are not modals,
  *   so they do not block the toggle — flagged, not carved
  *   out (Esc-to-close-panels-first is a follow-up if Adam
- *   wants it). INDICATOR: "Esc — Options" (wording draft
- *   for Adam's pin pass), bottom-right — seed controls
- *   own bottom-left, the readout chip sits in the top row,
- *   bottom-right is free. Desktop only (hidden on touch:
- *   no Esc key there, the visible Options control is
- *   already the touch path); hidden while any modal is
- *   open (then Esc closes, and the hint would read
- *   wrong); pointer-events-none, a label only, not a
- *   button. App.tsx only.
+ *   wants it). INDICATOR (retired 2026-10-29, legend
+ *   consolidation): the floating "Esc — Options" pill
+ *   that lived bottom-right is GONE — Adam ruled ONE
+ *   key legend (the printed one), and the Esc line now
+ *   lives in the printed legend block; the Options
+ *   button itself carries an Esc badge beside I/K/L.
+ *   App.tsx only.
  * - ESC + [X] OUT OF ANY MODAL, LIVE (Adam, 2026-10-27 —
  *   DEV brief): AUDITED every dialog surface (role="dialog"
  *   grep — exactly three true modals, no others): Options
@@ -8116,11 +8114,11 @@ export default function App() {
   }, []);
 
   // THE SHARED WINNER, computed once per render: the
-  // touch USE label, the desktop pile button, and the
-  // desktop controls hint all read it, so every tell
-  // agrees with what USE/R will do. Position state
-  // (10 Hz tick) drives the re-renders, so the tells
-  // appear and disappear as she moves and turns.
+  // touch USE label and the desktop pile button read
+  // it, so every tell agrees with what USE/R will do.
+  // Position state (10 Hz tick) drives the re-renders,
+  // so the tells appear and disappear as she moves
+  // and turns.
   const useWinner = computeUseWinner();
 
   // DESKTOP PILE PICKUP (see the header): the mouse twin
@@ -8158,75 +8156,7 @@ export default function App() {
                 ? 'SCRY'
                 : undefined;
 
-  // CONTROLS HINT (Adam, 2026-10-29: "We'll need a
-  // little HUD element for these controls, even as
-  // simple as they are"): the desktop tell for the
-  // target system — a small bottom-center line naming
-  // the faced target and what E (and R, when the target
-  // has a second) will do. Contextual, not a static
-  // legend: it reads the same shared winner, so it can
-  // never promise what the keys won't do, and it is
-  // also R's only tell. Desktop only — the phone's tell
-  // is the touch USE label above. Hidden whenever a
-  // menu, panel, modal, or placement owns the screen.
-  const controlsHint = ((): { target: string; use: string; second?: string } | null => {
-    if (isTouch || useWinner === null || placement !== null) return null;
-    if (
-      inventoryOpen ||
-      craftingOpen ||
-      charmsOpen ||
-      optionsOpen ||
-      introOpen ||
-      pendingTrapRecipe ||
-      pendingRemoveTarget !== null ||
-      paused ||
-      homeMenuOpen ||
-      selectedPileId !== null ||
-      selectedTorchId !== null ||
-      selectedTentId !== null ||
-      selectedFireId !== null ||
-      selectedSiteId !== null
-    ) {
-      return null;
-    }
-    switch (useWinner.kind) {
-      case 'scatter':
-        return {
-          target: useWinner.target.name,
-          use: 'Harvest',
-          second: 'Remove',
-        };
-      case 'ground':
-        return { target: useWinner.target.name, use: 'Harvest' };
-      case 'pile':
-        return { target: 'Pile', use: 'Open', second: 'Pick up pile' };
-      case 'trap':
-        return {
-          target: trapRowTrap?.label ?? 'Trap',
-          use: trapRowTrap?.label.startsWith('Collect') ? 'Collect' : 'Check',
-        };
-      case 'hive':
-        return { target: 'Hive', use: 'Harvest honey' };
-      case 'site':
-        return { target: 'Ritual site', use: 'Open' };
-      case 'fire':
-        return { target: 'Campfire', use: 'Open' };
-      case 'tent':
-        return { target: 'Tent', use: 'Open', second: 'Take down' };
-      case 'torch':
-        return { target: 'Torch', use: 'Open', second: 'Pick up' };
-      case 'home': {
-        const rest = homeMenuActions().find((a) => a.id === 'rest');
-        return {
-          target: 'Home',
-          use: 'Open',
-          second: rest && rest.disabled !== true ? 'Sleep' : undefined,
-        };
-      }
-      case 'scry':
-        return { target: 'Still water', use: 'Scry' };
-    }
-  })();
+
 
   return (
     <div
@@ -8613,25 +8543,6 @@ export default function App() {
               : `Pick up ${displayNameFor(desktopPilePickup.item)} × ${desktopPilePickup.quantity}`}
           </button>
         ) : null}
-        {controlsHint ? (
-          <div className="pointer-events-none absolute bottom-4 left-1/2 flex -translate-x-1/2 items-center gap-2 rounded-full bg-black/45 px-3 py-1.5 text-xs text-[#f0ead6]">
-            <span className="text-[#f0ead6]/70">{controlsHint.target}</span>
-            <span>
-              <span className={'mr-1 ' + KEY_BADGE_CLASS}>
-                E
-              </span>
-              {controlsHint.use}
-            </span>
-            {controlsHint.second ? (
-              <span>
-                <span className={'mr-1 ' + KEY_BADGE_CLASS}>
-                  R
-                </span>
-                {controlsHint.second}
-              </span>
-            ) : null}
-          </div>
-        ) : null}
         {/* PILL FIX: pickup feedback lives HERE, last in the
           z-40 overlay (after the buttons + pile button), so
           it paints ABOVE the menu instead of under it (it
@@ -8789,6 +8700,14 @@ export default function App() {
               }
             >
               Options
+              {!isTouch ? (
+                <span
+                  aria-hidden="true"
+                  className={'ml-1 ' + KEY_BADGE_CLASS}
+                >
+                  Esc
+                </span>
+              ) : null}
             </button>
           </div>
           <div className="mt-3">
@@ -9116,6 +9035,9 @@ export default function App() {
       <div className="absolute bottom-0 right-0 z-30 p-4 text-right text-xs opacity-70 pointer-events-none">
         <p>WASD to walk</p>
         <p>V / C to switch camera</p>
+        <p>E — Interact</p>
+        <p>R — 2nd Interact</p>
+        <p>Esc — Options</p>
         {cameraMode === 'first' && <p>Click the world to capture the mouse</p>}
       </div>
       )}
@@ -9564,24 +9486,7 @@ export default function App() {
         />
       ) : null}
 
-      {/* Esc hint: desktop only, and only while no modal is
-        open (while a modal is open, Esc closes it instead —
-        the hint would read wrong). The first-run dialog
-        counts as a modal here (Esc does nothing while it
-        is open, so the hint would read wrong). Bottom-right: seed
-        controls own bottom-left, the LocationChip owns
-        bottom-centre, bottom-right is free. A label only,
-        not a button — the Options control + Esc are the
-        doors. Wording draft for Adam's pin pass. */}
-      {!isTouch &&
-      !optionsOpen &&
-      !introOpen &&
-      !pendingTrapRecipe &&
-      !firstRunDialogOpen ? (
-        <p className="pointer-events-none absolute bottom-2 right-2 z-30 rounded bg-black/45 px-2 py-1 text-xs text-stone-300">
-          Esc — Options
-        </p>
-      ) : null}
+
 
       {/* Paused control: only while the engine flag is set. It
         renders regardless of panels (a global state control,
