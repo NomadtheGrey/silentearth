@@ -960,6 +960,66 @@ interface AnimalModelParts {
 const animalPartsCache = new Map<AnimalKind, AnimalModelParts>();
 const animalMatCache = new Map<AnimalKind, THREE.MeshLambertMaterial>();
 
+/**
+ * Raccoon detail (Adam 2026-10-29 — a live raccoon read as a
+ * generic grey animal): the two markings that make a raccoon
+ * a raccoon — a RINGED tail (alternating light/dark bands)
+ * and the dark FACE MASK across the eye band. Raccoon only:
+ * every other kind keeps the shared generic parts untouched.
+ * Geometries + materials are cached once, like the generic
+ * parts. The kind's sizes stay (length 0.6 / height 0.35 in
+ * ANIMAL_MODEL_PARAMS); band count/colors and the mask span
+ * are visual drafts for Adam's sighting.
+ */
+const RACCOON_DARK = 0x33302b;
+const RACCOON_LIGHT = 0x8f8f8f;
+const RACCOON_TAIL_BANDS = 6;
+
+interface RaccoonDetail {
+  tailSegs: THREE.BufferGeometry[];
+  mask: THREE.BufferGeometry;
+  darkMat: THREE.MeshLambertMaterial;
+  lightMat: THREE.MeshLambertMaterial;
+}
+
+let raccoonDetailCache: RaccoonDetail | null = null;
+
+function raccoonDetail(p: AnimalModelParams): RaccoonDetail {
+  if (raccoonDetailCache) return raccoonDetailCache;
+  // Ringed tail: band boxes laid along -z from the body's
+  // rear, alternating light/dark with a dark tip. Each band's
+  // offset is baked into its geometry (the wing idiom), so
+  // assembly places every segment at the one tail origin.
+  const segLen = p.length * 0.09;
+  const tailSegs: THREE.BufferGeometry[] = [];
+  for (let i = 0; i < RACCOON_TAIL_BANDS; i++) {
+    const seg = new THREE.BoxGeometry(p.length * 0.24, p.height * 0.36, segLen);
+    seg.translate(0, 0, -p.length / 2 - segLen * (i + 0.5));
+    tailSegs.push(seg);
+  }
+  // Face mask: a sphere patch hugging the head (same centre,
+  // r x 1.04 so it sits proud of the fur), spanning the eye
+  // band across the front (+z). The muzzle below the band
+  // stays body-grey and readable.
+  const headR = p.height * 0.45;
+  const mask = new THREE.SphereGeometry(
+    headR * 1.04,
+    8,
+    4,
+    Math.PI / 2 - 0.75,
+    1.5,
+    Math.PI / 2 - 0.42,
+    0.62,
+  );
+  raccoonDetailCache = {
+    tailSegs,
+    mask,
+    darkMat: meshMat(RACCOON_DARK),
+    lightMat: meshMat(RACCOON_LIGHT),
+  };
+  return raccoonDetailCache;
+}
+
 export function buildAnimal(kind: AnimalKind): THREE.Group {
   const p = ANIMAL_MODEL_PARAMS[kind];
   let parts = animalPartsCache.get(kind);
@@ -1012,10 +1072,28 @@ export function buildAnimal(kind: AnimalKind): THREE.Group {
     g.add(wingR);
     wings.push(wingL, wingR);
   }
-  if (parts.tail) {
+  if (parts.tail && kind !== 'raccoon') {
     const tail = new THREE.Mesh(parts.tail, mat);
     tail.position.set(0, p.height * 0.5, -p.length / 2 - p.length * 0.1);
     g.add(tail);
+  }
+  if (kind === 'raccoon') {
+    // Ringed tail + face mask replace the generic tail box
+    // (see raccoonDetail). Segments alternate light/dark from
+    // the body out, dark at the tip; the mask rides at the
+    // head's own position so it tracks the head exactly.
+    const detail = raccoonDetail(p);
+    detail.tailSegs.forEach((seg, i) => {
+      const band = new THREE.Mesh(
+        seg,
+        i % 2 === 0 ? detail.lightMat : detail.darkMat,
+      );
+      band.position.set(0, p.height * 0.5, 0);
+      g.add(band);
+    });
+    const mask = new THREE.Mesh(detail.mask, detail.darkMat);
+    mask.position.set(0, p.height * 0.7, p.length / 2);
+    g.add(mask);
   }
   if (wings.length === 2) g.userData.wings = wings;
   return g;
