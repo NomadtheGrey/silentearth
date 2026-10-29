@@ -1342,8 +1342,9 @@ export class WorldRenderer {
       py: number,
       pz: number,
       seg = 10,
+      openEnded = false,
     ): THREE.Mesh => {
-      const mesh = new THREE.Mesh(new THREE.CylinderGeometry(rt, rb, h, seg), lambert(color));
+      const mesh = new THREE.Mesh(new THREE.CylinderGeometry(rt, rb, h, seg, 1, openEnded), lambert(color));
       mesh.position.set(px, py, pz);
       return mesh;
     };
@@ -1441,7 +1442,15 @@ export class WorldRenderer {
           hg.add(houseCyl(0.04, 0.04, 1.7, 0x6b4a2f, i * (f / 3), 0.85, -0.7));
         }
       } else if (house.type === 'thatchHut') {
-        hg.add(houseCyl(f / 2, f / 2, 1.6, 0xcbb59a, 0, 0.8, 0, 12));
+        // Wall OPEN-ENDED (Adam, 2026-10-29): a capped cylinder's
+        // top cap at y 1.6 rendered from inside (DoubleSide) as a
+        // fan-seamed false ceiling, sealing off the roof cone's
+        // underside — the cone IS the ceiling. No bottom cap
+        // either (the floor disc below is its own mesh; its top
+        // cap is the floor). Outside, the cone's base radius
+        // (f/2 + 0.3) overhangs the wall (f/2) at the same 1.6,
+        // so the open rim is covered from above.
+        hg.add(houseCyl(f / 2, f / 2, 1.6, 0xcbb59a, 0, 0.8, 0, 12, true));
         const roof = houseRoof(new THREE.ConeGeometry(f / 2 + 0.3, 1.5, 12), 0x8a7a4a);
         roof.position.y = 2.35;
         hg.add(roof);
