@@ -45,10 +45,7 @@ const ALL_RECORDS: BuildRecord[] = [
   {
     merge: 'Merge #26',
     pr: 53,
-    // sha pending: the merge sha is unknowable before the
-    // merge; the pre-authorized correction merge replaces
-    // this with the real one.
-    sha: 'pending',
+    sha: '615cad8',
     date: '2026-10-29',
     what: 'Cloud mirror coalescing ends the write-per-harvest burn: cloud saves now write at most once a minute (latest state only, flushed when the page hides). Harvest buttons fill as you work them, with the press count shown. Inventory rows and headers lay out cleanly on a phone; the quest log\u2019s house quests can actually complete; the ritual bone list greys out the kinds you don\u2019t carry. The opossum gains its long skinny tail, pointy face, and ears. Houses: recipe rows explain the upgrade ladder; the Thatch Hut loses its false ceiling cap and gains a real packed-earth floor; the Woven Cottage and Wooden Hut roofs open the same way; the home menu works anywhere inside your hut. The umbrella shows in the Protection line, and the apron is a true garment \u2014 worn, its +10 lb in the pockets only while you wear it.',
     why: 'Adam\u2019s live-play session drove the batch \u2014 and the cloud bill forced the headline: saving on every harvest was burning through the save box\u2019s writes, so testing paused until the coalesce shipped.',
