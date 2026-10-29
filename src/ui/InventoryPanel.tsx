@@ -249,7 +249,22 @@ export function InventoryPanel({
       {items.length === 0 ? (
         <p className={'italic ' + t.muted}>Nothing carried yet.</p>
       ) : (
-        <ul className="grid grid-cols-[minmax(0,1fr)_auto_auto] gap-x-2 gap-y-1">
+        // Row layout (narrow-width fix, 2026-10-29 — Adam's
+        // screenshot: descriptors wrapped one word per line
+        // and the meta line printed OVER the descriptor):
+        // the old single-line 3-column subgrid (name+note |
+        // nowrap meta | button cluster) starves the text
+        // column at phone width — meta ~170 px + touch
+        // buttons ~150 px + padding leave the name column
+        // a sliver, and the overflowing centered meta
+        // overprints the note. Below sm the row STACKS in
+        // normal flow (name+note full width, meta on its
+        // own line, buttons on their own line — overlap is
+        // impossible); at sm and up the original 3-column
+        // grid returns unchanged. All three lists in this
+        // panel (personal, pile, storage) share the shape
+        // and the fix.
+        <ul className="flex flex-col gap-y-2 sm:grid sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:gap-x-2 sm:gap-y-1">
           {items.map((item) => {
             const selected = item.id === selectedItemId;
             const placeable = placeableIds?.has(item.id) ?? false;
@@ -257,7 +272,7 @@ export function InventoryPanel({
             return (
               <li
                 key={item.id}
-                className="col-span-3 grid grid-cols-subgrid items-center"
+                className="flex flex-col gap-y-1 sm:col-span-3 sm:grid sm:grid-cols-subgrid sm:items-center"
               >
                 <button
                   type="button"
@@ -280,7 +295,7 @@ export function InventoryPanel({
                     </span>
                   ) : null}
                 </button>
-                <span className="whitespace-nowrap text-right text-sm tabular-nums text-stone-300">
+                <span className="whitespace-nowrap text-left text-sm tabular-nums text-stone-300 sm:text-right">
                   {[item.quantityText, item.weightText]
                     .filter(
                       (part): part is string =>
@@ -362,16 +377,16 @@ export function InventoryPanel({
           <h3 className={'text-base font-semibold ' + t.heading}>
             Nearby pile
           </h3>
-          <ul className="grid grid-cols-[minmax(0,1fr)_auto_auto] gap-x-2 gap-y-1">
+          <ul className="flex flex-col gap-y-2 sm:grid sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:gap-x-2 sm:gap-y-1">
             {nearbyPile.kinds.map((kind) => (
               <li
                 key={kind.id}
-                className="col-span-3 grid grid-cols-subgrid items-center"
+                className="flex flex-col gap-y-1 sm:col-span-3 sm:grid sm:grid-cols-subgrid sm:items-center"
               >
                 <span className="rounded px-2 py-1 text-left text-sm">
                   {kind.name}
                 </span>
-                <span className="whitespace-nowrap text-right text-sm tabular-nums text-stone-300">
+                <span className="whitespace-nowrap text-left text-sm tabular-nums text-stone-300 sm:text-right">
                   pile ×{kind.pileQuantity} · carried ×{kind.carriedQuantity}
                 </span>
                 <span className="flex gap-1">
@@ -415,11 +430,11 @@ export function InventoryPanel({
           {storage.items.length === 0 ? (
             <p className={'italic ' + t.muted}>Nothing stored here yet.</p>
           ) : (
-            <ul className="grid grid-cols-[minmax(0,1fr)_auto_auto] gap-x-2 gap-y-1">
+            <ul className="flex flex-col gap-y-2 sm:grid sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:gap-x-2 sm:gap-y-1">
               {storage.items.map((item) => (
                 <li
                   key={item.id}
-                  className="col-span-3 grid grid-cols-subgrid items-center"
+                  className="flex flex-col gap-y-1 sm:col-span-3 sm:grid sm:grid-cols-subgrid sm:items-center"
                 >
                   <span className="rounded px-2 py-1 text-left">
                     <span className="flex items-center gap-1.5">
@@ -442,7 +457,7 @@ export function InventoryPanel({
                       </span>
                     ) : null}
                   </span>
-                  <span className="whitespace-nowrap text-right text-sm tabular-nums text-stone-300">
+                  <span className="whitespace-nowrap text-left text-sm tabular-nums text-stone-300 sm:text-right">
                     {item.quantityText ?? null}
                   </span>
                   <span className="flex gap-1">
