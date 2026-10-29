@@ -35,6 +35,11 @@
  *   interactLabel, the button shows that label instead of
  *   "USE" (a dropped pile about to be picked up reads
  *   "PICK UP").
+ * - JUMP button, same family, stacked above USE on the
+ *   centre axis (2026-10-29, Adam's sprint/jump order):
+ *   the touch half of Space. No touch sprint button —
+ *   sprint on touch is the MOVE stick's double-push
+ *   (Background's movement path).
  *
  * GESTURE OWNERSHIP (BioForge v1 lesson, required): a look-drag
  * NEVER fires interact on release. Only two gestures interact:
@@ -64,6 +69,9 @@ export interface TouchControlsProps {
   onLook?: (dx: number, dy: number) => void;
   /** USE press, or a short still tap on the look field. */
   onInteract?: () => void;
+  /** JUMP press (the touch half of Space; added 2026-10-29
+    with Background's pressJump seam). */
+  onJump?: () => void;
   /** When set, the USE button shows this label instead of "USE"
     (the shell sets it when a dropped pile would win the press). */
   interactLabel?: string;
@@ -85,6 +93,7 @@ export function TouchControls({
   onLook,
   onInteract,
   interactLabel,
+  onJump,
   lookEnabled = true,
 }: TouchControlsProps) {
   const [stickUsed, setStickUsed] = useState(false);
@@ -382,6 +391,27 @@ export function TouchControls({
         }}
       >
         {interactLabel ?? 'USE'}
+      </button>
+
+      {/* JUMP: same button family as USE, stacked directly
+        above it on the centre axis (bottom-56: USE spans
+        128-192 px off the bottom, JUMP spans 224-288 —
+        32 px clear). Added 2026-10-29 with Adam's
+        sprint/jump order; the shell wires it to the
+        player's pressJump (mid-air presses no-op there).
+        Renders after USE (same DOM-order rule), and there
+        is no touch sprint button: the stick double-push
+        is Background's movement path. */}
+      <button
+        type="button"
+        aria-label="Jump"
+        className="pointer-events-auto absolute bottom-56 left-1/2 flex h-16 w-16 -translate-x-1/2 touch-none items-center justify-center whitespace-nowrap rounded-full border-2 border-[#f0ead6]/80 bg-moss-deep/90 text-sm font-bold text-[#f0ead6]"
+        onTouchStart={(e) => {
+          e.preventDefault();
+          onJump?.();
+        }}
+      >
+        JUMP
       </button>
     </div>
   );

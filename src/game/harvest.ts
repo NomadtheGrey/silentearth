@@ -144,9 +144,12 @@
  *   and a fresh log is scheduled to spawn near trees after
  *   LOG_SPAWN_MS. Spawned logs harvest like fallen logs and, when
  *   taken, schedule their own replacement — the chain renews.
- * - TAKEN-permanent sources (renewal 'taken': flint stones) are
- *   removed for good with NO replacement scheduled — single
- *   pickups, not clusters; the infinite world supplies more.
+ * - TAKEN-permanent sources (renewal 'taken': flint stones,
+ *   bone scatters) are removed for good with NO replacement
+ *   scheduled — single pickups, not clusters; the infinite
+ *   world supplies more. Bones joined by Adam's ruling
+ *   (2026-10-29, PINNED — "bones don't grow back"): a
+ *   harvested bone is gone permanently, no shrink, no regrow.
  * - TREES FELL (Adam, 2026-10-26, PINNED — answers the flagged
  *   fell-vs-shrink question with FELL): a harvested tree becomes
  *   a STUMP at its spot (a workstation anchor like any other
@@ -960,10 +963,12 @@ export function createHarvestOutcomeListener(
       state.remove(req.targetId);
       state.scheduleLogSpawn(req.x, req.z, gen.seed, nowMs);
     } else if (source.renewal === 'taken') {
-      // TAKEN-permanent (flint stones, Adam 2026-10-27): a single
-      // pickup, gone from this spot for good — no shrink, no
-      // respawn scheduling. The chunk reload on harvest:completed
-      // (renderer, via wrapGenWithState) removes it from view.
+      // TAKEN-permanent (flint stones, Adam 2026-10-27; bone
+      // scatters, Adam 2026-10-29 — bones don't grow back): a
+      // single pickup, gone from this spot for good — no
+      // shrink, no respawn scheduling. The chunk reload on
+      // harvest:completed (renderer, via wrapGenWithState)
+      // removes it from view.
       state.remove(req.targetId);
     } else {
       // Ordinary sources SHRINK and REGROW (Adam, 2026-10-26).

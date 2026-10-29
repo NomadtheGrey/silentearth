@@ -46,6 +46,12 @@ export interface EventMap {
   /** Camera mode toggled (V or C). */
   'camera:switched': { mode: CameraMode };
   /**
+   * Sprint started or stopped (player.ts, 2026-10-29 — transitions
+   * only, never per-frame). The shell's hunger wiring reads this:
+   * sprinting drains hunger faster (rate is UI/Systems' half).
+   */
+  'player:sprint-changed': { sprinting: boolean };
+  /**
    * In-range harvest targets changed (enter/leave only — the tracker
    * diffs by target id, so steady walking does not spam UI). UI renders
    * one harvest button per target and hides buttons for targets that

@@ -566,7 +566,7 @@
  * - CRAFTING GROUPS, LIVE (Adam, 2026-10-26 — "group the
  *   crafted items on the crafting screen"): SECTIONS in one
  *   scroll, NOT tabs (the phone sheet already scrolls;
- *   sections keep everything visible). 38 recipes, 6 groups
+ *   sections keep everything visible). 45 recipes, 6 groups
  *   in this order — Tools, Homes, Fire & Workshop, Clothes,
  *   Materials & Carrying, Traps — order within a group is the
  *   current recipe order, empty groups never render.
@@ -736,10 +736,12 @@
  *   createSleepListener (Fill-in's sleep.ts, landed in
  *   parallel as 69f5393): it checks night, then shelter
  *   from the position, and jumps the sky to dawn,
- *   time-only, no restore. Outcomes 'sleep:completed' /
- *   'sleep:failed' need no UI action (the dawn jump hides
- *   the button via the night gate; failures show nothing
- *   per the brief's no-invented-text rule). REPAIR NOTE:
+ *   time-only, no restore. Outcomes: 'sleep:failed'
+ *   needs no UI action (failures show nothing per the
+ *   brief's no-invented-text rule), and 'sleep:completed'
+ *   showed nothing until 2026-10-29, when Adam ordered
+ *   the WAKE MESSAGE (the transient dawning notice —
+ *   see handleSleep). REPAIR NOTE:
  *   the first push of this landing (cf5f813) was built
  *   from a stale base and its whole-file events.ts
  *   clobbered Fill-in's landed sleep contract (the three
@@ -835,15 +837,13 @@
  *   untouched. Panels (inventory/crafting) are not modals,
  *   so they do not block the toggle — flagged, not carved
  *   out (Esc-to-close-panels-first is a follow-up if Adam
- *   wants it). INDICATOR: "Esc — Options" (wording draft
- *   for Adam's pin pass), bottom-right — seed controls
- *   own bottom-left, the readout chip sits in the top row,
- *   bottom-right is free. Desktop only (hidden on touch:
- *   no Esc key there, the visible Options control is
- *   already the touch path); hidden while any modal is
- *   open (then Esc closes, and the hint would read
- *   wrong); pointer-events-none, a label only, not a
- *   button. App.tsx only.
+ *   wants it). INDICATOR (retired 2026-10-29, legend
+ *   consolidation): the floating "Esc — Options" pill
+ *   that lived bottom-right is GONE — Adam ruled ONE
+ *   key legend (the printed one), and the Esc line now
+ *   lives in the printed legend block; the Options
+ *   button itself carries an Esc badge beside I/K/L.
+ *   App.tsx only.
  * - ESC + [X] OUT OF ANY MODAL, LIVE (Adam, 2026-10-27 —
  *   DEV brief): AUDITED every dialog surface (role="dialog"
  *   grep — exactly three true modals, no others): Options
@@ -1649,6 +1649,7 @@ import type {
 } from './ui/types';
 import {
   PersonalInventory,
+  descriptionFor,
   displayNameFor,
   isCarryingGear,
   normalizeItemId,
@@ -1761,6 +1762,7 @@ import { CrowArrows } from './ui/CrowArrows';
 import { RitualPanel } from './ui/RitualPanel';
 import { CharmsPanel } from './ui/CharmsPanel';
 import { StormWarning } from './ui/StormWarning';
+import { WakeNotice } from './ui/WakeNotice';
 
 type BusHarvestTarget = EventMap['harvest:inRange']['targets'][number];
 
@@ -1921,11 +1923,11 @@ const CRAFTING_GROUP_BY_RECIPE_ID: Record<string, string> = {
   'trundle-tool': 'Tools',
   'primitive-lean-to': 'Homes',
   'thatch-hut': 'Homes',
-  'wattle-and-daub-hut': 'Homes',
-  'woven-cottage-prototype': 'Homes',
   'woven-cottage': 'Homes',
   'small-wooden-hut': 'Homes',
   'moss-cradle': 'Homes',
+  'sleeping-bag': 'Homes',
+  tent: 'Homes',
   campfire: 'Fire & Workshop',
   hearth: 'Fire & Workshop',
   kiln: 'Fire & Workshop',
@@ -1934,6 +1936,9 @@ const CRAFTING_GROUP_BY_RECIPE_ID: Record<string, string> = {
   'crafted-workstation': 'Fire & Workshop',
   'potters-wheel': 'Fire & Workshop',
   loom: 'Fire & Workshop',
+  'dry-kindling': 'Fire & Workshop',
+  torch: 'Fire & Workshop',
+  altar: 'Fire & Workshop',
   'hooded-cloak': 'Clothes',
   shawl: 'Clothes',
   'pointy-hat': 'Clothes',
@@ -1946,6 +1951,10 @@ const CRAFTING_GROUP_BY_RECIPE_ID: Record<string, string> = {
   'clay-brick': 'Materials & Carrying',
   'small-basket': 'Materials & Carrying',
   'large-basket': 'Materials & Carrying',
+  'plant-pulp': 'Materials & Carrying',
+  'pressed-sheets': 'Materials & Carrying',
+  paper: 'Materials & Carrying',
+  grimoire: 'Materials & Carrying',
   snare: 'Traps',
   'fish-weir-trap': 'Traps',
   'pot-trap': 'Traps',
@@ -2090,6 +2099,23 @@ function weightTextFor(
   return `${formatLb(each)} lb each · ${formatLb(quantity * each)} lb`;
 }
 
+/**
+ * The one note rule for item rows (descriptor wiring,
+ * 2026-10-29 — Adam ordered brief descriptors for pretty
+ * much all items): a primal bone reads Systems' boneNote
+ * (its canonical note — the descriptor table deliberately
+ * omits bone ids); every other item reads its
+ * ITEM_DESCRIPTIONS line via descriptionFor. Unknown id =
+ * undefined = no note, as before. ONE helper for personal
+ * rows and home-storage rows alike — the rule must not
+ * fork. All descriptor lines are DRAFT (Systems' table,
+ * Adam's pin pass).
+ */
+function itemNoteFor(item: string, charms: CharmState): string | undefined {
+  const kind = boneKindFor(normalizeItemId(item));
+  return kind === null ? descriptionFor(item) : boneNote(kind, charms);
+}
+
 /** One inventory stack as a panel row, with the umbrella icon attached. */
 function toInventoryItem(
   stack: {
@@ -2108,37 +2134,15 @@ function toInventoryItem(
     quantityText: String(stack.quantity),
     weightText: weightTextFor(stack.item, stack.quantity, inventory),
     icon: stack.item === UMBRELLA_ITEM_ID ? <UmbrellaIcon /> : undefined,
-    // Bone rows (individual-bone build, 2026-10-28):
-    // every carried primal bone reads its note from
-    // Systems' boneNote — raw: 'Needs a ritual site';
-    // awakened: 'Tier <n> · <effect phrase>' (tier from
-    // the awakening record, so tier-ups flow through;
-    // phrase fallback 'Awakened' for a kind without a
-    // drafted phrase). This SUPERSEDES the tier-1
-    // Waking build's first-charm note (which computed
-    // 'Stirs at hunger 45; drains 10% slower' from the
-    // DRAFT constants): Systems' boneNote is now the
-    // canonical note, and shrew's phrase ('Stirs when
-    // hunger falls, warning before the slowdown; small
-    // hunger bonus while carried') is Systems' adopted
-    // draft shape — the numbers no longer render.
-    // Phrases are DRAFT (bone-charms doc, not pins),
-    // flagged for Adam's pin pass. Non-bone stacks
-    // keep no note.
-    //
-    // BAG ROW (tent shell, 2026-10-28): the sleeping
-    // bag's row carries its category as its note —
-    // 'Bedding' (PROPOSED copy). The bag is carried
-    // passive bedding (umbrella precedent: no equip,
-    // no use-action), and this note is its V1 marker —
-    // the fiction that she carries bedding, visible
-    // wherever the inventory shows. No number attaches
-    // (no cold/exposure-during-sleep model exists yet).
-    note: (() => {
-      if (stack.item === ITEMS.sleepingBag) return 'Bedding';
-      const kind = boneKindFor(normalizeItemId(stack.item));
-      return kind === null ? undefined : boneNote(kind, charms);
-    })(),
+    // Row note via the one rule (itemNoteFor, above):
+    // primal bones read boneNote (raw: 'Needs a ritual
+    // site'; awakened: 'Tier <n> · <effect phrase>' —
+    // Systems' canonical note since the individual-bone
+    // build; phrases DRAFT); every other stack reads its
+    // descriptor (descriptor wiring, 2026-10-29). The
+    // sleeping bag's old 'Bedding' category note is GONE:
+    // its authored descriptor supersedes it.
+    note: itemNoteFor(stack.item, charms),
   };
 }
 
@@ -2262,10 +2266,12 @@ export default function App() {
   // then shelter (from the position), and jumps the sky
   // to dawn, time-only, no restore. The one listener lives
   // in the boot effect below (createSleepListener);
-  // outcomes 'sleep:completed'/'sleep:failed' need no UI
-  // action — the dawn jump disables the row via the night
-  // gate, and failures show nothing per the brief's
-  // no-invented-text rule. Daytime shows the row disabled
+  // outcomes: 'sleep:failed' needs no UI action (failures
+  // show nothing per the brief's no-invented-text rule);
+  // 'sleep:completed' raises the WAKE MESSAGE since
+  // 2026-10-29 (Adam's order — see the consumer beside
+  // handleSleep); the dawn jump disables the row via the
+  // night gate either way. Daytime shows the row disabled
   // with a "Night only" note; the menu stays open after
   // a Rest press.
   const handleSleep = (): void => {
@@ -2273,6 +2279,29 @@ export default function App() {
     if (!player) return;
     bus.emit('sleep:requested', { x: player.x, z: player.z });
   };
+
+  // WAKE MESSAGE (Adam, 2026-10-29: a completed sleep
+  // showed NOTHING — the dawn jump was the only signal;
+  // "We need a message indicating that we have done so,
+  // and it's dawning"): a third consumer of
+  // 'sleep:completed' (beside groundhog wake + the quest
+  // flag, in the boot effect) — it sets a transient
+  // screen-level notice that clears itself after a few
+  // seconds. 'sleep:failed' has no consumer here:
+  // failures stay silent, as before. Copy is DRAFT for
+  // Adam's pin pass.
+  const [wakeNote, setWakeNote] = useState<string | null>(null);
+  useEffect(() => {
+    const off = bus.on('sleep:completed', () => {
+      setWakeNote("You slept through the night. It's dawning.");
+    });
+    return off;
+  }, []);
+  useEffect(() => {
+    if (wakeNote === null) return;
+    const timer = setTimeout(() => setWakeNote(null), 5000);
+    return () => clearTimeout(timer);
+  }, [wakeNote]);
 
   // Gap-closing state (see the header): one Systems FireState
   // per placed fire (the cooking vessel), the engine lighting
@@ -2592,9 +2621,39 @@ export default function App() {
           charmStateRef.current.isAwakened('snake-vertebra'),
           charmStateRef.current,
         ) *
-        groundhogRestRef.current.restedDrainFactor(),
+        groundhogRestRef.current.restedDrainFactor() *
+        // SPRINT FACTOR (UI half of Adam's sprint/jump
+        // order, 2026-10-29): sprinting joins the same
+        // product at DRAFT ×1.25 — the pinned base rate
+        // (1 pt / 30 s) is untouched and there is no
+        // second hunger value; the flag mirrors
+        // Background's 'player:sprint-changed' event
+        // (see the subscription below syncShrewEffect's
+        // neighbours — sprintingRef).
+        (sprintingRef.current ? 1.25 : 1),
     );
   };
+
+  // SPRINT STATE MIRROR (2026-10-29): Background's player
+  // emits 'player:sprint-changed' on transitions only;
+  // the ref feeds the drain product above, and the
+  // subscription re-syncs the rate the moment the state
+  // flips (the 1 s tick's own re-sync would catch it
+  // within a second regardless). The live getter
+  // (player.sprinting) stays Background's; this mirror
+  // exists so the shell never polls it.
+  const sprintingRef = useRef(false);
+  useEffect(() => {
+    const off = bus.on('player:sprint-changed', (p) => {
+      sprintingRef.current = p.sprinting;
+      syncShrewEffect();
+    });
+    return off;
+    // First-render closure by design (the established
+    // pattern — syncShrewEffect reads only refs and
+    // singletons, so the captured instance stays correct).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   // CHARM-BONUS SYNC (mouse/bear wiring): the two
   // session-only bonuses, shell-synced on list change
   // (boot + ritual completion, beside syncCharmHooks).
@@ -4689,10 +4748,22 @@ export default function App() {
       recipe.upgradesStump === true &&
       nearestStump !== null &&
       stumpState.isWorkbench(nearestStump.x, nearestStump.z);
+    // Row description (descriptor wiring, 2026-10-29):
+    // the output's authored descriptor replaces the
+    // generated 'Makes 1 × <raw id>' line; a multi-output
+    // recipe appends ' (×N)'. The fallback (no recipe
+    // output should miss the table) keeps the Makes shape
+    // but with the DISPLAY name — never the raw id.
+    const outputDescriptor = descriptionFor(recipe.output.item);
     return {
       id: recipe.id,
       name: recipe.name,
-      description: `Makes ${recipe.output.quantity} × ${recipe.output.item}.`,
+      description:
+        outputDescriptor !== undefined
+          ? recipe.output.quantity > 1
+            ? `${outputDescriptor} (×${recipe.output.quantity})`
+            : outputDescriptor
+          : `Makes ${recipe.output.quantity} × ${displayNameFor(recipe.output.item)}.`,
       ingredients: [
         ...recipe.ingredients.map((ingredient) => ({
           name: ingredient.item,
@@ -4733,39 +4804,63 @@ export default function App() {
     };
   });
 
-  // NO-RECRAFT ORDER (Adam, 2026-10-28): one stable
-  // partition of the full list — available recipes first
-  // in current order, owned/superseded last in current
-  // order. The section filters below preserve relative
-  // order, so this IS the per-section stable partition
-  // (within-section only, no re-sort); section order +
-  // accordion unchanged, and disabled rows stay visible
-  // when their section is expanded (never hidden). The
-  // flat menu prop rides the same order. Header counts
-  // read canCraft, so an all-disabled section renders
-  // "0 of N craftable" with its rows visible on expand.
+  // NO-RECRAFT ORDER (Adam, 2026-10-28; STRENGTHENED
+  // 2026-10-29 — "should move to the bottom of the
+  // LIST if crafted and no longer craftable"): owned/
+  // superseded recipes leave their sections entirely
+  // and collect in ONE trailing block at the very
+  // bottom of the whole list, after every section (and
+  // after "Other" if it ever renders), keeping their
+  // relative order and their per-row labels. The sink
+  // keys on OWNERSHIP (the row's disabledLabel is one
+  // of Systems' two pinned labels) — never on canCraft:
+  // a merely unaffordable recipe (ownership available,
+  // ingredients missing) stays in its section, and the
+  // stump's "Already a Workbench" row is not an
+  // ownership row and never sinks. Sections are built
+  // from available recipes only; a section with no
+  // available recipes does not render. Header counts
+  // read the section's rows as before (canCraft among
+  // them), so they stay honest under the new shape.
+  // The flat menu prop rides the same global order:
+  // available in order, then the sunk block. (The
+  // 2026-10-28 within-section partition this replaces
+  // left the trowels at the bottom of Tools — the
+  // FIRST section, still high on screen.)
+  const isSunkRecipe = (recipe: (typeof craftingRecipes)[number]) =>
+    recipe.disabledLabel !== undefined &&
+    Object.values(CRAFT_OWNERSHIP_LABELS).includes(recipe.disabledLabel);
   const orderedCraftingRecipes = [
-    ...craftingRecipes.filter((recipe) => recipe.canCraft),
-    ...craftingRecipes.filter((recipe) => !recipe.canCraft),
+    ...craftingRecipes.filter((recipe) => !isSunkRecipe(recipe)),
+    ...craftingRecipes.filter(isSunkRecipe),
   ];
+  const availableCraftingRecipes = orderedCraftingRecipes.filter(
+    (recipe) => !isSunkRecipe(recipe),
+  );
+  const sunkCraftingRecipes = orderedCraftingRecipes.filter(isSunkRecipe);
 
   // CRAFTING GROUPS: sections in DEV's group order, each filtered
-  // from the recipe-ordered menu rows above (never re-sorted);
+  // from the AVAILABLE rows above (never re-sorted);
   // empty groups dropped here, and the menu drops them again
-  // defensively. Unmapped recipes (none today — all 38 map)
-  // trail under "Other" instead of vanishing.
-  const ungroupedRecipes = orderedCraftingRecipes.filter(
+  // defensively. Unmapped recipes (none today — all 45 map,
+  // placements pinned by Adam 2026-10-29) trail under
+  // "Other" instead of vanishing; the sunk block closes
+  // the list after it.
+  const ungroupedRecipes = availableCraftingRecipes.filter(
     (recipe) => CRAFTING_GROUP_BY_RECIPE_ID[recipe.id] === undefined,
   );
   const craftingSections = [
     ...CRAFTING_GROUP_ORDER.map((title) => ({
       title,
-      recipes: orderedCraftingRecipes.filter(
+      recipes: availableCraftingRecipes.filter(
         (recipe) => CRAFTING_GROUP_BY_RECIPE_ID[recipe.id] === title,
       ),
     })).filter((section) => section.recipes.length > 0),
     ...(ungroupedRecipes.length > 0
       ? [{ title: 'Other', recipes: ungroupedRecipes }]
+      : []),
+    ...(sunkCraftingRecipes.length > 0
+      ? [{ title: 'Owned & Superseded', recipes: sunkCraftingRecipes }]
       : []),
   ];
 
@@ -5142,11 +5237,47 @@ export default function App() {
     display: boneDisplayFor(charm.kind),
   }));
 
+  // PANEL FAMILY (Adam, 2026-10-29: the three HUD
+  // panels SWAP — "switch out without any further
+  // intervention"): Inventory / Crafting / Charms are
+  // a radio family. Opening one closes the other two;
+  // the toggles close the open one. Keys and both
+  // button rows all ride these helpers, so the rule
+  // holds however a panel is opened. Options is NOT
+  // in the family — it overlays (its own door + the
+  // modal guards), never swapped out, never swapped
+  // in by a panel key.
+  const openInventoryPanel = () => {
+    setInventoryOpen(true);
+    setCraftingOpen(false);
+    setCharmsOpen(false);
+  };
+  const openCraftingPanel = () => {
+    setCraftingOpen(true);
+    setInventoryOpen(false);
+    setCharmsOpen(false);
+  };
+  const toggleInventoryPanel = () => {
+    if (inventoryOpen) setInventoryOpen(false);
+    else openInventoryPanel();
+  };
+  const toggleCraftingPanel = () => {
+    if (craftingOpen) setCraftingOpen(false);
+    else openCraftingPanel();
+  };
+  const toggleCharmsPanel = () => {
+    if (charmsOpen) setCharmsOpen(false);
+    else openCharmsPanel();
+  };
+
   // Open the charms panel with a valid selection: keep
   // the current one if it is still listed (awakenings
-  // never drop), else fall to the first charm.
+  // never drop), else fall to the first charm. Radio
+  // family: opening closes the other two.
   const openCharmsPanel = () => {
     setCharmsOpen(true);
+    setInventoryOpen(false);
+    setCraftingOpen(false);
     setSelectedCharmKind((current) =>
       charmEntries.some((charm) => charm.kind === current)
         ? current
@@ -6292,7 +6423,15 @@ export default function App() {
     if (clothing.length > 0) {
       sections.push({ title: 'Clothing', entries: clothing });
     }
-    const storage: string[] = [];
+    // POCKETS LINE (Adam, 2026-10-29: "include the
+    // starting 10# for pockets"): the base capacity she
+    // always has opens the Storage section as a TEXT-ONLY
+    // first entry — pockets is not an item, so it never
+    // enters ids or any gear logic; display string only.
+    // The section therefore always renders (the readout
+    // accounts for her full capacity). The 10 was already
+    // in the total — capacity math is unchanged.
+    const storage: string[] = ['Pockets — +10 lb'];
     const largeCarried = inventory.count(ITEMS.largeBasket) >= 1;
     if (inventory.count(ITEMS.apron) >= 1) {
       ids.push(ITEMS.apron);
@@ -6310,9 +6449,7 @@ export default function App() {
       ids.push(ITEMS.largeBasket);
       storage.push(`${displayNameFor(ITEMS.largeBasket)} — +50 lb`);
     }
-    if (storage.length > 0) {
-      sections.push({ title: 'Storage', entries: storage });
-    }
+    sections.push({ title: 'Storage', entries: storage });
     const owned = ownedToolItem(inventory);
     if (owned !== 'none') {
       ids.push(owned);
@@ -6704,6 +6841,10 @@ export default function App() {
                     // Same display rule as panel rows above:
                     // storage rows are panel rows too.
                     name: displayNameFor(id),
+                    // Same note rule as personal rows (the
+                    // one itemNoteFor helper — descriptor
+                    // wiring, 2026-10-29).
+                    note: itemNoteFor(id, charmStateRef.current),
                     quantityText: String(openHomeStore.count(id)),
                   })),
           capacityText:
@@ -7423,6 +7564,11 @@ export default function App() {
   // categorical last fallback after scry, so the grass
   // at her feet can never steal a faced target (the
   // aa6e88b bug was exactly ground winning by distance).
+  // TWO 2026-10-29 CORRECTIONS live inside: the scatter
+  // candidate is the nearest of the FACED set (not the
+  // nearest overall, facing-tested alone), and ground's
+  // fallback is gated on NOTHING else being in range at
+  // all (accidental mud/dirt scooping).
   // ONE shared computeUseWinner() feeds the press, the
   // R press, the touch USE label, and the desktop pile
   // button, so the tell can never disagree with the act.
@@ -7470,15 +7616,33 @@ export default function App() {
     };
     // The harvest pair first: scatter + pile, resolved by
     // pileWouldWin inside the faced set.
-    const scatter = harvestTargets.find(
-      (candidate) => candidate.kind === 'scatter',
-    );
+    // FACED-SCATTER CORRECTION (2026-10-29): the scatter
+    // candidate is the nearest of the FACED set — Adam's
+    // pinned amendment, which the first version of this
+    // function missed: it took the first scatter in
+    // tracker order (nearest overall) and facing-tested
+    // that one alone, so a plant behind her silently
+    // vetoed every faced plant beyond it. Now every
+    // in-range scatter is facing-tested and the nearest
+    // faced one is the candidate (distance per candidate
+    // from the bus targets when present, the facing
+    // computation otherwise — the existing sources).
+    let scatter: HarvestTarget | undefined;
+    let scatterDistance: number | null = null;
+    for (const candidate of harvestTargets) {
+      if (candidate.kind !== 'scatter') continue;
+      const f = facingOf(candidate.worldX, candidate.worldZ);
+      if (!f.isFaced) continue;
+      const d =
+        busTargetsRef.current.find((t) => t.id === candidate.id)?.distance ??
+        f.distance;
+      if (scatterDistance === null || d < scatterDistance) {
+        scatter = candidate;
+        scatterDistance = d;
+      }
+    }
     const scatterFacing = scatter
-      ? facingOf(scatter.worldX, scatter.worldZ)
-      : null;
-    const scatterDistance = scatter
-      ? (busTargetsRef.current.find((t) => t.id === scatter.id)?.distance ??
-        scatterFacing!.distance)
+      ? { isFaced: true, distance: scatterDistance! }
       : null;
     let pairWinner: UseWinner | null = null;
     const facedPile = piles.find(
@@ -7501,6 +7665,17 @@ export default function App() {
         distance: scatterDistance!,
       };
     }
+    // GROUND GATE bookkeeping (see the fallback below):
+    // whether ANY candidate is in range at all, faced or
+    // not. Scatter, pile, trap, hive, and home are known
+    // here; sites and placed kinds add themselves inside
+    // their consider helpers as they range-check.
+    let anyCandidateInRange =
+      harvestTargets.some((t) => t.kind === 'scatter') ||
+      piles.length > 0 ||
+      !!trapRowTrap ||
+      !!hiveRowHive ||
+      homeHouse !== undefined;
     // The rest of the field, in tie order (the pair winner
     // keeps ties — challengers must be strictly nearer).
     const challengers: UseWinner[] = [];
@@ -7528,6 +7703,7 @@ export default function App() {
     let siteBest: UseWinner | null = null;
     const considerSite = (siteId: string, x: number, z: number): void => {
       const f = facingOf(x, z);
+      if (f.distance <= HARVEST_RANGE) anyCandidateInRange = true;
       if (
         f.isFaced &&
         f.distance <= HARVEST_RANGE &&
@@ -7550,6 +7726,7 @@ export default function App() {
       z: number,
     ): void => {
       const f = facingOf(x, z);
+      if (f.distance <= HARVEST_RANGE) anyCandidateInRange = true;
       if (f.isFaced && f.distance <= HARVEST_RANGE) {
         challengers.push({ kind, id, distance: f.distance });
       }
@@ -7583,7 +7760,18 @@ export default function App() {
     const ground = harvestTargets.find(
       (candidate) => candidate.kind === 'ground',
     );
-    if (ground) return { kind: 'ground', target: ground, distance: 0 };
+    // GROUND, NARROWED (Adam, 2026-10-29 — an unintended
+    // 'Mud x 31' pile: "picking up Mud or Dirt [must be]
+    // intentional"): ground wins ONLY when no other
+    // candidate is in range at all. With anything near —
+    // faced or not — a press that faces nothing is a
+    // no-op, not a scoop. Bare ground with nothing else
+    // near still scoops by E or pill: the scoop-anywhere
+    // pin survives, narrowed to where it can't be an
+    // accident.
+    if (ground && !anyCandidateInRange) {
+      return { kind: 'ground', target: ground, distance: 0 };
+    }
     return null;
   };
 
@@ -7789,6 +7977,77 @@ export default function App() {
   // kind in the pinned order (site → home → pile → fire
   // → tent → torch): a candidate replaces the best only
   // when STRICTLY nearer.
+  // MENUS RELEASE THE MOUSE (Adam, 2026-10-29, live
+  // play: opening Crafting while pointer-locked left
+  // the mouse trapped — Esc was doing the browser's
+  // unlock by hand): ANY screen that takes mouse input
+  // releases pointer lock when it opens. One effect
+  // over the open-state set: the three panels, Options,
+  // intro, the first-run dialog, the pile modal, the
+  // ritual/site panel, the world menus (home / torch /
+  // tent / fire selections — they take clicks as well
+  // as digits, so they are IN), the confirms
+  // (RemoveConfirm, trap-recipe, the four cloud
+  // confirms), and the paused veil (its resume is a
+  // click). Nothing re-locks on close — the standing
+  // "Click the world to capture the mouse" legend line
+  // is the re-entry, and the locked-click gate keeps
+  // that click from also harvesting. player.ts is
+  // untouched (it reads pointerLockElement per frame,
+  // so an external exit simply stops mouse-look while
+  // a screen is up — the point). Phone has no pointer
+  // lock; the pointerLockElement check makes this a
+  // no-op there. JUDGMENT CALL, stated: placement mode
+  // is NOT in the set — it is a mode, not a screen,
+  // and exiting the lock on arm would kill first-
+  // person placement aiming (the banner's buttons are
+  // the touch path; Enter confirms on desktop).
+  useEffect(() => {
+    const anyScreenOpen =
+      inventoryOpen ||
+      craftingOpen ||
+      charmsOpen ||
+      optionsOpen ||
+      introOpen ||
+      firstRunDialogOpen ||
+      homeMenuOpen ||
+      selectedPileId !== null ||
+      selectedTorchId !== null ||
+      selectedTentId !== null ||
+      selectedFireId !== null ||
+      selectedSiteId !== null ||
+      pendingRemoveTarget !== null ||
+      pendingTrapRecipe !== null ||
+      cloudPendingBring !== null ||
+      cloudPendingRemove !== null ||
+      cloudPendingRestore !== null ||
+      cloudPendingNewGame !== null ||
+      paused;
+    if (anyScreenOpen && document.pointerLockElement !== null) {
+      document.exitPointerLock();
+    }
+  }, [
+    inventoryOpen,
+    craftingOpen,
+    charmsOpen,
+    optionsOpen,
+    introOpen,
+    firstRunDialogOpen,
+    homeMenuOpen,
+    selectedPileId,
+    selectedTorchId,
+    selectedTentId,
+    selectedFireId,
+    selectedSiteId,
+    pendingRemoveTarget,
+    pendingTrapRecipe,
+    cloudPendingBring,
+    cloudPendingRemove,
+    cloudPendingRestore,
+    cloudPendingNewGame,
+    paused,
+  ]);
+
   // PC KEYS (Adam, 2026-10-28 — every frequent action without
   // Esc): E is USE (the shared dispatch above, same as the
   // touch USE button), Shift+E arms Remove on the nearest
@@ -7857,10 +8116,17 @@ export default function App() {
         }
         return;
       }
+      // Panel family (Adam, 2026-10-29: the panels
+      // SWAP): with one panel open, another panel's
+      // key replaces it in the same press; the open
+      // panel's own key closes it; every other key
+      // waits. (Before this, only the open panel's own
+      // key did anything here — I then K was blocked
+      // by the open Inventory. That was the bug.)
       if (inventoryOpen || craftingOpen || charmsOpen) {
-        if (key === 'i' && inventoryOpen) setInventoryOpen(false);
-        else if (key === 'k' && craftingOpen) setCraftingOpen(false);
-        else if (key === 'l' && charmsOpen) setCharmsOpen(false);
+        if (key === 'i') toggleInventoryPanel();
+        else if (key === 'k') toggleCraftingPanel();
+        else if (key === 'l') toggleCharmsPanel();
         return;
       }
       if (key === 'e' && !e.shiftKey) {
@@ -7873,12 +8139,11 @@ export default function App() {
       } else if (key === 'r') {
         handleSecondInteract();
       } else if (key === 'i') {
-        setInventoryOpen((open) => !open);
+        toggleInventoryPanel();
       } else if (key === 'k') {
-        setCraftingOpen((open) => !open);
+        toggleCraftingPanel();
       } else if (key === 'l') {
-        if (charmsOpen) setCharmsOpen(false);
-        else openCharmsPanel();
+        toggleCharmsPanel();
       } else if (key === 'p') {
         pauseState.setPaused(!pausedRef.current);
       }
@@ -7896,6 +8161,9 @@ export default function App() {
     handleUseInteract,
     handleSecondInteract,
     openCharmsPanel,
+    toggleInventoryPanel,
+    toggleCraftingPanel,
+    toggleCharmsPanel,
     firstRunDone,
     placement,
     handlePlaceConfirm,
@@ -8116,12 +8384,34 @@ export default function App() {
   }, []);
 
   // THE SHARED WINNER, computed once per render: the
-  // touch USE label, the desktop pile button, and the
-  // desktop controls hint all read it, so every tell
-  // agrees with what USE/R will do. Position state
-  // (10 Hz tick) drives the re-renders, so the tells
-  // appear and disappear as she moves and turns.
+  // touch USE label and the desktop pile button read
+  // it, so every tell agrees with what USE/R will do.
+  // Position state (10 Hz tick) drives the re-renders,
+  // so the tells appear and disappear as she moves
+  // and turns.
   const useWinner = computeUseWinner();
+
+  // ONE TARGET AT A TIME (Adam, 2026-10-29, screenshot:
+  // the column offered two scatter targets at once —
+  // "Another case of Dual Selection. One target should
+  // be available at a time"): the proximity column
+  // presents ONLY the current target — this same
+  // winner. A scatter/ground winner contributes its
+  // target row(s); a trap or hive winner contributes
+  // its row; a pile or menu-kind winner (pile / site /
+  // fire / tent / torch / home / scry) contributes
+  // NOTHING to the column — its menu or modal is its
+  // presentation. Presentation only: the tracker still
+  // emits every in-range target (Shift+E's nearest-
+  // scatter and the dispatch fallbacks keep their
+  // inputs); the column just stops offering the rest.
+  const presentedTargets =
+    useWinner !== null &&
+    (useWinner.kind === 'scatter' || useWinner.kind === 'ground')
+      ? [useWinner.target]
+      : [];
+  const presentedTrap = useWinner?.kind === 'trap' ? trapRowTrap : null;
+  const presentedHive = useWinner?.kind === 'hive' ? hiveRowHive : null;
 
   // DESKTOP PILE PICKUP (see the header): the mouse twin
   // of R's pile second — shown only when the faced
@@ -8158,75 +8448,7 @@ export default function App() {
                 ? 'SCRY'
                 : undefined;
 
-  // CONTROLS HINT (Adam, 2026-10-29: "We'll need a
-  // little HUD element for these controls, even as
-  // simple as they are"): the desktop tell for the
-  // target system — a small bottom-center line naming
-  // the faced target and what E (and R, when the target
-  // has a second) will do. Contextual, not a static
-  // legend: it reads the same shared winner, so it can
-  // never promise what the keys won't do, and it is
-  // also R's only tell. Desktop only — the phone's tell
-  // is the touch USE label above. Hidden whenever a
-  // menu, panel, modal, or placement owns the screen.
-  const controlsHint = ((): { target: string; use: string; second?: string } | null => {
-    if (isTouch || useWinner === null || placement !== null) return null;
-    if (
-      inventoryOpen ||
-      craftingOpen ||
-      charmsOpen ||
-      optionsOpen ||
-      introOpen ||
-      pendingTrapRecipe ||
-      pendingRemoveTarget !== null ||
-      paused ||
-      homeMenuOpen ||
-      selectedPileId !== null ||
-      selectedTorchId !== null ||
-      selectedTentId !== null ||
-      selectedFireId !== null ||
-      selectedSiteId !== null
-    ) {
-      return null;
-    }
-    switch (useWinner.kind) {
-      case 'scatter':
-        return {
-          target: useWinner.target.name,
-          use: 'Harvest',
-          second: 'Remove',
-        };
-      case 'ground':
-        return { target: useWinner.target.name, use: 'Harvest' };
-      case 'pile':
-        return { target: 'Pile', use: 'Open', second: 'Pick up pile' };
-      case 'trap':
-        return {
-          target: trapRowTrap?.label ?? 'Trap',
-          use: trapRowTrap?.label.startsWith('Collect') ? 'Collect' : 'Check',
-        };
-      case 'hive':
-        return { target: 'Hive', use: 'Harvest honey' };
-      case 'site':
-        return { target: 'Ritual site', use: 'Open' };
-      case 'fire':
-        return { target: 'Campfire', use: 'Open' };
-      case 'tent':
-        return { target: 'Tent', use: 'Open', second: 'Take down' };
-      case 'torch':
-        return { target: 'Torch', use: 'Open', second: 'Pick up' };
-      case 'home': {
-        const rest = homeMenuActions().find((a) => a.id === 'rest');
-        return {
-          target: 'Home',
-          use: 'Open',
-          second: rest && rest.disabled !== true ? 'Sleep' : undefined,
-        };
-      }
-      case 'scry':
-        return { target: 'Still water', use: 'Scry' };
-    }
-  })();
+
 
   return (
     <div
@@ -8572,14 +8794,14 @@ export default function App() {
         stationAnchor is set; see ProximityHarvestButtons. */}
       <div className="pointer-events-none absolute inset-0 z-40">
         <ProximityHarvestButtons theme={lookThemes.world}
-          targets={harvestTargets}
+          targets={presentedTargets}
           harvestedIds={harvestedIds}
           onHarvest={handleHarvest}
           onRemove={handleRemove}
           stationAnchor={stationAnchor}
-          trap={trapRowTrap}
+          trap={presentedTrap}
           onCollectTrap={handleCollectTrap}
-          hive={hiveRowHive}
+          hive={presentedHive}
           onHarvestHive={handleHarvestHive}
           showKeyHints={!isTouch}
           lookNode={
@@ -8612,25 +8834,6 @@ export default function App() {
                 )}`
               : `Pick up ${displayNameFor(desktopPilePickup.item)} × ${desktopPilePickup.quantity}`}
           </button>
-        ) : null}
-        {controlsHint ? (
-          <div className="pointer-events-none absolute bottom-4 left-1/2 flex -translate-x-1/2 items-center gap-2 rounded-full bg-black/45 px-3 py-1.5 text-xs text-[#f0ead6]">
-            <span className="text-[#f0ead6]/70">{controlsHint.target}</span>
-            <span>
-              <span className={'mr-1 ' + KEY_BADGE_CLASS}>
-                E
-              </span>
-              {controlsHint.use}
-            </span>
-            {controlsHint.second ? (
-              <span>
-                <span className={'mr-1 ' + KEY_BADGE_CLASS}>
-                  R
-                </span>
-                {controlsHint.second}
-              </span>
-            ) : null}
-          </div>
         ) : null}
         {/* PILL FIX: pickup feedback lives HERE, last in the
           z-40 overlay (after the buttons + pile button), so
@@ -8721,7 +8924,7 @@ export default function App() {
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <button
               type="button"
-              onClick={() => setInventoryOpen((open) => !open)}
+              onClick={toggleInventoryPanel}
               aria-pressed={inventoryOpen}
               className={
                 isTouch
@@ -8741,7 +8944,7 @@ export default function App() {
             </button>
             <button
               type="button"
-              onClick={() => setCraftingOpen((open) => !open)}
+              onClick={toggleCraftingPanel}
               aria-pressed={craftingOpen}
               className={
                 isTouch
@@ -8761,7 +8964,7 @@ export default function App() {
             </button>
             <button
               type="button"
-              onClick={openCharmsPanel}
+              onClick={toggleCharmsPanel}
               aria-pressed={charmsOpen}
               className={
                 isTouch
@@ -8789,6 +8992,14 @@ export default function App() {
               }
             >
               Options
+              {!isTouch ? (
+                <span
+                  aria-hidden="true"
+                  className={'ml-1 ' + KEY_BADGE_CLASS}
+                >
+                  Esc
+                </span>
+              ) : null}
             </button>
           </div>
           <div className="mt-3">
@@ -8848,7 +9059,7 @@ export default function App() {
                   {
                     id: 'craft',
                     label: 'Craft',
-                    onSelect: () => setCraftingOpen(true),
+                    onSelect: () => openCraftingPanel(),
                   },
                 ]}
                 comfortable={isTouch}
@@ -8920,7 +9131,7 @@ export default function App() {
             </button>
             <button
               type="button"
-              onClick={() => setInventoryOpen((open) => !open)}
+              onClick={toggleInventoryPanel}
               aria-pressed={inventoryOpen}
               className="min-h-[44px] rounded bg-moss-deep px-3 py-2 text-sm hover:bg-moss"
             >
@@ -8928,7 +9139,7 @@ export default function App() {
             </button>
             <button
               type="button"
-              onClick={() => setCraftingOpen((open) => !open)}
+              onClick={toggleCraftingPanel}
               aria-pressed={craftingOpen}
               className="min-h-[44px] rounded bg-moss-deep px-3 py-2 text-sm hover:bg-moss"
             >
@@ -8936,7 +9147,7 @@ export default function App() {
             </button>
             <button
               type="button"
-              onClick={openCharmsPanel}
+              onClick={toggleCharmsPanel}
               aria-pressed={charmsOpen}
               className="min-h-[44px] rounded bg-moss-deep px-3 py-2 text-sm hover:bg-moss"
             >
@@ -9115,7 +9326,12 @@ export default function App() {
       {isTouch ? null : (
       <div className="absolute bottom-0 right-0 z-30 p-4 text-right text-xs opacity-70 pointer-events-none">
         <p>WASD to walk</p>
+        <p>Double-tap W to sprint</p>
+        <p>Space to jump</p>
         <p>V / C to switch camera</p>
+        <p>E — Interact</p>
+        <p>R — 2nd Interact</p>
+        <p>Esc — Options</p>
         {cameraMode === 'first' && <p>Click the world to capture the mouse</p>}
       </div>
       )}
@@ -9131,6 +9347,9 @@ export default function App() {
           onLook={applyTouchLook}
           onInteract={handleUseInteract}
           interactLabel={useWinnerLabel}
+          onJump={() => {
+            playerRef.current?.pressJump();
+          }}
         />
       ) : null}
 
@@ -9564,36 +9783,25 @@ export default function App() {
         />
       ) : null}
 
-      {/* Esc hint: desktop only, and only while no modal is
-        open (while a modal is open, Esc closes it instead —
-        the hint would read wrong). The first-run dialog
-        counts as a modal here (Esc does nothing while it
-        is open, so the hint would read wrong). Bottom-right: seed
-        controls own bottom-left, the LocationChip owns
-        bottom-centre, bottom-right is free. A label only,
-        not a button — the Options control + Esc are the
-        doors. Wording draft for Adam's pin pass. */}
-      {!isTouch &&
-      !optionsOpen &&
-      !introOpen &&
-      !pendingTrapRecipe &&
-      !firstRunDialogOpen ? (
-        <p className="pointer-events-none absolute bottom-2 right-2 z-30 rounded bg-black/45 px-2 py-1 text-xs text-stone-300">
-          Esc — Options
-        </p>
-      ) : null}
+
 
       {/* Paused control: only while the engine flag is set. It
         renders regardless of panels (a global state control,
-        not a panel). The wrapper is pointer-events-none, but
-        the button itself takes its own tap — that tap is the
-        resume (tap-to-resume, pinned). */}
+        not a panel). The whole veil is the resume surface
+        (click anywhere resumes, Adam 2026-10-29 — the
+        tap-to-resume pin, widened from the button to the
+        veil); the component owns the surface. */}
       {paused ? (
         <PausedIndicator
           onResume={() => pauseState.setPaused(false)}
           showKeyHint={!isTouch}
         />
       ) : null}
+
+      {/* Wake notice: transient, screen-level, after a
+        completed sleep (see the consumer beside
+        handleSleep). Renders nothing when no note. */}
+      <WakeNotice text={wakeNote} />
 
       {/* Camera transition overlay (vignette at rest, fade on switch). */}
       <CameraTransition switching={switching} />

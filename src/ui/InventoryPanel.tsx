@@ -26,9 +26,11 @@ import { WitchPortrait } from './WitchPortrait';
  * A home-storage section inside the inventory panel (the SAME
  * panel pattern, not a second panel): the sheltering house's
  * stored items, with Withdraw buttons. Deposit buttons live on
- * the personal rows above, gated by onDepositItem. The caller
- * owns both inventories; this panel never moves anything
- * itself.
+ * the personal rows above, gated by onDepositItem — and since
+ * 2026-10-29 a destination line at the top of the personal
+ * list names the house they deposit into (Adam found the
+ * buttons unreadable without it). The caller owns both
+ * inventories; this panel never moves anything itself.
  */
 export interface InventoryStorageSection {
   /** Display name of the house holding these supplies. */
@@ -230,6 +232,19 @@ export function InventoryPanel({
         ↓ Drop one at feet · ↓↓ Drop all at feet · ↑ Take one from pile · ↑↑
         Take all from pile
       </p>
+      {/* Deposit destination (Adam, 2026-10-29 — the buttons
+        appeared beside a plant outdoors and the destination
+        read nowhere near them): while home storage is open,
+        state where Deposit goes at the TOP of the list, with
+        the legend. The section header far below names the
+        same house (storage.label); this line exists so the
+        rows carrying the buttons say it too. Unsheltered =
+        no storage prop = no line, no buttons, as before. */}
+      {storage !== undefined ? (
+        <p className={'mb-2 text-xs ' + t.muted}>
+          Home storage — {storage.label}. Deposit stores one there.
+        </p>
+      ) : null}
 
       {items.length === 0 ? (
         <p className={'italic ' + t.muted}>Nothing carried yet.</p>
@@ -406,13 +421,26 @@ export function InventoryPanel({
                   key={item.id}
                   className="col-span-3 grid grid-cols-subgrid items-center"
                 >
-                  <span className="flex items-center gap-1.5 rounded px-2 py-1 text-left">
-                    {item.icon ? (
-                      <span className="inline-flex shrink-0">
-                        {item.icon}
+                  <span className="rounded px-2 py-1 text-left">
+                    <span className="flex items-center gap-1.5">
+                      {item.icon ? (
+                        <span className="inline-flex shrink-0">
+                          {item.icon}
+                        </span>
+                      ) : null}
+                      <span className="min-w-0">{item.name}</span>
+                    </span>
+                    {/* Row note, same block as the personal
+                      rows (descriptor wiring, 2026-10-29):
+                      storage rows carry notes by the same
+                      rule, so they render them the same
+                      way — before this, a stored item's
+                      note had nowhere to show. */}
+                    {item.note ? (
+                      <span className={'block text-sm ' + t.muted}>
+                        {item.note}
                       </span>
                     ) : null}
-                    <span className="min-w-0">{item.name}</span>
                   </span>
                   <span className="whitespace-nowrap text-right text-sm tabular-nums text-stone-300">
                     {item.quantityText ?? null}

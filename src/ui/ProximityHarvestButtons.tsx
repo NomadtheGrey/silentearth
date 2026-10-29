@@ -4,16 +4,28 @@
  *
  * Silent Earth redesign — proximity harvest buttons (UI lane, presentation only).
  *
- * The layer that turns in-range targets into buttons, screen-fixed:
- * one column fixed just above the middle of the screen (bottom
- * edge at 52% of view height, so it grows upward, never over the
- * middle), holding a button per target. The world-anchored
- * version slid up behind screen UI as the camera moved; this
- * version stays put, so every in-range target stays reachable
- * and tappable. No separate screen, no panel: the column is
- * the menu, and it renders above panel layers (z-40) and below
- * modals (z-50) — the caller places this component in a z-40
+ * The layer that turns the current target into buttons,
+ * screen-fixed: one column fixed just above the middle of the
+ * screen (bottom edge at 52% of view height, so it grows
+ * upward, never over the middle), holding the current
+ * target's button(s). The world-anchored version slid up
+ * behind screen UI as the camera moved; this version stays
+ * put, so the presented target stays reachable and tappable.
+ * No separate screen, no panel: the column is the menu, and
+ * it renders above panel layers (z-40) and below modals
+ * (z-50) — the caller places this component in a z-40
  * overlay for that layering to hold.
+ *
+ * ONE TARGET AT A TIME (Adam, 2026-10-29: "Another case of
+ * Dual Selection. One target should be available at a
+ * time"): the caller passes ONLY the current target — the
+ * same winner its USE/R dispatch computes (faced, nearest;
+ * behind her is out) — or nothing, when the winner is a
+ * kind this column does not present (pile / site / fire /
+ * tent / torch / home / scry: their menus are their
+ * presentation). This layer still renders exactly what it
+ * is passed; the narrowing lives in the caller, and the
+ * tracker behind it still emits every in-range target.
  *
  * STATION ANCHOR (Adam, 2026-10-28, reading (b)): when the
  * caller passes stationAnchor, the column instead sits above
@@ -107,7 +119,8 @@
  * with the caller's label and no KindGlyph — plain
  * text, same button look. Null trap = no row (the
  * caller owns gating: panels/modals/paused pass null;
- * legacy harvest rows stay ungated). A press reports
+ * since the one-target landing the caller also passes
+ * null unless the trap IS the current target). A press reports
  * the trap id through onCollectTrap; the outcome
  * (grant, pack-full, nothing-caught) is the caller's
  * job, not this component's. The row renders even
@@ -120,7 +133,9 @@
  * (after the trap row), with the caller's label and
  * no KindGlyph — plain text, same button look. Null
  * hive = no row (the caller owns gating, trap-row
- * list verbatim). A press reports the hive coords
+ * list verbatim; since the one-target landing the
+ * caller also passes null unless the hive IS the
+ * current target). A press reports the hive coords
  * through onHarvestHive; the outcome (grant,
  * torch-refusal, pack-full, too-hungry refusal) is
  * the caller's job, not this component's. The row
@@ -135,7 +150,12 @@ import type { HarvestTarget, HarvestRequest } from './proximityHarvest';
 import { KEY_BADGE_CLASS, UI_THEMES, type UiThemeName } from './themes';
 
 export interface ProximityHarvestButtonsProps {
-  /** In-range targets only, mapped from 'harvest:inRange' (see proximityHarvest.ts). */
+  /**
+   * The current target only (0 or 1 entries since the
+   * one-target landing): the caller narrows its
+   * in-range targets (mapped from 'harvest:inRange',
+   * see proximityHarvest.ts) to the USE winner.
+   */
   targets: HarvestTarget[];
   /**
    * Ids harvested since the last projection (pill fix):

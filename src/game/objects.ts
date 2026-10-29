@@ -802,6 +802,12 @@ export const SOURCES: HarvestSourceDef[] = [
     biomes: ['mirewood', 'deepBog', 'oldfieldRise', 'creekBottom', 'tanglewood', 'saltFlat', 'meadow', 'forest'],
     mesh: { shape: 'stone', color: 0x232326, baseY: 0.10 },
   },
+  // DEPLETION (Adam, 2026-10-29, PINNED — "bones don't grow
+  // back"): renewal 'taken' — a harvested bone scatter is
+  // gone permanently (the removed set, like removed plants),
+  // no shrink state, no regrow. The yield is unchanged
+  // (1 bone, fixedYield). Other sources regrow as before;
+  // bones were named alone.
   {
     id: 'boneScatter',
     kind: 'bone',
@@ -817,6 +823,7 @@ export const SOURCES: HarvestSourceDef[] = [
     primaryYield: 'BONE',
     fixedYield: true,
     secondaryYields: [],
+    renewal: 'taken',
     provenance: 'prototype',
     biomes: ['saltFlat', 'deepBog', 'creekBottom', 'oldfieldRise', 'mirewood', 'tanglewood'],
     mesh: { shape: 'bone', color: 0xe8e0cc, baseY: 0.08 },

@@ -43,6 +43,14 @@ export interface BuildRecord {
 
 const ALL_RECORDS: BuildRecord[] = [
   {
+    merge: 'Merge #24',
+    pr: 49,
+    sha: 'pending', // corrected to the real merge sha by the follow-up merge, per the standing drill
+    date: '2026-10-29',
+    what: 'The playtest-fix stack (23 commits): menus release the mouse, panels swap in one press, one target at a time, and pausing never traps the pointer (no lock while paused, click anywhere on the veil to resume). Double-tap W sprints and Space jumps. Fish and eels swim under the surface, crayfish stay in the water, and the raccoon reads as a raccoon. Tall Sunflowers stand 2 m and turn their faces with the sun; the Thatch Hut loses its false ceiling; bones stay removed once taken. Crafting sinks owned recipes to the bottom, a completed sleep says so at dawn, and inventory rows now carry a short descriptor saying what each thing is for.',
+    why: 'One long live-play session drove every line: the controls should not trap or double-act, the animals should live where they belong, and the world should say what things are.',
+  },
+  {
     merge: 'Merge #23',
     pr: 47,
     sha: '6132ede',

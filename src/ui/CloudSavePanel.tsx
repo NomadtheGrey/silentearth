@@ -15,6 +15,18 @@
  * remove disclosure. Words screen wording is PROPOSED
  * (Adam pins at sighting); no password gate (the
  * player's own machine holds the words, per approval).
+ *
+ * Opt-in flow (bug fix, 2026-10-29): the module reports
+ * enabled only once words exist (turnOn/enterWords set
+ * both), so a fresh user's toggle click can never flip
+ * the module state by itself — the panel holds a LOCAL
+ * reveal state instead: clicking ON checks the box and
+ * reveals the words choice right there; completing the
+ * words (create or enter) lands on the module's real
+ * enabled state and the reveal clears; clicking OFF
+ * from the revealed state just cancels the reveal (no
+ * module call), and OFF from truly-on rides the
+ * caller's turnOff path as before.
  * Sync mapping: enabled + mirrored ok → 'Synced';
  * enabled + never mirrored → 'Will sync on next save';
  * enabled + last mirror failed unreachable → 'Will sync
@@ -24,7 +36,7 @@
  * refresh only, driven by App).
  */
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { UI_THEMES, type UiThemeName } from './themes';
 
 export interface CloudSaveRow {
@@ -94,6 +106,16 @@ export function CloudSavePanel({
   comfortable = false,
 }: CloudSavePanelProps) {
   const t = UI_THEMES[theme];
+  // Opt-in reveal (see the header): true while the
+  // player has clicked the toggle ON but has not yet
+  // completed the words. Clears the moment the module
+  // reports truly enabled, so it can never mask a
+  // later off.
+  const [reveal, setReveal] = useState(false);
+  useEffect(() => {
+    if (sync.enabled) setReveal(false);
+  }, [sync.enabled]);
+  const shownOn = sync.enabled || reveal;
   const [showEnter, setShowEnter] = useState(false);
   const [enterInput, setEnterInput] = useState('');
   const [showWords, setShowWords] = useState(false);
@@ -151,14 +173,31 @@ export function CloudSavePanel({
       <label className="flex items-center gap-2">
         <input
           type="checkbox"
-          checked={sync.enabled}
+          checked={shownOn}
           disabled={busy}
-          onChange={(e) => onToggle(e.target.checked)}
+          onChange={(e) => {
+            const next = e.target.checked;
+            if (next) {
+              // Reveal: check the box locally + show the
+              // words choice; the caller's toggle handler
+              // is reveal-only on ON (no module call).
+              setReveal(true);
+              onToggle(true);
+            } else if (sync.enabled) {
+              // Truly on: the caller's turnOff path.
+              setReveal(false);
+              onToggle(false);
+            } else {
+              // Revealed but never on: cancel the reveal,
+              // nothing else — no module call.
+              setReveal(false);
+            }
+          }}
         />
         Cloud saves
       </label>
 
-      {!sync.enabled ? (
+      {!shownOn ? (
         <p className="text-xs opacity-70">
           When cloud saves are on, each save also copies this world to
           your cloud box, so you can bring it down on another device
@@ -166,7 +205,7 @@ export function CloudSavePanel({
         </p>
       ) : null}
 
-      {sync.enabled && words === null ? (
+      {shownOn && words === null ? (
         <div className="flex flex-col gap-2">
           <div className="flex flex-wrap gap-2">
             <button

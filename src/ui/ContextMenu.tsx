@@ -14,6 +14,16 @@
  *
  * Selection is a prop, not internal state, like every other panel
  * in this directory.
+ *
+ * WIDTH (Adam, 2026-10-29): w-72, uniform across every menu
+ * this component renders (home / pile / fire / tent / torch —
+ * one component, one width). At the old w-56 the label +
+ * countsText baseline row had zero slack (208 px of content
+ * against ~208 px of text), so names hyphen-wrapped beside
+ * their counts; w-64 still wrapped the longest real rows
+ * under conservative serif metrics (~251 px for Luminous
+ * Spores + 'carried ×60 · stored ×0' vs 240 px of content),
+ * so the shipped width is w-72 (272 px content).
  */
 
 import type { ReactNode } from 'react';
@@ -73,7 +83,7 @@ export function ContextMenu({
   };
   const hintClass = 'ml-1 ' + KEY_BADGE_CLASS;
   return (
-    <section aria-label={`${objectName} actions`} className={'w-56 max-h-[70vh] overflow-y-auto rounded-2xl p-2 ' + t.panel}>
+    <section aria-label={`${objectName} actions`} className={'w-72 max-h-[70vh] overflow-y-auto rounded-2xl p-2 ' + t.panel}>
       <div className="mb-1 flex items-center justify-between gap-2">
         <h2 className={'text-sm font-semibold ' + t.heading}>{objectName}</h2>
         {onClose ? (

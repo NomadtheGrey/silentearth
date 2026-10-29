@@ -37,6 +37,22 @@ export const BASE_SCATTER_PER_CHUNK = 40;
 /** Walk speed, meters per second. No terrain speed modifier in landing 1:
  *  swamp navigation difficulty is undecided and must not be invented. */
 export const PLAYER_SPEED = 5;
+/**
+ * Sprint multiplier (DRAFT, Adam's pin pass — sprint + jump,
+ * 2026-10-29): double-tap W (or double-push the thumbstick) to
+ * sprint. Composes multiplicatively with the terrain / hunger /
+ * charm speed factors in player.ts, the same way they compose
+ * with each other.
+ */
+export const SPRINT_MULTIPLIER = 1.6;
+/** Double-tap window, seconds (DRAFT): a fresh forward press this
+ *  soon after the last forward release engages sprint. */
+export const SPRINT_TAP_WINDOW_S = 0.3;
+/** Jump launch velocity, m/s (DRAFT — with JUMP_GRAVITY this is a
+ *  ~0.6 m hop lasting ~0.6 s on flat ground). */
+export const JUMP_VELOCITY = 4.0;
+/** Jump gravity, m/s² (DRAFT — see JUMP_VELOCITY). */
+export const JUMP_GRAVITY = 13.33;
 /** First-person eye height in meters. */
 export const PLAYER_EYE_HEIGHT = 1.7;
 /** Third-person overhead follow offset (above + behind the witch). */

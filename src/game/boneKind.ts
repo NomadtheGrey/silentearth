@@ -8,9 +8,11 @@
  * 'bone' scatter kind, and each instance's kind derives
  * deterministically from its position — same seed +
  * position always gives the same kind, with no rand-stream
- * consumption (no chunk re-rolls) and no stored tag (the
- * kind survives the default regrow: same position, same
- * kind after it grows back).
+ * consumption (no chunk re-rolls) and no stored tag.
+ * (Bones don't grow back — Adam, 2026-10-29: a harvested
+ * scatter is removed permanently, so the determinism now
+ * serves worldgen alone: a never-touched scatter's kind
+ * is fixed by its position.)
  *
  * LIST AUTHORITY: BONE_KINDS mirrors Systems' RITUAL_
  * RECIPES keys in src/systems/rituals.ts (the determined
@@ -68,8 +70,9 @@ export const BONE_KINDS: readonly string[] = [
 /**
  * The bone kind lying at (x, z) in world `seed`: FNV-1a
  * position hash → one of BONE_KINDS. Deterministic,
- * uniform enough across positions (probed), and stable
- * across regrows (position is the whole identity).
+ * uniform enough across positions (probed). Position is
+ * the whole identity (bones don't regrow — Adam,
+ * 2026-10-29 — so no regrow stability is needed).
  */
 export function boneKindAt(seed: string, x: number, z: number): string {
   const h = deriveSeed(String(seed), `bone:${x.toFixed(2)},${z.toFixed(2)}`);

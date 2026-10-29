@@ -47,6 +47,8 @@ import type { ScatterKind } from '../types';
 import type { MeshSpec } from './objects';
 import type { AnimalKind } from './animals';
 import { hashSeed, mulberry32 } from './seed';
+import { sunDirection, sunElevationAtCycle } from './sky';
+import { dayFraction } from './weather';
 
 /** Ground-cover disc radii per kind (disc-shaped sources only). */
 /** Ground-disc radii by scatter kind (shared with waterProximity's pond edge). */
@@ -473,11 +475,14 @@ export function buildKindGeometry(spec: MeshSpec, kind: ScatterKind): THREE.Buff
         part(cyl(0.06, 0.06, 0.02, 8), e, { p: [0, 0.48, 0] }),
       ]);
     case 'flowerTallDisc':
-      // Tall sunflower: tall thick stem + large disc + dark centre.
+      // Tall sunflower STEM ONLY (Adam, 2026-10-29, pinned): the
+      // stem stands 2.0 m and the head is a separate pivot
+      // geometry the renderer aims at the sun — see
+      // buildSunflowerHeadGeometry below. (Before: a 1.0 m stem
+      // with the disc baked horizontal at the top, a plate
+      // facing the sky.)
       return merge([
-        part(cyl(0.03, 0.04, 1.0, 4), STEM_GREEN, { p: [0, 0.5, 0] }),
-        part(cyl(0.3, 0.3, 0.04, 10), c, { p: [0, 1.02, 0] }),
-        part(sphere(0.1, 8, 6), e, { p: [0, 1.06, 0] }),
+        part(cyl(0.035, 0.05, SUNFLOWER_STEM_HEIGHT_M, 5), STEM_GREEN, { p: [0, SUNFLOWER_STEM_HEIGHT_M / 2, 0] }),
       ]);
     case 'flowerTrillium':
       // White trillium: low stem + 3 white petal discs in a triangle
@@ -536,6 +541,99 @@ export function buildKindGeometry(spec: MeshSpec, kind: ScatterKind): THREE.Buff
       ]);
     }
   }
+}
+
+// ---------------------------------------------------------------------------
+// Tall sunflower head (Adam, 2026-10-29, pinned Option A): the stem
+// above is ordinary static scatter; the HEAD is a separate pivot
+// geometry, instanced per chunk by the renderer and re-aimed at the
+// sun on the renderer's 2 s world tick. Everything here is a pure
+// function of the worldgen object + the sky cycle — deterministic,
+// no RNG, no saved state.
+// ---------------------------------------------------------------------------
+
+/** Stem height in metres (Adam PINNED 2.0, 2026-10-29): the head
+ *  centre rides at this height x instance scale — above her 1.7 m
+ *  eye line at scale 1.0, up to 2.8 m at the top of the scale range. */
+export const SUNFLOWER_STEM_HEIGHT_M = 2.0;
+
+/** Head pitch clamp (DRAFT radians, 55°): a face tilts toward the
+ *  sun but never past flower-plausible, and never nods below
+ *  upright — it reads as trying, not as a radar dish. */
+const SUNFLOWER_MAX_PITCH_RAD = (55 * Math.PI) / 180;
+/** Night rest pitch (DRAFT, 5°): near-upright, facing east. */
+const SUNFLOWER_NIGHT_PITCH_RAD = (5 * Math.PI) / 180;
+
+/**
+ * The sunflower head, built around its own pivot (the origin),
+ * facing local +z: petal disc (r 0.3, the size it always was)
+ * standing in the facing plane, the dark centre dome proud of the
+ * face, and a short neck stub behind meeting the stem top.
+ * Colours ride the source spec, like every other kind geometry.
+ */
+export function buildSunflowerHeadGeometry(spec: MeshSpec): THREE.BufferGeometry {
+  const c = spec.color;
+  const e = spec.extraColor ?? c;
+  return merge([
+    part(cyl(0.3, 0.3, 0.04, 12), c, { r: [Math.PI / 2, 0, 0] }),
+    part(sphere(0.13, 8, 6), e, { p: [0, 0, 0.02], s: [1, 1, 0.45] }),
+    part(cyl(0.028, 0.028, 0.1, 5), STEM_GREEN, { r: [Math.PI / 2, 0, 0], p: [0, 0, -0.06] }),
+  ]);
+}
+
+/**
+ * Where every sunflower head aims at a sky-cycle position:
+ * yaw follows the sun's azimuth (the codebase facing convention,
+ * atan2(x, z)); pitch is the sun's elevation clamped to
+ * [0, SUNFLOWER_MAX_PITCH_RAD]. At night (sun below the horizon)
+ * the target RESTS facing east, near-upright — young sunflowers
+ * re-face east overnight; there is nothing to face in the dark.
+ */
+export function sunflowerHeadOrientation(
+  cycleT: number,
+  month: number,
+): { yaw: number; pitch: number } {
+  const elev = sunElevationAtCycle(cycleT, month);
+  if (elev <= 0) {
+    return { yaw: Math.PI / 2, pitch: SUNFLOWER_NIGHT_PITCH_RAD };
+  }
+  const dir = sunDirection(cycleT / dayFraction(month), month);
+  return {
+    yaw: Math.atan2(dir.x, dir.z),
+    pitch: Math.min(elev, SUNFLOWER_MAX_PITCH_RAD),
+  };
+}
+
+/**
+ * Compose one head's instance matrix: position at the stem top
+ * (obj.y + STEM_HEIGHT x effective scale), orientation from
+ * sunflowerHeadOrientation plus a small deterministic per-head
+ * yaw jitter (from the object's own rotY) so a field reads grown,
+ * not cloned. effectiveScale is the renderer's composed instance
+ * scale (obj.scale, x SHRINK_SCALE while regrowing) — the same
+ * scale its stem renders at, so a regrowing sunflower's head
+ * rides its shrunk stem instead of floating.
+ */
+export function sunflowerHeadMatrix(
+  obj: { x: number; y: number; z: number; rotY: number },
+  effectiveScale: number,
+  orientation: { yaw: number; pitch: number },
+  out: THREE.Matrix4,
+): THREE.Matrix4 {
+  const jitter = Math.sin(obj.rotY * 12.9898) * 0.08;
+  const q = new THREE.Quaternion().setFromEuler(
+    new THREE.Euler(-orientation.pitch, orientation.yaw + jitter, 0, 'YXZ'),
+  );
+  out.compose(
+    new THREE.Vector3(
+      obj.x,
+      obj.y + SUNFLOWER_STEM_HEIGHT_M * effectiveScale,
+      obj.z,
+    ),
+    q,
+    new THREE.Vector3(effectiveScale, effectiveScale, effectiveScale),
+  );
+  return out;
 }
 
 /** Shared vertex-colored material for merged kind geometry. */
@@ -960,6 +1058,135 @@ interface AnimalModelParts {
 const animalPartsCache = new Map<AnimalKind, AnimalModelParts>();
 const animalMatCache = new Map<AnimalKind, THREE.MeshLambertMaterial>();
 
+/**
+ * Raccoon detail (Adam 2026-10-29 — a live raccoon read as a
+ * generic grey animal): the two markings that make a raccoon
+ * a raccoon — a RINGED tail (alternating light/dark bands)
+ * and the dark FACE MASK across the eye band. Raccoon only:
+ * every other kind keeps the shared generic parts untouched.
+ * Geometries + materials are cached once, like the generic
+ * parts. The kind's sizes stay (length 0.6 / height 0.35 in
+ * ANIMAL_MODEL_PARAMS); band count/colors and the mask span
+ * are visual drafts for Adam's sighting.
+ */
+const RACCOON_DARK = 0x33302b;
+const RACCOON_LIGHT = 0x8f8f8f;
+const RACCOON_TAIL_BANDS = 6;
+
+interface RaccoonDetail {
+  tailSegs: THREE.BufferGeometry[];
+  mask: THREE.BufferGeometry;
+  darkMat: THREE.MeshLambertMaterial;
+  lightMat: THREE.MeshLambertMaterial;
+}
+
+let raccoonDetailCache: RaccoonDetail | null = null;
+
+function raccoonDetail(p: AnimalModelParams): RaccoonDetail {
+  if (raccoonDetailCache) return raccoonDetailCache;
+  // Ringed tail: band boxes laid along -z from the body's
+  // rear, alternating light/dark with a dark tip. Each band's
+  // offset is baked into its geometry (the wing idiom), so
+  // assembly places every segment at the one tail origin.
+  const segLen = p.length * 0.09;
+  const tailSegs: THREE.BufferGeometry[] = [];
+  for (let i = 0; i < RACCOON_TAIL_BANDS; i++) {
+    const seg = new THREE.BoxGeometry(p.length * 0.24, p.height * 0.36, segLen);
+    seg.translate(0, 0, -p.length / 2 - segLen * (i + 0.5));
+    tailSegs.push(seg);
+  }
+  // Face mask: a sphere patch hugging the head (same centre,
+  // r x 1.04 so it sits proud of the fur), spanning the eye
+  // band across the front (+z). The muzzle below the band
+  // stays body-grey and readable.
+  const headR = p.height * 0.45;
+  const mask = new THREE.SphereGeometry(
+    headR * 1.04,
+    8,
+    4,
+    Math.PI / 2 - 0.75,
+    1.5,
+    Math.PI / 2 - 0.42,
+    0.62,
+  );
+  raccoonDetailCache = {
+    tailSegs,
+    mask,
+    darkMat: meshMat(RACCOON_DARK),
+    lightMat: meshMat(RACCOON_LIGHT),
+  };
+  return raccoonDetailCache;
+}
+
+/**
+ * Subsurface swimmers (Adam 2026-10-29 — a fish read as a
+ * crate standing ON the water): fish and eels are built
+ * around the group origin as the WATER LINE — the body rides
+ * below it and only the back / dorsal / tail tip break it.
+ * The renderer poses the group at the instance's WATER_Y, so
+ * the submergence lives entirely in these shapes; instance
+ * data is untouched. Surface swimmers (frog, turtle,
+ * muskrat, beaver, crayfish) keep the generic on-the-line
+ * build exactly as before.
+ *
+ * Fish: an ellipsoid body — flattened, elongated, the snout
+ * is the body's tapered front (NO sphere head) — plus a
+ * vertical tail fin and a dorsal fin a shade darker than the
+ * body. Eels: the shared long-cylinder body sunk below the
+ * line, no head sphere, and a low dorsal ridge along the
+ * back. Geometries + the fin material are cached once, like
+ * the generic parts; sizes derive from the kind params
+ * (unchanged). Proportions are visual drafts for Adam's
+ * sighting.
+ */
+interface FishDetail {
+  body: THREE.BufferGeometry;
+  tailFin: THREE.BufferGeometry;
+  dorsalFin: THREE.BufferGeometry;
+  finMat: THREE.MeshLambertMaterial;
+}
+
+let fishDetailCache: FishDetail | null = null;
+
+function fishDetail(p: AnimalModelParams): FishDetail {
+  if (fishDetailCache) return fishDetailCache;
+  // Ellipsoid body: unit sphere scaled flat + long, centred
+  // below the line so only the back breaks it.
+  const body = new THREE.SphereGeometry(1, 10, 8);
+  body.scale(p.length * 0.16, p.height * 0.42, p.length * 0.52);
+  body.translate(0, -p.height * 0.25, 0);
+  // Vertical tail fin at the rear, swept back a touch; its
+  // tip breaks the line.
+  const tailFin = new THREE.BoxGeometry(0.014, p.height * 0.85, p.length * 0.2);
+  tailFin.rotateX(-0.25);
+  tailFin.translate(0, -p.height * 0.22, -p.length * 0.6);
+  // Dorsal fin amidships, swept back; the part that reads
+  // above the surface.
+  const dorsalFin = new THREE.BoxGeometry(0.012, p.height * 0.24, p.length * 0.32);
+  dorsalFin.rotateX(0.35);
+  dorsalFin.translate(0, p.height * 0.15, -p.length * 0.05);
+  fishDetailCache = {
+    body,
+    tailFin,
+    dorsalFin,
+    finMat: meshMat(shade(p.color, 0.75)),
+  };
+  return fishDetailCache;
+}
+
+let eelRidgeCache: THREE.BufferGeometry | null = null;
+
+function eelRidge(p: AnimalModelParams): THREE.BufferGeometry {
+  if (eelRidgeCache) return eelRidgeCache;
+  // Low ridge along the sunk cylinder's back; its offset is
+  // baked so it sits on the body (body centre rides at
+  // -0.375 x height in buildAnimal) and just breaks the line.
+  const ridge = new THREE.BoxGeometry(0.012, p.height * 0.25, p.length * 0.8);
+  ridge.translate(0, p.height * 0.17, 0);
+  eelRidgeCache = ridge;
+  return eelRidgeCache;
+}
+
 export function buildAnimal(kind: AnimalKind): THREE.Group {
   const p = ANIMAL_MODEL_PARAMS[kind];
   let parts = animalPartsCache.get(kind);
@@ -994,10 +1221,14 @@ export function buildAnimal(kind: AnimalKind): THREE.Group {
   }
   const g = new THREE.Group();
   const width = p.length * 0.55;
-  const body = new THREE.Mesh(parts.body, mat);
-  body.position.set(0, p.height / 2, 0);
-  g.add(body);
-  if (parts.head) {
+  if (kind !== 'fish') {
+    const body = new THREE.Mesh(parts.body, mat);
+    // Eels ride submerged: the shared long cylinder sinks so
+    // its centre is below the water line (see eelRidge).
+    body.position.set(0, kind === 'eels' ? -p.height * 0.375 : p.height / 2, 0);
+    g.add(body);
+  }
+  if (parts.head && kind !== 'fish' && kind !== 'eels') {
     const head = new THREE.Mesh(parts.head, mat);
     head.position.set(0, p.height * 0.7, p.length / 2);
     g.add(head);
@@ -1012,10 +1243,42 @@ export function buildAnimal(kind: AnimalKind): THREE.Group {
     g.add(wingR);
     wings.push(wingL, wingR);
   }
-  if (parts.tail) {
+  if (parts.tail && kind !== 'raccoon' && kind !== 'fish') {
     const tail = new THREE.Mesh(parts.tail, mat);
     tail.position.set(0, p.height * 0.5, -p.length / 2 - p.length * 0.1);
     g.add(tail);
+  }
+  if (kind === 'raccoon') {
+    // Ringed tail + face mask replace the generic tail box
+    // (see raccoonDetail). Segments alternate light/dark from
+    // the body out, dark at the tip; the mask rides at the
+    // head's own position so it tracks the head exactly.
+    const detail = raccoonDetail(p);
+    detail.tailSegs.forEach((seg, i) => {
+      const band = new THREE.Mesh(
+        seg,
+        i % 2 === 0 ? detail.lightMat : detail.darkMat,
+      );
+      band.position.set(0, p.height * 0.5, 0);
+      g.add(band);
+    });
+    const mask = new THREE.Mesh(detail.mask, detail.darkMat);
+    mask.position.set(0, p.height * 0.7, p.length / 2);
+    g.add(mask);
+  }
+  if (kind === 'fish') {
+    // Subsurface build (see fishDetail): ellipsoid body +
+    // two fins, all offsets baked — every mesh sits at the
+    // group origin, which the renderer poses at WATER_Y.
+    const detail = fishDetail(p);
+    g.add(new THREE.Mesh(detail.body, mat));
+    g.add(new THREE.Mesh(detail.tailFin, detail.finMat));
+    g.add(new THREE.Mesh(detail.dorsalFin, detail.finMat));
+  }
+  if (kind === 'eels') {
+    // The sunk long-cylinder body was added above; the
+    // dorsal ridge completes the eel read.
+    g.add(new THREE.Mesh(eelRidge(p), mat));
   }
   if (wings.length === 2) g.userData.wings = wings;
   return g;
