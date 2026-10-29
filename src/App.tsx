@@ -1649,6 +1649,7 @@ import type {
 } from './ui/types';
 import {
   PersonalInventory,
+  descriptionFor,
   displayNameFor,
   isCarryingGear,
   normalizeItemId,
@@ -2098,6 +2099,23 @@ function weightTextFor(
   return `${formatLb(each)} lb each · ${formatLb(quantity * each)} lb`;
 }
 
+/**
+ * The one note rule for item rows (descriptor wiring,
+ * 2026-10-29 — Adam ordered brief descriptors for pretty
+ * much all items): a primal bone reads Systems' boneNote
+ * (its canonical note — the descriptor table deliberately
+ * omits bone ids); every other item reads its
+ * ITEM_DESCRIPTIONS line via descriptionFor. Unknown id =
+ * undefined = no note, as before. ONE helper for personal
+ * rows and home-storage rows alike — the rule must not
+ * fork. All descriptor lines are DRAFT (Systems' table,
+ * Adam's pin pass).
+ */
+function itemNoteFor(item: string, charms: CharmState): string | undefined {
+  const kind = boneKindFor(normalizeItemId(item));
+  return kind === null ? descriptionFor(item) : boneNote(kind, charms);
+}
+
 /** One inventory stack as a panel row, with the umbrella icon attached. */
 function toInventoryItem(
   stack: {
@@ -2116,37 +2134,15 @@ function toInventoryItem(
     quantityText: String(stack.quantity),
     weightText: weightTextFor(stack.item, stack.quantity, inventory),
     icon: stack.item === UMBRELLA_ITEM_ID ? <UmbrellaIcon /> : undefined,
-    // Bone rows (individual-bone build, 2026-10-28):
-    // every carried primal bone reads its note from
-    // Systems' boneNote — raw: 'Needs a ritual site';
-    // awakened: 'Tier <n> · <effect phrase>' (tier from
-    // the awakening record, so tier-ups flow through;
-    // phrase fallback 'Awakened' for a kind without a
-    // drafted phrase). This SUPERSEDES the tier-1
-    // Waking build's first-charm note (which computed
-    // 'Stirs at hunger 45; drains 10% slower' from the
-    // DRAFT constants): Systems' boneNote is now the
-    // canonical note, and shrew's phrase ('Stirs when
-    // hunger falls, warning before the slowdown; small
-    // hunger bonus while carried') is Systems' adopted
-    // draft shape — the numbers no longer render.
-    // Phrases are DRAFT (bone-charms doc, not pins),
-    // flagged for Adam's pin pass. Non-bone stacks
-    // keep no note.
-    //
-    // BAG ROW (tent shell, 2026-10-28): the sleeping
-    // bag's row carries its category as its note —
-    // 'Bedding' (PROPOSED copy). The bag is carried
-    // passive bedding (umbrella precedent: no equip,
-    // no use-action), and this note is its V1 marker —
-    // the fiction that she carries bedding, visible
-    // wherever the inventory shows. No number attaches
-    // (no cold/exposure-during-sleep model exists yet).
-    note: (() => {
-      if (stack.item === ITEMS.sleepingBag) return 'Bedding';
-      const kind = boneKindFor(normalizeItemId(stack.item));
-      return kind === null ? undefined : boneNote(kind, charms);
-    })(),
+    // Row note via the one rule (itemNoteFor, above):
+    // primal bones read boneNote (raw: 'Needs a ritual
+    // site'; awakened: 'Tier <n> · <effect phrase>' —
+    // Systems' canonical note since the individual-bone
+    // build; phrases DRAFT); every other stack reads its
+    // descriptor (descriptor wiring, 2026-10-29). The
+    // sleeping bag's old 'Bedding' category note is GONE:
+    // its authored descriptor supersedes it.
+    note: itemNoteFor(stack.item, charms),
   };
 }
 
@@ -4752,10 +4748,22 @@ export default function App() {
       recipe.upgradesStump === true &&
       nearestStump !== null &&
       stumpState.isWorkbench(nearestStump.x, nearestStump.z);
+    // Row description (descriptor wiring, 2026-10-29):
+    // the output's authored descriptor replaces the
+    // generated 'Makes 1 × <raw id>' line; a multi-output
+    // recipe appends ' (×N)'. The fallback (no recipe
+    // output should miss the table) keeps the Makes shape
+    // but with the DISPLAY name — never the raw id.
+    const outputDescriptor = descriptionFor(recipe.output.item);
     return {
       id: recipe.id,
       name: recipe.name,
-      description: `Makes ${recipe.output.quantity} × ${recipe.output.item}.`,
+      description:
+        outputDescriptor !== undefined
+          ? recipe.output.quantity > 1
+            ? `${outputDescriptor} (×${recipe.output.quantity})`
+            : outputDescriptor
+          : `Makes ${recipe.output.quantity} × ${displayNameFor(recipe.output.item)}.`,
       ingredients: [
         ...recipe.ingredients.map((ingredient) => ({
           name: ingredient.item,
@@ -6833,6 +6841,10 @@ export default function App() {
                     // Same display rule as panel rows above:
                     // storage rows are panel rows too.
                     name: displayNameFor(id),
+                    // Same note rule as personal rows (the
+                    // one itemNoteFor helper — descriptor
+                    // wiring, 2026-10-29).
+                    note: itemNoteFor(id, charmStateRef.current),
                     quantityText: String(openHomeStore.count(id)),
                   })),
           capacityText:

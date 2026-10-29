@@ -421,13 +421,26 @@ export function InventoryPanel({
                   key={item.id}
                   className="col-span-3 grid grid-cols-subgrid items-center"
                 >
-                  <span className="flex items-center gap-1.5 rounded px-2 py-1 text-left">
-                    {item.icon ? (
-                      <span className="inline-flex shrink-0">
-                        {item.icon}
+                  <span className="rounded px-2 py-1 text-left">
+                    <span className="flex items-center gap-1.5">
+                      {item.icon ? (
+                        <span className="inline-flex shrink-0">
+                          {item.icon}
+                        </span>
+                      ) : null}
+                      <span className="min-w-0">{item.name}</span>
+                    </span>
+                    {/* Row note, same block as the personal
+                      rows (descriptor wiring, 2026-10-29):
+                      storage rows carry notes by the same
+                      rule, so they render them the same
+                      way — before this, a stored item's
+                      note had nowhere to show. */}
+                    {item.note ? (
+                      <span className={'block text-sm ' + t.muted}>
+                        {item.note}
                       </span>
                     ) : null}
-                    <span className="min-w-0">{item.name}</span>
                   </span>
                   <span className="whitespace-nowrap text-right text-sm tabular-nums text-stone-300">
                     {item.quantityText ?? null}
