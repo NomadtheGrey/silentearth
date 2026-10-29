@@ -1609,6 +1609,7 @@ import { PileInventoryModal } from './ui/PileInventoryModal';
 import { PileChip } from './ui/PileChip';
 import { TorchChip } from './ui/TorchChip';
 import { TentChip } from './ui/TentChip';
+import { FirstRunDialog } from './ui/FirstRunDialog';
 import { AnimalTag } from './ui/AnimalTag';
 import { AltarChip } from './ui/AltarChip';
 import type { ContextAction } from './ui/types';
@@ -2296,6 +2297,21 @@ export default function App() {
 
   const [seedInput, setSeedInput] = useState(bootSave?.seed ?? DEFAULT_SEED);
   const [seed, setSeed] = useState(bootSave?.seed ?? DEFAULT_SEED);
+
+  // World name (Adam, 2026-10-28 — first-run flow): the
+  // name the player gives this world, or undefined when
+  // unnamed (the cloud list falls back to 'Main save').
+  // Saved via SaveDraft.worldName on saveNow (Systems
+  // field); the ref mirror is the saveNow pattern
+  // (saveNow reads refs, so a bare state would go stale
+  // in captured listeners). Boot restores it from
+  // bootSave; the first-run dialog + the cloud-tab
+  // rename field (later landing) both set it.
+  const [worldName, setWorldName] = useState<string | undefined>(
+    bootSave?.worldName,
+  );
+  const worldNameRef = useRef(worldName);
+  worldNameRef.current = worldName;
   const [cameraMode, setCameraMode] = useState<CameraMode>(
     bootSave?.cameraMode ?? 'first',
   );
@@ -2797,6 +2813,12 @@ export default function App() {
       saveGame(
         serializeSave({
           seed: meta.seed,
+          // World name rides saveNow (first-run dialog +
+          // cloud-tab rename set it; undefined = unnamed,
+          // omitted — the serialize spread drops it).
+          ...(worldNameRef.current !== undefined
+            ? { worldName: worldNameRef.current }
+            : {}),
           cameraMode: meta.cameraMode,
           position: player
             ? { x: player.x, z: player.z }
@@ -4019,8 +4041,19 @@ export default function App() {
     };
   }, []);
 
-  const regenerate = () => {
-    const nextSeed = seedInput.trim() || DEFAULT_SEED;
+  // Regenerate the world from a seed. The optional
+  // override is the first-run dialog's path: Begin passes
+  // its trimmed seed (blank → DEFAULT_SEED via the same
+  // fallback), while the Options callers pass nothing and
+  // read seedInput as before. The override exists because
+  // setSeedInput + regenerate() in one handler would read
+  // the STALE seedInput (state updates batch) — the
+  // dialog's seed must arrive as an argument, not via
+  // state. Callers that pass nothing MUST call it as
+  // () => regenerate(): a bare onClick={regenerate}
+  // would land the click event as the override.
+  const regenerate = (seedOverride?: string) => {
+    const nextSeed = (seedOverride ?? seedInput).trim() || DEFAULT_SEED;
     const gen = createWorldGen(nextSeed);
     genRef.current = gen;
     const renderer = rendererRef.current;
@@ -4064,6 +4097,32 @@ export default function App() {
     setBiomeText(formatWeights(gen.weightsAt(spawn.x, spawn.z)));
     bus.emit('world:seedSet', { seed: nextSeed });
     recomputeAnchors();
+  };
+
+  // First-run Begin (Adam, 2026-10-28): the dialog's
+  // trimmed values arrive here. Name: blank → unnamed
+  // (undefined — the cloud list falls back to 'Main
+  // save'). Seed: blank → DEFAULT_SEED, via regenerate's
+  // override path (the Options seed field syncs too, so
+  // it shows the chosen seed). The full regenerate tail
+  // runs — at first run its clears are no-ops (no tents,
+  // stagings, or scry state yet) and its world-swap steps
+  // (spawn, setWorldGen, anchors, seedSet bus) are exactly
+  // what a new world needs. No saveNow here: the name +
+  // seed persist at the first saveNow (state + ref +
+  // meta sync), the same as any unsaved progress. Begin
+  // ACTUALLY opens the intro (DEV correction) — it sets
+  // introOpen true, it does not merely un-gate an
+  // auto-open. (The regenerate guard returns early when
+  // the renderer/player are missing; firstRunDone +
+  // introOpen still set — Begin never strands the
+  // player on the dialog.)
+  const handleFirstRunBegin = (name: string, seed: string) => {
+    setWorldName(name === '' ? undefined : name);
+    setSeedInput(seed === '' ? DEFAULT_SEED : seed);
+    regenerate(seed);
+    setFirstRunDone(true);
+    setIntroOpen(true);
   };
 
   // Station presence from the real query at her position
@@ -6582,13 +6641,34 @@ export default function App() {
       : (piles.find((pile) => pile.id === selectedPileId) ?? null);
 
   const [optionsOpen, setOptionsOpen] = useState(false);
+  // FIRST-RUN DIALOG (Adam, 2026-10-28): on a no-save
+  // boot the dialog comes FIRST and the intro second.
+  // firstRunDone starts true when a save exists (the
+  // dialog never shows) and flips true on dialog Begin;
+  // introOpen's init reads it, so the intro cannot open
+  // under the dialog. Declared BEFORE introOpen — an
+  // initializer reading a later-declared const is a TDZ
+  // crash (the #17 lesson), and the dialog predicate
+  // below reads both.
+  const [firstRunDone, setFirstRunDone] = useState(bootSave !== null);
+
   // Intro modal: open on first run — no save at boot (a corrupt
-  // save reads as null, so it reads as fresh too). Dismissing
+  // save reads as null, so it reads as fresh too). Gated by
+  // the first-run dialog (firstRunDone): the dialog opens
+  // first, Begin opens the intro. Dismissing
   // sets it false for the session; a player who never saves
   // sees it again next launch, which is the trigger working
   // as briefed, not a bug. Re-open any time from the
   // Introduction section in Options (Settings tab).
-  const [introOpen, setIntroOpen] = useState(() => bootSave === null);
+  const [introOpen, setIntroOpen] = useState(
+    () => bootSave === null && firstRunDone,
+  );
+
+  // First-run dialog predicate (render-time, bootSave is
+  // session-stable): no save at boot + dialog not yet
+  // begun. Read by the dialog render, the Esc guard, the
+  // PC-keys guard, and the Esc-hint condition below.
+  const firstRunDialogOpen = bootSave === null && !firstRunDone;
 
   // TRAP ROW (Adam, 2026-10-28): the nearest placed
   // trap within HARVEST_RANGE (2.5 m, the harvest
@@ -6727,6 +6807,10 @@ export default function App() {
       const target = e.target as HTMLElement | null;
       const tag = target?.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+      // First-run dialog owns the screen: Esc neither
+      // dismisses it nor opens Options over it (DEV
+      // correction — the dialog is Begin-only).
+      if (firstRunDialogOpen) return;
       if (
         optionsOpen ||
         introOpen ||
@@ -6796,6 +6880,7 @@ export default function App() {
     charmsOpen,
     craftingOpen,
     inventoryOpen,
+    firstRunDone,
   ]);
   const handleFontChange = (next: FontId): void => {
     setFont(next);
@@ -6978,7 +7063,8 @@ export default function App() {
   // toggle Inventory/Crafting/Charms, P toggles pause.
   // Guards: typing (text input/textarea/select focus) swallows
   // everything; paused allows P only (resume); any modal open
-  // (Options, intro, trap confirm, remove confirm) blocks all
+  // (Options, intro, trap confirm, remove confirm, first-run
+  // dialog) blocks all
   // keys; any menu open allows only that menu's own toggle key
   // to close it (anything else is ignored); Ctrl/Meta/Alt
   // combos are never hijacked; held-key repeats are ignored
@@ -7002,7 +7088,8 @@ export default function App() {
         optionsOpen ||
         introOpen ||
         pendingTrapRecipe ||
-        pendingRemoveTarget !== null
+        pendingRemoveTarget !== null ||
+        firstRunDialogOpen
       ) {
         return;
       }
@@ -7043,6 +7130,7 @@ export default function App() {
     charmsOpen,
     handleUseInteract,
     openCharmsPanel,
+    firstRunDone,
   ]);
   // PC-KEYS CLICK (Adam, 2026-10-28): click-to-harvest while
   // pointer-locked — the same shared USE path as E. Gated on
@@ -8161,7 +8249,7 @@ export default function App() {
           className="bg-[#1e241c] border border-[#3a4436] px-2 py-1 text-xs w-48 outline-none"
         />
         <button
-          onClick={regenerate}
+          onClick={() => regenerate()}
           className="bg-[#3a4436] hover:bg-[#4a5546] px-3 py-1 text-xs"
         >
           Regenerate
@@ -8226,8 +8314,21 @@ export default function App() {
         onCancel={() => setPendingRemoveTarget(null)}
       />
 
+      {/* First-run dialog: no save at boot — name + seed,
+        both optional, Begin-only (no Cancel, no X, no
+        backdrop dismiss; Begin-with-blanks is the exit).
+        Renders before the intro modal; Begin opens the
+        intro (firstRunDone gate + explicit setIntroOpen). */}
+      {firstRunDialogOpen ? (
+        <FirstRunDialog
+          onBegin={handleFirstRunBegin}
+          comfortable={isTouch}
+        />
+      ) : null}
+
       {/* Intro modal: first run (no save at boot) + re-openable
-        from Options. Same z-50 shell as OptionsModal; the two
+        from Options. On first run the dialog precedes it
+        (firstRunDone gate). Same z-50 shell as OptionsModal; the two
         never stack (opening the intro closes Options). */}
       {introOpen ? (
         <IntroModal
@@ -8407,12 +8508,18 @@ export default function App() {
 
       {/* Esc hint: desktop only, and only while no modal is
         open (while a modal is open, Esc closes it instead —
-        the hint would read wrong). Bottom-right: seed
+        the hint would read wrong). The first-run dialog
+        counts as a modal here (Esc does nothing while it
+        is open, so the hint would read wrong). Bottom-right: seed
         controls own bottom-left, the LocationChip owns
         bottom-centre, bottom-right is free. A label only,
         not a button — the Options control + Esc are the
         doors. Wording draft for Adam's pin pass. */}
-      {!isTouch && !optionsOpen && !introOpen && !pendingTrapRecipe ? (
+      {!isTouch &&
+      !optionsOpen &&
+      !introOpen &&
+      !pendingTrapRecipe &&
+      !firstRunDialogOpen ? (
         <p className="pointer-events-none absolute bottom-2 right-2 z-30 rounded bg-black/50 px-2 py-1 text-xs text-stone-300">
           Esc — Options
         </p>
