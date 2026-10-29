@@ -43,6 +43,15 @@ export interface BuildRecord {
 
 const ALL_RECORDS: BuildRecord[] = [
   {
+    merge: 'Merge #21',
+    pr: 43,
+    // Second merge replaces this with the real merge sha.
+    sha: 'pending',
+    date: '2026-10-29',
+    what: 'Cloud saves (module + panel + wiring + word list): three-word sign-in, save mirroring to the cloud box, cloud list, bring-down with local parking, and a 6,216-word list. New Game is not in this merge — it rides after cloud.',
+    why: 'A save should survive the device: the game mirrors to the cloud when opted in, and a world can be brought down again later without ever deleting the local save.',
+  },
+  {
     merge: 'Merge #20',
     pr: 41,
     sha: '05bc426',

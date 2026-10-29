@@ -1677,6 +1677,27 @@ import {
   type SaveData,
 } from './systems/save';
 import {
+  CLOUD_BASE_URL,
+  bringHere,
+  deleteCloudSave,
+  enterWords,
+  generateWords,
+  getCloudSave,
+  getWords,
+  isCloudEnabled,
+  listCloudSaves,
+  mirrorSave,
+  parkLocal,
+  readParked,
+  syncState,
+  turnOff,
+  turnOn,
+} from './systems/cloudSaves';
+import {
+  type CloudParkedSave,
+  type CloudSaveRow,
+} from './ui/CloudSavePanel';
+import {
   clothingRemaining,
   stormApproaching,
   SEASON_START_MONTH,
@@ -2810,8 +2831,7 @@ export default function App() {
     try {
       const meta = saveMetaRef.current;
       const player = playerRef.current;
-      saveGame(
-        serializeSave({
+      const data = serializeSave({
           seed: meta.seed,
           // World name rides saveNow (first-run dialog +
           // cloud-tab rename set it; undefined = unnamed,
@@ -2934,11 +2954,285 @@ export default function App() {
           harvestState: harvestState.snapshot(),
           sky: rendererRef.current?.snapshotSky() ?? undefined,
           facing: player ? player.snapshotFacing() : undefined,
-        }),
-      );
+        });
+      saveGame(data);
+      // CLOUD MIRROR (Adam, 2026-10-29): after the local
+      // write succeeds, mirror to the cloud. Fire-and-
+      // forget: mirrorSave never throws and no-ops when
+      // cloud is off, so a failed mirror never breaks
+      // play (the sync note records it for the panel).
+      void mirrorSave(CLOUD_BASE_URL, data);
     } catch {
       // Saving must never break play.
     }
+  };
+
+  // CLOUD SAVES (Adam, 2026-10-29 — panel + wiring, one
+  // landing with the panel). App owns every cloud fact
+  // and action; the panel is props-only. No listener in
+  // v1: state refreshes when Options opens + after each
+  // action (open/action refresh only). saveNow mirrors
+  // separately above (the one funnel). Confirm snapshots:
+  // the bring/remove/restore Popups below name the world
+  // as of press time; no saveNow can fire while the modal
+  // is open (saves fire on gameplay actions + pagehide,
+  // neither reachable behind the modal), so snapshot and
+  // live state cannot diverge mid-confirm.
+  const [cloudSync, setCloudSync] = useState(() => syncState());
+  const [cloudWords, setCloudWords] = useState(() => getWords());
+  const [cloudSaves, setCloudSaves] = useState<CloudSaveRow[]>([]);
+  const [cloudParked, setCloudParked] = useState<CloudParkedSave | null>(
+    () => {
+      const parked = readParked();
+      return parked === null
+        ? null
+        : {
+            name: parked.worldName,
+            seed: parked.seed,
+            savedAt: parked.savedAt,
+          };
+    },
+  );
+  const [cloudNote, setCloudNote] = useState<string | null>(null);
+  const [cloudBusy, setCloudBusy] = useState(false);
+  const [cloudPendingBring, setCloudPendingBring] = useState<{
+    slot: string;
+    local: SaveData;
+    parked: SaveData | null;
+  } | null>(null);
+  const [cloudPendingRemove, setCloudPendingRemove] = useState<{
+    slot: string;
+    row: CloudSaveRow;
+  } | null>(null);
+  const [cloudPendingRestore, setCloudPendingRestore] =
+    useState<SaveData | null>(null);
+
+  const refreshCloudState = () => {
+    setCloudSync(syncState());
+    setCloudWords(getWords());
+    const parked = readParked();
+    setCloudParked(
+      parked === null
+        ? null
+        : {
+            name: parked.worldName,
+            seed: parked.seed,
+            savedAt: parked.savedAt,
+          },
+    );
+  };
+
+  const refreshCloudList = async () => {
+    const words = getWords();
+    if (!isCloudEnabled() || words === null) {
+      setCloudSaves([]);
+      return;
+    }
+    setCloudBusy(true);
+    try {
+      const listed = await listCloudSaves(CLOUD_BASE_URL, words);
+      if (listed.ok === false) {
+        setCloudNote(listed.reason);
+        setCloudSaves([]);
+        return;
+      }
+      const rows: CloudSaveRow[] = [];
+      for (const slot of listed.value) {
+        const fetched = await getCloudSave(CLOUD_BASE_URL, words, slot);
+        if (fetched.ok) {
+          rows.push({
+            slot,
+            name: fetched.value.name,
+            seed: fetched.value.seed,
+            updatedAt: fetched.value.updatedAt,
+          });
+        }
+      }
+      setCloudSaves(rows);
+    } finally {
+      setCloudBusy(false);
+    }
+  };
+
+  // Refresh cloud state + list whenever Options opens.
+  // (Placed here, not in the cloud block above: the deps
+  // array reads optionsOpen at render time, so this
+  // effect must sit AFTER its declaration — the #17
+  // lesson. The cloud block's callbacks are plain
+  // closures and read it safely from anywhere.)
+
+  const handleCloudToggle = (on: boolean) => {
+    if (!on) {
+      const res = turnOff();
+      if (!res.ok) {
+        setCloudNote(res.reason ?? 'Could not turn cloud off.');
+      } else {
+        setCloudNote(null);
+      }
+      setCloudSaves([]);
+      refreshCloudState();
+      return;
+    }
+    // Reveal only: no module call until words are chosen
+    // (opt-in completes via turnOn/enterWords).
+    setCloudNote(null);
+  };
+
+  const handleCloudGenerateWords = () => {
+    let words: [string, string, string];
+    try {
+      words = generateWords();
+    } catch {
+      setCloudNote(
+        'Secure random numbers are unavailable in this browser.',
+      );
+      return;
+    }
+    const res = turnOn(words);
+    if (!res.ok) {
+      setCloudNote(
+        res.reason ?? 'Could not store the words on this device.',
+      );
+      return;
+    }
+    setCloudNote(null);
+    refreshCloudState();
+  };
+
+  const handleCloudEnterWords = (input: string) => {
+    const res = enterWords(input);
+    if (!res.ok) {
+      setCloudNote(res.reason);
+      return;
+    }
+    setCloudNote(null);
+    refreshCloudState();
+    void refreshCloudList();
+  };
+
+  const runCloudBring = async (slot: string) => {
+    const words = getWords();
+    if (words === null) {
+      setCloudNote('No cloud words on this device.');
+      return;
+    }
+    setCloudBusy(true);
+    try {
+      const brought = await bringHere(CLOUD_BASE_URL, words, slot);
+      if (brought.ok === false) {
+        setCloudNote(brought.reason);
+        return;
+      }
+      const current = loadSave();
+      if (current !== null && !parkLocal(current)) {
+        setCloudNote(
+          'Could not park the current save — bring-down cancelled, nothing changed.',
+        );
+        return;
+      }
+      saveGame(brought.value);
+      // Install = write + fresh boot: the boot path is
+      // the tested restore path; mid-session rehydration
+      // is a far larger surface. Reload boots into the
+      // brought save.
+      window.location.reload();
+    } finally {
+      setCloudBusy(false);
+    }
+  };
+
+  const handleCloudBringHere = (slot: string) => {
+    // Nothing displaced, nothing to confirm or park.
+    const current = loadSave();
+    if (current === null) {
+      void runCloudBring(slot);
+      return;
+    }
+    setCloudPendingBring({
+      slot,
+      local: current,
+      parked: readParked(),
+    });
+  };
+
+  const confirmCloudBring = () => {
+    const pending = cloudPendingBring;
+    setCloudPendingBring(null);
+    if (pending !== null) void runCloudBring(pending.slot);
+  };
+
+  const confirmCloudRemove = async () => {
+    const pending = cloudPendingRemove;
+    setCloudPendingRemove(null);
+    if (pending === null) return;
+    const words = getWords();
+    if (words === null) {
+      setCloudNote('No cloud words on this device.');
+      return;
+    }
+    setCloudBusy(true);
+    try {
+      const res = await deleteCloudSave(CLOUD_BASE_URL, words, pending.slot);
+      if (res.ok) {
+        setCloudNote(
+          'Removed from cloud. Mirroring is still on — the next save will copy this world to the cloud again.',
+        );
+        await refreshCloudList();
+      } else {
+        setCloudNote(res.reason ?? 'Could not remove the cloud copy.');
+      }
+    } finally {
+      setCloudBusy(false);
+    }
+  };
+
+  const confirmCloudRestore = () => {
+    const parked = cloudPendingRestore;
+    setCloudPendingRestore(null);
+    if (parked === null) {
+      setCloudNote('Nothing parked.');
+      return;
+    }
+    const current = loadSave();
+    if (current !== null && !parkLocal(current)) {
+      setCloudNote(
+        'Could not park the current save — restore cancelled, nothing changed.',
+      );
+      return;
+    }
+    saveGame(parked);
+    // Same install shape as bring-down: write + fresh boot.
+    window.location.reload();
+  };
+
+  const handleCloudRename = (name: string) => {
+    setWorldName(name === '' ? undefined : name);
+  };
+
+  const cloudPanelProps = {
+    sync: cloudSync,
+    words: cloudWords,
+    saves: cloudSaves,
+    parked: cloudParked,
+    currentName: worldName,
+    busy: cloudBusy,
+    note: cloudNote,
+    onToggle: handleCloudToggle,
+    onGenerateWords: handleCloudGenerateWords,
+    onEnterWords: handleCloudEnterWords,
+    onRefreshList: () => {
+      void refreshCloudList();
+    },
+    onBringHere: handleCloudBringHere,
+    onRemove: (slot: string) => {
+      const row = cloudSaves.find((candidate) => candidate.slot === slot);
+      if (row !== undefined) setCloudPendingRemove({ slot, row });
+    },
+    onRestoreParked: () => {
+      const parked = readParked();
+      if (parked !== null) setCloudPendingRestore(parked);
+    },
+    onRename: handleCloudRename,
   };
 
   // Project one world point to a screen anchor. Reads refs only, so
@@ -6641,6 +6935,18 @@ export default function App() {
       : (piles.find((pile) => pile.id === selectedPileId) ?? null);
 
   const [optionsOpen, setOptionsOpen] = useState(false);
+
+  // Refresh cloud state + list whenever Options opens.
+  // (Placed here, not in the cloud block above: the deps
+  // array reads optionsOpen at render time, so this
+  // effect must sit AFTER its declaration — the #17
+  // lesson. The cloud block's callbacks are plain
+  // closures and read it safely from anywhere.)
+  useEffect(() => {
+    if (!optionsOpen) return;
+    refreshCloudState();
+    void refreshCloudList();
+  }, [optionsOpen]);
   // FIRST-RUN DIALOG (Adam, 2026-10-28): on a no-save
   // boot the dialog comes FIRST and the intro second.
   // firstRunDone starts true when a save exists (the
@@ -8292,6 +8598,7 @@ export default function App() {
             setIntroOpen(true);
           }}
           quests={questDisplay}
+          cloud={cloudPanelProps}
           onClose={() => setOptionsOpen(false)}
           comfortable={isTouch}
         />
@@ -8336,6 +8643,157 @@ export default function App() {
           comfortable={isTouch}
         />
       ) : null}
+
+      {/* Cloud bring-down confirm: names the incoming
+        cloud save and the displaced local (press-time
+        snapshot) + the park warning when a parked save
+        will be replaced. Confirm parks the current local
+        and installs the cloud save (write + reload);
+        Cancel (or Esc) changes nothing. */}
+      <Popup
+        open={cloudPendingBring !== null}
+        title="Bring this world here?"
+        onClose={() => setCloudPendingBring(null)}
+        comfortable={isTouch}
+      >
+        {cloudPendingBring !== null ? (
+          <div className="flex flex-col gap-3 p-3 text-sm">
+            <p>
+              Bringing “
+              {cloudSaves.find(
+                (row) => row.slot === cloudPendingBring.slot,
+              )?.name ??
+                (cloudPendingBring.slot === 'main'
+                  ? 'Main save'
+                  : cloudPendingBring.slot)}
+              ” here will replace your current world “
+              {cloudPendingBring.local.worldName ?? 'Main save'}”.
+            </p>
+            <p className="text-xs opacity-80">
+              Your current world will be parked, not deleted — the
+              Restore parked save door brings it back.
+              {cloudPendingBring.parked !== null
+                ? ' Your existing parked save will be replaced.'
+                : ''}
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                className={
+                  'rounded bg-[#3a4436] hover:bg-[#4a5546] px-3 py-1 text-sm text-stone-100 ' +
+                  (isTouch ? 'min-h-[44px] px-3 py-2' : '')
+                }
+                onClick={confirmCloudBring}
+              >
+                Bring here
+              </button>
+              <button
+                type="button"
+                className={
+                  'rounded bg-[#3a4436] hover:bg-[#4a5546] px-3 py-1 text-sm text-stone-100 ' +
+                  (isTouch ? 'min-h-[44px] px-3 py-2' : '')
+                }
+                onClick={() => setCloudPendingBring(null)}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : null}
+      </Popup>
+
+      {/* Cloud remove confirm: explicit-only (approved).
+        Removing the cloud copy does NOT turn off
+        mirroring — the next save copies this world to
+        the cloud again (disclosure, required). */}
+      <Popup
+        open={cloudPendingRemove !== null}
+        title="Remove from cloud?"
+        onClose={() => setCloudPendingRemove(null)}
+        comfortable={isTouch}
+      >
+        {cloudPendingRemove !== null ? (
+          <div className="flex flex-col gap-3 p-3 text-sm">
+            <p>
+              Remove “{cloudPendingRemove.row.name ?? 'Main save'}”
+              from the cloud?
+            </p>
+            <p className="text-xs opacity-80">
+              This does not turn off mirroring — the next save
+              copies this world to the cloud again. Turn cloud off
+              to stop mirroring.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                className={
+                  'rounded bg-[#3a4436] hover:bg-[#4a5546] px-3 py-1 text-sm text-stone-100 ' +
+                  (isTouch ? 'min-h-[44px] px-3 py-2' : '')
+                }
+                onClick={() => {
+                  void confirmCloudRemove();
+                }}
+              >
+                Remove
+              </button>
+              <button
+                type="button"
+                className={
+                  'rounded bg-[#3a4436] hover:bg-[#4a5546] px-3 py-1 text-sm text-stone-100 ' +
+                  (isTouch ? 'min-h-[44px] px-3 py-2' : '')
+                }
+                onClick={() => setCloudPendingRemove(null)}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : null}
+      </Popup>
+
+      {/* Parked restore confirm: the swap — the current
+        world parks in turn, so restore never deletes. */}
+      <Popup
+        open={cloudPendingRestore !== null}
+        title="Restore parked save?"
+        onClose={() => setCloudPendingRestore(null)}
+        comfortable={isTouch}
+      >
+        {cloudPendingRestore !== null ? (
+          <div className="flex flex-col gap-3 p-3 text-sm">
+            <p>
+              Restore “{cloudPendingRestore.worldName ?? 'Main save'}”
+              as your current world?
+            </p>
+            <p className="text-xs opacity-80">
+              Your current world will be parked in its place —
+              nothing is deleted.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                className={
+                  'rounded bg-[#3a4436] hover:bg-[#4a5546] px-3 py-1 text-sm text-stone-100 ' +
+                  (isTouch ? 'min-h-[44px] px-3 py-2' : '')
+                }
+                onClick={confirmCloudRestore}
+              >
+                Restore
+              </button>
+              <button
+                type="button"
+                className={
+                  'rounded bg-[#3a4436] hover:bg-[#4a5546] px-3 py-1 text-sm text-stone-100 ' +
+                  (isTouch ? 'min-h-[44px] px-3 py-2' : '')
+                }
+                onClick={() => setCloudPendingRestore(null)}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : null}
+      </Popup>
 
       {/* Trap-craft confirm: Adam's words, verbatim, asked FIRST
         on trap Craft — Yes runs the existing execution, No or
