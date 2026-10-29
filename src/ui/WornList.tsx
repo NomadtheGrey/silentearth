@@ -7,9 +7,11 @@
  *
  * The wardrobe section in the HUD: the five garments, one row
  * each, with what she is doing about it — worn, carried (with
- * a Wear button), or not owned — plus two note lines at most:
+ * a Wear button), or not owned — plus a permanent Umbrella
+ * row in the same idiom (carried / not owned, never a button:
+ * it is carried, not worn), plus two note lines at most:
  * a protection note and a carrying-bonus note. It is light on
- * purpose: five short rows and two lines, never a heavy panel.
+ * purpose: short rows and two lines, never a heavy panel.
  * It owns no wardrobe logic: the caller passes the worn set,
  * the carried set, and both note texts, and reports wear /
  * remove presses through callbacks. The caller (App, which may
@@ -88,6 +90,17 @@ export interface WornListProps {
    * computes no rain number.
    */
   umbrellaNote?: string;
+  /**
+   * Whether an umbrella is carried, caller-supplied (the
+   * shell's carriesUmbrella read). The Umbrella ROW is
+   * permanent — it renders either way, in the garment
+   * rows' idiom ("Umbrella — carried" / "Umbrella — not
+   * owned", Adam 2026-10-29: with none carried the umbrella
+   * was invisible in the list). NO Wear/Remove button ever:
+   * the umbrella is carried, not worn, so there is no
+   * action for a button to offer. Default false.
+   */
+  umbrellaCarried?: boolean;
   /** Caller-supplied note line (e.g. a wear/remove error). */
   note?: string | null;
   /** Thumb-sized Wear/Remove buttons (44 px targets) on touch. Default false. */
@@ -119,6 +132,7 @@ export function WornList({
   protectionNote,
   capacityNote,
   umbrellaNote,
+  umbrellaCarried = false,
   note,
   comfortable = false,
   className,
@@ -167,6 +181,20 @@ export function WornList({
             </li>
           );
         })}
+        {/* Umbrella row (Adam, 2026-10-29): permanent, in
+          the garment idiom, but never a button — carried,
+          not worn. The umbrellaNote below stays the effect
+          line (it carries the precipitation number; this
+          row carries only the state word), so nothing
+          prints twice. */}
+        <li className="flex items-center justify-between gap-2">
+          <span>
+            Umbrella{' '}
+            <span className="text-xs text-stone-400">
+              {umbrellaCarried ? '— carried' : '— not owned'}
+            </span>
+          </span>
+        </li>
       </ul>
       {protectionNote ? (
         <p className="mt-1 text-xs text-stone-400">{protectionNote}</p>
