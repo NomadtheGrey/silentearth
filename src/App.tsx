@@ -2086,33 +2086,58 @@ function formatLb(pounds: number): string {
 }
 
 /**
- * One inventory row's weight line (weight display, Adam
- * 2026-10-27). Excluded rows never show a counting number, or
- * the row would contradict the header total (which already
- * excludes them): carrying gear and worn garments exclude the
- * whole stack, and the owned tool excludes exactly one unit —
- * Systems' usedLb rule, mirrored here for display only
- * (Systems owns the math; this never recomputes the total).
- * Normal rows show per-item weight, plus the stack total when
- * the count is above one ("0.5 lb each · 1.5 lb").
+ * The weight unit as printed in the title-row one-liner.
+ * Adam typed the format with "#" and delegated the unit
+ * call (2026-10-29: "whichever (or another idea) looks
+ * better on phone and PC"); UI rendered "#", spelled
+ * "lb", and a tightened "lb" at phone and PC panel
+ * widths and picked spelled "lb" — "#" reads as a
+ * number sign / hashtag in the game's typeface, while
+ * "lb" is unambiguous and matches the header's units.
+ * This constant stays the single point that decides it.
  */
-function weightTextFor(
+const TITLE_WEIGHT_UNIT = 'lb';
+
+/**
+ * One inventory row's title-row meta (the one-liner that
+ * rides the item name's line — FORMAT PIN, Adam,
+ * 2026-10-29: "Elderberries - 2 @ 0.1# each - 0.2#", name
+ * first, then this segment, dash-separated, on ONE line;
+ * the descriptor and buttons take the rows below). The
+ * rendered pick (Adam delegated the byte) drops his
+ * "each" — the "@" already carries the per-item
+ * meaning — and spells the unit: "- 2 @ 0.1 lb - 0.2 lb",
+ * the shortest clear form at both panel widths. This
+ * helper is the single formatting point for the segment.
+ * Excluded rows never show a counting number, or the row
+ * would contradict the header total (which already
+ * excludes them): carrying gear and worn garments exclude
+ * the whole stack, and the owned tool excludes exactly
+ * one unit — Systems' usedLb rule, mirrored here for
+ * display only (Systems owns the math; this never
+ * recomputes the total). A single item prints just its
+ * count @ its weight (the total would repeat the unit
+ * weight); above one, the total follows after a dash.
+ */
+function titleMetaFor(
   item: string,
   quantity: number,
   inventory: PersonalInventory,
 ): string {
   const id = item as ItemId;
   if (isCarryingGear(id) || inventory.wornItems().includes(id)) {
-    return 'carried free';
+    return '- carried free';
   }
   const owned = ownedToolItem(inventory);
   if (id === owned) {
-    if (quantity <= 1) return 'carried free';
-    return `${formatLb((quantity - 1) * weightOf(id))} lb · 1 carried free`;
+    if (quantity <= 1) return '- carried free';
+    return `- ${formatLb((quantity - 1) * weightOf(id))} ${TITLE_WEIGHT_UNIT} · 1 carried free`;
   }
   const each = weightOf(id);
-  if (quantity <= 1) return `${formatLb(each)} lb`;
-  return `${formatLb(each)} lb each · ${formatLb(quantity * each)} lb`;
+  if (quantity <= 1) {
+    return `- 1 @ ${formatLb(each)} ${TITLE_WEIGHT_UNIT}`;
+  }
+  return `- ${quantity} @ ${formatLb(each)} ${TITLE_WEIGHT_UNIT} - ${formatLb(quantity * each)} ${TITLE_WEIGHT_UNIT}`;
 }
 
 /**
@@ -2177,8 +2202,12 @@ function toInventoryItem(
     // code spelling lives in code, display spelling lives in
     // the systems table). The id stays the key for actions.
     name: displayNameFor(stack.item),
-    quantityText: String(stack.quantity),
-    weightText: weightTextFor(stack.item, stack.quantity, inventory),
+    // Title-row one-liner via the single formatting point
+    // (titleMetaFor, above — FORMAT PIN, Adam 2026-10-29).
+    // Personal rows carry titleMeta INSTEAD of the old
+    // quantityText/weightText pair; storage rows still
+    // build their own quantityText rows elsewhere.
+    titleMeta: titleMetaFor(stack.item, stack.quantity, inventory),
     icon: stack.item === UMBRELLA_ITEM_ID ? <UmbrellaIcon /> : undefined,
     // Row note via the one rule (itemNoteFor, above):
     // primal bones read boneNote (raw: 'Needs a ritual

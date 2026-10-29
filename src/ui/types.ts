@@ -41,6 +41,14 @@ export interface InventoryItem {
   quantityText?: string;
   /** Caller-supplied weight line, e.g. "1.5 lb" or "carried free". Never computed here. */
   weightText?: string;
+  /**
+   * Caller-supplied title-row one-liner segment (FORMAT
+   * PIN, Adam, 2026-10-29), e.g. "- 2 @ 0.1 lb each -
+   * 0.2 lb": rides the name's line after the name. When
+   * present it replaces the quantityText/weightText pair
+   * in the personal rows' meta slot. Never computed here.
+   */
+  titleMeta?: string;
   /** Caller-supplied short note, e.g. a category or origin. Optional. */
   note?: string;
   /** Caller-supplied glyph, rendered before the name. Optional. */

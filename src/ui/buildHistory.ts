@@ -43,6 +43,17 @@ export interface BuildRecord {
 
 const ALL_RECORDS: BuildRecord[] = [
   {
+    merge: 'Merge #28',
+    pr: 57,
+    // sha pending: the merge sha is unknowable before the
+    // merge; the pre-authorized correction merge replaces
+    // this with the real one.
+    sha: 'pending',
+    date: '2026-10-29',
+    what: 'The inventory title row reads as one line: in the stacked layout each row opens name \u2014 count @ weight \u2014 total (the one-liner format Adam pinned), composed at a single point, spelled \u201clb\u201d with the @ carrying the per-item meaning. The descriptor and buttons stay beneath it.',
+    why: 'Adam\u2019s format pin on the last batch\u2019s title-row work \u2014 one line to scan, nothing wasted. A single-commit merge on his word.',
+  },
+  {
     merge: 'Merge #27',
     pr: 55,
     sha: '5f6bd16',
