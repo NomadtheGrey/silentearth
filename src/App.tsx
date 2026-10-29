@@ -7488,6 +7488,11 @@ export default function App() {
   // categorical last fallback after scry, so the grass
   // at her feet can never steal a faced target (the
   // aa6e88b bug was exactly ground winning by distance).
+  // TWO 2026-10-29 CORRECTIONS live inside: the scatter
+  // candidate is the nearest of the FACED set (not the
+  // nearest overall, facing-tested alone), and ground's
+  // fallback is gated on NOTHING else being in range at
+  // all (accidental mud/dirt scooping).
   // ONE shared computeUseWinner() feeds the press, the
   // R press, the touch USE label, and the desktop pile
   // button, so the tell can never disagree with the act.
@@ -7535,15 +7540,33 @@ export default function App() {
     };
     // The harvest pair first: scatter + pile, resolved by
     // pileWouldWin inside the faced set.
-    const scatter = harvestTargets.find(
-      (candidate) => candidate.kind === 'scatter',
-    );
+    // FACED-SCATTER CORRECTION (2026-10-29): the scatter
+    // candidate is the nearest of the FACED set — Adam's
+    // pinned amendment, which the first version of this
+    // function missed: it took the first scatter in
+    // tracker order (nearest overall) and facing-tested
+    // that one alone, so a plant behind her silently
+    // vetoed every faced plant beyond it. Now every
+    // in-range scatter is facing-tested and the nearest
+    // faced one is the candidate (distance per candidate
+    // from the bus targets when present, the facing
+    // computation otherwise — the existing sources).
+    let scatter: HarvestTarget | undefined;
+    let scatterDistance: number | null = null;
+    for (const candidate of harvestTargets) {
+      if (candidate.kind !== 'scatter') continue;
+      const f = facingOf(candidate.worldX, candidate.worldZ);
+      if (!f.isFaced) continue;
+      const d =
+        busTargetsRef.current.find((t) => t.id === candidate.id)?.distance ??
+        f.distance;
+      if (scatterDistance === null || d < scatterDistance) {
+        scatter = candidate;
+        scatterDistance = d;
+      }
+    }
     const scatterFacing = scatter
-      ? facingOf(scatter.worldX, scatter.worldZ)
-      : null;
-    const scatterDistance = scatter
-      ? (busTargetsRef.current.find((t) => t.id === scatter.id)?.distance ??
-        scatterFacing!.distance)
+      ? { isFaced: true, distance: scatterDistance! }
       : null;
     let pairWinner: UseWinner | null = null;
     const facedPile = piles.find(
@@ -7566,6 +7589,17 @@ export default function App() {
         distance: scatterDistance!,
       };
     }
+    // GROUND GATE bookkeeping (see the fallback below):
+    // whether ANY candidate is in range at all, faced or
+    // not. Scatter, pile, trap, hive, and home are known
+    // here; sites and placed kinds add themselves inside
+    // their consider helpers as they range-check.
+    let anyCandidateInRange =
+      harvestTargets.some((t) => t.kind === 'scatter') ||
+      piles.length > 0 ||
+      !!trapRowTrap ||
+      !!hiveRowHive ||
+      homeHouse !== undefined;
     // The rest of the field, in tie order (the pair winner
     // keeps ties — challengers must be strictly nearer).
     const challengers: UseWinner[] = [];
@@ -7593,6 +7627,7 @@ export default function App() {
     let siteBest: UseWinner | null = null;
     const considerSite = (siteId: string, x: number, z: number): void => {
       const f = facingOf(x, z);
+      if (f.distance <= HARVEST_RANGE) anyCandidateInRange = true;
       if (
         f.isFaced &&
         f.distance <= HARVEST_RANGE &&
@@ -7615,6 +7650,7 @@ export default function App() {
       z: number,
     ): void => {
       const f = facingOf(x, z);
+      if (f.distance <= HARVEST_RANGE) anyCandidateInRange = true;
       if (f.isFaced && f.distance <= HARVEST_RANGE) {
         challengers.push({ kind, id, distance: f.distance });
       }
@@ -7648,7 +7684,18 @@ export default function App() {
     const ground = harvestTargets.find(
       (candidate) => candidate.kind === 'ground',
     );
-    if (ground) return { kind: 'ground', target: ground, distance: 0 };
+    // GROUND, NARROWED (Adam, 2026-10-29 — an unintended
+    // 'Mud x 31' pile: "picking up Mud or Dirt [must be]
+    // intentional"): ground wins ONLY when no other
+    // candidate is in range at all. With anything near —
+    // faced or not — a press that faces nothing is a
+    // no-op, not a scoop. Bare ground with nothing else
+    // near still scoops by E or pill: the scoop-anywhere
+    // pin survives, narrowed to where it can't be an
+    // accident.
+    if (ground && !anyCandidateInRange) {
+      return { kind: 'ground', target: ground, distance: 0 };
+    }
     return null;
   };
 
