@@ -446,6 +446,9 @@ export interface SaveData {
   version: typeof SAVE_VERSION;
   savedAt: number;
   seed: string;
+  /** World name (first-run flow + cloud envelope name);
+   * absent for old saves and unnamed worlds. */
+  worldName?: string;
   cameraMode: SaveCameraMode;
   position: { x: number; z: number };
   inventory: Record<string, number>;
@@ -485,6 +488,10 @@ export interface SaveData {
 /** Draft input to serializeSave — the shell's live values. */
 export interface SaveDraft {
   seed: string;
+  /** World name from the shell (first-run naming + tab
+   * rename); omitted when unnamed. App shell holds
+   * worldName state and includes it here on saveNow. */
+  worldName?: string;
   cameraMode: SaveCameraMode;
   position: { x: number; z: number };
   inventory: ReadonlyArray<{ item: string; quantity: number }>;
@@ -669,6 +676,7 @@ export function serializeSave(draft: SaveDraft): SaveData {
     version: SAVE_VERSION,
     savedAt: Date.now(),
     seed: draft.seed,
+    ...(draft.worldName !== undefined ? { worldName: draft.worldName } : {}),
     cameraMode: draft.cameraMode,
     position: { x: draft.position.x, z: draft.position.z },
     inventory: normalizeStacks(draft.inventory),
@@ -1335,10 +1343,17 @@ export function deserializeSave(value: unknown): SaveData | null {
     ) {
       delete inventory[FIRST_CHARM_ITEM];
     }
+    // World name: optional string, additive (old saves load
+    // without it). Non-string values drop — the name is a
+    // display label, never load-bearing, so a bad value
+    // drops the field, never the document.
+    const worldName =
+      typeof value.worldName === 'string' ? value.worldName : undefined;
     return {
       version: SAVE_VERSION,
       savedAt: value.savedAt,
       seed: value.seed,
+      ...(worldName !== undefined ? { worldName } : {}),
       cameraMode: value.cameraMode,
       position: { x: value.position.x, z: value.position.z },
       inventory,
