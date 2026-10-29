@@ -566,7 +566,7 @@
  * - CRAFTING GROUPS, LIVE (Adam, 2026-10-26 — "group the
  *   crafted items on the crafting screen"): SECTIONS in one
  *   scroll, NOT tabs (the phone sheet already scrolls;
- *   sections keep everything visible). 38 recipes, 6 groups
+ *   sections keep everything visible). 45 recipes, 6 groups
  *   in this order — Tools, Homes, Fire & Workshop, Clothes,
  *   Materials & Carrying, Traps — order within a group is the
  *   current recipe order, empty groups never render.
@@ -1919,11 +1919,11 @@ const CRAFTING_GROUP_BY_RECIPE_ID: Record<string, string> = {
   'trundle-tool': 'Tools',
   'primitive-lean-to': 'Homes',
   'thatch-hut': 'Homes',
-  'wattle-and-daub-hut': 'Homes',
-  'woven-cottage-prototype': 'Homes',
   'woven-cottage': 'Homes',
   'small-wooden-hut': 'Homes',
   'moss-cradle': 'Homes',
+  'sleeping-bag': 'Homes',
+  tent: 'Homes',
   campfire: 'Fire & Workshop',
   hearth: 'Fire & Workshop',
   kiln: 'Fire & Workshop',
@@ -1932,6 +1932,9 @@ const CRAFTING_GROUP_BY_RECIPE_ID: Record<string, string> = {
   'crafted-workstation': 'Fire & Workshop',
   'potters-wheel': 'Fire & Workshop',
   loom: 'Fire & Workshop',
+  'dry-kindling': 'Fire & Workshop',
+  torch: 'Fire & Workshop',
+  altar: 'Fire & Workshop',
   'hooded-cloak': 'Clothes',
   shawl: 'Clothes',
   'pointy-hat': 'Clothes',
@@ -1944,6 +1947,10 @@ const CRAFTING_GROUP_BY_RECIPE_ID: Record<string, string> = {
   'clay-brick': 'Materials & Carrying',
   'small-basket': 'Materials & Carrying',
   'large-basket': 'Materials & Carrying',
+  'plant-pulp': 'Materials & Carrying',
+  'pressed-sheets': 'Materials & Carrying',
+  paper: 'Materials & Carrying',
+  grimoire: 'Materials & Carrying',
   snare: 'Traps',
   'fish-weir-trap': 'Traps',
   'pot-trap': 'Traps',
@@ -4731,39 +4738,63 @@ export default function App() {
     };
   });
 
-  // NO-RECRAFT ORDER (Adam, 2026-10-28): one stable
-  // partition of the full list — available recipes first
-  // in current order, owned/superseded last in current
-  // order. The section filters below preserve relative
-  // order, so this IS the per-section stable partition
-  // (within-section only, no re-sort); section order +
-  // accordion unchanged, and disabled rows stay visible
-  // when their section is expanded (never hidden). The
-  // flat menu prop rides the same order. Header counts
-  // read canCraft, so an all-disabled section renders
-  // "0 of N craftable" with its rows visible on expand.
+  // NO-RECRAFT ORDER (Adam, 2026-10-28; STRENGTHENED
+  // 2026-10-29 — "should move to the bottom of the
+  // LIST if crafted and no longer craftable"): owned/
+  // superseded recipes leave their sections entirely
+  // and collect in ONE trailing block at the very
+  // bottom of the whole list, after every section (and
+  // after "Other" if it ever renders), keeping their
+  // relative order and their per-row labels. The sink
+  // keys on OWNERSHIP (the row's disabledLabel is one
+  // of Systems' two pinned labels) — never on canCraft:
+  // a merely unaffordable recipe (ownership available,
+  // ingredients missing) stays in its section, and the
+  // stump's "Already a Workbench" row is not an
+  // ownership row and never sinks. Sections are built
+  // from available recipes only; a section with no
+  // available recipes does not render. Header counts
+  // read the section's rows as before (canCraft among
+  // them), so they stay honest under the new shape.
+  // The flat menu prop rides the same global order:
+  // available in order, then the sunk block. (The
+  // 2026-10-28 within-section partition this replaces
+  // left the trowels at the bottom of Tools — the
+  // FIRST section, still high on screen.)
+  const isSunkRecipe = (recipe: (typeof craftingRecipes)[number]) =>
+    recipe.disabledLabel !== undefined &&
+    Object.values(CRAFT_OWNERSHIP_LABELS).includes(recipe.disabledLabel);
   const orderedCraftingRecipes = [
-    ...craftingRecipes.filter((recipe) => recipe.canCraft),
-    ...craftingRecipes.filter((recipe) => !recipe.canCraft),
+    ...craftingRecipes.filter((recipe) => !isSunkRecipe(recipe)),
+    ...craftingRecipes.filter(isSunkRecipe),
   ];
+  const availableCraftingRecipes = orderedCraftingRecipes.filter(
+    (recipe) => !isSunkRecipe(recipe),
+  );
+  const sunkCraftingRecipes = orderedCraftingRecipes.filter(isSunkRecipe);
 
   // CRAFTING GROUPS: sections in DEV's group order, each filtered
-  // from the recipe-ordered menu rows above (never re-sorted);
+  // from the AVAILABLE rows above (never re-sorted);
   // empty groups dropped here, and the menu drops them again
-  // defensively. Unmapped recipes (none today — all 38 map)
-  // trail under "Other" instead of vanishing.
-  const ungroupedRecipes = orderedCraftingRecipes.filter(
+  // defensively. Unmapped recipes (none today — all 45 map,
+  // placements pinned by Adam 2026-10-29) trail under
+  // "Other" instead of vanishing; the sunk block closes
+  // the list after it.
+  const ungroupedRecipes = availableCraftingRecipes.filter(
     (recipe) => CRAFTING_GROUP_BY_RECIPE_ID[recipe.id] === undefined,
   );
   const craftingSections = [
     ...CRAFTING_GROUP_ORDER.map((title) => ({
       title,
-      recipes: orderedCraftingRecipes.filter(
+      recipes: availableCraftingRecipes.filter(
         (recipe) => CRAFTING_GROUP_BY_RECIPE_ID[recipe.id] === title,
       ),
     })).filter((section) => section.recipes.length > 0),
     ...(ungroupedRecipes.length > 0
       ? [{ title: 'Other', recipes: ungroupedRecipes }]
+      : []),
+    ...(sunkCraftingRecipes.length > 0
+      ? [{ title: 'Owned & Superseded', recipes: sunkCraftingRecipes }]
       : []),
   ];
 
