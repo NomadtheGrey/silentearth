@@ -1915,7 +1915,10 @@ export class WorldRenderer {
     }
 
     // Witch mesh follows the player; hidden in first-person.
-    this.witch.position.set(this.player.x, 0, this.player.z);
+    // yOffset is the jump arc (player.ts, 2026-10-29): the witch
+    // and every camera height below ride it, so a hop reads in
+    // all three views. It is 0 whenever she is grounded.
+    this.witch.position.set(this.player.x, this.player.yOffset, this.player.z);
     this.witch.rotation.y = this.player.facing;
     this.witch.visible = this.player.mode !== 'first';
 
@@ -1955,7 +1958,7 @@ export class WorldRenderer {
     if (this.player.mode === 'first') {
       this.camera.position.set(
         this.player.x,
-        PLAYER_EYE_HEIGHT,
+        PLAYER_EYE_HEIGHT + this.player.yOffset,
         this.player.z,
       );
       this.camera.rotation.order = 'YXZ';
@@ -1973,12 +1976,12 @@ export class WorldRenderer {
       const fz = Math.cos(this.player.facing);
       this.camera.position.set(
         this.player.x - fx * BEHIND_CAMERA_DISTANCE,
-        BEHIND_CAMERA_HEIGHT,
+        BEHIND_CAMERA_HEIGHT + this.player.yOffset,
         this.player.z - fz * BEHIND_CAMERA_DISTANCE,
       );
       this.camera.lookAt(
         this.player.x + fx * BEHIND_LOOK_AHEAD,
-        BEHIND_LOOK_HEIGHT,
+        BEHIND_LOOK_HEIGHT + this.player.yOffset,
         this.player.z + fz * BEHIND_LOOK_AHEAD,
       );
     } else {
@@ -1987,7 +1990,7 @@ export class WorldRenderer {
         THIRD_PERSON_OFFSET.y,
         this.player.z + THIRD_PERSON_OFFSET.z,
       );
-      this.camera.lookAt(this.player.x, 0, this.player.z);
+      this.camera.lookAt(this.player.x, this.player.yOffset, this.player.z);
     }
 
     // Sky: day/night driver + sun/moon/stars/clouds + lights.

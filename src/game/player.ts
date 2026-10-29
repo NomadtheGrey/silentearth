@@ -2,12 +2,23 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * Player movement controller. Landing 1 scope only: walk movement (WASD)
+ * Player movement controller. Landing 1 scope: walk movement (WASD)
  * + mouse look in first-person, world-aligned movement in third-person.
- * No sprint, no jump. Terrain speed modifier: marsh/bog slow IS
- * implemented (Adam, 2026-10-26, PINNED — see movement.ts); the
- * renderer wires the terrain query, and bog boots arrive via a
- * worn-state query until the clothes system lands.
+ * Terrain speed modifier: marsh/bog slow IS implemented (Adam,
+ * 2026-10-26, PINNED — see movement.ts); the renderer wires the
+ * terrain query, and bog boots arrive via a worn-state query until
+ * the clothes system lands.
+ *
+ * SPRINT + JUMP (Adam, 2026-10-29 — numbers DRAFT, his pin pass):
+ * double-tap W (or double-push the thumbstick) engages sprint
+ * while forward stays held — SPRINT_MULTIPLIER on top of the
+ * composing terrain/hunger/charm factors; Space hops her
+ * (JUMP_VELOCITY against JUMP_GRAVITY, flat ground = y 0, the
+ * renderer adds the public yOffset to the witch + cameras).
+ * Sprint state is exposed as the `sprinting` getter plus the
+ * 'player:sprint-changed' bus event (transitions only) for the
+ * shell's hunger wiring; pressJump() is the touch entry, in the
+ * pressUse idiom. Both are momentary — no saved state.
  *
  * Position changes flow out through the event bus (player:moved, throttled
  * to ~10 Hz); nothing reads this controller's fields directly except the
@@ -22,8 +33,9 @@
  * by construction when no touch input is present:
  * - setThumbstick(x, z): left-stick vector merged into the SAME
  *   movement path as the keys (same speeds, same terrain/hunger
- *   slowdowns). Walk only — Silent Earth has no sprint, and a
- *   far push is still just full walk, never a sprint flag.
+ *   slowdowns). A partial push walks proportionally slower; a
+ *   double-push (two full-forward deflections inside the tap
+ *   window, then held) engages sprint, the double-tap W mirror.
  * - addLookDelta(dx, dy): drag-look that rotates the camera
  *   WITHOUT pointer lock (a phone has none). It shares the mouse
  *   look math and emits 'player:looked' on the same throttle, so
@@ -34,11 +46,13 @@
  *   'harvest:requested' bus event — no new harvest logic, no new
  *   harvest rules; the outcome listener re-validates range +
  *   permit at outcome time, so a stale press fails safely.
+ * - pressJump(): tap entry for the Space hop (UI's Jump button);
+ *   starts the hop when grounded, no-ops mid-air.
  */
 
 import { bus } from './events';
 import { pauseState } from './pause';
-import { CAMERA_TOGGLE_KEYS, MOVE_KEYS, PLAYER_SPEED, CHUNK_SIZE } from '../constants';
+import { CAMERA_TOGGLE_KEYS, MOVE_KEYS, PLAYER_SPEED, CHUNK_SIZE, SPRINT_MULTIPLIER, SPRINT_TAP_WINDOW_S, JUMP_VELOCITY, JUMP_GRAVITY } from '../constants';
 import type { CameraMode } from '../types';
 import { HUNGRY_SPEED_MULTIPLIER, type HungerStageQuery } from './hunger';
 import {
@@ -49,6 +63,15 @@ import {
 
 /** Mouse-look sensitivity (radians per pixel), shared by mouse + touch. */
 const LOOK_SENSITIVITY = 0.0025;
+
+/**
+ * Thumbstick sprint edges (DRAFT, 2026-10-29): forward deflection
+ * at or above PUSH counts as a push; at or below RELEASE counts as
+ * released. The band between is hysteresis, so an analog stick
+ * hovering near a threshold cannot flap the sprint state.
+ */
+const STICK_SPRINT_PUSH = 0.85;
+const STICK_SPRINT_RELEASE = 0.5;
 
 /**
  * A harvest press for pressUse: exactly the 'harvest:requested' bus
@@ -96,8 +119,42 @@ export class PlayerController {
   mode: CameraMode = 'third';
   /** Facing for the witch mesh in third-person (radians). */
   facing = 0;
+  /**
+   * Jump height above the ground right now, meters (0 = grounded).
+   * The renderer adds it to the witch + camera heights each frame.
+   * Momentary physics state — never saved.
+   */
+  yOffset = 0;
 
   private keys = new Set<string>();
+
+  // Sprint + jump state (2026-10-29, all momentary, none saved).
+  // Tap timing reads timeS, an accumulated update() clock — the
+  // renderer's frame cadence — so a tap is judged on game time,
+  // not wall time (a paused gap cannot fake or eat a double-tap).
+  private vy = 0;
+  private timeS = 0;
+  private kbSprint = false;
+  private lastForwardReleaseS = -Infinity;
+  private stickPushed = false;
+  private stickSprint = false;
+  private lastStickReleaseS = -Infinity;
+  private sprintEmitted = false;
+
+  /** Sprinting right now (either input source). The shell's
+   *  hunger wiring can also ride 'player:sprint-changed'. */
+  get sprinting(): boolean {
+    return this.kbSprint || this.stickSprint;
+  }
+
+  /** Emit 'player:sprint-changed' when the effective state flips. */
+  private syncSprint(): void {
+    const s = this.sprinting;
+    if (s !== this.sprintEmitted) {
+      this.sprintEmitted = s;
+      bus.emit('player:sprint-changed', { sprinting: s });
+    }
+  }
 
   /**
    * Hunger stage query (Systems owns hunger state — same pattern
@@ -171,6 +228,25 @@ export class PlayerController {
     }
     this.stickX = x;
     this.stickZ = z;
+    // Double-push sprint (the double-tap W mirror): a fresh
+    // full-forward push inside the tap window of the last
+    // release engages sprint; the sprint holds while the stick
+    // stays pushed and ends when it falls to the release edge.
+    const fwd = -z;
+    if (!this.stickPushed && fwd >= STICK_SPRINT_PUSH) {
+      this.stickPushed = true;
+      if (this.timeS - this.lastStickReleaseS <= SPRINT_TAP_WINDOW_S) {
+        this.stickSprint = true;
+        this.syncSprint();
+      }
+    } else if (this.stickPushed && fwd <= STICK_SPRINT_RELEASE) {
+      this.stickPushed = false;
+      this.lastStickReleaseS = this.timeS;
+      if (this.stickSprint) {
+        this.stickSprint = false;
+        this.syncSprint();
+      }
+    }
   }
 
   /** Shell-wired nearest-target query for zero-arg pressUse (see below). */
@@ -201,6 +277,18 @@ export class PlayerController {
       x: resolved.x,
       z: resolved.z,
     });
+    return true;
+  }
+
+  /**
+   * Jump press (Space, or UI's touch Jump button — same entry):
+   * starts the hop when grounded; mid-air presses no-op (no
+   * double jump). The arc itself integrates in update(); the
+   * renderer reads yOffset. Returns true when the hop started.
+   */
+  pressJump(): boolean {
+    if (this.yOffset > 0 || this.vy !== 0) return false;
+    this.vy = JUMP_VELOCITY;
     return true;
   }
 
@@ -251,13 +339,42 @@ export class PlayerController {
       return;
     }
     if (MOVE_KEYS.includes(key)) {
+      if (key === 'w' && !e.repeat && !this.keys.has('w')) {
+        // Fresh W press (a held key's auto-repeat is not a tap):
+        // a release inside the tap window makes this the second
+        // tap — sprint engages and holds while W stays down.
+        if (this.timeS - this.lastForwardReleaseS <= SPRINT_TAP_WINDOW_S) {
+          this.kbSprint = true;
+          this.syncSprint();
+        }
+      }
       this.keys.add(key);
       e.preventDefault();
+    }
+    if (key === ' ' || key === 'spacebar') {
+      // Space = jump. A focused button or link keeps its Space
+      // (it clicks — menus free the mouse now, so a clicked
+      // button can hold the focus; jumping AND re-triggering it
+      // would double-act). Any other target: the game takes the
+      // key, and preventDefault keeps the page from scrolling.
+      if (tag === 'BUTTON' || tag === 'A') return;
+      e.preventDefault();
+      this.pressJump();
     }
   };
 
   private onKeyUp = (e: KeyboardEvent): void => {
-    this.keys.delete(e.key.toLowerCase());
+    const key = e.key.toLowerCase();
+    this.keys.delete(key);
+    if (key === 'w') {
+      // The release starts the double-tap window and ends any
+      // keyboard sprint (sprint lives only while W is held).
+      this.lastForwardReleaseS = this.timeS;
+      if (this.kbSprint) {
+        this.kbSprint = false;
+        this.syncSprint();
+      }
+    }
   };
 
   private onMouseMove = (e: MouseEvent): void => {
@@ -403,14 +520,27 @@ export class PlayerController {
 
   /** Advance movement by dt seconds. Called once per frame by the renderer. */
   update(dt: number): void {
+    // Game-time clock first: double-tap windows are judged on
+    // accumulated frame time (see the sprint state block).
+    this.timeS += dt;
+    // Jump arc: integrates even with no movement input, so a
+    // hop started standing still still rises and lands.
+    if (this.vy !== 0 || this.yOffset > 0) {
+      this.yOffset += this.vy * dt;
+      this.vy -= JUMP_GRAVITY * dt;
+      if (this.yOffset <= 0) {
+        this.yOffset = 0;
+        this.vy = 0;
+      }
+    }
     // One movement path for keys + thumbstick: the stick vector is
     // the base, keys add on top, and the combined vector is
     // direction-normalized with magnitude kept as the speed factor.
     // Desktop is unchanged by construction: keys-only vectors have
     // magnitude 1 (single key) or sqrt(2) (diagonal, clamped to 1),
     // exactly as the old normalize-then-move. A partial stick push
-    // walks proportionally slower (analog magnitude < 1) — still
-    // walk only, never sprint.
+    // walks proportionally slower (analog magnitude < 1); sprint,
+    // when engaged, multiplies the composed speed below.
     let fx = this.stickX;
     let fz = this.stickZ;
     if (this.keys.has('w')) fz -= 1;
@@ -440,7 +570,11 @@ export class PlayerController {
     const stage = this.hungerStageQuery?.() ?? null;
     const hunger =
       stage === 'hungry' || stage === 'too-hungry' ? HUNGRY_SPEED_MULTIPLIER : 1;
-    const speed = PLAYER_SPEED * terrain * hunger * swiftStepFactor(this.swiftStep) * magnitude;
+    // Sprint (2026-10-29, DRAFT x1.6) composes as one more
+    // multiplier on the same line — terrain, hunger, charm and
+    // sprint all multiply together, none replaces another.
+    const sprint = this.sprinting ? SPRINT_MULTIPLIER : 1;
+    const speed = PLAYER_SPEED * terrain * hunger * swiftStepFactor(this.swiftStep) * sprint * magnitude;
 
     if (this.mode === 'first' || this.mode === 'behind') {
       // Movement relative to view yaw (yaw = 0 faces -z). Rotate the local
