@@ -6415,7 +6415,15 @@ export default function App() {
     if (clothing.length > 0) {
       sections.push({ title: 'Clothing', entries: clothing });
     }
-    const storage: string[] = [];
+    // POCKETS LINE (Adam, 2026-10-29: "include the
+    // starting 10# for pockets"): the base capacity she
+    // always has opens the Storage section as a TEXT-ONLY
+    // first entry — pockets is not an item, so it never
+    // enters ids or any gear logic; display string only.
+    // The section therefore always renders (the readout
+    // accounts for her full capacity). The 10 was already
+    // in the total — capacity math is unchanged.
+    const storage: string[] = ['Pockets — +10 lb'];
     const largeCarried = inventory.count(ITEMS.largeBasket) >= 1;
     if (inventory.count(ITEMS.apron) >= 1) {
       ids.push(ITEMS.apron);
@@ -6433,9 +6441,7 @@ export default function App() {
       ids.push(ITEMS.largeBasket);
       storage.push(`${displayNameFor(ITEMS.largeBasket)} — +50 lb`);
     }
-    if (storage.length > 0) {
-      sections.push({ title: 'Storage', entries: storage });
-    }
+    sections.push({ title: 'Storage', entries: storage });
     const owned = ownedToolItem(inventory);
     if (owned !== 'none') {
       ids.push(owned);
