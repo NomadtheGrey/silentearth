@@ -350,7 +350,8 @@ export type GarmentId =
   | 'shawl'
   | 'pointyHat'
   | 'mossyMittens'
-  | 'bogBoots';
+  | 'bogBoots'
+  | 'apron';
 
 /**
  * Garment protection table — MARLOWE-DECIDED starting values
@@ -364,6 +365,12 @@ export type GarmentId =
  * - Bog boots: wet 40% — PLUS the less-slow travel effect in
  *   movement.ts (the two effects are separate: wet protection
  *   here, speed mitigation there).
+ * - Apron: NONE (Adam, 2026-10-29 — the apron is a true
+ *   garment, worn like the others, but its only bonus is
+ *   carrying; Systems owns that number). The empty row is
+ *   load-bearing: clothingRemaining iterates
+ *   GARMENT_PROTECTION[garment] and would throw on a
+ *   missing id the first time a worn apron flows in.
  * Full kit combined (multiplicative, see clothingRemaining):
  * rain ~49%, wind 30%, cold ~41%, wet 40%.
  */
@@ -373,6 +380,7 @@ export const GARMENT_PROTECTION: Record<GarmentId, ElementPercentages> = {
   pointyHat: { rain: 0.15 },
   mossyMittens: { cold: 0.15 },
   bogBoots: { wet: 0.4 },
+  apron: {},
 };
 
 /**
