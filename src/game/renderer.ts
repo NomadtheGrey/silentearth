@@ -1451,7 +1451,15 @@ export class WorldRenderer {
         // (f/2 + 0.3) overhangs the wall (f/2) at the same 1.6,
         // so the open rim is covered from above.
         hg.add(houseCyl(f / 2, f / 2, 1.6, 0xcbb59a, 0, 0.8, 0, 12, true));
-        const roof = houseRoof(new THREE.ConeGeometry(f / 2 + 0.3, 1.5, 12), 0x8a7a4a);
+        // Roof cone OPEN-ENDED (Adam, 2026-10-29, his order on
+        // the re-sight: "Just remove the cone cap."): a cone's
+        // default base cap was a SECOND flat fan at the same
+        // 1.6 plane the wall cap had masked — probe-proved to
+        // be the ceiling he kept seeing after the wall fix.
+        // Open-ended, the cone's sloped underside (DoubleSide
+        // via houseRoof) is the ceiling; from above, the slope
+        // itself covers the wall's open rim as before.
+        const roof = houseRoof(new THREE.ConeGeometry(f / 2 + 0.3, 1.5, 12, 1, true), 0x8a7a4a);
         roof.position.y = 2.35;
         hg.add(roof);
         hg.add(houseBox(0.7, 1.3, 0.1, 0x3a2812, 0, 0.65, f / 2 + 0.01));
