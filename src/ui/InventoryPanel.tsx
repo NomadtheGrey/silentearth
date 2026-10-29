@@ -397,13 +397,14 @@ export function InventoryPanel({
                       <span className="min-w-0 truncate">{item.name}</span>
                     </span>
                   </button>
-                  <span className="whitespace-nowrap text-right text-sm tabular-nums text-stone-300 @xl:col-start-2 @xl:row-start-1">
-                    {[item.quantityText, item.weightText]
-                      .filter(
-                        (part): part is string =>
-                          part !== undefined && part !== '',
-                      )
-                      .join(' · ')}
+                  <span className="whitespace-nowrap text-right text-sm tabular-nums text-stone-300 @max-[12rem]:whitespace-normal @max-[12rem]:text-left @xl:col-start-2 @xl:row-start-1">
+                    {item.titleMeta ??
+                      [item.quantityText, item.weightText]
+                        .filter(
+                          (part): part is string =>
+                            part !== undefined && part !== '',
+                        )
+                        .join(' · ')}
                   </span>
                 </div>
                 {item.note ? (
@@ -502,7 +503,7 @@ export function InventoryPanel({
                   <span className="min-w-[8ch] flex-1 truncate rounded px-2 py-1 text-left text-sm @xl:col-start-1 @xl:row-start-1">
                     {kind.name}
                   </span>
-                  <span className="whitespace-nowrap text-right text-sm tabular-nums text-stone-300 @xl:col-start-2 @xl:row-start-1">
+                  <span className="whitespace-nowrap text-right text-sm tabular-nums text-stone-300 @max-[12rem]:whitespace-normal @max-[12rem]:text-left @xl:col-start-2 @xl:row-start-1">
                     pile ×{kind.pileQuantity} · carried ×{kind.carriedQuantity}
                   </span>
                 </div>
@@ -569,7 +570,7 @@ export function InventoryPanel({
                         <span className="min-w-0 truncate">{item.name}</span>
                       </span>
                     </span>
-                    <span className="whitespace-nowrap text-right text-sm tabular-nums text-stone-300 @xl:col-start-2 @xl:row-start-1">
+                    <span className="whitespace-nowrap text-right text-sm tabular-nums text-stone-300 @max-[12rem]:whitespace-normal @max-[12rem]:text-left @xl:col-start-2 @xl:row-start-1">
                       {item.quantityText ?? null}
                     </span>
                   </div>
