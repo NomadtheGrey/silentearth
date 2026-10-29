@@ -7101,6 +7101,8 @@ export default function App() {
     if (!nearest) return null;
     return {
       id: nearest.id,
+      x: nearest.x,
+      z: nearest.z,
       label:
         nearest.catch !== null
           ? `Collect ${nearest.catch}`
@@ -7371,37 +7373,44 @@ export default function App() {
     }
   };
 
-  // USE / still-tap interact: the nearest in-range object,
-  // pressed through the engine's pressUse (which fires the
-  // existing harvest:requested event; the outcome listener
-  // re-validates range + permit, so a stale press fails
-  // safely). Scatter is preferred and ground is the
-  // fallback — USE never harvests dirt while a bush is in
-  // range. With no target at all, pressUse is not called
-  // (menus and HUD buttons stay direct taps).
+  // USE DISPATCH (Adam, 2026-10-29 — the common-action
+  // principle, superseding the per-thing keys T/H/F/Q of
+  // the earlier buttons landing): there are no per-thing
+  // keys. USE — the touch USE button, the E key, and the
+  // pointer-locked click, all through handleUseInteract —
+  // activates the COMMON ACTION of the one target she is
+  // more or less FACING: harvest for a plant, Collect for
+  // a trap, Harvest honey for a hive, OPEN for the things
+  // whose interaction is a screen (pile menu, ritual
+  // panel, torch/tent/fire menus, home menu), Scry for
+  // the scry button. R fires the SAME target's SECOND
+  // action where one exists today (handleSecondInteract).
   //
-  // PILE FALLBACK, FIXED (Adam, 2026-10-27 — BUG FIX, see
-  // the header bullet): a pile in range is picked up by
-  // this same USE press when no SCATTER target is nearer.
-  // The tracker sorts piles nearest first, so piles[0] is
-  // the nearest pile; the scatter candidate's distance
-  // comes from the raw bus target (the UI target shape
-  // carries no distance field), falling back to a
-  // shell-computed distance if the bus entry is gone. The
-  // pile wins on a tie (no scatter target is NEARER then).
-  // Ground NEVER competes: ground sits at distance 0 and
-  // is always eligible in third/behind (and whenever
-  // looking down in first-person), so under the old
-  // scatter-first rule any pile at a nonzero distance
-  // lost to ground and USE harvested dirt instead of
-  // picking up. The one shared pileWouldWin rule below
-  // drives this press, the touch PICK UP label, and the
-  // desktop button, so all three always agree.
-  // NOTE: this is the touch USE path only. Desktop has no USE
-  // affordance (harvest is by button click), so desktop pile
-  // pickup is a visible button instead — see DESKTOP PILE
-  // PICKUP in the header and the computation before return.
-  // Touch keeps USE; the button is desktop-only.
+  // TARGET SELECTION = FACING (Adam: "if we're more or
+  // less facing one target, that's the one we should be
+  // paying attention to, not the grass, not the loom
+  // behind her"). Candidates are in range (per-kind caps
+  // as the rows use: HARVEST_RANGE; home via
+  // shelterHouseId) AND faced — the game's existing faced
+  // definition, the upgrade pill's (46a617d): forward =
+  // (sin facing, cos facing) from player.facing — one
+  // read in every camera mode (first-person facing
+  // tracks the look, third is travel direction, behind
+  // is look-synced, player.ts) — angle < 45 degrees (dot
+  // > SQRT1_2); distance 0 faced, and < 1 m counts as
+  // faced (hut interiors vs the house center, a pile at
+  // her feet). Behind-her candidates are OUT even when
+  // nearer. Winner = the nearest of the faced set, with
+  // ONE preserved sub-rule: pile vs scatter inside the
+  // set resolves by pileWouldWin (pile takes ties).
+  // Ground is never a faced candidate (it has no
+  // direction — it is where she stands): it stays the
+  // categorical last fallback after scry, so the grass
+  // at her feet can never steal a faced target (the
+  // aa6e88b bug was exactly ground winning by distance).
+  // ONE shared computeUseWinner() feeds the press, the
+  // R press, the touch USE label, and the desktop pile
+  // button, so the tell can never disagree with the act.
   const pileWouldWin = (
     pile: PileTarget | undefined,
     scatter: HarvestTarget | undefined,
@@ -7415,50 +7424,260 @@ export default function App() {
       Math.hypot(scatter.worldX - fromX, scatter.worldZ - fromZ);
     return pile.distance <= scatterDistance;
   };
-  // Shared USE path (PC keys, 2026-10-28): the touch USE
-  // button, the E key, and the pointer-locked click all call
-  // this one handler — scatter-first from harvestTargets +
-  // pileWouldWin pile fallback + ground fallback. Renamed
-  // from handleTouchInteract (same body); nothing here is
-  // touch-specific. The zero-arg player.pressUse() path is
-  // NOT used (its shell query has no callers).
-  const handleUseInteract = (): void => {
+
+  type UseWinner =
+    | { kind: 'scatter' | 'ground'; target: HarvestTarget; distance: number }
+    | { kind: 'pile'; pile: PileTarget; distance: number }
+    | { kind: 'trap'; id: string; distance: number }
+    | { kind: 'hive'; x: number; z: number; distance: number }
+    | { kind: 'site'; siteId: string; distance: number }
+    | { kind: 'fire' | 'tent' | 'torch'; id: string; distance: number }
+    | { kind: 'home'; distance: number }
+    | { kind: 'scry'; distance: number };
+
+  const computeUseWinner = (): UseWinner | null => {
     const player = playerRef.current;
-    if (!player) return;
+    if (!player) return null;
+    const forwardX = Math.sin(player.facing);
+    const forwardZ = Math.cos(player.facing);
+    const facingOf = (
+      x: number,
+      z: number,
+    ): { isFaced: boolean; distance: number } => {
+      const dx = x - player.x;
+      const dz = z - player.z;
+      const distance = Math.hypot(dx, dz);
+      if (distance < 1) return { isFaced: true, distance };
+      return {
+        isFaced: (dx * forwardX + dz * forwardZ) / distance > Math.SQRT1_2,
+        distance,
+      };
+    };
+    // The harvest pair first: scatter + pile, resolved by
+    // pileWouldWin inside the faced set.
     const scatter = harvestTargets.find(
       (candidate) => candidate.kind === 'scatter',
     );
-    const pile = piles[0];
-    if (pile && pileWouldWin(pile, scatter, player.x, player.z)) {
-      bus.emit('pile:pickup-requested', { pileId: pile.id });
-      return;
+    const scatterFacing = scatter
+      ? facingOf(scatter.worldX, scatter.worldZ)
+      : null;
+    const scatterDistance = scatter
+      ? (busTargetsRef.current.find((t) => t.id === scatter.id)?.distance ??
+        scatterFacing!.distance)
+      : null;
+    let pairWinner: UseWinner | null = null;
+    const facedPile = piles.find(
+      (pile) => facingOf(pile.x, pile.z).isFaced,
+    );
+    if (facedPile && scatter && scatterFacing!.isFaced) {
+      pairWinner = pileWouldWin(facedPile, scatter, player.x, player.z)
+        ? { kind: 'pile', pile: facedPile, distance: facedPile.distance }
+        : { kind: 'scatter', target: scatter, distance: scatterDistance! };
+    } else if (facedPile) {
+      pairWinner = {
+        kind: 'pile',
+        pile: facedPile,
+        distance: facedPile.distance,
+      };
+    } else if (scatter && scatterFacing!.isFaced) {
+      pairWinner = {
+        kind: 'scatter',
+        target: scatter,
+        distance: scatterDistance!,
+      };
     }
-    const target = scatter ?? harvestTargets[0];
-    if (!target) return;
-    player.pressUse({
-      targetId: target.id,
-      sourceId: target.sourceId,
-      kind: target.kind,
-      x: target.worldX,
-      z: target.worldZ,
-    });
+    // The rest of the field, in tie order (the pair winner
+    // keeps ties — challengers must be strictly nearer).
+    const challengers: UseWinner[] = [];
+    if (trapRowTrap) {
+      const f = facingOf(trapRowTrap.x, trapRowTrap.z);
+      if (f.isFaced) {
+        challengers.push({
+          kind: 'trap',
+          id: trapRowTrap.id,
+          distance: f.distance,
+        });
+      }
+    }
+    if (hiveRowHive) {
+      const f = facingOf(hiveRowHive.x, hiveRowHive.z);
+      if (f.isFaced) {
+        challengers.push({
+          kind: 'hive',
+          x: hiveRowHive.x,
+          z: hiveRowHive.z,
+          distance: f.distance,
+        });
+      }
+    }
+    let siteBest: UseWinner | null = null;
+    const considerSite = (siteId: string, x: number, z: number): void => {
+      const f = facingOf(x, z);
+      if (
+        f.isFaced &&
+        f.distance <= HARVEST_RANGE &&
+        (siteBest === null || f.distance < siteBest.distance)
+      ) {
+        siteBest = { kind: 'site', siteId, distance: f.distance };
+      }
+    };
+    for (const pos of stumpPositions(genRef.current, player.x, player.z)) {
+      considerSite(stumpSiteId(pos.x, pos.z), pos.x, pos.z);
+    }
+    for (const altar of placedAltars) {
+      considerSite(altar.id, altar.x, altar.z);
+    }
+    if (siteBest !== null) challengers.push(siteBest);
+    const considerPlaced = (
+      kind: 'fire' | 'tent' | 'torch',
+      id: string,
+      x: number,
+      z: number,
+    ): void => {
+      const f = facingOf(x, z);
+      if (f.isFaced && f.distance <= HARVEST_RANGE) {
+        challengers.push({ kind, id, distance: f.distance });
+      }
+    };
+    for (const fire of placedFires) {
+      considerPlaced('fire', fire.id, fire.x, fire.z);
+    }
+    for (const tent of placedTents) {
+      considerPlaced('tent', tent.id, tent.x, tent.z);
+    }
+    for (const torch of placedTorches) {
+      considerPlaced('torch', torch.id, torch.x, torch.z);
+    }
+    if (homeHouse !== undefined) {
+      const f = facingOf(homeHouse.x, homeHouse.z);
+      if (f.isFaced) {
+        challengers.push({ kind: 'home', distance: f.distance });
+      }
+    }
+    let winner = pairWinner;
+    for (const challenger of challengers) {
+      if (winner === null || challenger.distance < winner.distance) {
+        winner = challenger;
+      }
+    }
+    if (winner !== null) return winner;
+    // Fallbacks: scry (visible; it has no world position,
+    // so it never outranks a positioned target), then
+    // ground, then nothing.
+    if (scryVisible) return { kind: 'scry', distance: Infinity };
+    const ground = harvestTargets.find(
+      (candidate) => candidate.kind === 'ground',
+    );
+    if (ground) return { kind: 'ground', target: ground, distance: 0 };
+    return null;
   };
 
-  // BUTTON KEYS (Adam, 2026-10-29, map pinned as proposed):
-  // the world-layer buttons a pointer-locked player could
-  // not reach without Esc + mouse. T fires the trap row,
-  // H the hive row, F the scry button — each the SAME
-  // handler its button calls, gated on the SAME derived
-  // row/visibility state the button renders from, so a
-  // key can never do what its button doesn't show. Q
-  // opens the nearest world-chip menu (below); digits
-  // 1-9 fire an open world menu's actions in render
-  // order; Enter confirms an armed placement. Dispatch
-  // precedence among open menus mirrors the Esc chain's
-  // topmost order (home → pile → torch → tent → fire →
-  // site). Panel-internal key navigation is OUT (the
-  // mouse layer, Adam's call if he wants it); phone
-  // unchanged.
+  // The USE press itself: fire the winner's common
+  // action through the SAME handler its button, row, or
+  // chip tap calls. Harvest presses go through the
+  // engine's pressUse (the outcome listener re-validates
+  // range + permit, so a stale press fails safely). The
+  // zero-arg player.pressUse() path is NOT used (its
+  // shell query has no callers).
+  const handleUseInteract = (): void => {
+    const player = playerRef.current;
+    if (!player) return;
+    const winner = computeUseWinner();
+    if (winner === null) return;
+    switch (winner.kind) {
+      case 'scatter':
+      case 'ground':
+        player.pressUse({
+          targetId: winner.target.id,
+          sourceId: winner.target.sourceId,
+          kind: winner.target.kind,
+          x: winner.target.worldX,
+          z: winner.target.worldZ,
+        });
+        break;
+      case 'pile':
+        selectedPileIdRef.current = winner.pile.id;
+        setSelectedPileId(winner.pile.id);
+        break;
+      case 'trap':
+        handleCollectTrap(winner.id);
+        break;
+      case 'hive':
+        handleHarvestHive(winner.x, winner.z);
+        break;
+      case 'site':
+        setSelectedSiteId(winner.siteId);
+        break;
+      case 'fire':
+        setSelectedFireId(winner.id);
+        break;
+      case 'tent':
+        setSelectedTentId(winner.id);
+        break;
+      case 'torch':
+        setSelectedTorchId(winner.id);
+        break;
+      case 'home':
+        setHomeMenuOpen(true);
+        break;
+      case 'scry':
+        handleScry();
+        break;
+    }
+  };
+
+  // R — the winner's SECOND action (Adam, 2026-10-29,
+  // tentative made real for the seconds that exist
+  // today): scatter → Remove (the SAME confirm Shift+E
+  // arms — R sits ALONGSIDE Shift+E, which stays as
+  // pinned; the difference is scope: Shift+E reaches
+  // the nearest scatter whatever the winner is, R acts
+  // on the winner); pile → pick up the WHOLE pile on
+  // the existing pickup path (Adam pinned: "R can pick
+  // up the whole pile if possible" — the grant's own
+  // capacity behavior, no second rule); torch → Pick
+  // up; tent → Take down; home → Rest (night-gated
+  // exactly as its menu disables it). Trap, hive, fire,
+  // site, scry, and ground have no second action today:
+  // R is a no-op there (hive Relocate is an unbuilt
+  // seed, named not built).
+  const handleSecondInteract = (): void => {
+    const winner = computeUseWinner();
+    if (winner === null) return;
+    switch (winner.kind) {
+      case 'scatter':
+        setPendingRemoveTarget(winner.target);
+        break;
+      case 'pile':
+        bus.emit('pile:pickup-requested', { pileId: winner.pile.id });
+        break;
+      case 'torch':
+        handleTorchAction(winner.id, 'pick-up');
+        break;
+      case 'tent':
+        handleTentAction(winner.id, 'take-down');
+        break;
+      case 'home': {
+        const rest = homeMenuActions().find((a) => a.id === 'rest');
+        if (rest && rest.disabled !== true) handleHomeMenuAction('rest');
+        break;
+      }
+      default:
+        break;
+    }
+  };
+
+  // MENU KEYS (carried from the buttons landing, as
+  // amended): digits 1-9 fire an open world menu's
+  // actions in render order; Enter confirms an armed
+  // placement. Dispatch precedence among open menus
+  // mirrors the Esc chain's topmost order (home → pile
+  // → torch → tent → fire → site). The ritual panel's
+  // digit dispatch reads the hoisted kind/food lists
+  // below, so the panel and the keys can never disagree
+  // about order. Panel-internal key navigation beyond
+  // digits is OUT (the mouse layer, Adam's call if he
+  // wants it); phone unchanged.
   const flattenMenuTargets = (
     actions: ContextAction[],
   ): { id: string; disabled: boolean }[] =>
@@ -7555,73 +7774,14 @@ export default function App() {
   // kind in the pinned order (site → home → pile → fire
   // → tent → torch): a candidate replaces the best only
   // when STRICTLY nearer.
-  const openNearestChipMenu = (): void => {
-    const player = playerRef.current;
-    if (!player) return;
-    let best: { distance: number; open: () => void } | null = null;
-    const consider = (
-      distance: number,
-      open: () => void,
-      range: number = HARVEST_RANGE,
-    ): void => {
-      if (
-        distance <= range &&
-        (best === null || distance < best.distance)
-      ) {
-        best = { distance, open };
-      }
-    };
-    for (const pos of stumpPositions(genRef.current, player.x, player.z)) {
-      consider(Math.hypot(pos.x - player.x, pos.z - player.z), () =>
-        setSelectedSiteId(stumpSiteId(pos.x, pos.z)),
-      );
-    }
-    for (const altar of placedAltars) {
-      consider(Math.hypot(altar.x - player.x, altar.z - player.z), () =>
-        setSelectedSiteId(altar.id),
-      );
-    }
-    if (homeHouse !== undefined) {
-      consider(
-        Math.hypot(homeHouse.x - player.x, homeHouse.z - player.z),
-        () => setHomeMenuOpen(true),
-        Number.POSITIVE_INFINITY,
-      );
-    }
-    for (const pile of piles) {
-      consider(pile.distance, () => {
-        selectedPileIdRef.current = pile.id;
-        setSelectedPileId(pile.id);
-      });
-    }
-    for (const fire of placedFires) {
-      consider(Math.hypot(fire.x - player.x, fire.z - player.z), () =>
-        setSelectedFireId(fire.id),
-      );
-    }
-    for (const tent of placedTents) {
-      consider(Math.hypot(tent.x - player.x, tent.z - player.z), () =>
-        setSelectedTentId(tent.id),
-      );
-    }
-    for (const torch of placedTorches) {
-      consider(Math.hypot(torch.x - player.x, torch.z - player.z), () =>
-        setSelectedTorchId(torch.id),
-      );
-    }
-    const winner = best;
-    if (winner !== null) winner.open();
-  };
-
   // PC KEYS (Adam, 2026-10-28 — every frequent action without
-  // Esc): E harvests (the shared USE path, same as the touch
-  // USE button), Shift+E arms Remove (confirm dialog), I/K/L
-  // toggle Inventory/Crafting/Charms, P toggles pause.
-  // BUTTON KEYS (Adam, 2026-10-29) join here: T/H/F fire
-  // the trap row / hive row / scry button, Q opens the
-  // nearest chip menu, digits fire an open world menu's
-  // actions, Enter confirms an armed placement (the
-  // helpers + dispatch table sit directly above). Letter
+  // Esc): E is USE (the shared dispatch above, same as the
+  // touch USE button), Shift+E arms Remove on the nearest
+  // scatter (confirm dialog), R fires the USE target's
+  // second action, I/K/L toggle Inventory/Crafting/Charms,
+  // P toggles pause. Digits fire an open world menu's
+  // actions and Enter confirms an armed placement (the
+  // helpers + dispatch sit directly above). Letter
   // keys fire with or without Shift (only E reads Shift,
   // for Remove).
   // Guards: typing (text input/textarea/select focus) swallows
@@ -7695,6 +7855,8 @@ export default function App() {
           (candidate) => candidate.kind === 'scatter',
         );
         if (scatter) setPendingRemoveTarget(scatter);
+      } else if (key === 'r') {
+        handleSecondInteract();
       } else if (key === 'i') {
         setInventoryOpen((open) => !open);
       } else if (key === 'k') {
@@ -7702,14 +7864,6 @@ export default function App() {
       } else if (key === 'l') {
         if (charmsOpen) setCharmsOpen(false);
         else openCharmsPanel();
-      } else if (key === 't') {
-        if (trapRowTrap) handleCollectTrap(trapRowTrap.id);
-      } else if (key === 'h') {
-        if (hiveRowHive) handleHarvestHive(hiveRowHive.x, hiveRowHive.z);
-      } else if (key === 'f') {
-        if (scryVisible) handleScry();
-      } else if (key === 'q') {
-        openNearestChipMenu();
       } else if (key === 'p') {
         pauseState.setPaused(!pausedRef.current);
       }
@@ -7725,6 +7879,7 @@ export default function App() {
     craftingOpen,
     charmsOpen,
     handleUseInteract,
+    handleSecondInteract,
     openCharmsPanel,
     firstRunDone,
     placement,
@@ -7736,13 +7891,6 @@ export default function App() {
     selectedFireId,
     selectedSiteId,
     dispatchWorldMenuDigit,
-    openNearestChipMenu,
-    trapRowTrap,
-    hiveRowHive,
-    scryVisible,
-    handleCollectTrap,
-    handleHarvestHive,
-    handleScry,
   ]);
   // PC-KEYS CLICK (Adam, 2026-10-28): click-to-harvest while
   // pointer-locked — the same shared USE path as E. Gated on
@@ -7952,50 +8100,118 @@ export default function App() {
     return () => cancelAnimationFrame(raf);
   }, []);
 
-  // DESKTOP PILE PICKUP (see the header): the nearest pile,
-  // but only when it would win under the touch USE rules —
-  // otherwise the button would contradict what USE would do.
-  // The tracker already limits piles to 2.5 m and sorts
-  // nearest first, so piles[0] is the candidate; the shared
-  // pileWouldWin rule (scatter-only candidate, ground never
-  // competes; bus distance, shell-computed fallback from
-  // position state, which re-renders on the 10 Hz moved tick
-  // — so the button appears and disappears as she moves).
-  // Null on touch (USE already exists there) and null when
-  // a nearer scatter target wins: harvest that first, then
-  // the pile button appears. Pressing emits
-  // pile:pickup-requested; Systems' listener grants, the
-  // existing subscriber refreshes, saves, and feeds back.
-  // Label names the whole pile (total count) when it holds
-  // many kinds — the grant takes everything, so naming
-  // only the first kind would understate the action.
-  const desktopPilePickup =
-    !isTouch &&
-    pileWouldWin(
-      piles[0],
-      harvestTargets.find((candidate) => candidate.kind === 'scatter'),
-      position.x,
-      position.z,
-    )
-      ? piles[0]
-      : null;
+  // THE SHARED WINNER, computed once per render: the
+  // touch USE label, the desktop pile button, and the
+  // desktop controls hint all read it, so every tell
+  // agrees with what USE/R will do. Position state
+  // (10 Hz tick) drives the re-renders, so the tells
+  // appear and disappear as she moves and turns.
+  const useWinner = computeUseWinner();
 
-  // TOUCH PILE LABEL: the same shared rule, touch-only —
-  // when a pile would win the USE press, the USE button
-  // reads "PICK UP" (see TouchControls interactLabel).
-  // Position state (10 Hz tick) drives it, so the label
-  // appears and disappears as she moves, exactly like the
-  // desktop button.
-  const touchPilePickup =
-    isTouch &&
-    pileWouldWin(
-      piles[0],
-      harvestTargets.find((candidate) => candidate.kind === 'scatter'),
-      position.x,
-      position.z,
-    )
-      ? piles[0]
-      : null;
+  // DESKTOP PILE PICKUP (see the header): the mouse twin
+  // of R's pile second — shown only when the faced
+  // winner IS a pile, so the button never contradicts
+  // the dispatch. Pressing emits pile:pickup-requested
+  // (the existing path); Systems' listener grants, the
+  // existing subscriber refreshes, saves, and feeds
+  // back. Label names the whole pile (total count) when
+  // it holds many kinds — the grant takes everything,
+  // so naming only the first kind would understate it.
+  const desktopPilePickup =
+    !isTouch && useWinner?.kind === 'pile' ? useWinner.pile : null;
+
+  // TOUCH USE LABEL: names the winner's action family
+  // (TouchControls interactLabel; undefined keeps the
+  // plain "USE"). Scatter/ground stay unlabelled — plain
+  // USE is the harvest read she already knows.
+  const useWinnerLabel =
+    useWinner === null
+      ? undefined
+      : useWinner.kind === 'pile'
+        ? 'OPEN'
+        : useWinner.kind === 'trap'
+          ? 'COLLECT'
+          : useWinner.kind === 'hive'
+            ? 'HARVEST'
+            : useWinner.kind === 'site' ||
+                useWinner.kind === 'fire' ||
+                useWinner.kind === 'tent' ||
+                useWinner.kind === 'torch' ||
+                useWinner.kind === 'home'
+              ? 'OPEN'
+              : useWinner.kind === 'scry'
+                ? 'SCRY'
+                : undefined;
+
+  // CONTROLS HINT (Adam, 2026-10-29: "We'll need a
+  // little HUD element for these controls, even as
+  // simple as they are"): the desktop tell for the
+  // target system — a small bottom-center line naming
+  // the faced target and what E (and R, when the target
+  // has a second) will do. Contextual, not a static
+  // legend: it reads the same shared winner, so it can
+  // never promise what the keys won't do, and it is
+  // also R's only tell. Desktop only — the phone's tell
+  // is the touch USE label above. Hidden whenever a
+  // menu, panel, modal, or placement owns the screen.
+  const controlsHint = ((): { target: string; use: string; second?: string } | null => {
+    if (isTouch || useWinner === null || placement !== null) return null;
+    if (
+      inventoryOpen ||
+      craftingOpen ||
+      charmsOpen ||
+      optionsOpen ||
+      introOpen ||
+      pendingTrapRecipe ||
+      pendingRemoveTarget !== null ||
+      paused ||
+      homeMenuOpen ||
+      selectedPileId !== null ||
+      selectedTorchId !== null ||
+      selectedTentId !== null ||
+      selectedFireId !== null ||
+      selectedSiteId !== null
+    ) {
+      return null;
+    }
+    switch (useWinner.kind) {
+      case 'scatter':
+        return {
+          target: useWinner.target.name,
+          use: 'Harvest',
+          second: 'Remove',
+        };
+      case 'ground':
+        return { target: useWinner.target.name, use: 'Harvest' };
+      case 'pile':
+        return { target: 'Pile', use: 'Open', second: 'Pick up pile' };
+      case 'trap':
+        return {
+          target: trapRowTrap?.label ?? 'Trap',
+          use: trapRowTrap?.label.startsWith('Collect') ? 'Collect' : 'Check',
+        };
+      case 'hive':
+        return { target: 'Hive', use: 'Harvest honey' };
+      case 'site':
+        return { target: 'Ritual site', use: 'Open' };
+      case 'fire':
+        return { target: 'Campfire', use: 'Open' };
+      case 'tent':
+        return { target: 'Tent', use: 'Open', second: 'Take down' };
+      case 'torch':
+        return { target: 'Torch', use: 'Open', second: 'Pick up' };
+      case 'home': {
+        const rest = homeMenuActions().find((a) => a.id === 'rest');
+        return {
+          target: 'Home',
+          use: 'Open',
+          second: rest && rest.disabled !== true ? 'Sleep' : undefined,
+        };
+      }
+      case 'scry':
+        return { target: 'Still water', use: 'Scry' };
+    }
+  })();
 
   return (
     <div
@@ -8380,6 +8596,25 @@ export default function App() {
                 )}`
               : `Pick up ${displayNameFor(desktopPilePickup.item)} × ${desktopPilePickup.quantity}`}
           </button>
+        ) : null}
+        {controlsHint ? (
+          <div className="pointer-events-none absolute bottom-4 left-1/2 flex -translate-x-1/2 items-center gap-2 rounded-full bg-black/45 px-3 py-1.5 text-xs text-[#f0ead6]">
+            <span className="text-[#f0ead6]/70">{controlsHint.target}</span>
+            <span>
+              <span className="mr-1 rounded border border-stone-500/60 bg-black/30 px-1 font-mono text-[10px]">
+                E
+              </span>
+              {controlsHint.use}
+            </span>
+            {controlsHint.second ? (
+              <span>
+                <span className="mr-1 rounded border border-stone-500/60 bg-black/30 px-1 font-mono text-[10px]">
+                  R
+                </span>
+                {controlsHint.second}
+              </span>
+            ) : null}
+          </div>
         ) : null}
         {/* PILL FIX: pickup feedback lives HERE, last in the
           z-40 overlay (after the buttons + pile button), so
@@ -8878,7 +9113,7 @@ export default function App() {
           onTurn={applyTurn}
           onLook={applyTouchLook}
           onInteract={handleUseInteract}
-          interactLabel={touchPilePickup ? 'PICK UP' : undefined}
+          interactLabel={useWinnerLabel}
         />
       ) : null}
 
