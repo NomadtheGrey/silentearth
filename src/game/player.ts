@@ -226,6 +226,24 @@ export class PlayerController {
   }
 
   private onKeyDown = (e: KeyboardEvent): void => {
+    // Typing yield (2026-10-29): a keystroke aimed at a text
+    // field belongs to the field — the same target test App's
+    // key handlers use, plus contentEditable. Without this,
+    // WASD moved her and V/C flipped the camera while typing
+    // a world name, a seed, or cloud words, and the move
+    // branch's preventDefault swallowed the letters. Yield =
+    // no key add, no camera toggle, no preventDefault, so the
+    // letters type normally.
+    const target = e.target as HTMLElement | null;
+    const tag = target?.tagName;
+    if (
+      tag === 'INPUT' ||
+      tag === 'TEXTAREA' ||
+      tag === 'SELECT' ||
+      target?.isContentEditable
+    ) {
+      return;
+    }
     const key = e.key.toLowerCase();
     if (CAMERA_TOGGLE_KEYS.includes(key)) {
       this.toggleCamera();
