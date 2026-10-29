@@ -37,6 +37,7 @@
  */
 
 import { bus } from './events';
+import { pauseState } from './pause';
 import { CAMERA_TOGGLE_KEYS, MOVE_KEYS, PLAYER_SPEED, CHUNK_SIZE } from '../constants';
 import type { CameraMode } from '../types';
 import { HUNGRY_SPEED_MULTIPLIER, type HungerStageQuery } from './hunger';
@@ -311,6 +312,12 @@ export class PlayerController {
   private onCanvasClick = (): void => {
     // First-person mouse look needs pointer lock; a click is the gesture
     // that grants it. Failure is non-fatal (keyboard movement still works).
+    // Pause gate (Adam 2026-10-29): NEVER request the lock while paused —
+    // a click on the frozen canvas (missing the resume button) locked
+    // him inside a paused game with no cursor and no way to move, Esc
+    // the only way out. The render loop already reads this same
+    // pauseState singleton; the click path now does too.
+    if (pauseState.isPaused()) return;
     if (this.mode === 'first' && document.pointerLockElement !== this.canvas) {
       this.canvas?.requestPointerLock();
     }
@@ -375,10 +382,18 @@ export class PlayerController {
       // (sky-trap fix — see resetLook).
       this.resetLook();
       // Best effort: a keydown counts as a user gesture for pointer lock.
-      try {
-        this.canvas?.requestPointerLock();
-      } catch {
-        // Non-fatal; the next canvas click will capture instead.
+      // Same pause gate as onCanvasClick (2026-10-29): V/C reach this
+      // handler while paused (nothing consumes them — the loop is
+      // frozen, the listeners are not), so entering first-person from
+      // 'behind' while paused would spring the same lock trap by
+      // keyboard. The mode switch itself still happens; only the
+      // lock request waits for an unpaused click.
+      if (!pauseState.isPaused()) {
+        try {
+          this.canvas?.requestPointerLock();
+        } catch {
+          // Non-fatal; the next canvas click will capture instead.
+        }
       }
     } else if (document.pointerLockElement === this.canvas) {
       document.exitPointerLock();
