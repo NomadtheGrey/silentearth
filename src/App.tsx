@@ -1683,6 +1683,7 @@ import {
 import {
   CLOUD_BASE_URL,
   bringHere,
+  canonicalizeWords,
   deleteCloudSave,
   enterWords,
   generateWords,
@@ -3061,7 +3062,25 @@ export default function App() {
     slot: string;
     local: SaveData;
     parked: SaveData | null;
+    // The words the bring runs under: the device's own
+    // for the stored list, or the TYPED words for the
+    // load-from-cloud door (2026-10-29) — snapshotted at
+    // press time like the rest of the pending state.
+    words: [string, string, string] | null;
+    // Incoming world's name, from whichever list the
+    // row came from (the confirm names it).
+    name?: string;
   } | null>(null);
+  // LOAD-FROM-CLOUD DOOR state (Adam, 2026-10-29): the
+  // typed-words lookup's own rows + note + canonical
+  // words — kept separate from the stored-words list so
+  // a lookup never clobbers it. null rows = no lookup
+  // yet this session.
+  const [cloudLoadRows, setCloudLoadRows] =
+    useState<CloudSaveRow[] | null>(null);
+  const [cloudLoadNote, setCloudLoadNote] = useState<string | null>(null);
+  const [cloudLoadWords, setCloudLoadWords] =
+    useState<[string, string, string] | null>(null);
   const [cloudPendingRemove, setCloudPendingRemove] = useState<{
     slot: string;
     row: CloudSaveRow;
@@ -3088,6 +3107,36 @@ export default function App() {
     );
   };
 
+  // Row-building for ANY words (load-door wiring,
+  // 2026-10-29): list the fingerprint's slots, then read
+  // each save's header for its row. The stored-words
+  // refresh and the typed-words lookup share this — the
+  // only difference is whose words and where the rows
+  // land.
+  const fetchCloudRows = async (
+    words: [string, string, string],
+  ): Promise<
+    { ok: true; rows: CloudSaveRow[] } | { ok: false; reason: string }
+  > => {
+    const listed = await listCloudSaves(CLOUD_BASE_URL, words);
+    if (listed.ok === false) {
+      return { ok: false, reason: listed.reason };
+    }
+    const rows: CloudSaveRow[] = [];
+    for (const slot of listed.value) {
+      const fetched = await getCloudSave(CLOUD_BASE_URL, words, slot);
+      if (fetched.ok) {
+        rows.push({
+          slot,
+          name: fetched.value.name,
+          seed: fetched.value.seed,
+          updatedAt: fetched.value.updatedAt,
+        });
+      }
+    }
+    return { ok: true, rows };
+  };
+
   const refreshCloudList = async () => {
     const words = getWords();
     if (!isCloudEnabled() || words === null) {
@@ -3096,25 +3145,50 @@ export default function App() {
     }
     setCloudBusy(true);
     try {
-      const listed = await listCloudSaves(CLOUD_BASE_URL, words);
-      if (listed.ok === false) {
-        setCloudNote(listed.reason);
+      const res = await fetchCloudRows(words);
+      if (res.ok === false) {
+        setCloudNote(res.reason);
         setCloudSaves([]);
         return;
       }
-      const rows: CloudSaveRow[] = [];
-      for (const slot of listed.value) {
-        const fetched = await getCloudSave(CLOUD_BASE_URL, words, slot);
-        if (fetched.ok) {
-          rows.push({
-            slot,
-            name: fetched.value.name,
-            seed: fetched.value.seed,
-            updatedAt: fetched.value.updatedAt,
-          });
-        }
+      setCloudSaves(res.rows);
+    } finally {
+      setCloudBusy(false);
+    }
+  };
+
+  // LOAD-FROM-CLOUD LOOKUP (Adam, 2026-10-29): validate
+  // the typed words FIRST (canonicalizeWords — exactly
+  // three, each a real cloud word; the typo catch), and
+  // fetch only on success. Invalid input shows the
+  // module's reason and fetches nothing. A valid lookup
+  // with no saves shows the no-saves line (the #21 copy —
+  // no oracle: unknown words and empty words read the
+  // same).
+  const handleCloudLoadLookup = async (input: string) => {
+    const canon = canonicalizeWords(input);
+    if (canon.ok === false) {
+      setCloudLoadNote(canon.reason);
+      setCloudLoadRows(null);
+      setCloudLoadWords(null);
+      return;
+    }
+    setCloudBusy(true);
+    try {
+      const res = await fetchCloudRows(canon.words);
+      if (res.ok === false) {
+        setCloudLoadNote(res.reason);
+        setCloudLoadRows(null);
+        setCloudLoadWords(null);
+        return;
       }
-      setCloudSaves(rows);
+      setCloudLoadWords(canon.words);
+      setCloudLoadRows(res.rows);
+      setCloudLoadNote(
+        res.rows.length === 0
+          ? 'No cloud saves found for those words.'
+          : null,
+      );
     } finally {
       setCloudBusy(false);
     }
@@ -3176,8 +3250,10 @@ export default function App() {
     void refreshCloudList();
   };
 
-  const runCloudBring = async (slot: string) => {
-    const words = getWords();
+  const runCloudBring = async (
+    slot: string,
+    words: [string, string, string] | null,
+  ) => {
     if (words === null) {
       setCloudNote('No cloud words on this device.');
       return;
@@ -3208,23 +3284,50 @@ export default function App() {
   };
 
   const handleCloudBringHere = (slot: string) => {
+    // Stored-words bring: snapshot the device's words +
+    // the row's name for the confirm.
+    const row = cloudSaves.find((candidate) => candidate.slot === slot);
     // Nothing displaced, nothing to confirm or park.
     const current = loadSave();
     if (current === null) {
-      void runCloudBring(slot);
+      void runCloudBring(slot, getWords());
       return;
     }
     setCloudPendingBring({
       slot,
       local: current,
       parked: readParked(),
+      words: getWords(),
+      name: row?.name,
+    });
+  };
+
+  // Load-door bring: the same confirm + park + install
+  // path, under the TYPED words from the lookup — the
+  // device's own words and its on/off switch are never
+  // touched (one-time fetch semantics).
+  const handleCloudLoadBringHere = (slot: string) => {
+    const row = (cloudLoadRows ?? []).find(
+      (candidate) => candidate.slot === slot,
+    );
+    const current = loadSave();
+    if (current === null) {
+      void runCloudBring(slot, cloudLoadWords);
+      return;
+    }
+    setCloudPendingBring({
+      slot,
+      local: current,
+      parked: readParked(),
+      words: cloudLoadWords,
+      name: row?.name,
     });
   };
 
   const confirmCloudBring = () => {
     const pending = cloudPendingBring;
     setCloudPendingBring(null);
-    if (pending !== null) void runCloudBring(pending.slot);
+    if (pending !== null) void runCloudBring(pending.slot, pending.words);
   };
 
   const confirmCloudRemove = async () => {
@@ -3331,6 +3434,12 @@ export default function App() {
       void refreshCloudList();
     },
     onBringHere: handleCloudBringHere,
+    loadSaves: cloudLoadRows,
+    loadNote: cloudLoadNote,
+    onLoadLookup: (input: string) => {
+      void handleCloudLoadLookup(input);
+    },
+    onLoadBringHere: handleCloudLoadBringHere,
     onRemove: (slot: string) => {
       const row = cloudSaves.find((candidate) => candidate.slot === slot);
       if (row !== undefined) setCloudPendingRemove({ slot, row });
@@ -9427,9 +9536,10 @@ export default function App() {
           <div className="flex flex-col gap-3 p-3 text-sm">
             <p>
               Bringing “
-              {cloudSaves.find(
-                (row) => row.slot === cloudPendingBring.slot,
-              )?.name ??
+              {cloudPendingBring.name ??
+                cloudSaves.find(
+                  (row) => row.slot === cloudPendingBring.slot,
+                )?.name ??
                 (cloudPendingBring.slot === 'main'
                   ? 'Main save'
                   : cloudPendingBring.slot)}

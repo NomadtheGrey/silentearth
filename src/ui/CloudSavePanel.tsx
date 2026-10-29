@@ -12,7 +12,9 @@
  * Sections, in order: opt-in toggle; words (create vs
  * enter, then the words screen); sync line; rename;
  * cloud list (Bring here / Remove); parked save;
- * remove disclosure. Words screen wording is PROPOSED
+ * remove disclosure; load-from-cloud door (ALWAYS
+ * visible — typed-words lookup + Bring, 2026-10-29);
+ * New Game. Words screen wording is PROPOSED
  * (Adam pins at sighting); no password gate (the
  * player's own machine holds the words, per approval).
  *
@@ -72,6 +74,15 @@ export interface CloudSavePanelProps {
   onEnterWords: (input: string) => void;
   onRefreshList: () => void;
   onBringHere: (slot: string) => void;
+  /** Load-from-cloud door (2026-10-29): the typed-words
+    lookup's rows — null = no lookup yet. Kept separate
+    from `saves` (the device's own list) by design. */
+  loadSaves: CloudSaveRow[] | null;
+  /** The lookup's own note (invalid words' reason, or
+    the no-saves line). */
+  loadNote: string | null;
+  onLoadLookup: (input: string) => void;
+  onLoadBringHere: (slot: string) => void;
   onRemove: (slot: string) => void;
   onRestoreParked: () => void;
   onRename: (name: string) => void;
@@ -98,6 +109,10 @@ export function CloudSavePanel({
   onEnterWords,
   onRefreshList,
   onBringHere,
+  loadSaves,
+  loadNote,
+  onLoadLookup,
+  onLoadBringHere,
   onRemove,
   onRestoreParked,
   onRename,
@@ -118,6 +133,7 @@ export function CloudSavePanel({
   const shownOn = sync.enabled || reveal;
   const [showEnter, setShowEnter] = useState(false);
   const [enterInput, setEnterInput] = useState('');
+  const [loadInput, setLoadInput] = useState('');
   const [showWords, setShowWords] = useState(false);
   const [copied, setCopied] = useState(false);
   const [copyFailed, setCopyFailed] = useState(false);
@@ -402,6 +418,76 @@ export function CloudSavePanel({
           ) : null}
         </div>
       ) : null}
+
+      {/* Load from cloud (Adam, 2026-10-29 — he ordered
+        the door himself: with cloud ON the tab showed no
+        place to type words at all): ALWAYS visible —
+        cloud on, off, or wordless — because its whole
+        point is reaching saves under words this device
+        does not hold. The lookup validates in App
+        (canonicalizeWords) before anything is fetched;
+        Bring rides the caller's existing confirm + park +
+        install path under the TYPED words. One-time fetch
+        semantics, stated on the panel: the device's own
+        words and its on/off switch never change here (if
+        cloud is on, the brought world syncs under the
+        device's own words from the next save). Copy is
+        PROPOSED, like the words screen's — Adam pins at
+        sighting. */}
+      <div className="flex flex-col gap-2 border-t border-moss-deep pt-3">
+        <h3 className={'text-sm font-semibold ' + t.heading}>
+          Load from cloud
+        </h3>
+        <p className="text-xs opacity-70">
+          Look up the worlds under any three words and bring one
+          here. This is a one-time fetch — it does not change this
+          device's own words or its cloud on/off switch.
+        </p>
+        <form
+          className="flex flex-wrap gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            onLoadLookup(loadInput);
+          }}
+        >
+          <input
+            value={loadInput}
+            onChange={(e) => setLoadInput(e.target.value)}
+            placeholder="word word word"
+            aria-label="Three cloud words to look up"
+            className={inputClass}
+          />
+          <button
+            type="submit"
+            className={buttonClass}
+            disabled={busy}
+          >
+            Look up
+          </button>
+        </form>
+        {loadNote !== null ? (
+          <p className="text-xs opacity-80">{loadNote}</p>
+        ) : null}
+        {(loadSaves ?? []).map((row) => (
+          <div key={row.slot} className="flex flex-col gap-1">
+            <p>
+              {rowTitle(row)} ·{' '}
+              {new Date(row.updatedAt).toLocaleString()}
+            </p>
+            <p className="text-xs opacity-70">Seed: {row.seed}</p>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                className={buttonClass}
+                disabled={busy}
+                onClick={() => onLoadBringHere(row.slot)}
+              >
+                Bring here
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
 
       {/* New Game: a local action, not a cloud one — it
         sits at the panel's bottom, outside the cloud
