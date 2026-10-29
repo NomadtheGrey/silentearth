@@ -1020,6 +1020,75 @@ function raccoonDetail(p: AnimalModelParams): RaccoonDetail {
   return raccoonDetailCache;
 }
 
+/**
+ * Subsurface swimmers (Adam 2026-10-29 — a fish read as a
+ * crate standing ON the water): fish and eels are built
+ * around the group origin as the WATER LINE — the body rides
+ * below it and only the back / dorsal / tail tip break it.
+ * The renderer poses the group at the instance's WATER_Y, so
+ * the submergence lives entirely in these shapes; instance
+ * data is untouched. Surface swimmers (frog, turtle,
+ * muskrat, beaver, crayfish) keep the generic on-the-line
+ * build exactly as before.
+ *
+ * Fish: an ellipsoid body — flattened, elongated, the snout
+ * is the body's tapered front (NO sphere head) — plus a
+ * vertical tail fin and a dorsal fin a shade darker than the
+ * body. Eels: the shared long-cylinder body sunk below the
+ * line, no head sphere, and a low dorsal ridge along the
+ * back. Geometries + the fin material are cached once, like
+ * the generic parts; sizes derive from the kind params
+ * (unchanged). Proportions are visual drafts for Adam's
+ * sighting.
+ */
+interface FishDetail {
+  body: THREE.BufferGeometry;
+  tailFin: THREE.BufferGeometry;
+  dorsalFin: THREE.BufferGeometry;
+  finMat: THREE.MeshLambertMaterial;
+}
+
+let fishDetailCache: FishDetail | null = null;
+
+function fishDetail(p: AnimalModelParams): FishDetail {
+  if (fishDetailCache) return fishDetailCache;
+  // Ellipsoid body: unit sphere scaled flat + long, centred
+  // below the line so only the back breaks it.
+  const body = new THREE.SphereGeometry(1, 10, 8);
+  body.scale(p.length * 0.16, p.height * 0.42, p.length * 0.52);
+  body.translate(0, -p.height * 0.25, 0);
+  // Vertical tail fin at the rear, swept back a touch; its
+  // tip breaks the line.
+  const tailFin = new THREE.BoxGeometry(0.014, p.height * 0.85, p.length * 0.2);
+  tailFin.rotateX(-0.25);
+  tailFin.translate(0, -p.height * 0.22, -p.length * 0.6);
+  // Dorsal fin amidships, swept back; the part that reads
+  // above the surface.
+  const dorsalFin = new THREE.BoxGeometry(0.012, p.height * 0.24, p.length * 0.32);
+  dorsalFin.rotateX(0.35);
+  dorsalFin.translate(0, p.height * 0.15, -p.length * 0.05);
+  fishDetailCache = {
+    body,
+    tailFin,
+    dorsalFin,
+    finMat: meshMat(shade(p.color, 0.75)),
+  };
+  return fishDetailCache;
+}
+
+let eelRidgeCache: THREE.BufferGeometry | null = null;
+
+function eelRidge(p: AnimalModelParams): THREE.BufferGeometry {
+  if (eelRidgeCache) return eelRidgeCache;
+  // Low ridge along the sunk cylinder's back; its offset is
+  // baked so it sits on the body (body centre rides at
+  // -0.375 x height in buildAnimal) and just breaks the line.
+  const ridge = new THREE.BoxGeometry(0.012, p.height * 0.25, p.length * 0.8);
+  ridge.translate(0, p.height * 0.17, 0);
+  eelRidgeCache = ridge;
+  return eelRidgeCache;
+}
+
 export function buildAnimal(kind: AnimalKind): THREE.Group {
   const p = ANIMAL_MODEL_PARAMS[kind];
   let parts = animalPartsCache.get(kind);
@@ -1054,10 +1123,14 @@ export function buildAnimal(kind: AnimalKind): THREE.Group {
   }
   const g = new THREE.Group();
   const width = p.length * 0.55;
-  const body = new THREE.Mesh(parts.body, mat);
-  body.position.set(0, p.height / 2, 0);
-  g.add(body);
-  if (parts.head) {
+  if (kind !== 'fish') {
+    const body = new THREE.Mesh(parts.body, mat);
+    // Eels ride submerged: the shared long cylinder sinks so
+    // its centre is below the water line (see eelRidge).
+    body.position.set(0, kind === 'eels' ? -p.height * 0.375 : p.height / 2, 0);
+    g.add(body);
+  }
+  if (parts.head && kind !== 'fish' && kind !== 'eels') {
     const head = new THREE.Mesh(parts.head, mat);
     head.position.set(0, p.height * 0.7, p.length / 2);
     g.add(head);
@@ -1072,7 +1145,7 @@ export function buildAnimal(kind: AnimalKind): THREE.Group {
     g.add(wingR);
     wings.push(wingL, wingR);
   }
-  if (parts.tail && kind !== 'raccoon') {
+  if (parts.tail && kind !== 'raccoon' && kind !== 'fish') {
     const tail = new THREE.Mesh(parts.tail, mat);
     tail.position.set(0, p.height * 0.5, -p.length / 2 - p.length * 0.1);
     g.add(tail);
@@ -1094,6 +1167,20 @@ export function buildAnimal(kind: AnimalKind): THREE.Group {
     const mask = new THREE.Mesh(detail.mask, detail.darkMat);
     mask.position.set(0, p.height * 0.7, p.length / 2);
     g.add(mask);
+  }
+  if (kind === 'fish') {
+    // Subsurface build (see fishDetail): ellipsoid body +
+    // two fins, all offsets baked — every mesh sits at the
+    // group origin, which the renderer poses at WATER_Y.
+    const detail = fishDetail(p);
+    g.add(new THREE.Mesh(detail.body, mat));
+    g.add(new THREE.Mesh(detail.tailFin, detail.finMat));
+    g.add(new THREE.Mesh(detail.dorsalFin, detail.finMat));
+  }
+  if (kind === 'eels') {
+    // The sunk long-cylinder body was added above; the
+    // dorsal ridge completes the eel read.
+    g.add(new THREE.Mesh(eelRidge(p), mat));
   }
   if (wings.length === 2) g.userData.wings = wings;
   return g;

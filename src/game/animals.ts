@@ -102,6 +102,16 @@ export interface AnimalDef {
   wanderRange: number;
   /** Owl + bat fly at night; everything else is active by day. */
   active: 'night' | 'day';
+  /**
+   * Subsurface swimmer (fish, eels): the kind lives UNDER the
+   * water line — models.ts builds it submerged around the
+   * WATER_Y origin, and pickWanderTarget hops it to the
+   * nearest water point instead of a random one, so its
+   * straight-line travel hugs the water instead of cutting
+   * across banks. Surface water kinds (beaver, turtle, frog,
+   * crayfish, muskrat) omit it and ride on the line.
+   */
+  subsurface?: boolean;
 }
 
 export const ANIMAL_DEFS: Record<AnimalKind, AnimalDef> = {
@@ -127,8 +137,8 @@ export const ANIMAL_DEFS: Record<AnimalKind, AnimalDef> = {
   muskrat: { biomes: ['creekBottom', 'mirewood', 'deepBog'], temperament: 'wary', movement: 'water', anim: 'swim', active: 'day', flee: 'cover', wanderRange: 8 },
   mice: { biomes: ['meadow', 'oldfieldRise'], temperament: 'skittish', movement: 'ground', anim: 'hop', active: 'day', flee: 'zigzag', wanderRange: 3 },
   voles: { biomes: ['meadow', 'creekBottom'], temperament: 'skittish', movement: 'ground', anim: 'hop', active: 'day', flee: 'zigzag', wanderRange: 3 },
-  fish: { biomes: ['creekBottom', 'mirewood'], temperament: 'skittish', movement: 'water', anim: 'swim', active: 'day', flee: 'straight', wanderRange: 8 },
-  eels: { biomes: ['creekBottom', 'mirewood'], temperament: 'skittish', movement: 'water', anim: 'swim', active: 'day', flee: 'straight', wanderRange: 8 },
+  fish: { biomes: ['creekBottom', 'mirewood'], temperament: 'skittish', movement: 'water', anim: 'swim', active: 'day', flee: 'straight', wanderRange: 8, subsurface: true },
+  eels: { biomes: ['creekBottom', 'mirewood'], temperament: 'skittish', movement: 'water', anim: 'swim', active: 'day', flee: 'straight', wanderRange: 8, subsurface: true },
   opossum: { biomes: ['forest', 'oldfieldRise', 'tanglewood'], temperament: 'skittish', movement: 'ground', anim: 'bob', active: 'day', flee: 'freeze', wanderRange: 8 },
   shrew: { biomes: ['forest', 'meadow'], temperament: 'skittish', movement: 'ground', anim: 'hop', active: 'day', flee: 'zigzag', wanderRange: 3 },
 };
@@ -204,6 +214,27 @@ function pickWanderTarget(
       (p) => Math.hypot(p.x - a.homeX, p.z - a.homeZ) <= 15,
     );
     const pool = near.length > 0 ? near : a.anchors;
+    if (def.subsurface) {
+      // Subsurface kinds (fish, eels) hop to the NEAREST pool
+      // point instead of a random one: short hops hug the
+      // water-point chain, so straight-line travel stays in
+      // the water instead of cutting across banks (v1
+      // containment — there is no water mask to test
+      // against). Points within 0.6 m of her are excluded so
+      // she actually moves; if that empties the pool (a lone
+      // point), she holds at the pool's first point.
+      let best: AnimalPoint | null = null;
+      let bestDist = Infinity;
+      for (const p of pool) {
+        const d = Math.hypot(p.x - a.x, p.z - a.z);
+        if (d > 0.6 && d < bestDist) {
+          best = p;
+          bestDist = d;
+        }
+      }
+      const p = best ?? pool[0];
+      return { x: p.x, z: p.z, y: WATER_Y };
+    }
     const p = pool[Math.floor(Math.random() * pool.length)];
     return { x: p.x, z: p.z, y: WATER_Y };
   }
