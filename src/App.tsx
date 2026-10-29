@@ -7823,6 +7823,77 @@ export default function App() {
   // kind in the pinned order (site → home → pile → fire
   // → tent → torch): a candidate replaces the best only
   // when STRICTLY nearer.
+  // MENUS RELEASE THE MOUSE (Adam, 2026-10-29, live
+  // play: opening Crafting while pointer-locked left
+  // the mouse trapped — Esc was doing the browser's
+  // unlock by hand): ANY screen that takes mouse input
+  // releases pointer lock when it opens. One effect
+  // over the open-state set: the three panels, Options,
+  // intro, the first-run dialog, the pile modal, the
+  // ritual/site panel, the world menus (home / torch /
+  // tent / fire selections — they take clicks as well
+  // as digits, so they are IN), the confirms
+  // (RemoveConfirm, trap-recipe, the four cloud
+  // confirms), and the paused veil (its resume is a
+  // click). Nothing re-locks on close — the standing
+  // "Click the world to capture the mouse" legend line
+  // is the re-entry, and the locked-click gate keeps
+  // that click from also harvesting. player.ts is
+  // untouched (it reads pointerLockElement per frame,
+  // so an external exit simply stops mouse-look while
+  // a screen is up — the point). Phone has no pointer
+  // lock; the pointerLockElement check makes this a
+  // no-op there. JUDGMENT CALL, stated: placement mode
+  // is NOT in the set — it is a mode, not a screen,
+  // and exiting the lock on arm would kill first-
+  // person placement aiming (the banner's buttons are
+  // the touch path; Enter confirms on desktop).
+  useEffect(() => {
+    const anyScreenOpen =
+      inventoryOpen ||
+      craftingOpen ||
+      charmsOpen ||
+      optionsOpen ||
+      introOpen ||
+      firstRunDialogOpen ||
+      homeMenuOpen ||
+      selectedPileId !== null ||
+      selectedTorchId !== null ||
+      selectedTentId !== null ||
+      selectedFireId !== null ||
+      selectedSiteId !== null ||
+      pendingRemoveTarget !== null ||
+      pendingTrapRecipe !== null ||
+      cloudPendingBring !== null ||
+      cloudPendingRemove !== null ||
+      cloudPendingRestore !== null ||
+      cloudPendingNewGame !== null ||
+      paused;
+    if (anyScreenOpen && document.pointerLockElement !== null) {
+      document.exitPointerLock();
+    }
+  }, [
+    inventoryOpen,
+    craftingOpen,
+    charmsOpen,
+    optionsOpen,
+    introOpen,
+    firstRunDialogOpen,
+    homeMenuOpen,
+    selectedPileId,
+    selectedTorchId,
+    selectedTentId,
+    selectedFireId,
+    selectedSiteId,
+    pendingRemoveTarget,
+    pendingTrapRecipe,
+    cloudPendingBring,
+    cloudPendingRemove,
+    cloudPendingRestore,
+    cloudPendingNewGame,
+    paused,
+  ]);
+
   // PC KEYS (Adam, 2026-10-28 — every frequent action without
   // Esc): E is USE (the shared dispatch above, same as the
   // touch USE button), Shift+E arms Remove on the nearest
