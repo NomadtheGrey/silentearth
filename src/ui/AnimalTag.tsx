@@ -29,7 +29,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { WorldAnchor } from './WorldAnchor';
-import { UI_THEMES } from './themes';
+import { UI_THEMES, type UiThemeName } from './themes';
 
 export interface AnimalTagProps {
   /** Live feed of loaded-chunk animals (Background's getter). */
@@ -38,6 +38,8 @@ export interface AnimalTagProps {
   getPlayerPos: () => { x: number; z: number };
   /** Screen projection (App's projectAnchor, 'scatter' kind). */
   project: (x: number, z: number) => { x: number; y: number } | null;
+  /** Look for the tag's overlay. Default "mire". */
+  theme?: UiThemeName;
 }
 
 /** Poll cadence (approved, draft for pin pass). */
@@ -45,7 +47,7 @@ const TAG_POLL_MS = 250;
 /** Range cap in meters (approved, draft for pin pass). */
 const TAG_RANGE_M = 32;
 
-export function AnimalTag({ getAnimals, getPlayerPos, project }: AnimalTagProps) {
+export function AnimalTag({ getAnimals, getPlayerPos, project, theme = 'mire' }: AnimalTagProps) {
   const [tag, setTag] = useState<{ name: string; x: number; y: number } | null>(
     null,
   );
@@ -108,7 +110,7 @@ export function AnimalTag({ getAnimals, getPlayerPos, project }: AnimalTagProps)
       <p
         className={
           'whitespace-nowrap rounded px-2 py-1 text-xs text-stone-100 ' +
-          UI_THEMES['mire'].overlay
+          UI_THEMES[theme].overlay
         }
       >
         {tag.name}

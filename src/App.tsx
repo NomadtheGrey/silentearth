@@ -1623,7 +1623,9 @@ import {
   OptionsModal,
   fontClassFor,
   loadFontChoice,
+  loadLookChoice,
   saveFontChoice,
+  saveLookChoice,
   type FontId,
 } from './ui/OptionsModal';
 import { IntroModal } from './ui/IntroModal';
@@ -1634,7 +1636,7 @@ import { ProximityHarvestButtons } from './ui/ProximityHarvestButtons';
 import { InteractionProgress } from './ui/InteractionProgress';
 import { ObjectFeedback } from './ui/ObjectFeedback';
 import { WorldAnchor } from './ui/WorldAnchor';
-import { KEY_BADGE_CLASS, UI_THEMES } from './ui/themes';
+import { KEY_BADGE_CLASS, LOOK_THEMES, UI_THEMES } from './ui/themes';
 import { CameraTransition } from './ui/CameraTransition';
 import { CAMERA_TRANSITION } from './ui/cameraPresentation';
 import { projectWorldToScreen } from './ui/worldProjection';
@@ -7171,6 +7173,15 @@ export default function App() {
   // save file. No stored choice reads as IM Fell English.
   const [font, setFont] = useState<FontId>(loadFontChoice);
 
+  // Options look (beautification phase 2, Adam 2026-10-29:
+  // switchable looks in Settings): shell-owned UI setting
+  // in the SAME settings key as the font. The look names
+  // the two theme slots (world / dialog) the shell passes
+  // down to the themed surfaces. No stored choice reads
+  // as the current look (mire + hearth).
+  const [look, setLook] = useState(loadLookChoice);
+  const lookThemes = LOOK_THEMES[look];
+
   // ESC TOGGLE (Adam, 2026-10-27 — Esc opens Options; extended
   // 2026-10-28 — Esc closes the topmost layer first): with
   // NO modal open, Esc closes the topmost open layer, one
@@ -7274,6 +7285,10 @@ export default function App() {
   const handleFontChange = (next: FontId): void => {
     setFont(next);
     saveFontChoice(next);
+  };
+  const handleLookChange = (next: typeof look): void => {
+    setLook(next);
+    saveLookChoice(next);
   };
 
   // Visible thin scrollbars on the touch scroll containers
@@ -8369,7 +8384,7 @@ export default function App() {
             y={selectedFireAnchor.y}
             interactive
           >
-            <ContextMenu
+            <ContextMenu theme={lookThemes.world}
               objectName={FIRE_NAME[selectedFire.type]}
               header={lightingBarFor(selectedFire)}
               actions={fireMenuActions(selectedFire)}
@@ -8385,7 +8400,7 @@ export default function App() {
             y={selectedTorchAnchor.y}
             interactive
           >
-            <ContextMenu
+            <ContextMenu theme={lookThemes.world}
               objectName="Lit Torch"
               actions={torchMenuActions()}
               showKeyHints={!isTouch}
@@ -8400,7 +8415,7 @@ export default function App() {
             y={selectedTentAnchor.y}
             interactive
           >
-            <ContextMenu
+            <ContextMenu theme={lookThemes.world}
               objectName="Tent"
               actions={tentMenuActions()}
               showKeyHints={!isTouch}
@@ -8439,7 +8454,7 @@ export default function App() {
         ) : null}
         {homeMenuOpen && homeHouse !== undefined && homeChipAnchor ? (
           <WorldAnchor x={homeChipAnchor.x} y={homeChipAnchor.y} interactive>
-            <ContextMenu
+            <ContextMenu theme={lookThemes.world}
               objectName={shelterHouseName ?? 'Home'}
               header={
                 <>
@@ -8470,7 +8485,7 @@ export default function App() {
             y={selectedSiteAnchor.y}
             interactive
           >
-            <RitualPanel
+            <RitualPanel theme={lookThemes.world}
               siteLabel={selectedSiteLabel}
               staged={
                 selectedSiteStaged !== null &&
@@ -8539,7 +8554,7 @@ export default function App() {
         {progressItems.map((item) => (
           <Fragment key={item.targetId}>
             <WorldAnchor x={item.x} y={item.y}>
-              <InteractionProgress
+              <InteractionProgress theme={lookThemes.dialog}
                 fraction={item.fraction}
                 label={item.label}
               />
@@ -8556,7 +8571,7 @@ export default function App() {
         or above the station's projected center when
         stationAnchor is set; see ProximityHarvestButtons. */}
       <div className="pointer-events-none absolute inset-0 z-40">
-        <ProximityHarvestButtons
+        <ProximityHarvestButtons theme={lookThemes.world}
           targets={harvestTargets}
           harvestedIds={harvestedIds}
           onHarvest={handleHarvest}
@@ -8642,7 +8657,7 @@ export default function App() {
         on touch (the slot is not gated by collapse).
         It hides only while a panel or the modal is open
         (rule unchanged by the move). */}
-      <HudShell
+      <HudShell theme={lookThemes.world}
         hideNeeds={isTouch && hudCollapsed}
         topReadout={
           !inventoryOpen &&
@@ -8650,7 +8665,7 @@ export default function App() {
           !charmsOpen &&
           !optionsOpen &&
           !introOpen ? (
-            <LocationChip
+            <LocationChip theme={lookThemes.world}
               x={position.x}
               z={position.z}
               biomeName={dominantBiome.name}
@@ -8822,7 +8837,7 @@ export default function App() {
                   workstation addition reads 'Workbench'
                   (the panel's own 'workstation' kind),
                   a plain stump reads 'Tree stump'. */}
-              <StationPanel
+              <StationPanel theme={lookThemes.world}
                 stationKind={
                   nearestStump !== null &&
                   stumpState.isWorkbench(nearestStump.x, nearestStump.z)
@@ -8968,7 +8983,7 @@ export default function App() {
         }
       >
         {selectedPile ? (
-          <PileInventoryModal
+          <PileInventoryModal theme={lookThemes.world}
             title={
               selectedPile.stacks.length === 1
                 ? `${displayNameFor(selectedPile.stacks[0].item)} × ${selectedPile.stacks[0].quantity}`
@@ -8984,7 +8999,7 @@ export default function App() {
           />
         ) : null}
         {inventoryOpen ? (
-          <InventoryPanel
+          <InventoryPanel theme={lookThemes.world}
             items={inventoryItems.filter(
               (item) => !wornGear.ids.has(normalizeItemId(item.id as ItemId)),
             )}
@@ -9016,7 +9031,7 @@ export default function App() {
           />
         ) : null}
         {craftingOpen ? (
-          <CraftingMenu
+          <CraftingMenu theme={lookThemes.dialog}
             recipes={orderedCraftingRecipes}
             sections={craftingSections}
             stationNote={stationNote}
@@ -9028,7 +9043,7 @@ export default function App() {
           />
         ) : null}
         {charmsOpen ? (
-          <CharmsPanel
+          <CharmsPanel theme={lookThemes.world}
             charms={charmEntries}
             selectedKind={selectedCharmKind}
             onSelectKind={setSelectedCharmKind}
@@ -9121,7 +9136,7 @@ export default function App() {
 
       {/* Options modal (tabbed; Settings first: font + perspective). */}
       {optionsOpen ? (
-        <OptionsModal
+        <OptionsModal theme={lookThemes.world} look={look} onLookChange={handleLookChange}
           font={font}
           onFontChange={handleFontChange}
           perspective={cameraMode}
@@ -9143,7 +9158,7 @@ export default function App() {
         Cancel aborts with nothing consumed. Standalone
         dialog (not Popup) so its Enter/Esc is the single
         path — the App Esc listener yields while it is open. */}
-      <RemoveConfirm
+      <RemoveConfirm theme={lookThemes.world}
         open={pendingRemoveTarget !== null}
         targetName={pendingRemoveTarget?.name ?? ''}
         onConfirm={() => {
@@ -9160,7 +9175,7 @@ export default function App() {
         Renders before the intro modal; Begin opens the
         intro (firstRunDone gate + explicit setIntroOpen). */}
       {firstRunDialogOpen ? (
-        <FirstRunDialog
+        <FirstRunDialog theme={lookThemes.world}
           onBegin={handleFirstRunBegin}
           comfortable={isTouch}
         />
@@ -9171,7 +9186,7 @@ export default function App() {
         (firstRunDone gate). Same z-50 shell as OptionsModal; the two
         never stack (opening the intro closes Options). */}
       {introOpen ? (
-        <IntroModal
+        <IntroModal theme={lookThemes.world}
           onClose={() => setIntroOpen(false)}
           comfortable={isTouch}
         />
@@ -9183,7 +9198,7 @@ export default function App() {
         will be replaced. Confirm parks the current local
         and installs the cloud save (write + reload);
         Cancel (or Esc) changes nothing. */}
-      <Popup
+      <Popup theme={lookThemes.dialog}
         open={cloudPendingBring !== null}
         title="Bring this world here?"
         onClose={() => setCloudPendingBring(null)}
@@ -9239,7 +9254,7 @@ export default function App() {
         Removing the cloud copy does NOT turn off
         mirroring — the next save copies this world to
         the cloud again (disclosure, required). */}
-      <Popup
+      <Popup theme={lookThemes.dialog}
         open={cloudPendingRemove !== null}
         title="Remove from cloud?"
         onClose={() => setCloudPendingRemove(null)}
@@ -9286,7 +9301,7 @@ export default function App() {
 
       {/* Parked restore confirm: the swap — the current
         world parks in turn, so restore never deletes. */}
-      <Popup
+      <Popup theme={lookThemes.dialog}
         open={cloudPendingRestore !== null}
         title="Restore parked save?"
         onClose={() => setCloudPendingRestore(null)}
@@ -9334,7 +9349,7 @@ export default function App() {
         current save, clears the save key, and reloads
         into the first-run dialog; Cancel (or Esc)
         changes nothing. */}
-      <Popup
+      <Popup theme={lookThemes.dialog}
         open={cloudPendingNewGame !== null}
         title="Start a new game?"
         onClose={() => setCloudPendingNewGame(null)}
@@ -9386,7 +9401,7 @@ export default function App() {
         Popup shell is the staged dialog (z-50 modal); the
         buttons match the placement banner's touch sizing. */}
       {pendingTrapRecipe ? (
-        <Popup
+        <Popup theme={lookThemes.dialog}
           open={true}
           title="PLACE TRAP HERE?"
           onClose={handleTrapConfirmNo}
@@ -9461,7 +9476,7 @@ export default function App() {
       !introOpen &&
       !pendingTrapRecipe &&
       !paused ? (
-        <FrogHint
+        <FrogHint theme={lookThemes.world}
           dx={frogHint.dx}
           dz={frogHint.dz}
           distanceMeters={frogHint.distance}
@@ -9485,7 +9500,7 @@ export default function App() {
       !pendingTrapRecipe &&
       pendingRemoveTarget === null &&
       !paused ? (
-        <CrowArrows
+        <CrowArrows theme={lookThemes.world}
           arrows={crowArrows}
           lifted={frogHint !== null || scryVisible}
         />
@@ -9514,7 +9529,7 @@ export default function App() {
           <p
             className={
               'whitespace-nowrap rounded px-2 py-1 text-xs text-stone-100 ' +
-              UI_THEMES['mire'].overlay
+              UI_THEMES[lookThemes.world].overlay
             }
           >
             {nearestScatter.name}
@@ -9539,7 +9554,7 @@ export default function App() {
       !pendingTrapRecipe &&
       pendingRemoveTarget === null &&
       !paused ? (
-        <AnimalTag
+        <AnimalTag theme={lookThemes.world}
           getAnimals={() => rendererRef.current?.getVisibleAnimals() ?? []}
           getPlayerPos={() => {
             const player = playerRef.current;
