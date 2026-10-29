@@ -1,9 +1,6 @@
 node_modules/
 build/
 dist/
-# PWA icons are build-generated from assets-src/*.png.b64
-# by scripts/build-icons.mjs (prebuild) — never committed.
-public/icons/*.png
 coverage/
 .DS_Store
 *.log
