@@ -45,10 +45,7 @@ const ALL_RECORDS: BuildRecord[] = [
   {
     merge: 'Merge #27',
     pr: 55,
-    // sha pending: the merge sha is unknowable before the
-    // merge; the pre-authorized correction merge replaces
-    // this with the real one.
-    sha: 'pending',
+    sha: '5f6bd16',
     date: '2026-10-29',
     what: 'Accidental-close guard: leaving, refreshing, or pressing back mid-game now asks first, with a leave-confirm dialog, so a stray swipe can\u2019t end a run. Inventory rows key their columns to the panel\u2019s own width instead of the screen\u2019s, and each row\u2019s meta rides its title row \u2014 name left, figures right, descriptor unobstructed beneath.',
     why: 'Adam kept losing the game to a stray back-swipe, and the inventory columns were answering the wrong width. A tiny batch, merged on his word as soon as everybody was done.',
