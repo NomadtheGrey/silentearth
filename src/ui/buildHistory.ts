@@ -43,6 +43,15 @@ export interface BuildRecord {
 
 const ALL_RECORDS: BuildRecord[] = [
   {
+    merge: 'Merge #22',
+    pr: 45,
+    // Second merge replaces this with the real merge sha.
+    sha: 'pending',
+    date: '2026-10-29',
+    what: 'New Game button + handler (fully fresh, reload route): a New Game section in the Cloud Saves panel parks the current save, clears only the save key, and reloads into the existing first-run dialog; Begin works verbatim and the intro re-opens. Park failure cancels cleanly, changing nothing.',
+    why: 'Starting over should be one confirmed press, not file surgery: the old world is parked (bring it back with Restore), and the new world begins exactly like the first one did.',
+  },
+  {
     merge: 'Merge #21',
     pr: 43,
     sha: '47107b4',
