@@ -27,9 +27,16 @@
 export interface ScryButtonProps {
   /** Called when the player presses the button. */
   onPress?: () => void;
+  /**
+   * Show the PC key badge ("F" — the button-keys map,
+   * Adam 2026-10-29). Caller passes !isTouch (the
+   * PausedIndicator showKeyHint precedent): hint only,
+   * handler and sizing untouched. Default false.
+   */
+  showKeyHint?: boolean;
 }
 
-export function ScryButton({ onPress }: ScryButtonProps) {
+export function ScryButton({ onPress, showKeyHint = false }: ScryButtonProps) {
   return (
     <button
       type="button"
@@ -38,6 +45,14 @@ export function ScryButton({ onPress }: ScryButtonProps) {
       className="pointer-events-auto min-h-[44px] rounded-full bg-black/60 px-4 py-2 text-sm font-medium text-[#f0ead6]"
     >
       Scry
+      {showKeyHint ? (
+        <span
+          aria-hidden="true"
+          className="ml-2 rounded border border-stone-500/60 bg-black/30 px-1.5 font-mono text-xs"
+        >
+          F
+        </span>
+      ) : null}
     </button>
   );
 }

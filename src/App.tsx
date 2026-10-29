@@ -6973,6 +6973,40 @@ export default function App() {
       ? null
       : (ritualRecipeFor(selectedSiteStaged.bone) ?? null);
 
+  // Ritual panel option lists, hoisted from the panel's
+  // JSX so the PC-key digit dispatch (below) reads the
+  // SAME lists the panel renders — one source, no
+  // divergence. Computed only while a site is selected
+  // (the panel's own condition); [] otherwise.
+  const selectedSiteKindOptions =
+    selectedSiteId === null
+      ? []
+      : RITUAL_RECIPES.filter(
+          (recipe) => charmStateRef.current.tierOf(recipe.boneKind) === 0,
+        ).map((recipe) => ({
+          kind: recipe.boneKind,
+          display: boneDisplayFor(recipe.boneKind),
+          skyLabel:
+            recipe.sky === 'none' ? 'Any sky' : skyLabelFor(recipe.sky),
+        }));
+  const selectedSiteFoodOptions =
+    selectedSiteId === null
+      ? []
+      : (() => {
+          const byItem = new Map<string, number>();
+          for (const stack of inventory.stacksSnapshot()) {
+            const id = normalizeItemId(stack.item);
+            if ((FOOD_ITEMS as readonly string[]).includes(id)) {
+              byItem.set(id, (byItem.get(id) ?? 0) + stack.quantity);
+            }
+          }
+          return [...byItem.entries()].map(([id, count]) => ({
+            item: id,
+            display: displayNameFor(id),
+            count,
+          }));
+        })();
+
   // The pile whose menu is open, with its anchor.
   // Live menu pile: the menu renders from piles state, not a
   // tap-time snapshot (see the state comment above).
@@ -7410,10 +7444,186 @@ export default function App() {
     });
   };
 
+  // BUTTON KEYS (Adam, 2026-10-29, map pinned as proposed):
+  // the world-layer buttons a pointer-locked player could
+  // not reach without Esc + mouse. T fires the trap row,
+  // H the hive row, F the scry button — each the SAME
+  // handler its button calls, gated on the SAME derived
+  // row/visibility state the button renders from, so a
+  // key can never do what its button doesn't show. Q
+  // opens the nearest world-chip menu (below); digits
+  // 1-9 fire an open world menu's actions in render
+  // order; Enter confirms an armed placement. Dispatch
+  // precedence among open menus mirrors the Esc chain's
+  // topmost order (home → pile → torch → tent → fire →
+  // site). Panel-internal key navigation is OUT (the
+  // mouse layer, Adam's call if he wants it); phone
+  // unchanged.
+  const flattenMenuTargets = (
+    actions: ContextAction[],
+  ): { id: string; disabled: boolean }[] =>
+    actions.flatMap((action) =>
+      action.arrows
+        ? action.arrows.map((arrow) => ({
+            id: arrow.id,
+            disabled: arrow.disabled === true,
+          }))
+        : [{ id: action.id, disabled: action.disabled === true }],
+    );
+
+  const dispatchWorldMenuDigit = (digit: number): void => {
+    if (homeMenuOpen) {
+      const target = flattenMenuTargets(homeMenuActions())[digit - 1];
+      if (target && !target.disabled) handleHomeMenuAction(target.id);
+      return;
+    }
+    if (selectedPile !== null) {
+      const target = flattenMenuTargets(pileMenuActions(selectedPile))[
+        digit - 1
+      ];
+      if (target && !target.disabled) {
+        handlePileAction(selectedPile, target.id);
+      }
+      return;
+    }
+    if (selectedTorch !== undefined) {
+      const target = flattenMenuTargets(torchMenuActions())[digit - 1];
+      if (target && !target.disabled) {
+        handleTorchAction(selectedTorch.id, target.id);
+      }
+      return;
+    }
+    if (selectedTent !== undefined) {
+      const target = flattenMenuTargets(tentMenuActions())[digit - 1];
+      if (target && !target.disabled) {
+        handleTentAction(selectedTent.id, target.id);
+      }
+      return;
+    }
+    if (selectedFire !== undefined) {
+      const target = flattenMenuTargets(fireMenuActions(selectedFire))[
+        digit - 1
+      ];
+      if (target && !target.disabled) {
+        handleFireAction(selectedFire.id, target.id);
+      }
+      return;
+    }
+    if (selectedSiteId !== null) {
+      // The ritual panel's buttons are panel-composed,
+      // not ContextActions: unstaged = the kind list;
+      // staged = offering foods, then Speak — the
+      // panel's own render order, from the hoisted
+      // lists the panel renders.
+      const siteId = selectedSiteId;
+      if (selectedSiteStaged === null) {
+        const option = selectedSiteKindOptions[digit - 1];
+        if (option) handleStageBone(siteId, option.kind);
+        return;
+      }
+      if (
+        selectedSiteStaging !== null &&
+        !selectedSiteStaging.completed &&
+        selectedSiteRecipe !== null
+      ) {
+        const bone = selectedSiteStaged.bone;
+        const steps: (() => void)[] = [];
+        if (!selectedSiteStaging.offeringGiven) {
+          for (const food of selectedSiteFoodOptions) {
+            steps.push(() => handleGiveOffering(siteId, bone, food.item));
+          }
+        }
+        if (
+          !selectedSiteStaging.nameSpoken &&
+          nameSightRef.current.looksAt(bone) >=
+            selectedSiteRecipe.spokenName.minLooks
+        ) {
+          steps.push(() => handleSpeakName(siteId, bone));
+        }
+        const step = steps[digit - 1];
+        if (step) step();
+      }
+      return;
+    }
+  };
+
+  // Q: open the nearest chip menu/panel in reach. Every
+  // candidate is range-gated like its row (HARVEST_RANGE)
+  // except home — shelterHouseId is itself the proximity
+  // read (shelter radius), so home competes on true
+  // distance with no second gate. Ties keep the earlier
+  // kind in the pinned order (site → home → pile → fire
+  // → tent → torch): a candidate replaces the best only
+  // when STRICTLY nearer.
+  const openNearestChipMenu = (): void => {
+    const player = playerRef.current;
+    if (!player) return;
+    let best: { distance: number; open: () => void } | null = null;
+    const consider = (
+      distance: number,
+      open: () => void,
+      range: number = HARVEST_RANGE,
+    ): void => {
+      if (
+        distance <= range &&
+        (best === null || distance < best.distance)
+      ) {
+        best = { distance, open };
+      }
+    };
+    for (const pos of stumpPositions(genRef.current, player.x, player.z)) {
+      consider(Math.hypot(pos.x - player.x, pos.z - player.z), () =>
+        setSelectedSiteId(stumpSiteId(pos.x, pos.z)),
+      );
+    }
+    for (const altar of placedAltars) {
+      consider(Math.hypot(altar.x - player.x, altar.z - player.z), () =>
+        setSelectedSiteId(altar.id),
+      );
+    }
+    if (homeHouse !== undefined) {
+      consider(
+        Math.hypot(homeHouse.x - player.x, homeHouse.z - player.z),
+        () => setHomeMenuOpen(true),
+        Number.POSITIVE_INFINITY,
+      );
+    }
+    for (const pile of piles) {
+      consider(pile.distance, () => {
+        selectedPileIdRef.current = pile.id;
+        setSelectedPileId(pile.id);
+      });
+    }
+    for (const fire of placedFires) {
+      consider(Math.hypot(fire.x - player.x, fire.z - player.z), () =>
+        setSelectedFireId(fire.id),
+      );
+    }
+    for (const tent of placedTents) {
+      consider(Math.hypot(tent.x - player.x, tent.z - player.z), () =>
+        setSelectedTentId(tent.id),
+      );
+    }
+    for (const torch of placedTorches) {
+      consider(Math.hypot(torch.x - player.x, torch.z - player.z), () =>
+        setSelectedTorchId(torch.id),
+      );
+    }
+    const winner = best;
+    if (winner !== null) winner.open();
+  };
+
   // PC KEYS (Adam, 2026-10-28 — every frequent action without
   // Esc): E harvests (the shared USE path, same as the touch
   // USE button), Shift+E arms Remove (confirm dialog), I/K/L
   // toggle Inventory/Crafting/Charms, P toggles pause.
+  // BUTTON KEYS (Adam, 2026-10-29) join here: T/H/F fire
+  // the trap row / hive row / scry button, Q opens the
+  // nearest chip menu, digits fire an open world menu's
+  // actions, Enter confirms an armed placement (the
+  // helpers + dispatch table sit directly above). Letter
+  // keys fire with or without Shift (only E reads Shift,
+  // for Remove).
   // Guards: typing (text input/textarea/select focus) swallows
   // everything; paused allows P only (resume); any modal open
   // (Options, intro, trap confirm, remove confirm, first-run
@@ -7447,6 +7657,31 @@ export default function App() {
         return;
       }
       const key = e.key.toLowerCase();
+      // Placement armed: Enter confirms, every other
+      // action key waits (Esc cancels, in the Esc
+      // listener above).
+      if (placement !== null) {
+        if (key === 'enter') handlePlaceConfirm();
+        return;
+      }
+      // A world menu/panel is open: digits fire its
+      // actions in render order, every other key waits
+      // (Esc closes, in the Esc listener above). Above
+      // the panel toggles, mirroring the Esc chain —
+      // menus close before panels.
+      if (
+        homeMenuOpen ||
+        selectedPileId !== null ||
+        selectedTorchId !== null ||
+        selectedTentId !== null ||
+        selectedFireId !== null ||
+        selectedSiteId !== null
+      ) {
+        if (/^[1-9]$/.test(key)) {
+          dispatchWorldMenuDigit(Number(key));
+        }
+        return;
+      }
       if (inventoryOpen || craftingOpen || charmsOpen) {
         if (key === 'i' && inventoryOpen) setInventoryOpen(false);
         else if (key === 'k' && craftingOpen) setCraftingOpen(false);
@@ -7467,6 +7702,14 @@ export default function App() {
       } else if (key === 'l') {
         if (charmsOpen) setCharmsOpen(false);
         else openCharmsPanel();
+      } else if (key === 't') {
+        if (trapRowTrap) handleCollectTrap(trapRowTrap.id);
+      } else if (key === 'h') {
+        if (hiveRowHive) handleHarvestHive(hiveRowHive.x, hiveRowHive.z);
+      } else if (key === 'f') {
+        if (scryVisible) handleScry();
+      } else if (key === 'q') {
+        openNearestChipMenu();
       } else if (key === 'p') {
         pauseState.setPaused(!pausedRef.current);
       }
@@ -7484,6 +7727,22 @@ export default function App() {
     handleUseInteract,
     openCharmsPanel,
     firstRunDone,
+    placement,
+    handlePlaceConfirm,
+    homeMenuOpen,
+    selectedPileId,
+    selectedTorchId,
+    selectedTentId,
+    selectedFireId,
+    selectedSiteId,
+    dispatchWorldMenuDigit,
+    openNearestChipMenu,
+    trapRowTrap,
+    hiveRowHive,
+    scryVisible,
+    handleCollectTrap,
+    handleHarvestHive,
+    handleScry,
   ]);
   // PC-KEYS CLICK (Adam, 2026-10-28): click-to-harvest while
   // pointer-locked — the same shared USE path as E. Gated on
@@ -7898,6 +8157,7 @@ export default function App() {
               objectName={FIRE_NAME[selectedFire.type]}
               header={lightingBarFor(selectedFire)}
               actions={fireMenuActions(selectedFire)}
+              showKeyHints={!isTouch}
               onSelect={(id) => handleFireAction(selectedFire.id, id)}
               onClose={() => setSelectedFireId(null)}
             />
@@ -7912,6 +8172,7 @@ export default function App() {
             <ContextMenu
               objectName="Lit Torch"
               actions={torchMenuActions()}
+              showKeyHints={!isTouch}
               onSelect={(id) => handleTorchAction(selectedTorch.id, id)}
               onClose={() => setSelectedTorchId(null)}
             />
@@ -7926,6 +8187,7 @@ export default function App() {
             <ContextMenu
               objectName="Tent"
               actions={tentMenuActions()}
+              showKeyHints={!isTouch}
               onSelect={(id) => handleTentAction(selectedTent.id, id)}
               onClose={() => setSelectedTentId(null)}
             />
@@ -7978,6 +8240,7 @@ export default function App() {
                 </>
               }
               actions={homeMenuActions()}
+              showKeyHints={!isTouch}
               onSelect={(id) => handleHomeMenuAction(id)}
               onClose={() => setHomeMenuOpen(false)}
             />
@@ -8020,31 +8283,8 @@ export default function App() {
                     })()
                   : null
               }
-              kindOptions={RITUAL_RECIPES.filter(
-                (recipe) =>
-                  charmStateRef.current.tierOf(recipe.boneKind) === 0,
-              ).map((recipe) => ({
-                kind: recipe.boneKind,
-                display: boneDisplayFor(recipe.boneKind),
-                skyLabel:
-                  recipe.sky === 'none'
-                    ? 'Any sky'
-                    : skyLabelFor(recipe.sky),
-              }))}
-              foodOptions={(() => {
-                const byItem = new Map<string, number>();
-                for (const stack of inventory.stacksSnapshot()) {
-                  const id = normalizeItemId(stack.item);
-                  if ((FOOD_ITEMS as readonly string[]).includes(id)) {
-                    byItem.set(id, (byItem.get(id) ?? 0) + stack.quantity);
-                  }
-                }
-                return [...byItem.entries()].map(([id, count]) => ({
-                  item: id,
-                  display: displayNameFor(id),
-                  count,
-                }));
-              })()}
+              kindOptions={selectedSiteKindOptions}
+              foodOptions={selectedSiteFoodOptions}
               note={ritualNote}
               onStageBone={(kind) =>
                 selectedSiteId !== null &&
@@ -8109,6 +8349,7 @@ export default function App() {
           onCollectTrap={handleCollectTrap}
           hive={hiveRowHive}
           onHarvestHive={handleHarvestHive}
+          showKeyHints={!isTouch}
           lookNode={
             !LOOK_PARKED && lookTarget ? (
               <div className="flex flex-col items-center gap-1">
@@ -8381,6 +8622,14 @@ export default function App() {
                     }
                   >
                     Place here
+                    {!isTouch ? (
+                      <span
+                        aria-hidden="true"
+                        className="ml-1 rounded border border-stone-500/60 bg-black/30 px-1 font-mono text-[10px]"
+                      >
+                        Enter
+                      </span>
+                    ) : null}
                   </button>
                 )}
                 <button
@@ -8956,7 +9205,7 @@ export default function App() {
       !pendingTrapRecipe &&
       !paused ? (
         <div className="pointer-events-none absolute bottom-12 left-1/2 z-40 -translate-x-1/2">
-          <ScryButton onPress={handleScry} />
+          <ScryButton onPress={handleScry} showKeyHint={!isTouch} />
         </div>
       ) : null}
 
