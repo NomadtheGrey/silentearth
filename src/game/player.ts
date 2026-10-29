@@ -20,6 +20,14 @@
  * shell's hunger wiring; pressJump() is the touch entry, in the
  * pressUse idiom. Both are momentary — no saved state.
  *
+ * RESUME RE-LOCK (Adam, 2026-10-29): requestResumeLock() is the
+ * resume-gesture seam — App calls it as the pause clears, so the
+ * veil click that resumes also captures the mouse in first-person
+ * instead of leaving the cursor free for a second, otherwise-dead
+ * canvas click. Deliberately NOT routed through onCanvasClick:
+ * that path is pause-gated (the lock trap), and this call rides
+ * the explicit resume gesture as the gate opens.
+ *
  * Position changes flow out through the event bus (player:moved, throttled
  * to ~10 Hz); nothing reads this controller's fields directly except the
  * renderer, which positions the cameras and the witch mesh each frame.
@@ -290,6 +298,38 @@ export class PlayerController {
     if (this.yOffset > 0 || this.vy !== 0) return false;
     this.vy = JUMP_VELOCITY;
     return true;
+  }
+
+  /**
+   * Resume re-lock (Adam, 2026-10-29): App calls this on the
+   * resume gesture (the veil click), as the pause clears, so
+   * resuming in first-person captures the mouse in the same click
+   * that unpauses. Before this seam, the veil click unpaused but
+   * left the cursor free, and a second canvas click was needed to
+   * play. First-person only, and only when no lock is held; any
+   * other state no-ops. NOT routed through onCanvasClick: that
+   * path is pause-gated on purpose (the lock trap), and this call
+   * is the explicit resume gesture itself, fired as the gate
+   * opens. Refusal is swallowed silently — Chrome refuses re-lock
+   * for ~1.25 s after an Esc-caused unlock, surfacing as a
+   * rejected promise rather than a throw — and the fallback is
+   * the pre-seam behavior: the next canvas click captures.
+   * Alt-tab pauses carry no cooldown and are the common case.
+   */
+  requestResumeLock(): void {
+    if (this.mode !== 'first' || !this.canvas) return;
+    if (document.pointerLockElement === this.canvas) return;
+    try {
+      const pending = this.canvas.requestPointerLock() as unknown as
+        | Promise<void>
+        | undefined;
+      pending?.catch(() => {
+        // Refused (the post-Esc cooldown is the known case) —
+        // silent by design; see the doc comment above.
+      });
+    } catch {
+      // Synchronous refusal on older engines — same silent fallback.
+    }
   }
 
   constructor(spawn: { x: number; z: number }) {

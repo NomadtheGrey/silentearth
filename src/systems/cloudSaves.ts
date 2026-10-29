@@ -455,9 +455,24 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 /**
- * List cloud slots (GET /index). A 404 reads as an empty
- * list (no saves yet / unknown secret — same shape by
- * design, see header). Never throws.
+ * List cloud slots (GET /index). The box answers with its
+ * index DOCUMENT — { v: 1, saves: [ { slot, name, seed,
+ * updatedAt, size }, ... ] }, the EMPTY_INDEX shape when
+ * the player has none (Worker: silentearth-saves/src/
+ * index.js, readIndex + the PUT handler's entry) — so the
+ * slot names come from the entries' `slot` fields. Plain-
+ * string entries and a bare string array are also accepted
+ * (tolerance for simpler shapes); anything else is not
+ * understood. NOTE (2026-10-29, the seam bug Adam found
+ * live): the first version of this parser accepted only a
+ * bare array and an invented { slots } record — neither is
+ * a shape the box ever sends, so every real list call
+ * failed 'not understood' and Bring was unreachable. The
+ * { slots } branch was REMOVED, not kept: dead tolerance
+ * for invented shapes is what left the seam untested. The
+ * probe fixtures now transcribe the Worker's own response
+ * shapes. A 404 still reads as an empty list (unknown
+ * route shape, see header). Never throws.
  */
 export async function listCloudSaves(
   baseUrl: string = CLOUD_BASE_URL,
@@ -482,13 +497,16 @@ export async function listCloudSaves(
       value: res.json.filter((slot) => typeof slot === 'string'),
     };
   }
-  if (isRecord(res.json) && Array.isArray(res.json['slots'])) {
-    return {
-      ok: true,
-      value: (res.json['slots'] as unknown[]).filter(
-        (slot) => typeof slot === 'string',
-      ),
-    };
+  if (isRecord(res.json) && Array.isArray(res.json['saves'])) {
+    const slots: string[] = [];
+    for (const entry of res.json['saves'] as unknown[]) {
+      if (typeof entry === 'string') {
+        slots.push(entry);
+      } else if (isRecord(entry) && typeof entry['slot'] === 'string') {
+        slots.push(entry['slot'] as string);
+      }
+    }
+    return { ok: true, value: slots };
   }
   return { ok: false, reason: 'Cloud index was not understood.' };
 }
