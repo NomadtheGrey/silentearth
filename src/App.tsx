@@ -2625,9 +2625,39 @@ export default function App() {
           charmStateRef.current.isAwakened('snake-vertebra'),
           charmStateRef.current,
         ) *
-        groundhogRestRef.current.restedDrainFactor(),
+        groundhogRestRef.current.restedDrainFactor() *
+        // SPRINT FACTOR (UI half of Adam's sprint/jump
+        // order, 2026-10-29): sprinting joins the same
+        // product at DRAFT ×1.25 — the pinned base rate
+        // (1 pt / 30 s) is untouched and there is no
+        // second hunger value; the flag mirrors
+        // Background's 'player:sprint-changed' event
+        // (see the subscription below syncShrewEffect's
+        // neighbours — sprintingRef).
+        (sprintingRef.current ? 1.25 : 1),
     );
   };
+
+  // SPRINT STATE MIRROR (2026-10-29): Background's player
+  // emits 'player:sprint-changed' on transitions only;
+  // the ref feeds the drain product above, and the
+  // subscription re-syncs the rate the moment the state
+  // flips (the 1 s tick's own re-sync would catch it
+  // within a second regardless). The live getter
+  // (player.sprinting) stays Background's; this mirror
+  // exists so the shell never polls it.
+  const sprintingRef = useRef(false);
+  useEffect(() => {
+    const off = bus.on('player:sprint-changed', (p) => {
+      sprintingRef.current = p.sprinting;
+      syncShrewEffect();
+    });
+    return off;
+    // First-render closure by design (the established
+    // pattern — syncShrewEffect reads only refs and
+    // singletons, so the captured instance stays correct).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   // CHARM-BONUS SYNC (mouse/bear wiring): the two
   // session-only bonuses, shell-synced on list change
   // (boot + ritual completion, beside syncCharmHooks).
@@ -9278,6 +9308,8 @@ export default function App() {
       {isTouch ? null : (
       <div className="absolute bottom-0 right-0 z-30 p-4 text-right text-xs opacity-70 pointer-events-none">
         <p>WASD to walk</p>
+        <p>Double-tap W to sprint</p>
+        <p>Space to jump</p>
         <p>V / C to switch camera</p>
         <p>E — Interact</p>
         <p>R — 2nd Interact</p>
@@ -9297,6 +9329,9 @@ export default function App() {
           onLook={applyTouchLook}
           onInteract={handleUseInteract}
           interactLabel={useWinnerLabel}
+          onJump={() => {
+            playerRef.current?.pressJump();
+          }}
         />
       ) : null}
 
