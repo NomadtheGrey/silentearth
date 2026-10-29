@@ -1635,7 +1635,6 @@ import {
 } from './ui/OptionsModal';
 import { IntroModal } from './ui/IntroModal';
 import { RemoveConfirm } from './ui/RemoveConfirm';
-import { LeaveConfirm } from './ui/LeaveConfirm';
 import { InventoryPanel } from './ui/InventoryPanel';
 import { CraftingMenu } from './ui/CraftingMenu';
 import { ProximityHarvestButtons } from './ui/ProximityHarvestButtons';
@@ -2851,14 +2850,6 @@ export default function App() {
   >([]);
   const [selectedPileId, setSelectedPileId] = useState<string | null>(null);
   const [homeMenuOpen, setHomeMenuOpen] = useState(false);
-  // Leave confirm (back-button trap, 2026-10-29): shown
-  // when a back press arrives with nothing open. The
-  // armed ref is the one-shot Leave pass: set by the
-  // Leave button, read by the popstate handler, which
-  // then lets history proceed for real instead of
-  // re-arming the trap.
-  const [leaveConfirmOpen, setLeaveConfirmOpen] = useState(false);
-  const leaveArmedRef = useRef(false);
   const selectedPileIdRef = useRef<string | null>(null);
   const [placement, setPlacement] = useState<PlacementMode | null>(null);
   const [placementAnchor, setPlacementAnchor] = useState<{
@@ -7600,8 +7591,7 @@ export default function App() {
         optionsOpen ||
         introOpen ||
         pendingTrapRecipe ||
-        pendingRemoveTarget !== null ||
-        leaveConfirmOpen
+        pendingRemoveTarget !== null
       ) {
         return;
       }
@@ -7667,110 +7657,28 @@ export default function App() {
     craftingOpen,
     inventoryOpen,
     firstRunDone,
-    leaveConfirmOpen,
   ]);
 
-  // BACK-BUTTON TRAP + BEFOREUNLOAD GUARD (Adam,
-  // 2026-10-29 — "protect the player against accidental
-  // tab closing/refresh/back button on phone"). The data
-  // side already exists: the boot effect saves locally on
-  // pagehide and the cloud mirror flushes there too;
-  // nothing here touches those handlers, and no handler
-  // below blocks or delays them — a swipe-away close
-  // cannot be intercepted on any browser, and the trap
-  // never swallows a genuine pagehide.
-  //
-  // THE TRAP (the phone mechanism — mobile Chrome largely
-  // ignores beforeunload): boot pushes ONE history entry.
-  // A popstate then means "back pressed while in game":
-  // the handler re-pushes the entry first (the trap stays
-  // exactly one layer deep), then — if a layer is open —
-  // closes the topmost one (Esc-chain parity); only with
-  // nothing open does it show the leave confirm. Stay
-  // just dismisses (the entry is already re-pushed).
-  // Leave arms the one-shot pass and steps back for
-  // real: the next popstate sees the arm, does not
-  // re-push, and history proceeds — a second back exits
-  // normally, never a loop. Reloads (cloud Bring) stack
-  // further trap entries, so the armed pass burns
-  // through any entries still carrying the trap marker
-  // before disarming.
-  //
-  // Screens that own themselves stand aside, exactly as
-  // the Esc chain treats them: the first-run dialog, the
-  // intro, the trap-recipe chooser, and the remove
-  // confirm swallow the back (re-push only). Options is
-  // the one modal the back closes directly — it has no
-  // key listener of its own for this, and closing it is
-  // the phone player's expectation.
-  const closeTopmostForBack = (): boolean => {
-    if (
-      firstRunDialogOpen ||
-      introOpen ||
-      pendingTrapRecipe ||
-      pendingRemoveTarget !== null
-    ) {
-      return true;
-    }
-    if (optionsOpen) {
-      setOptionsOpen(false);
-      return true;
-    }
-    if (placement !== null) {
-      handlePlaceCancel();
-      return true;
-    }
-    if (homeMenuOpen) {
-      setHomeMenuOpen(false);
-      return true;
-    }
-    if (selectedPileId !== null) {
-      selectedPileIdRef.current = null;
-      setSelectedPileId(null);
-      return true;
-    }
-    if (selectedTorchId !== null) {
-      setSelectedTorchId(null);
-      return true;
-    }
-    if (selectedTentId !== null) {
-      setSelectedTentId(null);
-      return true;
-    }
-    if (selectedFireId !== null) {
-      setSelectedFireId(null);
-      return true;
-    }
-    if (selectedSiteId !== null) {
-      setSelectedSiteId(null);
-      setRitualNote(null);
-      return true;
-    }
-    if (charmsOpen) {
-      setCharmsOpen(false);
-      return true;
-    }
-    if (craftingOpen) {
-      setCraftingOpen(false);
-      return true;
-    }
-    if (inventoryOpen) {
-      setInventoryOpen(false);
-      return true;
-    }
-    return false;
-  };
-  const handleLeaveGame = (): void => {
-    leaveArmedRef.current = true;
-    setLeaveConfirmOpen(false);
-    window.history.back();
-  };
+  // BEFOREUNLOAD GUARD (Adam, 2026-10-29, revised the
+  // same day): prevent ACCIDENTAL tab closure (fat
+  // fingers) — never force a player to stay. An earlier
+  // shape trapped the back button behind a leave
+  // confirm; Adam struck it down ("We're not trying to
+  // force him to stay! If the user wants to be rid of
+  // the tab on purpose, great, let him!"), and the trap,
+  // the confirm, and the panel-close-on-back all came
+  // out the day they landed. What remains is the
+  // browser's own native guard: a beforeunload handler,
+  // so browsers that honor it (desktop Chrome) show
+  // THEIR one-tap prompt on close/refresh. Mobile
+  // Chrome largely ignores beforeunload — no prompt is
+  // claimed on phones; there the defense is the silent
+  // net (pagehide local save + mirror flush, untouched
+  // in the boot effect) plus one-tap return via the
+  // installed home-screen app (the PWA manifest in
+  // index.html / public/). The back button keeps its
+  // ordinary meaning throughout.
   useEffect(() => {
-    window.history.pushState({ silentEarthBackTrap: true }, '');
-    // BEFOREUNLOAD (desktop bonus only): browsers that
-    // honor it (desktop Chrome) show their native leave
-    // prompt for tab close / refresh. It is NOT the
-    // phone mechanism and no prompt is claimed on mobile.
     const onBeforeUnload = (e: BeforeUnloadEvent): void => {
       e.preventDefault();
       e.returnValue = '';
@@ -7778,49 +7686,7 @@ export default function App() {
     window.addEventListener('beforeunload', onBeforeUnload);
     return () => window.removeEventListener('beforeunload', onBeforeUnload);
   }, []);
-  useEffect(() => {
-    const onPopState = (): void => {
-      if (leaveArmedRef.current) {
-        const landed = window.history.state as {
-          silentEarthBackTrap?: boolean;
-        } | null;
-        if (landed?.silentEarthBackTrap === true) {
-          // An older reload's trap entry: keep stepping.
-          window.history.back();
-          return;
-        }
-        leaveArmedRef.current = false;
-        return;
-      }
-      window.history.pushState({ silentEarthBackTrap: true }, '');
-      if (leaveConfirmOpen) {
-        // A back press while the confirm is up = Stay.
-        setLeaveConfirmOpen(false);
-        return;
-      }
-      if (closeTopmostForBack()) return;
-      setLeaveConfirmOpen(true);
-    };
-    window.addEventListener('popstate', onPopState);
-    return () => window.removeEventListener('popstate', onPopState);
-  }, [
-    leaveConfirmOpen,
-    optionsOpen,
-    introOpen,
-    pendingTrapRecipe,
-    pendingRemoveTarget,
-    placement,
-    homeMenuOpen,
-    selectedPileId,
-    selectedTorchId,
-    selectedTentId,
-    selectedFireId,
-    selectedSiteId,
-    charmsOpen,
-    craftingOpen,
-    inventoryOpen,
-    firstRunDialogOpen,
-  ]);
+
   const handleFontChange = (next: FontId): void => {
     setFont(next);
     saveFontChoice(next);
@@ -9801,20 +9667,6 @@ export default function App() {
           if (target) handleRemove(target);
         }}
         onCancel={() => setPendingRemoveTarget(null)}
-      />
-
-      {/* Leave confirm (back-button trap, 2026-10-29):
-        shown by the popstate handler when a back press
-        arrives with nothing open. Stay dismisses (the
-        trap entry is already re-pushed); Leave arms the
-        one-shot pass and steps back for real. Same z-50
-        shell as RemoveConfirm; the App Esc listener
-        yields while it is open, and the dialog's own
-        listener maps Esc to Stay and Enter to Leave. */}
-      <LeaveConfirm theme={lookThemes.world}
-        open={leaveConfirmOpen}
-        onStay={() => setLeaveConfirmOpen(false)}
-        onLeave={handleLeaveGame}
       />
 
       {/* First-run dialog: no save at boot — name + seed,
