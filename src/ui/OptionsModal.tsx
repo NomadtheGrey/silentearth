@@ -45,6 +45,10 @@
 
 import { useEffect, useState } from 'react';
 import { QuestLog, type QuestDisplay } from './QuestLog';
+import {
+  CloudSavePanel,
+  type CloudSavePanelProps,
+} from './CloudSavePanel';
 import { UI_THEMES, type UiThemeName } from './themes';
 import { BUILD_HISTORY } from './buildHistory';
 import { CameraToggle } from './CameraToggle';
@@ -115,6 +119,7 @@ const OPTION_TABS = [
   { id: 'settings', label: 'Settings' },
   { id: 'history', label: 'Build history' },
   { id: 'quests', label: 'Quest Log' },
+  { id: 'cloud', label: 'Cloud Saves' },
 ] as const;
 
 type OptionsTabId = (typeof OPTION_TABS)[number]['id'];
@@ -144,6 +149,12 @@ export interface OptionsModalProps {
    * (mirrors the Perspective section's optional pattern).
    */
   quests?: QuestDisplay[];
+  /**
+   * Cloud saves panel props, owned by the caller (App
+   * wiring). Omitted = no Cloud Saves tab (mirrors the
+   * optional Perspective/quests pattern).
+   */
+  cloud?: CloudSavePanelProps;
   /** Called when the modal is closed. */
   onClose?: () => void;
   /** Bottom-sheet layout + thumb-sized controls on touch. Default false. */
@@ -159,6 +170,7 @@ export function OptionsModal({
   onPerspectiveChange,
   onShowIntro,
   quests,
+  cloud,
   onClose,
   comfortable = false,
   theme = 'mire',
@@ -211,7 +223,9 @@ export function OptionsModal({
         </div>
 
         <div role="tablist" aria-label="Options sections" className="flex gap-1 px-3">
-          {OPTION_TABS.map((tab) => {
+          {OPTION_TABS.filter(
+            (tab) => tab.id !== 'cloud' || cloud !== undefined,
+          ).map((tab) => {
             const active = tab.id === activeTab;
             return (
               <button
@@ -329,6 +343,13 @@ export function OptionsModal({
           ) : null}
           {activeTab === 'quests' ? (
             <QuestLog quests={quests ?? []} theme={theme} />
+          ) : null}
+          {activeTab === 'cloud' && cloud !== undefined ? (
+            <CloudSavePanel
+              {...cloud}
+              theme={theme}
+              comfortable={comfortable}
+            />
           ) : null}
         </div>
       </section>
