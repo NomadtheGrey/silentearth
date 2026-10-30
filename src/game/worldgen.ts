@@ -19,7 +19,7 @@ import { BIOMES, createFields, weightsAt, groundColorAt, marshWeight } from './b
 import type { Fields } from './biomes';
 import { mulberry32, deriveSeed, hashSeed } from './seed';
 import { treeKindAt } from './treeKind';
-import { caveMouthSite, chapelSite, distToSegment, drownedMillSite, farmhouseSite, generalStoreSite, groveSite, railSidingSite, schoolhouseSite, sunkenRoadSite, villageSite, type SiteFootprint } from './sites';
+import { barnSite, caveMouthSite, chapelSite, distToSegment, drownedMillSite, farmhouseSite, generalStoreSite, groveSite, railSidingSite, schoolhouseSite, sunkenRoadSite, villageSite, type SiteFootprint } from './sites';
 import { CHUNK_SIZE, BASE_SCATTER_PER_CHUNK, GROUND_SEGMENTS } from '../constants';
 import type { BiomeWeights, ChunkData, ScatterKind, ScatterObject } from '../types';
 
@@ -97,17 +97,22 @@ export const CLUSTER_CELL_M = 128;
 // Woodland weight (forest + tanglewood + mirewood) at the
 // centre at or above which a cell runs the full spectrum.
 export const CLUSTER_WOODLAND_MIN = 0.35;
-// Presence rolls per cell (DRAFT).
-export const CLUSTER_PRESENCE_FULL = 0.65;
+// Presence rolls per cell (DRAFT; full-spectrum presence
+// raised in the 2026-10-30 tuning pass — woodland cells
+// reliably grow their grove).
+export const CLUSTER_PRESENCE_FULL = 0.8;
 export const CLUSTER_PRESENCE_SMALL = 0.3;
-// Fraction of lone trees (outside every grove) culled (DRAFT):
-// the thinning is what makes groves read as groves.
-export const CLUSTER_THIN_CULL = 0.4;
-// Scenery tall trees cull gentler (DRAFT): they plant no
-// groves of their own, so the full cull would halve the
-// world's emergent silhouettes; a light cull keeps them
-// reading as open-country landmarks.
-export const CLUSTER_TALL_THIN_CULL = 0.2;
+// Fraction of lone trees (outside every grove) culled
+// (DRAFT; raised hard in the 2026-10-30 tuning pass, on
+// Adam's verdict that the clustered woods read as
+// scattered trees: the in-between goes genuinely sparse,
+// and a lone tree becomes a landmark again).
+export const CLUSTER_THIN_CULL = 0.85;
+// Scenery tall trees (DRAFT; the same tuning): they plant
+// no groves of their own, so their cull stays the gentler
+// of the two — but the field quiets for them too, or the
+// contrast the tuning exists for never arrives.
+export const CLUSTER_TALL_THIN_CULL = 0.6;
 
 export interface ClusterGrove {
   /** World position of the grove centre. */
@@ -161,17 +166,19 @@ export function groveForCell(
   const roll = tier === 'small' ? 0 : rand();
   if (tier === 'small' || roll < 0.55) {
     sizeClass = 'small';
-    radius = 6 + rand() * 4;
-    count = 5 + Math.floor(rand() * 5);
+    radius = 8 + rand() * 4;
+    count = 10 + Math.floor(rand() * 7);
   } else if (roll < 0.9) {
     sizeClass = 'large';
-    radius = 14 + rand() * 8;
-    count = 16 + Math.floor(rand() * 17);
+    radius = 18 + rand() * 10;
+    count = 34 + Math.floor(rand() * 27);
   } else {
     // Huge forests: Adam's "maybe" — present in v1, rare.
+    // Sizes shifted up a class in the 2026-10-30 tuning
+    // pass (bigger stands, counts to match).
     sizeClass = 'huge';
-    radius = 35 + rand() * 15;
-    count = 50 + Math.floor(rand() * 33);
+    radius = 40 + rand() * 20;
+    count = 90 + Math.floor(rand() * 51);
   }
   for (const site of sites) {
     if (site.ribbon) {
@@ -205,8 +212,10 @@ function applyClustering(
   const originX = cx * CHUNK_SIZE;
   const originZ = cz * CHUNK_SIZE;
   // This chunk's cell + its neighbours: a grove's farthest
-  // reach (jitter 32 + radius 50 = 82 m) never crosses more
-  // than one cell border, so the 3x3 is exhaustive.
+  // reach (jitter 32 + radius 60 = 92 m) never crosses more
+  // than one cell border (a centre two cells out sits at
+  // least 96 m past the shared edge), so the 3x3 is
+  // exhaustive.
   const cellX = Math.floor(originX / CLUSTER_CELL_M);
   const cellZ = Math.floor(originZ / CLUSTER_CELL_M);
   const groves: ClusterGrove[] = [];
@@ -228,12 +237,16 @@ function applyClustering(
     if (roll < cull) objects.splice(i, 1);
   }
   // Planting: each grove's candidate trees, centre-weighted
-  // (the pow curve crowds the middle and softens the edge).
+  // (the pow curve crowds the middle and softens the edge;
+  // the exponent steepened in the 2026-10-30 tuning pass —
+  // a HIGHER exponent concentrates the core: at 0.85 about
+  // 44% of a grove's trees stand within its half-radius,
+  // against 25% for a uniform disc).
   for (const g of groves) {
     const rand = mulberry32(deriveSeed(seed, `grove-trees:${g.cellX},${g.cellZ}`));
     for (let i = 0; i < g.count; i++) {
       const angle = rand() * Math.PI * 2;
-      const dist = g.radius * Math.pow(rand(), 0.58);
+      const dist = g.radius * Math.pow(rand(), 0.85);
       const scale = 0.7 + rand() * 0.7;
       const rotY = rand() * Math.PI * 2;
       const x = g.x + Math.cos(angle) * dist;
@@ -270,6 +283,7 @@ export function createWorldGen(seed: string): WorldGen {
         drownedMillSite(seed, findSpawn(), weightsAtPos),
         sunkenRoadSite(seed, findSpawn(), weightsAtPos).footprint,
         railSidingSite(seed, findSpawn(), weightsAtPos).footprint,
+        barnSite(seed, findSpawn(), weightsAtPos),
       ];
     }
     return sitesCache;

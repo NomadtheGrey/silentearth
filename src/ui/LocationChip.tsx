@@ -77,6 +77,10 @@ export function LocationChip({
   // Zone format (Adam's example [+10, 0]): '+' on
   // positives on BOTH axes, plain zero/negatives.
   const signed = (n: number) => (n > 0 ? `+${n}` : `${n}`);
+  // Coords print WHOLE (Adam, 2026-10-30): the printed
+  // and spoken position round to whole numbers, display
+  // and aria together so they agree. Display-only — the
+  // shell's position state keeps full precision.
   const zoneText =
     zoneX === undefined || zoneZ === undefined
       ? null
@@ -87,12 +91,12 @@ export function LocationChip({
         'pointer-events-none rounded px-2 py-1 text-xs text-stone-100 ' +
         t.overlay
       }
-      aria-label={`Location: ${biomeName}${biomePercent !== null ? ` ${biomePercent} percent` : ''}, position ${x.toFixed(1)}, ${z.toFixed(1)}${zoneText !== null ? `, zone ${zoneText}` : ''}${fps !== null ? `, ${fps} frames per second` : ''}${timeDateMonth ? `, ${timeDateMonth}` : ''}`}
+      aria-label={`Location: ${biomeName}${biomePercent !== null ? ` ${biomePercent} percent` : ''}, position ${Math.round(x)}, ${Math.round(z)}${zoneText !== null ? `, zone ${zoneText}` : ''}${fps !== null ? `, ${fps} frames per second` : ''}${timeDateMonth ? `, ${timeDateMonth}` : ''}`}
     >
       <p className="whitespace-nowrap">
         {biomeName}
-        {biomePercent !== null ? ` ${biomePercent}%` : ''} · ({x.toFixed(1)},{' '}
-        {z.toFixed(1)})
+        {biomePercent !== null ? ` ${biomePercent}%` : ''} · ({Math.round(x)},{' '}
+        {Math.round(z)})
         {zoneText !== null ? ` · ${zoneText}` : ''}
         {fps !== null ? ` · ${fps} FPS` : ''}
       </p>

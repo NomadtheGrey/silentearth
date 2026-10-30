@@ -178,7 +178,21 @@ export type ScatterKind =
   | 'sidingRail'
   | 'boxcarBody'
   | 'sidingPlatform'
-  | 'sidingBuffer';
+  | 'sidingBuffer'
+  // Site-pass kinds (the Barn, sites.ts — same rule):
+  // segment walls (sound and patched), fallen walls,
+  // roof bays (plain and gabled), the fallen roof, the
+  // big door, the loft, the lean-to, hay bales.
+  | 'barnWall'
+  | 'barnWallPatch'
+  | 'barnWallFallen'
+  | 'barnRoofBay'
+  | 'barnRoofEnd'
+  | 'barnRoofFallen'
+  | 'barnDoor'
+  | 'barnLoft'
+  | 'barnLeanTo'
+  | 'hayBale';
 
 /** One placed scatter object in a chunk. y is its base height above ground. */
 export interface ScatterObject {

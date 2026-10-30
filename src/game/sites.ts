@@ -1311,6 +1311,7 @@ export function farmhouseSite(
   };
   let biome = weightsAtPos(center.x, center.z).dominant;
   let distance = FARM_MAX_DIST_M;
+  let accepted = false;
   let fallback: { x: number; z: number; biome: BiomeId; distance: number } | null = null;
   for (let d = FARM_MIN_DIST_M; d <= FARM_MAX_DIST_M; d += GROVE_SCAN_STEP_M) {
     const x = spawn.x + dirX * d;
@@ -1322,12 +1323,30 @@ export function farmhouseSite(
       center = { x, z };
       biome = w.dominant;
       distance = d;
+      accepted = true;
       break;
     }
-    if (d === FARM_MAX_DIST_M && fallback) {
-      center = { x: fallback.x, z: fallback.z };
-      biome = fallback.biome;
-      distance = fallback.distance;
+  }
+  // Resolve AFTER the loop (the barn's shape): the
+  // in-loop seat never fired when the band's last point
+  // was itself spacing-illegal — the continue skipped
+  // it and the initialized max point stood, illegally.
+  if (!accepted && fallback) {
+    center = { x: fallback.x, z: fallback.z };
+    biome = fallback.biome;
+    distance = fallback.distance;
+  }
+  if (!accepted && !fallback) {
+    // Starved bearing: extend past the band for the
+    // first spacing-legal point (the barn's guard).
+    for (let d = FARM_MAX_DIST_M + GROVE_SCAN_STEP_M; d <= 1200; d += GROVE_SCAN_STEP_M) {
+      const x = spawn.x + dirX * d;
+      const z = spawn.z + dirZ * d;
+      if (!spacingLegal(x, z)) continue;
+      center = { x, z };
+      biome = weightsAtPos(x, z).dominant;
+      distance = d;
+      break;
     }
   }
 
@@ -1624,6 +1643,7 @@ export function chapelSite(
   };
   let biome = weightsAtPos(center.x, center.z).dominant;
   let distance = CHAPEL_MAX_DIST_M;
+  let accepted = false;
   let fallback: { x: number; z: number; biome: BiomeId; distance: number } | null = null;
   for (let d = CHAPEL_MIN_DIST_M; d <= CHAPEL_MAX_DIST_M; d += GROVE_SCAN_STEP_M) {
     const x = spawn.x + dirX * d;
@@ -1635,12 +1655,30 @@ export function chapelSite(
       center = { x, z };
       biome = w.dominant;
       distance = d;
+      accepted = true;
       break;
     }
-    if (d === CHAPEL_MAX_DIST_M && fallback) {
-      center = { x: fallback.x, z: fallback.z };
-      biome = fallback.biome;
-      distance = fallback.distance;
+  }
+  // Resolve AFTER the loop (the barn's shape): the
+  // in-loop seat never fired when the band's last point
+  // was itself spacing-illegal — the continue skipped
+  // it and the initialized max point stood, illegally.
+  if (!accepted && fallback) {
+    center = { x: fallback.x, z: fallback.z };
+    biome = fallback.biome;
+    distance = fallback.distance;
+  }
+  if (!accepted && !fallback) {
+    // Starved bearing: extend past the band for the
+    // first spacing-legal point (the barn's guard).
+    for (let d = CHAPEL_MAX_DIST_M + GROVE_SCAN_STEP_M; d <= 1200; d += GROVE_SCAN_STEP_M) {
+      const x = spawn.x + dirX * d;
+      const z = spawn.z + dirZ * d;
+      if (!spacingLegal(x, z)) continue;
+      center = { x, z };
+      biome = weightsAtPos(x, z).dominant;
+      distance = d;
+      break;
     }
   }
 
@@ -2139,6 +2177,7 @@ export function generalStoreSite(
   };
   let biome = weightsAtPos(center.x, center.z).dominant;
   let distance = STORE_MAX_DIST_M;
+  let accepted = false;
   let fallback: { x: number; z: number; biome: BiomeId; distance: number } | null = null;
   for (let d = STORE_MIN_DIST_M; d <= STORE_MAX_DIST_M; d += GROVE_SCAN_STEP_M) {
     const x = spawn.x + dirX * d;
@@ -2150,12 +2189,30 @@ export function generalStoreSite(
       center = { x, z };
       biome = w.dominant;
       distance = d;
+      accepted = true;
       break;
     }
-    if (d === STORE_MAX_DIST_M && fallback) {
-      center = { x: fallback.x, z: fallback.z };
-      biome = fallback.biome;
-      distance = fallback.distance;
+  }
+  // Resolve AFTER the loop (the barn's shape): the
+  // in-loop seat never fired when the band's last point
+  // was itself spacing-illegal — the continue skipped
+  // it and the initialized max point stood, illegally.
+  if (!accepted && fallback) {
+    center = { x: fallback.x, z: fallback.z };
+    biome = fallback.biome;
+    distance = fallback.distance;
+  }
+  if (!accepted && !fallback) {
+    // Starved bearing: extend past the band for the
+    // first spacing-legal point (the barn's guard).
+    for (let d = STORE_MAX_DIST_M + GROVE_SCAN_STEP_M; d <= 1200; d += GROVE_SCAN_STEP_M) {
+      const x = spawn.x + dirX * d;
+      const z = spawn.z + dirZ * d;
+      if (!spacingLegal(x, z)) continue;
+      center = { x, z };
+      biome = weightsAtPos(x, z).dominant;
+      distance = d;
+      break;
     }
   }
 
@@ -3366,6 +3423,362 @@ export function railSidingSite(
  *  corridor. */
 export function railSidingContains(site: SidingSite, x: number, z: number): boolean {
   return distToSegment(x, z, site.a, site.b) <= SIDING_HALF_WIDTH_M;
+}
+
+// ---------------------------------------------------------------------------
+// THE BARN — site #11 (Adam, 2026-10-30; claim approved
+// by DEV), first of the new-types run, built WITH ITS
+// DIAL SHEET: scale, ruin story, arrangement, feature
+// picks, and wear are each drawn per instance from
+// their own streams, so no two worlds' barns are alike.
+// Two dial narrowings, stated in the landing report:
+// wall height and depth are FIXED (3.2 m / 7.2 m) —
+// instanced geometry is one size per kind, and the
+// roof + loft pieces are authored to those measures;
+// the length dial (12.0 / 14.4 m) carries the scale
+// variety. Wear lives in geometry (the patched-wall
+// kind + the ruin dial), never tint — one material per
+// kind is the same constraint.
+// ---------------------------------------------------------------------------
+
+/** Siting band, meters (DRAFT). */
+export const BARN_MIN_DIST_M = 350;
+export const BARN_MAX_DIST_M = 700;
+/** Clearing radius (DRAFT). */
+export const BARN_CLEAR_RADIUS_M = 22;
+/** Acceptance: meadow weight at or above this (DRAFT). */
+export const BARN_MEADOW_EDGE_WEIGHT = 0.2;
+/** Wall segment length, meters. */
+export const BARN_SEGMENT_M = 2.4;
+/** Wall height, meters (fixed — see the header). */
+export const BARN_WALL_H_M = 3.2;
+
+/** The derived Barn: one per world seed. */
+export interface BarnSite {
+  id: string;
+  seed: string;
+  center: { x: number; z: number };
+  /** Dominant biome at the centre. */
+  biome: BiomeId;
+  /** Centre distance from spawn, meters. */
+  distance: number;
+  clearRadius: number;
+  /** The ruin dial's draw. */
+  state: 'standing' | 'holed' | 'fallen-end';
+  /** The big door's end, world frame. */
+  doorSide: 'north' | 'south' | 'east' | 'west';
+  /** The stall row's long side, world frame. */
+  stallSide: 'north' | 'south' | 'east' | 'west';
+  /** The lean-to's long side, world frame, or null. */
+  leanToSide: 'north' | 'south' | 'east' | 'west' | null;
+  /** A point inside (the staging hook). */
+  interiorSpot: { x: number; z: number };
+  features: ScatterObject[];
+  walls: SiteWallBox[];
+  bounds: { minX: number; maxX: number; minZ: number; maxZ: number };
+}
+
+const barnCache = new Map<string, BarnSite>();
+
+/**
+ * Derive the world's Barn. `weightsAtPos` returns the
+ * full weights + dominant at a position. Memoized.
+ */
+export function barnSite(
+  seed: string,
+  spawn: { x: number; z: number },
+  weightsAtPos: (x: number, z: number) => BiomeWeights,
+): BarnSite {
+  const cached = barnCache.get(`${seed}::barn`);
+  if (cached) return cached;
+
+  // Spacing against all TEN predecessors — the
+  // generalized rule's first full application: eight
+  // circles radially, the two ribbons by line distance.
+  const circles = [
+    groveSite(seed, spawn, (x, z) => weightsAtPos(x, z).dominant),
+    schoolhouseSite(seed, spawn, weightsAtPos),
+    villageSite(seed, spawn, weightsAtPos),
+    farmhouseSite(seed, spawn, weightsAtPos),
+    chapelSite(seed, spawn, weightsAtPos),
+    caveMouthSite(seed, spawn, weightsAtPos),
+    generalStoreSite(seed, spawn, weightsAtPos),
+    drownedMillSite(seed, spawn, weightsAtPos),
+  ];
+  const road = sunkenRoadSite(seed, spawn, weightsAtPos);
+  const siding = railSidingSite(seed, spawn, weightsAtPos);
+  const spacingLegal = (x: number, z: number): boolean =>
+    circles.every(
+      (s) => Math.hypot(x - s.center.x, z - s.center.z) >= s.clearRadius + BARN_CLEAR_RADIUS_M + SITE_SPACING_MARGIN_M,
+    ) &&
+    distToSegment(x, z, road.a, road.b) >= ROAD_RIBBON_HALF_WIDTH_M + BARN_CLEAR_RADIUS_M + SITE_SPACING_MARGIN_M &&
+    distToSegment(x, z, siding.a, siding.b) >= SIDING_HALF_WIDTH_M + BARN_CLEAR_RADIUS_M + SITE_SPACING_MARGIN_M;
+
+  const bearing = mulberry32(deriveSeed(seed, 'site:barn'))() * Math.PI * 2;
+  const dirX = Math.cos(bearing);
+  const dirZ = Math.sin(bearing);
+  let center = { x: spawn.x + dirX * BARN_MAX_DIST_M, z: spawn.z + dirZ * BARN_MAX_DIST_M };
+  let biome = weightsAtPos(center.x, center.z).dominant;
+  let distance = BARN_MAX_DIST_M;
+  let fallback: { x: number; z: number; biome: BiomeId; distance: number } | null = null;
+  let accepted = false;
+  for (let d = BARN_MIN_DIST_M; d <= BARN_MAX_DIST_M; d += GROVE_SCAN_STEP_M) {
+    const x = spawn.x + dirX * d;
+    const z = spawn.z + dirZ * d;
+    if (!spacingLegal(x, z)) continue;
+    const w = weightsAtPos(x, z);
+    if (!fallback) fallback = { x, z, biome: w.dominant, distance: d };
+    if (w.dominant === 'oldfieldRise' || w.weights.meadow >= BARN_MEADOW_EDGE_WEIGHT) {
+      center = { x, z };
+      biome = w.dominant;
+      distance = d;
+      accepted = true;
+      break;
+    }
+  }
+  // Resolution AFTER the loop, not inside it: the
+  // in-loop seat the earlier sites use never fires when
+  // the band's last point is itself spacing-illegal
+  // (the continue skips it) — the default seed's barn
+  // bearing is exactly that case.
+  if (!accepted && fallback) {
+    center = { x: fallback.x, z: fallback.z };
+    biome = fallback.biome;
+    distance = fallback.distance;
+  }
+  if (!accepted && !fallback) {
+    // STARVED BEARING (guarded, not yet hit): no
+    // spacing-legal point exists in the band at all.
+    // Extend the scan past the band for the first legal
+    // point rather than seating the barn illegally —
+    // the distance tells on it, and the probe verifies
+    // the starvation.
+    for (let d = BARN_MAX_DIST_M + GROVE_SCAN_STEP_M; d <= 1200; d += GROVE_SCAN_STEP_M) {
+      const x = spawn.x + dirX * d;
+      const z = spawn.z + dirZ * d;
+      if (!spacingLegal(x, z)) continue;
+      center = { x, z };
+      biome = weightsAtPos(x, z).dominant;
+      distance = d;
+      break;
+    }
+  }
+
+  // --- The dial sheet -------------------------------------
+  // SCALE: length in bays (5 or 6); depth fixed (header).
+  const scaleRand = mulberry32(deriveSeed(seed, 'barn:scale'));
+  const perLong = 5 + Math.floor(scaleRand() * 2);
+  const perShort = 3;
+  const SEG = BARN_SEGMENT_M;
+  const W = perLong * SEG;
+  const D = perShort * SEG;
+  // RUIN STORY.
+  const stateRoll = mulberry32(deriveSeed(seed, 'barn:state'))();
+  const state: BarnSite['state'] = stateRoll < 0.45 ? 'standing' : stateRoll < 0.8 ? 'holed' : 'fallen-end';
+  // ARRANGEMENT + PICKS + WEAR share the plan stream.
+  const planRand = mulberry32(deriveSeed(seed, 'barn:plan'));
+  const swap = planRand() < 0.5;
+  const theta = swap ? Math.PI / 2 : 0;
+  const toWorld = (lx: number, lz: number): { x: number; z: number } =>
+    swap ? { x: center.x + lz, z: center.z - lx } : { x: center.x + lx, z: center.z + lz };
+  const toSpawnX = spawn.x - center.x;
+  const toSpawnZ = spawn.z - center.z;
+  const localSpawnX = swap ? -toSpawnZ : toSpawnX;
+  // The door end: the short end toward spawn (local ±X).
+  const doorEnd: 'east' | 'west' = localSpawnX >= 0 ? 'east' : 'west';
+  const farEnd: 'east' | 'west' = doorEnd === 'east' ? 'west' : 'east';
+  const worldSide = (local: 'north' | 'south' | 'east' | 'west'): 'north' | 'south' | 'east' | 'west' =>
+    !swap
+      ? local
+      : local === 'north'
+        ? 'west'
+        : local === 'west'
+          ? 'south'
+          : local === 'south'
+            ? 'east'
+            : 'north';
+  const stallLocal: 'north' | 'south' = planRand() < 0.5 ? 'north' : 'south';
+  const leanToLocal: 'north' | 'south' | null = planRand() < 0.6 ? (stallLocal === 'north' ? 'south' : 'north') : null;
+  const doorAjar = planRand() * 0.9; // the leaf stands ajar
+  const hayCount = Math.floor(planRand() * 5); // 0-4 bales
+  const patchShare = 0.25;
+
+  const features: ScatterObject[] = [];
+  const walls: SiteWallBox[] = [];
+  const feat = (kind: ScatterKind, x: number, z: number, y: number, scale: number, rotY: number): void => {
+    features.push({ kind, x, z, y, scale, rotY });
+  };
+  const box = (cx: number, cz: number, hx: number, hz: number): void => {
+    walls.push({ minX: cx - hx, maxX: cx + hx, minZ: cz - hz, maxZ: cz + hz });
+  };
+
+  interface Segment {
+    side: 'north' | 'south' | 'east' | 'west';
+    lx: number;
+    lz: number;
+    running: 'x' | 'z';
+    cornerAdjacent: boolean;
+  }
+  const segments: Segment[] = [];
+  for (let i = 0; i < perLong; i++) {
+    const lx = -W / 2 + SEG / 2 + i * SEG;
+    const corner = i === 0 || i === perLong - 1;
+    segments.push({ side: 'north', lx, lz: -D / 2, running: 'x', cornerAdjacent: corner });
+    segments.push({ side: 'south', lx, lz: D / 2, running: 'x', cornerAdjacent: corner });
+  }
+  for (let i = 0; i < perShort; i++) {
+    const lz = -D / 2 + SEG / 2 + i * SEG;
+    const corner = i === 0 || i === perShort - 1;
+    segments.push({ side: 'west', lx: -W / 2, lz, running: 'z', cornerAdjacent: corner });
+    segments.push({ side: 'east', lx: W / 2, lz, running: 'z', cornerAdjacent: corner });
+  }
+  const doorEndSegs = segments.filter((s) => s.side === doorEnd);
+  const doorSeg = doorEndSegs[Math.floor(doorEndSegs.length / 2)];
+  const fallenSegs = new Set(segments.filter((s) => s.side === farEnd));
+  // Holed: 1-2 damaged segments (never corners, never
+  // the door segment).
+  const damaged = new Set<Segment>();
+  const stubbed = new Set<Segment>();
+  if (state === 'holed') {
+    const pool = segments.filter((s) => !s.cornerAdjacent && s !== doorSeg);
+    const n = 1 + Math.floor(planRand() * 2);
+    for (let i = 0; i < n && pool.length > 0; i++) {
+      const pick = pool.splice(Math.floor(planRand() * pool.length), 1)[0];
+      (planRand() < 0.5 ? damaged : stubbed).add(pick);
+    }
+  }
+  if (state === 'fallen-end') {
+    // The long-side corners BESIDE the fallen end may
+    // stand as stubs.
+    for (const s of segments) {
+      if ((s.side === 'north' || s.side === 'south') && s.cornerAdjacent && (farEnd === 'west' ? s.lx < 0 : s.lx > 0)) {
+        if (planRand() < 0.5) stubbed.add(s);
+      }
+    }
+  }
+
+  const outRot = (side: 'north' | 'south' | 'east' | 'west'): number =>
+    side === 'north' ? Math.PI : side === 'south' ? 0 : side === 'east' ? Math.PI / 2 : -Math.PI / 2;
+  const emitWall = (s: Segment, scale: number): void => {
+    const w = toWorld(s.lx, s.lz);
+    const kind: ScatterKind = planRand() < patchShare && scale === 1 ? 'barnWallPatch' : 'barnWall';
+    feat(kind, w.x, w.z, 0, scale, theta + (s.running === 'x' ? 0 : Math.PI / 2));
+    if (s.running === 'x') box(w.x, w.z, (SEG / 2) * scale, 0.15);
+    else box(w.x, w.z, 0.15, (SEG / 2) * scale);
+  };
+
+  for (const s of segments) {
+    if (s === doorSeg) continue; // the doorway
+    if (state === 'fallen-end' && fallenSegs.has(s)) {
+      // Down: a fallen slab pushed outward, no box.
+      const ow = toWorld(s.lx + (s.side === 'east' ? 0.9 : -0.9), s.lz);
+      feat('barnWallFallen', ow.x, ow.z, 0, 1, theta + Math.PI / 2 + (planRand() * 2 - 1) * 0.3);
+      continue;
+    }
+    if (damaged.has(s)) continue;
+    emitWall(s, stubbed.has(s) ? 0.5 : 1);
+  }
+
+  // The door leaf, standing ajar in its doorway.
+  {
+    const w = toWorld(doorSeg.lx, doorSeg.lz);
+    feat('barnDoor', w.x, w.z, 0, 1, theta + outRot(doorEnd) + doorAjar);
+  }
+  // Roof: per-bay slices, gabled end bays — or, in the
+  // fallen-end state, dropped slopes at the far end and
+  // open sky over the rest.
+  for (let i = 0; i < perLong; i++) {
+    const lx = -W / 2 + SEG / 2 + i * SEG;
+    const w = toWorld(lx, 0);
+    const isEndBay = i === 0 || i === perLong - 1;
+    if (state === 'fallen-end') {
+      const nearFar = (farEnd === 'west' && i === 0) || (farEnd === 'east' && i === perLong - 1);
+      if (nearFar) feat('barnRoofFallen', w.x, w.z, 0, 1, theta + (planRand() * 2 - 1) * 0.2);
+      continue;
+    }
+    // End bays carry the gable; the far end bay flips so
+    // its gable faces outward.
+    feat(isEndBay ? 'barnRoofEnd' : 'barnRoofBay', w.x, w.z, BARN_WALL_H_M, 1, theta + (i === perLong - 1 ? Math.PI : 0));
+  }
+  // The loft: slab strips across the far end (she can't
+  // climb yet — it reads from below, posts and all). The
+  // strip rotation aims the posts' edge toward centre.
+  {
+    const loftLx = farEnd === 'west' ? -W / 2 + SEG : W / 2 - SEG;
+    const loftRot = theta + (farEnd === 'west' ? Math.PI / 2 : -Math.PI / 2);
+    for (let i = 0; i < perShort; i++) {
+      const lz = -D / 2 + SEG / 2 + i * SEG;
+      const w = toWorld(loftLx, lz);
+      feat('barnLoft', w.x, w.z, 2.2, 1, loftRot);
+    }
+  }
+  // Stalls: dividers off the stall side + their boxes.
+  {
+    const stallZ = stallLocal === 'north' ? -D / 2 : D / 2;
+    const inward = stallLocal === 'north' ? 1 : -1;
+    for (let i = 0; i < 3; i++) {
+      const lx = -W / 2 + SEG * (1.5 + i * 1.5) * (W / (SEG * 6));
+      const w = toWorld(lx, stallZ + inward * 1.0);
+      feat('barnWallPatch', w.x, w.z, 0, 0.55, theta + Math.PI / 2);
+      const ww = toWorld(lx, stallZ + inward * 1.0);
+      if (!swap) box(ww.x, ww.z, 0.15, 1.0);
+      else box(ww.x, ww.z, 1.0, 0.15);
+    }
+  }
+  // Hay: bales near the loft end, inside.
+  for (let i = 0; i < hayCount; i++) {
+    const lx = (farEnd === 'west' ? -1 : 1) * (W / 2 - 1.6 - planRand() * 1.5);
+    const lz = (planRand() * 2 - 1) * (D / 2 - 1.2);
+    const w = toWorld(lx, lz);
+    feat('hayBale', w.x, w.z, 0, 0.9 + planRand() * 0.3, planRand() * Math.PI);
+  }
+  // The lean-to: one sloped feature + two post boxes.
+  if (leanToLocal) {
+    const lz = (leanToLocal === 'north' ? -1 : 1) * (D / 2 + 1.3);
+    const w = toWorld(0, lz);
+    feat('barnLeanTo', w.x, w.z, 0, 1, theta + (leanToLocal === 'north' ? Math.PI : 0));
+    for (const lx of [-2.2, 2.2]) {
+      const pw = toWorld(lx, (leanToLocal === 'north' ? -1 : 1) * (D / 2 + 2.4));
+      box(pw.x, pw.z, 0.13, 0.13);
+    }
+  }
+  // Wear discs: trample at the door, wear inside.
+  {
+    const doorOut = toWorld(doorSeg.lx + (doorEnd === 'east' ? 2.6 : -2.6), 0);
+    feat('riverSilt', doorOut.x, doorOut.z, 0, 1.3, planRand() * Math.PI);
+    const inW = toWorld((planRand() * 2 - 1) * 2, (planRand() * 2 - 1) * 1.5);
+    feat('riverSilt', inW.x, inW.z, 0, 1.1, planRand() * Math.PI);
+  }
+
+  const site: BarnSite = {
+    id: 'barn',
+    seed,
+    center,
+    biome,
+    distance,
+    clearRadius: BARN_CLEAR_RADIUS_M,
+    state,
+    doorSide: worldSide(doorEnd),
+    stallSide: worldSide(stallLocal),
+    leanToSide: leanToLocal ? worldSide(leanToLocal) : null,
+    interiorSpot: center,
+    features,
+    walls,
+    bounds: {
+      minX: center.x - BARN_CLEAR_RADIUS_M,
+      maxX: center.x + BARN_CLEAR_RADIUS_M,
+      minZ: center.z - BARN_CLEAR_RADIUS_M,
+      maxZ: center.z + BARN_CLEAR_RADIUS_M,
+    },
+  };
+  barnCache.set(`${seed}::barn`, site);
+  return site;
+}
+
+/** True when a world position lies inside the barn's
+ *  clearing. */
+export function barnContains(site: BarnSite, x: number, z: number): boolean {
+  return Math.hypot(x - site.center.x, z - site.center.z) <= site.clearRadius;
 }
 
 /** The standing spacing rule (formalized by DEV,

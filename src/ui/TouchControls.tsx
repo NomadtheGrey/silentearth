@@ -18,7 +18,7 @@
  *   because the engine applies look deltas gateless and keeps
  *   pitch consistent across mode switches.
  * - Right thumbstick: a solid TURN ring + knob even with MOVE
- *   on the bottom row (USE to its left), same size and
+ *   on the bottom row (the USE/JUMP row above it), same size and
  *   pulse-until-first-use pattern as MOVE.
  *   It reports a deflection, not a drag: the shell holds the
  *   deflection and turns continuously while it is held, so a
@@ -28,18 +28,22 @@
  *   of right travel, and a center-started drag misses or clips
  *   the right-half look field. The stick is bounded by its own
  *   radius, not by the screen edge.
- * - USE button, centred on the bottom row between the sticks,
- *   thumb-sized (64 px), its centre on the sticks' axis —
- *   symmetrical with MOVE and TURN (19 px clear each side at
- *   390 px), not hugging one stick. When the shell passes
- *   interactLabel, the button shows that label instead of
- *   "USE" (a dropped pile about to be picked up reads
- *   "PICK UP").
- * - JUMP button, same family, stacked above USE on the
- *   centre axis (2026-10-29, Adam's sprint/jump order):
- *   the touch half of Space. No touch sprint button —
- *   sprint on touch is the MOVE stick's double-push
- *   (Background's movement path).
+ * - USE and JUMP buttons, one row above the TURN ring on
+ *   the right thumb's arc (2026-10-30 — they began centred
+ *   and stacked on the centre axis, where Adam's playtest
+ *   found them obscuring the view; the centre of the
+ *   screen is the reticle's field and stays clear). The
+ *   row is thumb-sized (64 px), spans 232-296 px off the
+ *   bottom (8 px clear of the ring's top), USE inboard
+ *   (right-[5.5rem]) so a long interact label spills left
+ *   into open field, JUMP outboard (right-4) over the
+ *   ring's right half. When the shell passes
+ *   interactLabel, USE shows that label instead of "USE"
+ *   (a dropped pile about to be picked up reads
+ *   "PICK UP"). JUMP is the touch half of Space
+ *   (2026-10-29, Adam's sprint/jump order). No touch
+ *   sprint button — sprint on touch is the MOVE stick's
+ *   double-push (Background's movement path).
  *
  * GESTURE OWNERSHIP (BioForge v1 lesson, required): a look-drag
  * NEVER fires interact on release. Only two gestures interact:
@@ -338,8 +342,8 @@ export function TouchControls({
         touches land on the stick, not the field beneath it
         (same DOM-order rule as the USE button). Level with
         MOVE on the bottom row (Adam 2026-10-26: the stacked
-        look was weird) — USE sits centred between the sticks
-        on the same axis, clear of the DRAG TO LOOK cue. */}
+        look was weird) — the USE/JUMP row sits above this
+        ring (2026-10-30), out of the view's centre. */}
       <div
         className="pointer-events-auto absolute bottom-24 right-4 touch-none"
         onTouchStart={handleTurnStart}
@@ -369,22 +373,24 @@ export function TouchControls({
         </div>
       </div>
 
-      {/* USE: centred between MOVE and TURN (left-1/2 +
-        -translate-x-1/2), its vertical centre on the sticks'
-        axis (bottom-32 lifts the 64 px button so its centre
-        meets the 128 px rings' centre, 160 px off the
-        bottom). At 390 px: MOVE [16, 144], USE [163, 227],
-        TURN [246, 374] — 19 px clear each side, no overlap;
-        the centred button straddles the look field's edge
-        but renders after it, so its touches land on the
-        button (same DOM-order rule as the sticks). */}
+      {/* USE: the action row above the TURN ring
+        (2026-10-30, Adam's playtest: the centred pair
+        obscured the view). bottom-[14.5rem] spans the
+        64 px row 232-296 px off the bottom — 8 px clear
+        of the ring's top (224) and wholly out of the
+        screen centre. USE sits inboard (right-[5.5rem]:
+        [W-152, W-88]) so its label — which overflows the
+        circle by design — spills left into open field,
+        not across JUMP. Renders after the look field and
+        the sticks, so its touches land on the button
+        (same DOM-order rule as the sticks). */}
       <button
         type="button"
         aria-label={
           interactLabel ??
           'Use: interact with the nearest in-range target'
         }
-        className="pointer-events-auto absolute bottom-32 left-1/2 flex h-16 w-16 -translate-x-1/2 touch-none items-center justify-center whitespace-nowrap rounded-full border-2 border-[#f0ead6]/80 bg-moss-deep/90 text-sm font-bold text-[#f0ead6]"
+        className="pointer-events-auto absolute bottom-[14.5rem] right-[5.5rem] flex h-16 w-16 touch-none items-center justify-center whitespace-nowrap rounded-full border-2 border-[#f0ead6]/80 bg-moss-deep/90 text-sm font-bold text-[#f0ead6]"
         onTouchStart={(e) => {
           e.preventDefault();
           onInteract?.();
@@ -393,19 +399,17 @@ export function TouchControls({
         {interactLabel ?? 'USE'}
       </button>
 
-      {/* JUMP: same button family as USE, stacked directly
-        above it on the centre axis (bottom-56: USE spans
-        128-192 px off the bottom, JUMP spans 224-288 —
-        32 px clear). Added 2026-10-29 with Adam's
-        sprint/jump order; the shell wires it to the
-        player's pressJump (mid-air presses no-op there).
-        Renders after USE (same DOM-order rule), and there
-        is no touch sprint button: the stick double-push
-        is Background's movement path. */}
+      {/* JUMP: same row as USE (2026-10-30), outboard —
+        right-4, over the TURN ring's right half
+        ([W-80, W-16] on the row's 232-296 px band). Added
+        2026-10-29 with Adam's sprint/jump order; the
+        shell wires it to the player's pressJump (mid-air
+        presses no-op there). Renders after USE (same
+        DOM-order rule). */}
       <button
         type="button"
         aria-label="Jump"
-        className="pointer-events-auto absolute bottom-56 left-1/2 flex h-16 w-16 -translate-x-1/2 touch-none items-center justify-center whitespace-nowrap rounded-full border-2 border-[#f0ead6]/80 bg-moss-deep/90 text-sm font-bold text-[#f0ead6]"
+        className="pointer-events-auto absolute bottom-[14.5rem] right-4 flex h-16 w-16 touch-none items-center justify-center whitespace-nowrap rounded-full border-2 border-[#f0ead6]/80 bg-moss-deep/90 text-sm font-bold text-[#f0ead6]"
         onTouchStart={(e) => {
           e.preventDefault();
           onJump?.();
