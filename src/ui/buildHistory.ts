@@ -42,6 +42,17 @@ export interface BuildRecord {
 }
 
 const ALL_RECORDS: BuildRecord[] = [
+  // Merge #35's sha is filled in by the correction
+  // merge that follows — the merge sha cannot be known
+  // before the merge exists. (Standing drill shape.)
+  {
+    merge: 'Merge #35',
+    pr: 71,
+    sha: 'pending',
+    date: '2026-10-30',
+    what: 'Her position reads in whole numbers now \u2014 no decimals trailing her across the country. The woods have been tuned by her own walk through them: the first gathering read as scattered trees, so the groves now stand bigger and tighter, trunks close enough to close a canopy, and the country between them is honestly sparse \u2014 a lone tree is a landmark again. A new old place joins the world: the Barn, farm country\u2019s working ruin \u2014 in some worlds standing whole with its big door ajar, stalls along one wall and the loft overhead; in others holed; in others with one end down and its roof dropped inside. No two barns roll the same: length, ruin, stalls, lean-to and hay all draw from the place\u2019s own streams. On her phone, USE and JUMP have moved out of the middle of her view into one row above the turn ring, on her right thumb\u2019s arc.',
+    why: 'Adam\u2019s playtest verdicts, carried through: the woods remark, the buttons sitting on the reticle, coordinates finer than anyone needs. The barn opens the new-types run \u2014 every place of a type now rolls its own dial sheet, so a type is a family, not a stamp. Underneath, the barn\u2019s build caught a quiet flaw in how three older places chose their ground \u2014 a seat could land closer to a neighbour than the spacing law allows; the fix was gated on a census proving no lawfully seated place moves, and none did.',
+  },
   {
     merge: 'Merge #34',
     pr: 69,
