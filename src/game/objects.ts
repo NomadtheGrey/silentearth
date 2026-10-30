@@ -1465,6 +1465,84 @@ export const SOURCES: HarvestSourceDef[] = [
     biomes: ['creekBottom', 'deepBog'],
     mesh: { shape: 'stone', color: 0x5d4630, extraColor: 0x8a7a5a, baseY: 0.9 },
   },
+  // The Rail Siding set (Adam, 2026-10-30 — site-pass
+  // only, same rule as the sets above). The rails are
+  // rusty iron-brown SCENERY (the mines precedent): the
+  // no-iron tenet binds her hands and her crafting, not
+  // the old world's leavings.
+  {
+    id: 'sidingBed',
+    kind: 'sidingBed',
+    name: 'Rail Bed',
+    description:
+      'The siding\u2019s gravel bed (Adam, 2026-10-30), its ' +
+      'ties still holding the line\u2019s measure.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['oldfieldRise', 'meadow'],
+    mesh: { shape: 'stone', color: 0x6b665a, extraColor: 0x4a4238, baseY: 0.05 },
+  },
+  {
+    id: 'sidingRail',
+    kind: 'sidingRail',
+    name: 'Rail',
+    description:
+      'A rusted rail (Adam, 2026-10-30) — the old world\u2019s ' +
+      'iron, left where it lay. Scenery, not salvage: her ' +
+      'hands and her crafting keep the tenet; the ground ' +
+      'keeps its leavings.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['oldfieldRise', 'meadow'],
+    mesh: { shape: 'stone', color: 0x6e4a38, extraColor: 0x8a6a52, baseY: 0.14 },
+  },
+  {
+    id: 'boxcarBody',
+    kind: 'boxcarBody',
+    name: 'Boxcar',
+    description:
+      'A stranded boxcar (Adam, 2026-10-30), its sliding ' +
+      'door open on a load that shifted against it long ' +
+      'ago. She can look in. The load says no further.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['oldfieldRise', 'meadow'],
+    mesh: { shape: 'stone', color: 0x74584a, extraColor: 0x2e2622, baseY: 1.55 },
+  },
+  {
+    id: 'sidingPlatform',
+    kind: 'sidingPlatform',
+    name: 'Loading Platform',
+    description:
+      'The siding\u2019s loading platform (Adam, 2026-10-30), ' +
+      'built to meet a boxcar\u2019s door.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['oldfieldRise', 'meadow'],
+    mesh: { shape: 'stone', color: 0x6e5136, extraColor: 0x4a3b28, baseY: 0.22 },
+  },
+  {
+    id: 'sidingBuffer',
+    kind: 'sidingBuffer',
+    name: 'Buffer Stop',
+    description:
+      'The buffer stop (Adam, 2026-10-30) where the spur ' +
+      'gives up — the end of the line, in timber.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['oldfieldRise', 'meadow'],
+    mesh: { shape: 'stone', color: 0x5d4630, extraColor: 0x3e2f20, baseY: 0.7 },
+  },
   {
     id: 'snapwoodThicket',
     kind: 'snapWood',

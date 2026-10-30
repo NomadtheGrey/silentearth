@@ -170,7 +170,15 @@ export type ScatterKind =
   | 'roadSlab'
   | 'roadSlabSunk'
   | 'roadPost'
-  | 'roadSign';
+  | 'roadSign'
+  // Site-pass kinds (the Rail Siding, sites.ts — same
+  // rule): the bed with its ties, the rails, the boxcar,
+  // the loading platform, the buffer stop.
+  | 'sidingBed'
+  | 'sidingRail'
+  | 'boxcarBody'
+  | 'sidingPlatform'
+  | 'sidingBuffer';
 
 /** One placed scatter object in a chunk. y is its base height above ground. */
 export interface ScatterObject {

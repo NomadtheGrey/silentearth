@@ -804,6 +804,79 @@ export function buildKindGeometry(spec: MeshSpec, kind: ScatterKind): THREE.Buff
       part(box(0.08, 0.5, 0.08), shade(c, 0.9), { p: [0, 0.55, -0.07] }),
     ]);
   }
+  // Kind overrides (the Rail Siding set, sites.ts): the
+  // bed with ties composed in, rails, the boxcar (door on
+  // its local +Z), platform, buffer. Ground = -baseY.
+  if (kind === 'sidingBed') {
+    const parts: THREE.BufferGeometry[] = [part(box(46, 0.1, 3.4), c)];
+    for (let x = -22; x <= 22; x += 2.9) {
+      parts.push(part(box(0.24, 0.06, 2.4), e, { p: [x, 0.07, 0] }));
+    }
+    return merge(parts);
+  }
+  if (kind === 'sidingRail') {
+    return merge([
+      part(box(92, 0.16, 0.09), c),
+      part(box(92, 0.03, 0.11), e, { p: [0, 0.09, 0] }),
+    ]);
+  }
+  if (kind === 'boxcarBody') {
+    // The car whole: underframe + wheels, floor, ribbed
+    // sides, roof — and on local +Z the sliding door,
+    // standing open: dark opening, panel slid aside, the
+    // shifted load right behind it, crates beyond.
+    const parts: THREE.BufferGeometry[] = [
+      part(box(9.5, 0.3, 2.6), e, { p: [0, -1.25, 0] }),
+      part(box(9.5, 0.12, 2.9), shade(e, 1.4), { p: [0, -1.05, 0] }),
+      part(box(9.5, 2.6, 0.12), c, { p: [0, 0.25, -1.39] }),
+      // The +Z side is built AROUND the door opening
+      // (x -1.55..0.35): two runs + a lintel.
+      part(box(3.2, 2.6, 0.12), c, { p: [-3.15, 0.25, 1.39] }),
+      part(box(4.4, 2.6, 0.12), c, { p: [2.55, 0.25, 1.39] }),
+      part(box(1.9, 0.3, 0.12), c, { p: [-0.6, 1.4, 1.39] }),
+      part(box(0.12, 2.6, 2.9), c, { p: [-4.69, 0.25, 0] }),
+      part(box(0.12, 2.6, 2.9), c, { p: [4.69, 0.25, 0] }),
+      part(box(9.7, 0.14, 3.1), shade(c, 0.9), { p: [0, 1.62, 0] }),
+      // The opening (dark) + the slid panel beside it.
+      part(box(1.9, 2.2, 0.06), e, { p: [-0.6, 0.15, 1.4] }),
+      part(box(1.9, 2.2, 0.08), shade(c, 0.92), { p: [-2.6, 0.15, 1.48] }),
+      // The shifted load, right behind the opening.
+      part(box(1.1, 1.1, 1.0), shade(e, 1.25), { p: [-0.6, -0.5, 0.85], r: [0, 0.3, 0] }),
+      // Dressing deeper in.
+      part(box(0.8, 0.8, 0.8), shade(e, 1.1), { p: [1.8, -0.6, 0.6] }),
+      part(box(0.8, 0.8, 0.8), shade(e, 0.95), { p: [2.7, -0.6, -0.5] }),
+      part(cyl(0.32, 0.32, 0.9, 8), shade(e, 1.2), { p: [0.8, -0.6, -0.8] }),
+    ];
+    for (const wx of [-3.4, 3.4]) {
+      for (const wz of [-0.75, 0.75]) {
+        parts.push(part(cyl(0.42, 0.42, 0.12, 10), e, { p: [wx, -1.15, wz], r: [Math.PI / 2, 0, 0] }));
+      }
+    }
+    for (const rx of [-3.5, -1.2, 1.2, 3.5]) {
+      parts.push(part(box(0.18, 2.6, 0.16), shade(c, 0.88), { p: [rx, 0.25, 1.39] }));
+      parts.push(part(box(0.18, 2.6, 0.16), shade(c, 0.88), { p: [rx, 0.25, -1.39] }));
+    }
+    return merge(parts);
+  }
+  if (kind === 'sidingPlatform') {
+    return merge([
+      part(box(8, 0.3, 2.2), c, { p: [0, 0.05, 0] }),
+      part(box(0.18, 0.35, 0.18), shade(e, 1.0), { p: [-3.6, -0.25, 0.9] }),
+      part(box(0.18, 0.35, 0.18), shade(e, 1.0), { p: [3.6, -0.25, 0.9] }),
+      part(box(0.18, 0.35, 0.18), shade(e, 1.0), { p: [-3.6, -0.25, -0.9] }),
+      part(box(0.18, 0.35, 0.18), shade(e, 1.0), { p: [3.6, -0.25, -0.9] }),
+      part(box(0.9, 0.9, 0.9), e, { p: [2.4, 0.65, 0] }),
+    ]);
+  }
+  if (kind === 'sidingBuffer') {
+    return merge([
+      part(box(0.3, 1.4, 0.3), e, { p: [0, 0, 1.1] }),
+      part(box(0.3, 1.4, 0.3), e, { p: [0, 0, -1.1] }),
+      part(box(0.35, 0.5, 2.6), c, { p: [0, 0.35, 0] }),
+      part(box(0.16, 1.5, 0.16), shade(e, 1.0), { p: [-0.5, -0.1, 1.1], r: [0, 0, 0.6] }),
+      part(box(0.16, 1.5, 0.16), shade(e, 1.0), { p: [-0.5, -0.1, -1.1], r: [0, 0, 0.6] }),
+    ]);
+  }
   switch (spec.shape) {
     case 'tree': {
       const branches: THREE.BufferGeometry[] = [];

@@ -2854,12 +2854,10 @@ export function drownedMillContains(site: MillSite, x: number, z: number): boole
 // approved by DEV). A LINEAR place: "a drowned stretch
 // of old road running somewhere with its ends lost" —
 // Travel fragments' ground (the marks staging rides the
-// exported line later). The registry's shape does NOT
-// change for it: the road registers as a CHAIN OF
-// STANDARD FOOTPRINTS (five overlapping circles along
-// the line), each carrying its own partitioned features,
-// so the site pass, the clustering check, and every
-// other consumer keep speaking centre + radius.
+// exported line later). It registers as ONE RIBBON
+// footprint (Adam's ribbon ruling; refit the same day —
+// it was born as a chain of circles and the partition
+// machinery that shape needed is retired).
 // ---------------------------------------------------------------------------
 
 /** Siting band for the midpoint, meters (DRAFT). */
@@ -2875,6 +2873,10 @@ export const ROAD_SEGMENTS = 5;
 export const ROAD_WIDTH_M = 4.4;
 /** Wet-acceptance: creekBottom + deepBog weight (DRAFT). */
 export const ROAD_WET_WEIGHT = 0.3;
+/** The ribbon corridor's half-width (DRAFT) — the refit
+ *  corridor: a tighter, truer clearing than the retired
+ *  chain of r13 circles gave the line. */
+export const ROAD_RIBBON_HALF_WIDTH_M = 6.5;
 
 /** The derived Sunken Road: one per world seed. */
 export interface RoadSite {
@@ -2891,11 +2893,13 @@ export interface RoadSite {
   b: { x: number; z: number };
   /** Unit direction a -> b. */
   dir: { x: number; z: number };
-  /** The footprint centres along the line. */
+  /** The footprint centres along the line (staging). */
   segmentCenters: { x: number; z: number }[];
-  /** The chain of standard footprints (what registers). */
-  footprints: SiteFootprint[];
-  /** All features (the footprints partition this list). */
+  /** The ONE ribbon footprint (what registers — refit
+   *  2026-10-30 under Adam's ribbon ruling; the chain of
+   *  circles and its partition machinery are retired). */
+  footprint: SiteFootprint;
+  /** All features (the footprint carries this list). */
   features: ScatterObject[];
   walls: SiteWallBox[];
 }
@@ -3071,34 +3075,22 @@ export function sunkenRoadSite(
     }
   }
 
-  // Partition into the chain of footprints: every
-  // feature and wall to its nearest centre, exactly once.
-  const footprints: SiteFootprint[] = segmentCenters.map((c) => ({
-    center: c,
-    clearRadius: ROAD_SEGMENT_CLEAR_M,
-    features: [],
-    walls: [],
+  // The ribbon footprint: one corridor, features whole
+  // (the chain-of-circles partition is retired — the
+  // ribbon ruling made the line a first-class shape).
+  const footprint: SiteFootprint = {
+    center,
+    clearRadius: halfSpan + ROAD_SEGMENT_CLEAR_M + ROAD_RIBBON_HALF_WIDTH_M,
+    features,
+    walls,
     bounds: {
-      minX: c.x - ROAD_SEGMENT_CLEAR_M,
-      maxX: c.x + ROAD_SEGMENT_CLEAR_M,
-      minZ: c.z - ROAD_SEGMENT_CLEAR_M,
-      maxZ: c.z + ROAD_SEGMENT_CLEAR_M,
+      minX: Math.min(a.x, b.x) - ROAD_RIBBON_HALF_WIDTH_M,
+      maxX: Math.max(a.x, b.x) + ROAD_RIBBON_HALF_WIDTH_M,
+      minZ: Math.min(a.z, b.z) - ROAD_RIBBON_HALF_WIDTH_M,
+      maxZ: Math.max(a.z, b.z) + ROAD_RIBBON_HALF_WIDTH_M,
     },
-  }));
-  const nearestFp = (x: number, z: number): number => {
-    let best = 0;
-    let bd = Infinity;
-    segmentCenters.forEach((c, i) => {
-      const d = Math.hypot(x - c.x, z - c.z);
-      if (d < bd) {
-        bd = d;
-        best = i;
-      }
-    });
-    return best;
+    ribbon: { a, b, halfWidth: ROAD_RIBBON_HALF_WIDTH_M },
   };
-  for (const f of features) footprints[nearestFp(f.x, f.z)].features.push(f);
-  for (const w of walls) footprints[nearestFp((w.minX + w.maxX) / 2, (w.minZ + w.maxZ) / 2)].walls.push(w);
 
   const site: RoadSite = {
     id: 'road',
@@ -3110,7 +3102,7 @@ export function sunkenRoadSite(
     b,
     dir,
     segmentCenters,
-    footprints,
+    footprint,
     features,
     walls,
   };
@@ -3119,16 +3111,261 @@ export function sunkenRoadSite(
 }
 
 /** True when a world position lies inside the road's
- *  corridor (point-to-line distance within the chain's
- *  clearing radius — a slight superset of the union of
- *  circles at the pinches, noted in the claim). */
+ *  corridor (point-to-line distance within the staging
+ *  radius — wider than the ribbon's clearing half-width:
+ *  containment is the place's claim for staging, the
+ *  ribbon is its clearing). */
 export function sunkenRoadContains(site: RoadSite, x: number, z: number): boolean {
-  const abx = site.b.x - site.a.x;
-  const abz = site.b.z - site.a.z;
-  const t = Math.max(0, Math.min(1, ((x - site.a.x) * abx + (z - site.a.z) * abz) / (abx * abx + abz * abz)));
-  const px = site.a.x + abx * t;
-  const pz = site.a.z + abz * t;
-  return Math.hypot(x - px, z - pz) <= ROAD_SEGMENT_CLEAR_M;
+  return distToSegment(x, z, site.a, site.b) <= ROAD_SEGMENT_CLEAR_M;
+}
+
+// ---------------------------------------------------------------------------
+// THE RAIL SIDING — site #10 (Adam, 2026-10-30; claim
+// approved by DEV). A RIBBON FROM BIRTH: a spur of track
+// that ends — gravel bed, ties, two rails (rusty
+// iron-brown SCENERY by Adam's mines precedent: the
+// tenet binds her hands and her crafting, not the old
+// world's leavings), a timber buffer stop, and a
+// stranded BOXCAR: door open, load shifted against it —
+// a look-in, not a walk-in (its own claim would settle
+// the floor question). "Small and strange." (the doc).
+// The line runs on the SURVEY GRID (N-S or E-W): rail in
+// gridded country does, and the grid is what lets the
+// boxcar stand square on its rails with honest boxes.
+// ---------------------------------------------------------------------------
+
+/** Siting band for the midpoint, meters (DRAFT). */
+export const SIDING_MIN_DIST_M = 550;
+export const SIDING_MAX_DIST_M = 900;
+/** The ribbon corridor's half-width (DRAFT). */
+export const SIDING_HALF_WIDTH_M = 7;
+/** Track length, meters (DRAFT). */
+export const SIDING_LENGTH_M = 92;
+/** Boxcar dimensions, meters. */
+export const BOXCAR_LENGTH_M = 9.5;
+export const BOXCAR_WIDTH_M = 2.9;
+
+/** The derived Rail Siding: one per world seed. */
+export interface SidingSite {
+  id: string;
+  seed: string;
+  center: { x: number; z: number };
+  /** Dominant biome at the midpoint. */
+  biome: BiomeId;
+  /** Midpoint distance from spawn, meters. */
+  distance: number;
+  a: { x: number; z: number };
+  b: { x: number; z: number };
+  dir: { x: number; z: number };
+  /** The boxcar's centre (world). */
+  boxcarSpot: { x: number; z: number };
+  /** The boxcar's door side, world frame. */
+  doorSide: 'north' | 'south' | 'east' | 'west';
+  /** Which end holds the buffer stop. */
+  bufferEnd: 'a' | 'b';
+  footprint: SiteFootprint;
+  features: ScatterObject[];
+  walls: SiteWallBox[];
+}
+
+const sidingCache = new Map<string, SidingSite>();
+
+/**
+ * Derive the world's Rail Siding. `weightsAtPos` returns
+ * the full weights + dominant at a position. Memoized.
+ */
+export function railSidingSite(
+  seed: string,
+  spawn: { x: number; z: number },
+  weightsAtPos: (x: number, z: number) => BiomeWeights,
+): SidingSite {
+  const cached = sidingCache.get(`${seed}::siding`);
+  if (cached) return cached;
+
+  const circles = [
+    groveSite(seed, spawn, (x, z) => weightsAtPos(x, z).dominant),
+    schoolhouseSite(seed, spawn, weightsAtPos),
+    villageSite(seed, spawn, weightsAtPos),
+    farmhouseSite(seed, spawn, weightsAtPos),
+    chapelSite(seed, spawn, weightsAtPos),
+    caveMouthSite(seed, spawn, weightsAtPos),
+    generalStoreSite(seed, spawn, weightsAtPos),
+    drownedMillSite(seed, spawn, weightsAtPos),
+  ];
+  const road = sunkenRoadSite(seed, spawn, weightsAtPos);
+
+  // Grid heading: E-W or N-S, its own draw.
+  const ew = mulberry32(deriveSeed(seed, 'siding:heading'))() < 0.5;
+  const dir = ew ? { x: 1, z: 0 } : { x: 0, z: 1 };
+  const perp = { x: -dir.z, z: dir.x };
+  const half = SIDING_LENGTH_M / 2;
+  // Spacing to the LINE (the generalized rule): sampled
+  // points keep (radius + halfWidth + 60) from every
+  // circle centre, and (road half + own half + 60) from
+  // the road's line.
+  const spacingLegal = (mx: number, mz: number): boolean => {
+    for (let s = -half; s <= half; s += 11) {
+      const x = mx + dir.x * s;
+      const z = mz + dir.z * s;
+      for (const c of circles) {
+        if (Math.hypot(x - c.center.x, z - c.center.z) < c.clearRadius + SIDING_HALF_WIDTH_M + SITE_SPACING_MARGIN_M) {
+          return false;
+        }
+      }
+      if (distToSegment(x, z, road.a, road.b) < ROAD_RIBBON_HALF_WIDTH_M + SIDING_HALF_WIDTH_M + SITE_SPACING_MARGIN_M) {
+        return false;
+      }
+    }
+    return true;
+  };
+
+  const bearing = mulberry32(deriveSeed(seed, 'site:siding'))() * Math.PI * 2;
+  const bDir = { x: Math.cos(bearing), z: Math.sin(bearing) };
+  let center = { x: spawn.x + bDir.x * SIDING_MAX_DIST_M, z: spawn.z + bDir.z * SIDING_MAX_DIST_M };
+  let biome = weightsAtPos(center.x, center.z).dominant;
+  let distance = SIDING_MAX_DIST_M;
+  let fallback: { x: number; z: number; biome: BiomeId; distance: number } | null = null;
+  for (let d = SIDING_MIN_DIST_M; d <= SIDING_MAX_DIST_M; d += GROVE_SCAN_STEP_M) {
+    const x = spawn.x + bDir.x * d;
+    const z = spawn.z + bDir.z * d;
+    if (!spacingLegal(x, z)) continue;
+    const w = weightsAtPos(x, z);
+    if (!fallback) fallback = { x, z, biome: w.dominant, distance: d };
+    if (w.dominant === 'oldfieldRise' || w.dominant === 'meadow' || w.dominant === 'forest') {
+      center = { x, z };
+      biome = w.dominant;
+      distance = d;
+      break;
+    }
+    if (d === SIDING_MAX_DIST_M && fallback) {
+      center = { x: fallback.x, z: fallback.z };
+      biome = fallback.biome;
+      distance = fallback.distance;
+    }
+  }
+  const a = { x: center.x - dir.x * half, z: center.z - dir.z * half };
+  const b = { x: center.x + dir.x * half, z: center.z + dir.z * half };
+
+  // --- Layout (plan stream) --------------------------------
+  const planRand = mulberry32(deriveSeed(seed, 'siding:plan'));
+  const theta = Math.atan2(-dir.z, dir.x);
+  const features: ScatterObject[] = [];
+  const walls: SiteWallBox[] = [];
+  const at = (s: number, off: number): { x: number; z: number } => ({
+    x: center.x + dir.x * s + perp.x * off,
+    z: center.z + dir.z * s + perp.z * off,
+  });
+  const feat = (kind: ScatterKind, x: number, z: number, y: number, scale: number, rotY: number): void => {
+    features.push({ kind, x, z, y, scale, rotY });
+  };
+
+  // Bed (two 46 m lengths; ties composed in the mesh)
+  // and the two rails the line's full length.
+  for (const s of [-half / 2, half / 2]) {
+    const w = at(s, 0);
+    feat('sidingBed', w.x, w.z, 0, 1, theta);
+  }
+  for (const off of [-0.75, 0.75]) {
+    const w = at(0, off);
+    feat('sidingRail', w.x, w.z, 0, 1, theta);
+  }
+
+  // The boxcar: mid-spur, on the rails. Its door side
+  // faces spawn. The perimeter boxes are FULL (the
+  // shifted load blocks the doorway — a look-in).
+  const sCar = -15 + Math.floor(planRand() * 31);
+  const carC = at(sCar, 0);
+  const doorSign = (spawn.x - carC.x) * perp.x + (spawn.z - carC.z) * perp.z >= 0 ? 1 : -1;
+  const doorVec = { x: perp.x * doorSign, z: perp.z * doorSign };
+  const doorSide: SidingSite['doorSide'] =
+    Math.abs(doorVec.x) > Math.abs(doorVec.z) ? (doorVec.x > 0 ? 'east' : 'west') : doorVec.z > 0 ? 'south' : 'north';
+  // Body geometry's door is on its local +Z; aim +Z at
+  // the door vector.
+  feat('boxcarBody', carC.x, carC.z, 0, 1, Math.atan2(doorVec.x, doorVec.z));
+  {
+    const hl = BOXCAR_LENGTH_M / 2;
+    const hw = BOXCAR_WIDTH_M / 2;
+    const t = 0.15;
+    // Long sides (along dir) and ends (along perp), as
+    // world AABBs — the grid heading keeps them exact.
+    const longBox = (off: number): SiteWallBox => {
+      const c = at(sCar, off);
+      return ew
+        ? { minX: c.x - hl, maxX: c.x + hl, minZ: c.z - t, maxZ: c.z + t }
+        : { minX: c.x - t, maxX: c.x + t, minZ: c.z - hl, maxZ: c.z + hl };
+    };
+    const endBox = (along: number): SiteWallBox => {
+      const c = at(sCar + along, 0);
+      return ew
+        ? { minX: c.x - t, maxX: c.x + t, minZ: c.z - hw, maxZ: c.z + hw }
+        : { minX: c.x - hw, maxX: c.x + hw, minZ: c.z - t, maxZ: c.z + t };
+    };
+    walls.push(longBox(hw), longBox(-hw), endBox(hl), endBox(-hl));
+  }
+  // The loading platform along the door side.
+  {
+    const w = at(sCar, doorSign * (BOXCAR_WIDTH_M / 2 + 1.3));
+    feat('sidingPlatform', w.x, w.z, 0, 1, theta);
+  }
+  // The buffer stop at one end.
+  const bufferEnd: SidingSite['bufferEnd'] = planRand() < 0.5 ? 'a' : 'b';
+  {
+    const sBuf = bufferEnd === 'a' ? -half + 1.5 : half - 1.5;
+    const w = at(sBuf, 0);
+    feat('sidingBuffer', w.x, w.z, 0, 1, theta);
+    walls.push(
+      ew
+        ? { minX: w.x - 0.4, maxX: w.x + 0.4, minZ: w.z - 1.6, maxZ: w.z + 1.6 }
+        : { minX: w.x - 1.6, maxX: w.x + 1.6, minZ: w.z - 0.4, maxZ: w.z + 0.4 },
+    );
+  }
+  // Ground dressing: a little rubble along the bed.
+  {
+    const count = 2 + Math.floor(planRand() * 2);
+    for (let i = 0; i < count; i++) {
+      const w = at((planRand() * 2 - 1) * (half - 4), (planRand() < 0.5 ? -1 : 1) * (2.6 + planRand() * 1.4));
+      feat('rubble', w.x, w.z, 0, 0.6 + planRand() * 0.5, planRand() * Math.PI);
+    }
+  }
+
+  const footprint: SiteFootprint = {
+    center,
+    clearRadius: half + SIDING_HALF_WIDTH_M,
+    features,
+    walls,
+    bounds: {
+      minX: Math.min(a.x, b.x) - SIDING_HALF_WIDTH_M,
+      maxX: Math.max(a.x, b.x) + SIDING_HALF_WIDTH_M,
+      minZ: Math.min(a.z, b.z) - SIDING_HALF_WIDTH_M,
+      maxZ: Math.max(a.z, b.z) + SIDING_HALF_WIDTH_M,
+    },
+    ribbon: { a, b, halfWidth: SIDING_HALF_WIDTH_M },
+  };
+
+  const site: SidingSite = {
+    id: 'siding',
+    seed,
+    center,
+    biome,
+    distance,
+    a,
+    b,
+    dir,
+    boxcarSpot: carC,
+    doorSide,
+    bufferEnd,
+    footprint,
+    features,
+    walls,
+  };
+  sidingCache.set(`${seed}::siding`, site);
+  return site;
+}
+
+/** True when a world position lies inside the siding's
+ *  corridor. */
+export function railSidingContains(site: SidingSite, x: number, z: number): boolean {
+  return distToSegment(x, z, site.a, site.b) <= SIDING_HALF_WIDTH_M;
 }
 
 /** The standing spacing rule (formalized by DEV,
@@ -3150,6 +3387,31 @@ export interface SiteFootprint {
   features: ScatterObject[];
   walls: SiteWallBox[];
   bounds: { minX: number; maxX: number; minZ: number; maxZ: number };
+  /** RIBBON (Adam's ruling, 2026-10-30): a linear place.
+   *  When present, the footprint is the corridor a -> b
+   *  with this half-width: suppression and the clustering
+   *  grove test measure to the LINE, and spacing doctrine
+   *  measures to the line too. center/clearRadius remain
+   *  as the bounding circle (broad-phase truth). */
+  ribbon?: {
+    a: { x: number; z: number };
+    b: { x: number; z: number };
+    halfWidth: number;
+  };
+}
+
+/** Distance from a point to the segment a -> b. */
+export function distToSegment(
+  x: number,
+  z: number,
+  a: { x: number; z: number },
+  b: { x: number; z: number },
+): number {
+  const abx = b.x - a.x;
+  const abz = b.z - a.z;
+  const len2 = abx * abx + abz * abz;
+  const t = len2 === 0 ? 0 : Math.max(0, Math.min(1, ((x - a.x) * abx + (z - a.z) * abz) / len2));
+  return Math.hypot(x - (a.x + abx * t), z - (a.z + abz * t));
 }
 
 /** True when a world position lies inside the grove's clearing —

@@ -19,7 +19,7 @@ import { BIOMES, createFields, weightsAt, groundColorAt, marshWeight } from './b
 import type { Fields } from './biomes';
 import { mulberry32, deriveSeed, hashSeed } from './seed';
 import { treeKindAt } from './treeKind';
-import { caveMouthSite, chapelSite, drownedMillSite, farmhouseSite, generalStoreSite, groveSite, schoolhouseSite, sunkenRoadSite, villageSite, type SiteFootprint } from './sites';
+import { caveMouthSite, chapelSite, distToSegment, drownedMillSite, farmhouseSite, generalStoreSite, groveSite, railSidingSite, schoolhouseSite, sunkenRoadSite, villageSite, type SiteFootprint } from './sites';
 import { CHUNK_SIZE, BASE_SCATTER_PER_CHUNK, GROUND_SEGMENTS } from '../constants';
 import type { BiomeWeights, ChunkData, ScatterKind, ScatterObject } from '../types';
 
@@ -174,7 +174,11 @@ export function groveForCell(
     count = 50 + Math.floor(rand() * 33);
   }
   for (const site of sites) {
-    if (Math.hypot(x - site.center.x, z - site.center.z) < radius + site.clearRadius) {
+    if (site.ribbon) {
+      if (distToSegment(x, z, site.ribbon.a, site.ribbon.b) < radius + site.ribbon.halfWidth) {
+        return null;
+      }
+    } else if (Math.hypot(x - site.center.x, z - site.center.z) < radius + site.clearRadius) {
       return null;
     }
   }
@@ -264,7 +268,8 @@ export function createWorldGen(seed: string): WorldGen {
         caveMouthSite(seed, findSpawn(), weightsAtPos),
         generalStoreSite(seed, findSpawn(), weightsAtPos),
         drownedMillSite(seed, findSpawn(), weightsAtPos),
-        ...sunkenRoadSite(seed, findSpawn(), weightsAtPos).footprints,
+        sunkenRoadSite(seed, findSpawn(), weightsAtPos).footprint,
+        railSidingSite(seed, findSpawn(), weightsAtPos).footprint,
       ];
     }
     return sitesCache;
@@ -480,16 +485,32 @@ export function createWorldGen(seed: string): WorldGen {
       const chunkMinZ = originZ;
       const chunkMaxZ = originZ + CHUNK_SIZE;
       for (const site of sites) {
-        // Circle vs chunk-rect distance: skip the site entirely
-        // for the overwhelming majority of chunks.
-        const nearX = Math.max(chunkMinX, Math.min(site.center.x, chunkMaxX));
-        const nearZ = Math.max(chunkMinZ, Math.min(site.center.z, chunkMaxZ));
-        const d2 = (site.center.x - nearX) ** 2 + (site.center.z - nearZ) ** 2;
-        if (d2 > site.clearRadius * site.clearRadius) continue;
-        for (let i = objects.length - 1; i >= 0; i--) {
-          const o = objects[i];
-          const od2 = (o.x - site.center.x) ** 2 + (o.z - site.center.z) ** 2;
-          if (od2 < site.clearRadius * site.clearRadius) objects.splice(i, 1);
+        if (site.ribbon) {
+          // Ribbon: skip by bounds, suppress by the LINE.
+          if (
+            chunkMaxX < site.bounds.minX || chunkMinX > site.bounds.maxX ||
+            chunkMaxZ < site.bounds.minZ || chunkMinZ > site.bounds.maxZ
+          ) {
+            continue;
+          }
+          for (let i = objects.length - 1; i >= 0; i--) {
+            const o = objects[i];
+            if (distToSegment(o.x, o.z, site.ribbon.a, site.ribbon.b) < site.ribbon.halfWidth) {
+              objects.splice(i, 1);
+            }
+          }
+        } else {
+          // Circle vs chunk-rect distance: skip the site entirely
+          // for the overwhelming majority of chunks.
+          const nearX = Math.max(chunkMinX, Math.min(site.center.x, chunkMaxX));
+          const nearZ = Math.max(chunkMinZ, Math.min(site.center.z, chunkMaxZ));
+          const d2 = (site.center.x - nearX) ** 2 + (site.center.z - nearZ) ** 2;
+          if (d2 > site.clearRadius * site.clearRadius) continue;
+          for (let i = objects.length - 1; i >= 0; i--) {
+            const o = objects[i];
+            const od2 = (o.x - site.center.x) ** 2 + (o.z - site.center.z) ** 2;
+            if (od2 < site.clearRadius * site.clearRadius) objects.splice(i, 1);
+          }
         }
         for (const f of site.features) {
           if (f.x >= chunkMinX && f.x < chunkMaxX && f.z >= chunkMinZ && f.z < chunkMaxZ) {
