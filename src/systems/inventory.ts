@@ -87,7 +87,7 @@
  * - 0.25 lb: dry-kindling, twined-cordage, grass, salt-crystal,
  *   edible-mushroom, poison-mushroom, apple, paper.
  * - 0.5 lb: tender-vines, peat-moss, bone, flint, pointy-hat,
- *   mossy-mittens, plant-pulp, pressed-sheets.
+ *   mossy-mittens, plant-pulp, pressed-sheets, journal.
  * - 1 lb: snap-wood, river-silt, clay, dirt, mud, garden-trowel,
  *   sharp-trowel, shawl, umbrella, clay-pot, grimoire.
  * - 2 lb: river-stone, downed-oak, spade, axe-trowel,
@@ -96,7 +96,7 @@
  *   while carried between craft and place (short interval —
  *   flagged: primitive-lean-to, thatch-hut, wattle-and-daub-hut,
  *   woven-cottage, small-wooden-hut, moss-cradle, campfire,
- *   hearth, kiln, stumpy-workstation,
+ *   hearth, kiln, writing-desk, stumpy-workstation,
  *   crafted-workstation, potters-wheel, loom).
  * - Unknown ids default to 1 lb (never block the game on a
  *   missing row — flagged). LANE JUDGMENTS inside that rule,
@@ -286,6 +286,7 @@ export const ITEM_WEIGHT_LB: Readonly<Record<string, number>> = {
   [ITEMS.umbrella]: 1,
   [ITEMS.clayPot]: 1,
   [ITEMS.grimoire]: 1,
+  [ITEMS.journal]: 0.5,
   // 2 lb
   [ITEMS.riverStone]: 2,
   [ITEMS.downedOak]: 2,
@@ -307,6 +308,7 @@ export const ITEM_WEIGHT_LB: Readonly<Record<string, number>> = {
   [ITEMS.campfire]: 4,
   [ITEMS.hearth]: 4,
   [ITEMS.kiln]: 4,
+  [ITEMS.writingDesk]: 4,
   [ITEMS.stumpyWorkstation]: 4,
   [ITEMS.craftedWorkstation]: 4,
   [ITEMS.pottersWheel]: 4,
@@ -463,6 +465,7 @@ export const ITEM_DISPLAY_NAMES: Readonly<Record<string, string>> = {
   'potters-wheel': "Potter's Wheel",
   loom: 'Loom',
   altar: 'Altar',
+  'writing-desk': 'Writing Desk',
   'clay-pot': 'Clay Pot',
   'clay-brick': 'Clay Brick',
   'small-basket': 'Small Basket',
@@ -480,6 +483,7 @@ export const ITEM_DISPLAY_NAMES: Readonly<Record<string, string>> = {
   'pressed-sheets': 'Pressed Sheets',
   paper: 'Paper',
   grimoire: 'Grimoire',
+  journal: 'Journal',
   snare: 'Snare',
   'fish-weir-trap': 'Fish / Weir Trap',
   'pot-trap': 'Pot Trap',
@@ -626,6 +630,7 @@ export const ITEM_DESCRIPTIONS: Readonly<Record<string, string>> = {
   'potters-wheel': "A wheel for shaping clay, on the clay's way to the kiln.",
   loom: 'A loom. Clothes and bedding are woven here.',
   altar: 'A ritual altar. Stage a bone here and speak its name to wake a charm.',
+  'writing-desk': 'A writing desk for the big book. The grimoire\'s workings are done standing at it.',
   // Crafted goods.
   'twined-cordage': 'Twined cord. It ties and binds half of everything you build.',
   'clay-pot': 'A fired clay pot. Stores food — and sunk in a creek, it is a pot trap. Not a cooking pot.',
@@ -635,7 +640,8 @@ export const ITEM_DESCRIPTIONS: Readonly<Record<string, string>> = {
   'plant-pulp': 'Mashed plant fibre. Press it into sheets, on the way to paper.',
   'pressed-sheets': 'Pressed fibre sheets. Bind them into paper.',
   paper: 'Handmade paper. Bind it into a grimoire.',
-  grimoire: 'A hand-bound book. No use for it yet.',
+  grimoire: 'A hand-bound book of workings. It lives on its writing desk.',
+  journal: 'A small bound book, made to be carried.',
   // Carrying and worn (numbers are the readout's own).
   'small-basket': 'A woven basket. Holds +25 lb.',
   'large-basket': "A big woven basket. Holds +50 lb — it replaces the small basket's room.",

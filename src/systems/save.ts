@@ -79,6 +79,15 @@
  *   entity provides one. Order preserved; duplicate
  *   positions allowed (two altars at one spot are two
  *   entries).
+ * - placed desks (position, id optional — no game
+ *   import): same additive-field rule (old saves load
+ *   desks: []) and the same leniency as altars on read
+ *   (entries pass through, the placed-desk restore
+ *   validates + drops bad records). Placed desks carry
+ *   no grimoire state — the desk is the SITE; the
+ *   grimoire's workings come later, so no working
+ *   field is stored. Multiple desks are legitimate
+ *   (a second camp wants a second desk).
  * - placed tents (position, id optional — no game
  *   import): same additive-field rule (old saves load
  *   tents: []) and the same leniency as altars on read
@@ -327,6 +336,21 @@ export interface SavedAltar {
 }
 
 /**
+ * A placed writing desk, as saved. No grimoire state
+ * is stored — the desk is the SITE; the grimoire's
+ * workings come later. `id` is optional: Background's
+ * placed-desk entity owns the id scheme (altar
+ * precedent); the save carries position always and
+ * the id when the entity provides one. Order
+ * preserved; duplicate positions allowed.
+ */
+export interface SavedDesk {
+  x: number;
+  z: number;
+  id?: string;
+}
+
+/**
  * A placed tent, as saved. No shelter state is stored —
  * the tent is the SITE; the shelter effect rides
  * Background's tent-aware shelterQuery branch when it
@@ -467,6 +491,8 @@ export interface SaveData {
   torches: SavedTorch[];
   /** Placed altars (sites, no ritual state); [] for old saves. */
   altars: SavedAltar[];
+  /** Placed desks (sites, no grimoire state); [] for old saves. */
+  desks: SavedDesk[];
   /** Placed tents (portable shelters); [] for old saves. */
   tents: SavedTent[];
   /** Partial-true-name look counts; [] for old saves. */
@@ -578,6 +604,16 @@ export interface SaveDraft {
    * (trap-save pattern: format now, wiring later).
    */
   altars?: ReadonlyArray<{
+    x: number;
+    z: number;
+    id?: string;
+  }>;
+  /**
+   * Placed desks from the placed-desk source
+   * (Background's entity snapshot, once it lands).
+   * OPTIONAL, same trap-save pattern as altars.
+   */
+  desks?: ReadonlyArray<{
     x: number;
     z: number;
     id?: string;
@@ -829,6 +865,16 @@ export function serializeSave(draft: SaveDraft): SaveData {
       x: altar.x,
       z: altar.z,
       ...(altar.id !== undefined ? { id: altar.id } : {}),
+    })),
+    // Desks: written AS-IS, same as altars (positions
+    // verbatim, id when the entity provides one — no
+    // filtering, no normalization). Invalid entries
+    // are restore()'s problem, not serialize's. No
+    // grimoire state is written — the desk is the SITE.
+    desks: (draft.desks ?? []).map((desk) => ({
+      x: desk.x,
+      z: desk.z,
+      ...(desk.id !== undefined ? { id: desk.id } : {}),
     })),
     // Tents: written AS-IS (positions verbatim, id when
     // the entity provides one — no filtering, no
@@ -1263,6 +1309,26 @@ export function deserializeSave(value: unknown): SaveData | null {
         });
       }
     }
+    // Desks are optional on read, same leniency as
+    // altars: an old v1 save without them loads with
+    // desks: []. Entries pass through UNVALIDATED —
+    // the placed-desk restore validates (finite
+    // coords) and drops bad records, so a bad desk
+    // entry can never corrupt the whole document. A
+    // non-array desks field loads as [].
+    const desks: SavedDesk[] = [];
+    if (value.desks !== undefined && Array.isArray(value.desks)) {
+      for (const entry of value.desks) {
+        if (!isRecord(entry)) continue;
+        desks.push({
+          x: entry.x as number,
+          z: entry.z as number,
+          ...(typeof entry.id === 'string'
+            ? { id: entry.id as string }
+            : {}),
+        });
+      }
+    }
     // Tents are optional on read, same leniency as
     // altars: an old v1 save without them loads with
     // tents: []. Entries pass through UNVALIDATED —
@@ -1416,6 +1482,7 @@ export function deserializeSave(value: unknown): SaveData | null {
       stumps,
       torches,
       altars,
+      desks,
       tents,
       nameSight,
       stagings,

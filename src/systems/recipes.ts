@@ -105,9 +105,11 @@ export const ITEMS = {
   pressedSheets: 'pressed-sheets',
   paper: 'paper',
   grimoire: 'grimoire',
+  journal: 'journal',
   // Ritual altar (2026-10-27 — made ritual site, placeable
   // only; see altar.ts for the place grant + scope guard).
   altar: 'altar',
+  writingDesk: 'writing-desk',
   // Primal bones (2026-10-27 first charm + 2026-10-28
   // individual bones build; see charms.ts). Kind rule,
   // documented: 'primal-bone-<shape-slug>'. Grouped by
@@ -507,6 +509,22 @@ const DRAFT_RECIPES: Recipe[] = [
       '(record) behavior ties to the discovery mechanic ' +
       '(still proposal, not pinned) and is a follow-up ' +
       'when discovery pins. Quantities draft.',
+  },
+  {
+    id: 'journal',
+    name: 'Journal',
+    status: 'draft',
+    output: { item: ITEMS.journal, quantity: 1 },
+    ingredients: [i(ITEMS.paper, 2), i(ITEMS.twinedCordage, 1)],
+    station: 'hand',
+    notes:
+      'DRAFT. The pocket book: the grimoire recipe\'s binding ' +
+      'idiom at half scale (paper 2 + cordage 1, by hand). ' +
+      'MUNDANE as crafted — the enchantment that links it to ' +
+      'the grimoire is a separate later step (Adam\'s altar ' +
+      'decision), NOT part of this recipe. One journal only ' +
+      '(a listed single in crafting.ts: names live in it, a ' +
+      'second would split the record). Quantities draft.',
   },
 
   // --- Tool ladder: ONE tool, evolving. Upgrade costs, not rebuilds.
@@ -1019,6 +1037,21 @@ const DRAFT_RECIPES: Recipe[] = [
       'DRAFT — BRAINSTORM, NOTHING PICKED. River stone is the ' +
       'weight. Craftable by hand anywhere — no workstation ' +
       'needed (Adam\'s ruling, 2026-10-26: traps are hand-crafted).',
+  },
+  {
+    id: 'writing-desk',
+    name: 'Writing Desk',
+    status: 'draft',
+    output: { item: ITEMS.writingDesk, quantity: 1 },
+    ingredients: [i(ITEMS.snapWood, 6)],
+    station: 'workstation',
+    notes:
+      'DRAFT. A desk for the big book, built at the stump ' +
+      'workstation (her workbench builds her desk). ' +
+      'Placeable-only, in the altar idiom (desk.ts carries ' +
+      'the place grant; the desk is the grimoire\'s SITE — ' +
+      'the workings themselves arrive with the grimoire\'s ' +
+      'design turn, not this recipe). Quantities draft.',
   },
   {
     id: 'altar',
