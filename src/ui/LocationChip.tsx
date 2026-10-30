@@ -81,12 +81,11 @@ export function LocationChip({
   // and spoken position round to whole numbers, display
   // and aria together so they agree. Display-only — the
   // shell's position state keeps full precision.
-  // The pair prints in the COMPASS FRAME (Adam's pin,
-  // zones.ts 2026-10-28: East = +x, North = -z): the
-  // second number is -z, so it agrees in sign with the
-  // zone readout beside it — walking north-east, both
-  // second numbers rise together. Engine internals keep
-  // raw z everywhere; only this print converts.
+  // The pair prints RAW (x, z): Adam's compass pin
+  // (2026-10-30, reversing the 2026-10-28 pin) is
+  // Cartesian — East = +x, North = +z — so the raw
+  // pair is already north-positive and the zone
+  // readout (zones.ts) carries the matching frame.
   const zoneText =
     zoneX === undefined || zoneZ === undefined
       ? null
@@ -97,12 +96,12 @@ export function LocationChip({
         'pointer-events-none rounded px-2 py-1 text-xs text-stone-100 ' +
         t.overlay
       }
-      aria-label={`Location: ${biomeName}${biomePercent !== null ? ` ${biomePercent} percent` : ''}, position ${Math.round(x)}, ${Math.round(-z)}${zoneText !== null ? `, zone ${zoneText}` : ''}${fps !== null ? `, ${fps} frames per second` : ''}${timeDateMonth ? `, ${timeDateMonth}` : ''}`}
+      aria-label={`Location: ${biomeName}${biomePercent !== null ? ` ${biomePercent} percent` : ''}, position ${Math.round(x)}, ${Math.round(z)}${zoneText !== null ? `, zone ${zoneText}` : ''}${fps !== null ? `, ${fps} frames per second` : ''}${timeDateMonth ? `, ${timeDateMonth}` : ''}`}
     >
       <p className="whitespace-nowrap">
         {biomeName}
         {biomePercent !== null ? ` ${biomePercent}%` : ''} · ({Math.round(x)},{' '}
-        {Math.round(-z)})
+        {Math.round(z)})
         {zoneText !== null ? ` · ${zoneText}` : ''}
         {fps !== null ? ` · ${fps} FPS` : ''}
       </p>
