@@ -47,7 +47,7 @@ import type { ScatterKind } from '../types';
 import type { MeshSpec } from './objects';
 import type { AnimalKind } from './animals';
 import { hashSeed, mulberry32 } from './seed';
-import { GROVE_CELL_M, SCHOOL_SEGMENT_M } from './sites';
+import { GROVE_CELL_M, SCHOOL_SEGMENT_M, VILLAGE_SEGMENT_M } from './sites';
 import { sunDirection, sunElevationAtCycle } from './sky';
 import { dayFraction } from './weather';
 
@@ -59,6 +59,7 @@ export const DISC_RADIUS: Partial<Record<ScatterKind, number>> = {
   pond: 4.5,
   peatMoss: 0.9,
   riverSilt: 1.0,
+  ashPatch: 1.6,
 };
 
 /** Fixed food accents (not source colors): bog berries, flower center, apples. */
@@ -403,6 +404,70 @@ export function buildKindGeometry(spec: MeshSpec, kind: ScatterKind): THREE.Buff
       part(blob(0.55), c, { p: [0, -0.12, 0], s: [1, 0.55, 1] }),
       part(blob(0.38), shade(c, 0.9), { p: [0.5, -0.15, 0.2], s: [1, 0.6, 1] }),
       part(box(0.5, 0.3, 0.42), shade(e, 1.0), { p: [-0.45, -0.12, -0.15], r: [0.15, 0.4, 0.1] }),
+    ]);
+  }
+  // Kind overrides (the Burnt Village set, sites.ts): house
+  // fabric built at VILLAGE_SEGMENT_M so shape and collision
+  // describe the same stretch of wall. Local ground is
+  // y = -baseY (walls: baseY 1.3; roofs and the well carry
+  // their height in the feature's y / their own baseY).
+  if (kind === 'villageWall') {
+    // Weathered plank wall: the run of boards, a top beam,
+    // and one dark window opening (extraColor) on the face.
+    return merge([
+      part(box(VILLAGE_SEGMENT_M, 2.6, 0.3), c),
+      part(box(VILLAGE_SEGMENT_M, 0.18, 0.36), shade(c, 1.12), { p: [0, 1.18, 0] }),
+      part(box(0.72, 0.95, 0.34), e, { p: [0.85, 0.12, 0] }),
+      part(box(0.14, 2.6, 0.34), shade(c, 0.88), { p: [-1.1, 0, 0] }),
+    ]);
+  }
+  if (kind === 'villageWallCharred') {
+    // The same wall, burned: a jagged top (two tilted
+    // remnants), a fallen brace leaning at the base.
+    return merge([
+      part(box(VILLAGE_SEGMENT_M, 2.6, 0.3), c),
+      part(box(1.0, 0.5, 0.32), shade(c, 1.15), { p: [0.9, 1.45, 0], r: [0, 0, 0.12] }),
+      part(box(0.7, 0.38, 0.32), shade(c, 0.9), { p: [-1.05, 1.4, 0], r: [0, 0, -0.16] }),
+      part(box(0.16, 1.9, 0.16), shade(e, 1.0), { p: [-0.5, -0.85, 0.3], r: [0.35, 0, 0.2] }),
+    ]);
+  }
+  if (kind === 'villageRoof') {
+    // Gable roof, origin at the wall top (the feature's y
+    // carries the height): two sloped planes meeting at a
+    // ridge beam that runs along local X, and a stone
+    // chimney at +2.3 x — the hearth house's chimney is the
+    // smoke anchor sites.ts names (every standing house
+    // has one; only the hearth house's smokes).
+    const slope = 0.68;
+    return merge([
+      part(box(7.6, 0.09, 4.3), c, { p: [0, 1.28, -1.78], r: [slope, 0, 0] }),
+      part(box(7.6, 0.09, 4.3), c, { p: [0, 1.28, 1.78], r: [-slope, 0, 0] }),
+      part(box(7.7, 0.15, 0.22), shade(c, 1.1), { p: [0, 2.42, 0] }),
+      part(box(0.55, 1.15, 0.55), 0x7d7668, { p: [2.3, 2.2, 0] }),
+      part(box(0.7, 0.12, 0.7), 0x6e6a5e, { p: [2.3, 2.8, 0] }),
+    ]);
+  }
+  if (kind === 'villageRoofFallen') {
+    // The roof, in: one plane tilted down into the house,
+    // a broken second piece across it, charred throughout.
+    return merge([
+      part(box(7.2, 0.09, 4.0), c, { p: [0, 0.78, 0.4], r: [0.5, 0, 0.04] }),
+      part(box(3.4, 0.09, 3.6), shade(c, 1.12), { p: [-1.2, 0.36, -0.8], r: [0.2, 0.4, 0.15] }),
+      part(box(2.2, 0.3, 0.3), shade(e, 1.0), { p: [0.8, 0.5, 0.2], r: [0, 0.2, 0.3] }),
+    ]);
+  }
+  if (kind === 'villageWell') {
+    // Stone ring (local ground -0.9), a dark water disc at
+    // the rim, two posts and a little gable cap (extraColor
+    // wood). The village's unburned landmark.
+    return merge([
+      part(cyl(0.78, 0.88, 0.9, 9), c, { p: [0, -0.45, 0] }),
+      part(flatDisc(0.68, 9), 0x14181c, { p: [0, 0.01, 0] }),
+      part(box(0.12, 1.5, 0.12), e, { p: [-0.95, -0.15, 0] }),
+      part(box(0.12, 1.5, 0.12), e, { p: [0.95, -0.15, 0] }),
+      part(box(2.05, 0.1, 0.14), shade(e, 1.1), { p: [0, 0.52, 0] }),
+      part(box(1.5, 0.07, 0.8), shade(e, 0.9), { p: [-0.36, 0.78, 0], r: [0, 0, 0.5] }),
+      part(box(1.5, 0.07, 0.8), shade(e, 0.9), { p: [0.36, 0.78, 0], r: [0, 0, -0.5] }),
     ]);
   }
   switch (spec.shape) {
@@ -1139,6 +1204,99 @@ export function buildTorch(): THREE.Group {
   flameInner.scale.set(1, 1.6, 1);
   flameInner.position.set(0, 0.78, 0);
   g.add(flameInner);
+  return g;
+}
+
+/**
+ * World height of a stump's top disc (the stump build:
+ * baseY 0.3 + trunk 0.6, with the top disc lifted 0.01
+ * against z-fighting). The dressing's candle stands on
+ * it; the renderer's candle light anchors off it too.
+ */
+export const STUMP_TOP_Y = 0.61;
+
+/**
+ * Where the altar candle stands on the stump top —
+ * off-centre toward the rim (radial ~0.23, inside the
+ * 0.42 top disc) so a bone staged at the centre (the
+ * renderer's staged-bone spot) never shares its exact
+ * spot. DRAFT (pin pass).
+ */
+export const ALTAR_CANDLE_X = 0.2;
+export const ALTAR_CANDLE_Z = 0.12;
+
+/** Radius of the placed-stones ring around the stump base. DRAFT. */
+export const ALTAR_STONE_RING_R = 0.85;
+
+/**
+ * The DRESSED STUMP (Background, claim approved 2026-10-30
+ * behind Systems' stumpy-altar shape): the altar
+ * transformation's visuals, keyed off the stump's STEP
+ * members — each element appears as its act completes, so
+ * a half-made altar looks half-made. Presentation reads
+ * the steps; ritual GRADE reads the 'altar' member
+ * (stumpState.isAltar) — never the other way round.
+ *
+ * The group origin is the stump's ground point; the stump
+ * itself stays in the instanced scatter (the workbench
+ * overlay precedent). Elements, each in a named subgroup:
+ *  - 'altar-stones': four river stones ringed at the base
+ *    (radius ALTAR_STONE_RING_R, just outside the root
+ *    flare; diagonal bearings, so the ring reads placed,
+ *    not cardinal), rounded grey, shade-varied.
+ *  - 'altar-glyph': a dark glyph on the stump's face —
+ *    three charcoal strokes (a stem and two arms) at
+ *    mid-trunk on the +Z facet. Heading-less like every
+ *    placed overlay (the record carries no rotY; tents
+ *    face +Z by the same law).
+ *  - 'altar-candle': buildCandle() standing on the top
+ *    disc at the offset above — flame included in the
+ *    build, lit as the act leaves it; the renderer adds
+ *    the candle-profile light beside it.
+ * 'workstation' (and any non-step member) draws nothing
+ * here — the workbench overlay is the renderer's own.
+ */
+export function buildStumpDressing(additions: readonly string[]): THREE.Group {
+  const g = new THREE.Group();
+  if (additions.includes('altar-stones')) {
+    const stones = new THREE.Group();
+    stones.name = 'altar-stones';
+    for (let i = 0; i < 4; i++) {
+      const a = Math.PI / 4 + (i * Math.PI) / 2;
+      const stone = new THREE.Mesh(
+        new THREE.SphereGeometry(0.17, 8, 6),
+        meshMat(shade(0x83878a, 0.9 + i * 0.07)),
+      );
+      stone.scale.set(1.15, 0.68, 0.95);
+      stone.position.set(Math.cos(a) * ALTAR_STONE_RING_R, 0.1, Math.sin(a) * ALTAR_STONE_RING_R);
+      stone.rotation.y = a;
+      stones.add(stone);
+    }
+    g.add(stones);
+  }
+  if (additions.includes('altar-glyph')) {
+    const glyph = new THREE.Group();
+    glyph.name = 'altar-glyph';
+    const charcoal = meshMat(0x14100c);
+    const stem = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.3, 0.02), charcoal);
+    stem.position.set(0, 0.32, 0.5);
+    glyph.add(stem);
+    for (const s of [-1, 1]) {
+      const arm = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.2, 0.02), charcoal);
+      arm.position.set(s * 0.055, 0.4, 0.495);
+      arm.rotation.z = s * 0.6;
+      glyph.add(arm);
+    }
+    g.add(glyph);
+  }
+  if (additions.includes('altar-candle')) {
+    const holder = new THREE.Group();
+    holder.name = 'altar-candle';
+    const candle = buildCandle();
+    candle.position.set(ALTAR_CANDLE_X, STUMP_TOP_Y, ALTAR_CANDLE_Z);
+    holder.add(candle);
+    g.add(holder);
+  }
   return g;
 }
 

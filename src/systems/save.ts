@@ -499,6 +499,9 @@ export interface SaveData {
   position: { x: number; z: number };
   inventory: Record<string, number>;
   hunger: number;
+  /** The books' link (journal <-> grimoire, enchanted at
+   * altar-grade ground); false for old saves. */
+  journalLinked: boolean;
   worn: string[];
   fires: SavedFire[];
   houses: SavedHouse[];
@@ -546,6 +549,10 @@ export interface SaveDraft {
   position: { x: number; z: number };
   inventory: ReadonlyArray<{ item: string; quantity: number }>;
   hunger: number;
+  /** The books' link, from the shell's link state. OPTIONAL
+   * so existing saveNow call sites keep compiling unchanged
+   * until the wiring lands (trap-save pattern). */
+  journalLinked?: boolean;
   worn: readonly string[];
   fires: ReadonlyArray<{
     /** Engine fire id when the caller has one; id-less entries get a deterministic id. */
@@ -783,6 +790,7 @@ export function serializeSave(draft: SaveDraft): SaveData {
     position: { x: draft.position.x, z: draft.position.z },
     inventory: normalizeStacks(draft.inventory),
     hunger: draft.hunger,
+    journalLinked: draft.journalLinked === true,
     worn: draft.worn.map(normalizeItemId),
     fires: draft.fires.map((fire, index) => ({
       // Id-less drafts get a deterministic id (same rule as
@@ -1059,6 +1067,9 @@ export function deserializeSave(value: unknown): SaveData | null {
     if (!isFiniteNumber(value.hunger)) return null;
     const worn = parseStringArray(value.worn);
     if (worn === null) return null;
+    // The books' link is optional on read: an old v1 save
+    // without it loads unlinked; only a literal true links.
+    const journalLinked = value.journalLinked === true;
     if (!Array.isArray(value.fires)) return null;
     const fires: SavedFire[] = [];
     for (const entry of value.fires) {
@@ -1540,6 +1551,7 @@ export function deserializeSave(value: unknown): SaveData | null {
       position: { x: value.position.x, z: value.position.z },
       inventory,
       hunger: Math.min(100, Math.max(0, value.hunger)),
+      journalLinked,
       worn,
       fires,
       houses,

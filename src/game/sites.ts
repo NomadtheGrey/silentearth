@@ -866,6 +866,369 @@ export function schoolhouseContains(site: SchoolSite, x: number, z: number): boo
   return Math.hypot(x - site.center.x, z - site.center.z) <= site.clearRadius;
 }
 
+// ---------------------------------------------------------------------------
+// THE BURNT VILLAGE — site #3 (Adam, 2026-10-30; claim
+// approved by DEV the same day with both open calls ruled:
+// smoke = the fog-exempt billboard column; spacing = the
+// radii-sum + margin rule, not a literal 200 m edge-to-edge).
+// The smoke avenue's destination and the populated-places
+// framework's first customer: a settlement composed on the
+// registry — a street spine on an old movement line, plots
+// along it, one house per plot, each house rolled a ruin
+// state. RECENTLY burned: ash, char, collapsed roofs.
+//
+// Siting (the doctrine: previously-occupied places sit
+// FARTHER than groves — she hasn't met people yet): the far
+// band 550–950 m, beyond the Schoolhouse's 250–450. Country:
+// a settlement needs water — oldfield- or creek-dominant
+// with creek weight present. Spacing against BOTH earlier
+// sites is a hard scan filter (radii + 60 m margin; the
+// bands keep real separations wide in practice).
+//
+// Layout composes in a quarter-turn frame (the schoolhouse
+// refinement): the street runs along world X or Z by plan
+// stream, so every wall stays an exact AABB. Houses are
+// walk-in shells (Adam's interiors rule: small = walk-in).
+// ---------------------------------------------------------------------------
+
+/** Siting band from spawn, meters (DRAFT). */
+export const VILLAGE_MIN_DIST_M = 550;
+export const VILLAGE_MAX_DIST_M = 950;
+/** Clearing radius around the village centre (DRAFT). */
+export const VILLAGE_CLEAR_RADIUS_M = 58;
+/** Extra spacing kept between the village and the earlier
+ *  sites' clearings (DRAFT; DEV-ruled formulation). */
+export const VILLAGE_SPACING_MARGIN_M = 60;
+/** Creek-bottom weight at/over which a candidate has water. */
+export const VILLAGE_CREEK_MIN_WEIGHT = 0.15;
+/** House wall segment length / wall height, meters (DRAFT):
+ *  a house is 7×7 m, two segments per side. */
+export const VILLAGE_SEGMENT_M = 3.5;
+export const VILLAGE_WALL_H_M = 2.6;
+const VILLAGE_WALL_HALF_T = 0.15;
+/** House-centre offset from the street axis (DRAFT). */
+const VILLAGE_HOUSE_SETBACK_M = 6.8;
+/** Plot centres along the street (local meters). */
+const VILLAGE_PLOT_XS = [-30.8, -15.4, 0, 15.4, 30.8];
+/** A plot's ruin fate (or 'gone' — burned to the ground). */
+export type VillageHouseState = 'standing' | 'charred' | 'collapsed' | 'gone';
+
+/** One village plot, as exported for the contents stagings. */
+export interface VillagePlot {
+  /** House centre, world coords ('gone' plots: the plot point). */
+  x: number;
+  z: number;
+  state: VillageHouseState;
+  /** True for the one hearth house (forced standing). */
+  hearth: boolean;
+}
+
+/** The derived Burnt Village: one per world seed. */
+export interface VillageSite {
+  id: string;
+  seed: string;
+  center: { x: number; z: number };
+  /** Dominant biome at the chosen centre. */
+  biome: BiomeId;
+  /** Siting distance from spawn, meters. */
+  distance: number;
+  clearRadius: number;
+  /** World axis the street runs along. */
+  streetAxis: 'x' | 'z';
+  plots: VillagePlot[];
+  /** The one hearth-standing house + its hearth spot (the
+   *  found-familiar beat stages at the spot). */
+  hearthHouse: {
+    x: number;
+    z: number;
+    hearthSpot: { x: number; z: number };
+    /** Where the smoke column rises (the chimney top). */
+    smokeAnchor: { x: number; z: number; y: number };
+  };
+  /** The village well (the bones beat stages one spot here). */
+  well: { x: number; z: number };
+  /** Seeded bone-scatter spots for the bones beat. */
+  boneSpots: { x: number; z: number; where: 'house' | 'well' | 'street' }[];
+  features: ScatterObject[];
+  walls: SiteWallBox[];
+  bounds: { minX: number; maxX: number; minZ: number; maxZ: number };
+}
+
+const villageCache = new Map<string, VillageSite>();
+
+/**
+ * Derive the world's Burnt Village. `weightsAtPos` returns
+ * the full weights + dominant at a position. Memoized by
+ * seed, like the other sites.
+ */
+export function villageSite(
+  seed: string,
+  spawn: { x: number; z: number },
+  weightsAtPos: (x: number, z: number) => BiomeWeights,
+): VillageSite {
+  const cached = villageCache.get(`${seed}::village`);
+  if (cached) return cached;
+
+  // Spacing is measured against both earlier sites.
+  const grove = groveSite(seed, spawn, (x, z) => weightsAtPos(x, z).dominant);
+  const school = schoolhouseSite(seed, spawn, weightsAtPos);
+  const spacingVs = (other: SiteFootprint): number =>
+    other.clearRadius + VILLAGE_CLEAR_RADIUS_M + VILLAGE_SPACING_MARGIN_M;
+  const spacingLegal = (x: number, z: number): boolean =>
+    Math.hypot(x - grove.center.x, z - grove.center.z) >= spacingVs(grove) &&
+    Math.hypot(x - school.center.x, z - school.center.z) >= spacingVs(school);
+
+  // Siting: its own bearing stream, scanned outward over the
+  // band (the schoolhouse fallback shape: the first
+  // spacing-legal candidate is remembered biome-unchecked;
+  // should none be spacing-legal, the band-end point stands).
+  const bearing = mulberry32(deriveSeed(seed, 'site:village'))() * Math.PI * 2;
+  const dirX = Math.cos(bearing);
+  const dirZ = Math.sin(bearing);
+  let center = {
+    x: spawn.x + dirX * VILLAGE_MAX_DIST_M,
+    z: spawn.z + dirZ * VILLAGE_MAX_DIST_M,
+  };
+  let biome = weightsAtPos(center.x, center.z).dominant;
+  let distance = VILLAGE_MAX_DIST_M;
+  let fallback: { x: number; z: number; biome: BiomeId; distance: number } | null = null;
+  for (let d = VILLAGE_MIN_DIST_M; d <= VILLAGE_MAX_DIST_M; d += GROVE_SCAN_STEP_M) {
+    const x = spawn.x + dirX * d;
+    const z = spawn.z + dirZ * d;
+    if (!spacingLegal(x, z)) continue;
+    const w = weightsAtPos(x, z);
+    if (!fallback) fallback = { x, z, biome: w.dominant, distance: d };
+    if (
+      (w.dominant === 'oldfieldRise' || w.dominant === 'creekBottom') &&
+      (w.weights.creekBottom ?? 0) >= VILLAGE_CREEK_MIN_WEIGHT
+    ) {
+      center = { x, z };
+      biome = w.dominant;
+      distance = d;
+      break;
+    }
+    if (d === VILLAGE_MAX_DIST_M && fallback) {
+      center = { x: fallback.x, z: fallback.z };
+      biome = fallback.biome;
+      distance = fallback.distance;
+    }
+  }
+
+  // --- Layout (streams under the 'village' label) ---------------------------
+  const planRand = mulberry32(deriveSeed(seed, 'village:plan'));
+  // Quarter-turn frame: the street runs along local X; the
+  // swap turns it onto world Z. Local -> world like the school.
+  const swap = planRand() < 0.5;
+  const theta = swap ? Math.PI / 2 : 0;
+  const toWorld = (lx: number, lz: number): { x: number; z: number } =>
+    swap
+      ? { x: center.x + lz, z: center.z - lx }
+      : { x: center.x + lx, z: center.z + lz };
+
+  const features: ScatterObject[] = [];
+  const walls: SiteWallBox[] = [];
+  const feat = (kind: ScatterKind, x: number, z: number, y: number, scale: number, rotY: number): void => {
+    features.push({ kind, x, z, y, scale, rotY });
+  };
+  const box = (cx: number, cz: number, hx: number, hz: number): void => {
+    walls.push({ minX: cx - hx, maxX: cx + hx, minZ: cz - hz, maxZ: cz + hz });
+  };
+
+  // Plots: five stations along the street, a house plot on
+  // each side of each station. The hearth plot is picked
+  // first and forced built + standing.
+  interface PlotPlan {
+    lx: number;
+    lz: number;
+    side: -1 | 1;
+  }
+  const plotPlans: PlotPlan[] = [];
+  for (const side of [-1, 1] as const) {
+    for (const px of VILLAGE_PLOT_XS) {
+      plotPlans.push({ lx: px, lz: side * VILLAGE_HOUSE_SETBACK_M, side });
+    }
+  }
+  const hearthIndex = Math.floor(planRand() * plotPlans.length);
+
+  const plots: VillagePlot[] = [];
+  const builtHouses: { plan: PlotPlan; world: { x: number; z: number } }[] = [];
+  let hearthHouse: VillageSite['hearthHouse'] | null = null;
+
+  plotPlans.forEach((plan, idx) => {
+    const world = toWorld(plan.lx, plan.lz);
+    const isHearth = idx === hearthIndex;
+    let state: VillageHouseState;
+    if (isHearth) state = 'standing';
+    else if (planRand() < 0.15) state = 'gone';
+    else {
+      const roll = planRand();
+      state = roll < 0.25 ? 'standing' : roll < 0.7 ? 'charred' : 'collapsed';
+    }
+    plots.push({ x: world.x, z: world.z, state, hearth: isHearth });
+    if (state === 'gone') return;
+    builtHouses.push({ plan, world });
+
+    // Segments: two per side of the 7×7 ring. The street
+    // side is local -side (toward the axis); its door gap is
+    // one segment, plan-picked (the door burned away — the
+    // gap is the full segment, like the schoolhouse).
+    interface Seg {
+      lx: number;
+      lz: number;
+      running: 'x' | 'z';
+      doorSide: boolean;
+    }
+    const segs: Seg[] = [];
+    const H = VILLAGE_SEGMENT_M; // 3.5 — half the house side
+    for (const off of [-H / 2, H / 2]) {
+      segs.push({ lx: plan.lx + off, lz: plan.lz - H, running: 'x', doorSide: plan.side === 1 });
+      segs.push({ lx: plan.lx + off, lz: plan.lz + H, running: 'x', doorSide: plan.side === -1 });
+      segs.push({ lx: plan.lx - H, lz: plan.lz + off, running: 'z', doorSide: false });
+      segs.push({ lx: plan.lx + H, lz: plan.lz + off, running: 'z', doorSide: false });
+    }
+    const doorPool = segs.filter((s) => s.doorSide);
+    const door = doorPool[Math.floor(planRand() * doorPool.length)];
+
+    const emitSeg = (s: Seg, kind: ScatterKind, scale: number): void => {
+      const w = toWorld(s.lx, s.lz);
+      const runsWorldX = (s.running === 'x') !== swap;
+      feat(kind, w.x, w.z, 0, scale, runsWorldX ? 0 : Math.PI / 2);
+      const halfLen = (VILLAGE_SEGMENT_M / 2) * scale;
+      if (runsWorldX) box(w.x, w.z, halfLen, VILLAGE_WALL_HALF_T);
+      else box(w.x, w.z, VILLAGE_WALL_HALF_T, halfLen);
+    };
+
+    if (state === 'standing') {
+      for (const s of segs) {
+        if (s === door) continue;
+        emitSeg(s, 'villageWall', 1);
+      }
+      feat('villageRoof', world.x, world.z, VILLAGE_WALL_H_M, 1, theta);
+    } else if (state === 'charred') {
+      // One or two non-door segments burned through entirely.
+      const others = segs.filter((s) => s !== door);
+      const missingCount = 1 + Math.floor(planRand() * 2);
+      for (let i = others.length - 1; i > 0; i--) {
+        const j = Math.floor(planRand() * (i + 1));
+        [others[i], others[j]] = [others[j], others[i]];
+      }
+      const missing = new Set(others.slice(0, missingCount));
+      for (const s of segs) {
+        if (s === door || missing.has(s)) continue;
+        emitSeg(s, 'villageWallCharred', 1);
+      }
+      feat('villageRoofFallen', world.x, world.z, 0, 1, theta);
+    } else {
+      // Collapsed: most segments gone; the rest stand as
+      // half-height charred stubs (scale 0.5 — box follows).
+      for (const s of segs) {
+        if (planRand() < 0.55) continue;
+        emitSeg(s, 'villageWallCharred', 0.5);
+      }
+      const rubbleRand = mulberry32(deriveSeed(seed, `village:rubble:${idx}`));
+      const rubbleCount = 2 + Math.floor(rubbleRand() * 2);
+      for (let i = 0; i < rubbleCount; i++) {
+        const w = toWorld(
+          plan.lx + (rubbleRand() * 2 - 1) * 2.4,
+          plan.lz + (rubbleRand() * 2 - 1) * 2.4,
+        );
+        feat('rubble', w.x, w.z, 0, 0.7 + rubbleRand() * 0.6, rubbleRand() * Math.PI);
+      }
+    }
+
+    if (isHearth) {
+      // The hearth stands against the back wall (away from
+      // the street); the smoke rises from the roof's chimney
+      // (the villageRoof build carries it at local +2.3 x).
+      const spotLocal = { lx: plan.lx, lz: plan.lz + plan.side * 2.4 };
+      const spot = toWorld(spotLocal.lx, spotLocal.lz);
+      const chimney = toWorld(plan.lx + 2.3, plan.lz);
+      hearthHouse = {
+        x: world.x,
+        z: world.z,
+        hearthSpot: spot,
+        smokeAnchor: { x: chimney.x, z: chimney.z, y: 5.2 },
+      };
+    }
+  });
+
+  // The well: just off the street's edge near its middle,
+  // on the + side. Solid — she walks around it.
+  const wellLocal = { lx: 5.5, lz: 4.4 };
+  const wellWorld = toWorld(wellLocal.lx, wellLocal.lz);
+  feat('villageWell', wellWorld.x, wellWorld.z, 0, 1, theta);
+  box(wellWorld.x, wellWorld.z, 0.85, 0.85);
+
+  // Ash: the street reads as an ash track (discs along the
+  // axis), and the whole footprint stands in ash fall.
+  {
+    const rand = mulberry32(deriveSeed(seed, 'village:ash'));
+    for (let lx = -39; lx <= 39; lx += 6.5) {
+      const w = toWorld(lx, (rand() * 2 - 1) * 1.6);
+      feat('ashPatch', w.x, w.z, 0.02, 1.4 + rand() * 1.2, rand() * Math.PI);
+    }
+    for (let i = 0; i < 22; i++) {
+      const a = rand() * Math.PI * 2;
+      const r = Math.sqrt(rand()) * (VILLAGE_CLEAR_RADIUS_M - 4);
+      const w = toWorld(Math.cos(a) * r, Math.sin(a) * r);
+      feat('ashPatch', w.x, w.z, 0.02, 0.8 + rand() * 1.6, rand() * Math.PI);
+    }
+  }
+
+  // Bone spots (the bones beat stages here — positions and
+  // their ground only; the bones themselves are contents).
+  const boneSpots: VillageSite['boneSpots'] = [];
+  {
+    const rand = mulberry32(deriveSeed(seed, 'village:bones'));
+    const houses = [...builtHouses];
+    for (let i = houses.length - 1; i > 0; i--) {
+      const j = Math.floor(rand() * (i + 1));
+      [houses[i], houses[j]] = [houses[j], houses[i]];
+    }
+    for (const h of houses.slice(0, 2)) {
+      boneSpots.push({
+        x: h.world.x + (rand() * 2 - 1) * 1.5,
+        z: h.world.z + (rand() * 2 - 1) * 1.5,
+        where: 'house',
+      });
+    }
+    boneSpots.push({ x: wellWorld.x + 1.1, z: wellWorld.z + 0.6, where: 'well' });
+    const streetW = toWorld((rand() * 2 - 1) * 20, 0);
+    boneSpots.push({ x: streetW.x, z: streetW.z, where: 'street' });
+  }
+
+  const site: VillageSite = {
+    id: 'village',
+    seed,
+    center,
+    biome,
+    distance,
+    clearRadius: VILLAGE_CLEAR_RADIUS_M,
+    streetAxis: swap ? 'z' : 'x',
+    plots,
+    // The hearth house always exists (its plot is forced).
+    hearthHouse: hearthHouse!,
+    well: wellWorld,
+    boneSpots,
+    features,
+    walls,
+    bounds: {
+      minX: center.x - VILLAGE_CLEAR_RADIUS_M,
+      maxX: center.x + VILLAGE_CLEAR_RADIUS_M,
+      minZ: center.z - VILLAGE_CLEAR_RADIUS_M,
+      maxZ: center.z + VILLAGE_CLEAR_RADIUS_M,
+    },
+  };
+  villageCache.set(`${seed}::village`, site);
+  return site;
+}
+
+/** True when a world position lies inside the village's
+ *  clearing (the footprint check). */
+export function villageContains(site: VillageSite, x: number, z: number): boolean {
+  return Math.hypot(x - site.center.x, z - site.center.z) <= site.clearRadius;
+}
+
 /** The shared footprint shape both sites (and the worldgen
  *  pass + the renderer's wall query) read: a clearing circle,
  *  its features, its collision boxes, and its broad bounds.

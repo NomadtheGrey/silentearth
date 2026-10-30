@@ -108,7 +108,16 @@ export type ScatterKind =
   | 'schoolDesk'
   | 'blackboard'
   | 'flagpole'
-  | 'rubble';
+  | 'rubble'
+  // Site-pass kinds (the Burnt Village, sites.ts — same rule):
+  // house wall segments (sound + charred), gable roofs
+  // (standing + fallen), the village well, ash ground.
+  | 'villageWall'
+  | 'villageWallCharred'
+  | 'villageRoof'
+  | 'villageRoofFallen'
+  | 'villageWell'
+  | 'ashPatch';
 
 /** One placed scatter object in a chunk. y is its base height above ground. */
 export interface ScatterObject {

@@ -32,6 +32,15 @@
  *   never offers a complete-press.
  * - No Pick-up, no removal action: moving/removing a
  *   placed altar or bone is Adam's word later, not here.
+ * - SITE ACTS (altar transformation, 2026-10-30): an
+ *   optional acts row set above the staging content —
+ *   the stump's three makings + the journal Linking at
+ *   altar-grade sites, composed by the shell (each act
+ *   present until done). Act buttons are always live;
+ *   a refusal is spoken through the note, the wish-pill
+ *   pattern. Acts take the panel's first digit badges
+ *   (render order), ahead of the kind/offer rows — the
+ *   shell's digit dispatch reads the same order.
  *
  * Touch + desktop share this panel exactly (parity); all
  * action buttons are 44 px tall, the touch minimum.
@@ -53,6 +62,12 @@ export interface RitualKindOption {
    * rows only, matching the shell's digit dispatch.
    */
   carried: number;
+}
+
+/** One site act the shell offers at this site. */
+export interface RitualSiteAct {
+  id: string;
+  label: string;
 }
 
 /** One carried food kind the player may offer. */
@@ -87,6 +102,10 @@ export interface RitualPanelProps {
   kindOptions: RitualKindOption[];
   foodOptions: RitualFoodOption[];
   note: string | null;
+  /** Transformation acts for this site (shell-composed;
+   *  empty/absent = no acts section). */
+  siteActs?: RitualSiteAct[];
+  onSiteAct?: (id: string) => void;
   onStageBone: (kind: string) => void;
   onGiveOffering: (item: string) => void;
   onSpeakName: () => void;
@@ -110,6 +129,8 @@ export function RitualPanel({
   kindOptions,
   foodOptions,
   note,
+  siteActs,
+  onSiteAct,
   onStageBone,
   onGiveOffering,
   onSpeakName,
@@ -155,6 +176,24 @@ export function RitualPanel({
         <p className="mt-1 rounded bg-black/45 px-2 py-1 text-xs text-stone-200">
           {note}
         </p>
+      ) : null}
+      {siteActs && siteActs.length > 0 && onSiteAct ? (
+        <div className="mt-2 flex flex-col gap-1">
+          {siteActs.map((act) => (
+            <button
+              key={act.id}
+              type="button"
+              onClick={() => onSiteAct(act.id)}
+              onTouchStart={(e) => {
+                e.stopPropagation();
+              }}
+              className={'min-h-[44px] rounded px-3 py-2 text-left text-sm ' + t.button}
+            >
+              {act.label}
+              {hintBadge(nextHint())}
+            </button>
+          ))}
+        </div>
       ) : null}
       {staged === null ? (
         <>
