@@ -119,7 +119,12 @@ export const GROVE_REFUSAL_LINE =
 
 // --- Siting (all DRAFT) -------------------------------------------------
 
-export const GROVE_MIN_DIST_M = 150;
+/** Siting band (Adam, 2026-10-30): five zones out is the CLOSEST
+ *  any grove gets — 5 chunks x 32 m = 160 m floor from spawn. The
+ *  300 m cap is unchanged: farther is fine. Previously-occupied
+ *  places sit farther than groves (her story: human traces
+ *  deepen with distance). */
+export const GROVE_MIN_DIST_M = 160;
 export const GROVE_MAX_DIST_M = 300;
 const GROVE_SCAN_STEP_M = 10;
 /** Biomes that can host the Grove (dominant-weight match). */
