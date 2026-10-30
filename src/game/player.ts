@@ -65,8 +65,10 @@ import type { CameraMode } from '../types';
 import { HUNGRY_SPEED_MULTIPLIER, type HungerStageQuery } from './hunger';
 import {
   applyBogBoots,
+  applyWading,
   type BogBootsQuery,
   type TerrainSpeedQuery,
+  type WaterQuery,
 } from './movement';
 import { pushOutOfWalls, type SiteWallBox } from './sites';
 
@@ -206,11 +208,28 @@ export class PlayerController {
   }
 
   /**
+   * Standing-in-water query (renderer-owned wiring, ground
+   * resistance 2026-10-30): true while she wades (river ribbon
+   * or a water disc under her feet). Separate from the terrain
+   * query BY DESIGN — the wading floor composes after the
+   * bog-boots step (movement.ts: boots mitigate bog only; folded
+   * into the terrain result, wading would be mitigated too).
+   * Defaults to dry ground when unwired.
+   */
+  private waterQuery: WaterQuery | null = null;
+
+  /** Renderer wiring for the water query (see above). */
+  setWaterQuery(query: WaterQuery): void {
+    this.waterQuery = query;
+  }
+
+  /**
    * Site wall query (renderer-owned wiring, sites landing
-   * 2026-10-30): returns the grove's hedge wall boxes when she
-   * is near the site, null in open country — the game's only
-   * collision, kept site-local by design (sites.ts). Unwired
-   * (tests) = no walls anywhere.
+   * 2026-10-30): returns a registered site's wall boxes when she
+   * is near it (the grove's hedges, the schoolhouse's walls),
+   * null in open country — the game's only collision, kept
+   * site-local by design (sites.ts). Unwired (tests) = no walls
+   * anywhere.
    */
   private siteWallsQuery: SiteWallsQuery | null = null;
 
@@ -630,7 +649,13 @@ export class PlayerController {
     // full bog = BOGGY_SLOW_MIN), mitigated by boots when worn.
     const rawTerrain = this.terrainSpeedQuery?.(this.x, this.z) ?? 1;
     const bootsWorn = this.bogBootsQuery?.() ?? false;
-    const terrain = applyBogBoots(rawTerrain, bootsWorn);
+    const bootsTerrain = applyBogBoots(rawTerrain, bootsWorn);
+    // Wading (ground resistance, 2026-10-30): standing in water
+    // floors the terrain factor at WADING_FACTOR — AFTER the
+    // boots step, because boots mitigate the bog curve only and
+    // bog boots are not waders (movement.ts). MIN composition:
+    // one wetness is never charged twice.
+    const terrain = applyWading(bootsTerrain, this.waterQuery?.(this.x, this.z) ?? false);
     // Hunger slowdown (Adam, 2026-10-26 — weather + hunger build):
     // a hungry witch moves at HUNGRY_SPEED_MULTIPLIER of base
     // speed. Applies at 'hungry' AND 'too-hungry' (too-hungry is

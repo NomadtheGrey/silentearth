@@ -27,7 +27,7 @@ import type { WorldGen } from './worldgen';
 import { PlayerController } from './player';
 import { marshWeight } from './biomes';
 import { SOURCE_FOR_KIND } from './objects';
-import { buildAltarGroup, buildAnimal, buildCampArrow, buildCandle, buildCauldronGroup, buildDeskGroup, buildEdgeArrow, buildKindGeometry, buildStagedBone, buildSunflowerHeadGeometry, buildTorch, buildUmbrella, buildWitch, CANDLE_FLAME_Y, sunflowerHeadMatrix, sunflowerHeadOrientation, TORCH_FLAME_Y, vertexLambert } from './models';
+import { buildAltarGroup, buildAnimal, buildCampArrow, buildCandle, buildCauldronGroup, buildDeskGroup, buildEdgeArrow, buildKindGeometry, buildStagedBone, buildSunflowerHeadGeometry, buildTorch, buildUmbrella, buildWitch, CANDLE_FLAME_Y, DISC_RADIUS, sunflowerHeadMatrix, sunflowerHeadOrientation, TORCH_FLAME_Y, vertexLambert } from './models';
 import { spawnAnimalsForChunk, updateAnimal } from './animals';
 import type { AnimalInstance, AnimalKind } from './animals';
 import { crowGlowIntensity, CROW_GLOW_EMISSIVE } from './crow';
@@ -40,7 +40,7 @@ import {
   scatterTargetId,
   wrapGenWithState,
 } from './harvestState';
-import { terrainSpeedAt } from './movement';
+import { standingInWater, terrainSpeedAt, type WaterDisc } from './movement';
 import { treeKindAt } from './treeKind';
 import { riverParamsFor, riverRibbonForChunk } from './river';
 import { groveSite, schoolhouseSite, wallsNearSites, type SiteFootprint } from './sites';
@@ -103,6 +103,29 @@ function computeSites(gen: WorldGen): SiteFootprint[] {
     groveSite(String(gen.seed), spawn, (x, z) => gen.weightsAt(x, z).dominant),
     schoolhouseSite(String(gen.seed), spawn, (x, z) => gen.weightsAt(x, z)),
   ];
+}
+
+/**
+ * The water discs (ponds + standing-water pools) in the 3x3
+ * chunks around (x, z), as wading-test circles — radius is the
+ * disc the renderer draws (DISC_RADIUS x instance scale), the
+ * same ground truth waterProximity.ts reads for ponds. The
+ * caller memoizes by chunk; generateChunk is pure, so the set
+ * is exact for the neighborhood.
+ */
+function collectWaterDiscs(gen: WorldGen, x: number, z: number): WaterDisc[] {
+  const discs: WaterDisc[] = [];
+  const pcx = Math.floor(x / CHUNK_SIZE);
+  const pcz = Math.floor(z / CHUNK_SIZE);
+  for (let cx = pcx - 1; cx <= pcx + 1; cx++) {
+    for (let cz = pcz - 1; cz <= pcz + 1; cz++) {
+      for (const obj of gen.generateChunk(cx, cz).objects) {
+        if (obj.kind !== 'pond' && obj.kind !== 'standingWater') continue;
+        discs.push({ x: obj.x, z: obj.z, r: (DISC_RADIUS[obj.kind] ?? 1.0) * obj.scale });
+      }
+    }
+  }
+  return discs;
 }
 
 function lambert(color: number, opacity = 1): THREE.MeshLambertMaterial {
@@ -533,6 +556,27 @@ export class WorldRenderer {
     // generator delegates fieldsAt/weightsAt untouched, so the
     // slow reads true world data, not harvest state.
     this.player.setTerrainSpeedQuery((x, z) => terrainSpeedAt(this.gen, x, z));
+    // Water query (ground resistance, 2026-10-30): the wading
+    // half of the terrain story, wired beside the terrain query.
+    // The pond / standing-water discs around her chunk are
+    // memoized by chunk (generateChunk is pure; the set rebuilds
+    // at most once per chunk crossing, never per frame) and the
+    // river reads this.riverParams dynamically, so world changes
+    // flow through without re-wiring. The composition itself —
+    // wading floors the boots-mitigated terrain factor — lives
+    // in player.ts + movement.ts (applyWading).
+    {
+      let discMemoKey = '';
+      let discMemo: WaterDisc[] = [];
+      this.player.setWaterQuery((x, z) => {
+        const key = `${Math.floor(x / CHUNK_SIZE)},${Math.floor(z / CHUNK_SIZE)}`;
+        if (key !== discMemoKey) {
+          discMemoKey = key;
+          discMemo = collectWaterDiscs(this.gen, x, z);
+        }
+        return standingInWater(this.riverParams, discMemo, x, z);
+      });
+    }
     // Site walls (sites landing, 2026-10-30; generalized to the
     // registered sites with the Schoolhouse): the renderer owns
     // the generator and the player, so it wires the sites'
