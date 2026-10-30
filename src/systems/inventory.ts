@@ -615,7 +615,7 @@ export const ITEM_DESCRIPTIONS: Readonly<Record<string, string>> = {
   'luminous-spores': 'Pale glowing spores. An ingredient for the moss cradle.',
   'dry-kindling': 'Split snap-wood, dry and ready. One piece lights a fire by friction.',
   'charcoal-stick': 'A stick with a burnt end — char one at a lit fire. Draws a dark line on wood, stone, or hide.',
-  candle: 'Made by dipping a twined-cordage wick in wax melted in a cauldron at a lit fire — one melt makes three. One of the three things a Stumpy Altar asks for: stone, glyph, and flame.',
+  candle: 'Made by dipping a twined-cordage wick in wax melted in a cauldron at a lit hearth — one melt makes three. One of the three things a Stumpy Altar asks for: stone, glyph, and flame.',
   beeswax: 'Wax gathered from a wild hive, alongside the honey. Melts in the cauldron at a fire.',
   tallow: 'Fat rendered from a trap carcass, in the cauldron at a fire. Melts into a candle.',
   clay: 'Clay. Pots, bricks, and daub — shaped, then fired.',
