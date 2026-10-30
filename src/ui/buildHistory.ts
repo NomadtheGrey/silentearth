@@ -45,10 +45,7 @@ const ALL_RECORDS: BuildRecord[] = [
   {
     merge: 'Merge #29',
     pr: 59,
-    // sha pending: the merge sha is unknowable before the
-    // merge; the pre-authorized correction merge replaces
-    // this with the real one.
-    sha: 'pending',
+    sha: '5feba05',
     date: '2026-10-30',
     what: 'No iron anywhere: the bloomery is gone end to end and the fire ladder tops at the kiln \u2014 the witch does not touch iron, and old saves migrate the retired fire and item cleanly. The writing desk and journal are built end to end (the grimoire\u2019s desk stands in the world; the journal is a listed single), and the clay cauldron is founded: kiln-fired, set on a hearth as its own target, bound to that hearth in the save. Candles burn from both roads \u2014 beeswax (hives now yield wax with the honey) and tallow, three per melt \u2014 and a charcoal stick joins the fire goods. Crafting obeys the station law: the panel shows only what her one faced target feeds, radius is retired, and the loom joins the race \u2014 every one of the 51 recipes sits in its group. Trees have kinds now: an oak is a fact of its spot, broader in the canopy, and fells to snap-wood plus a Downed Oak. Traps take their settled allocations (pot traps gain mice and voles; deer are untrappable), tallow no longer renders from frog or crayfish, and the station pills speak their acts: WEAVE, KRAFT, LIGHT, COOK, FIRE \u2014 and a lit hearth wears its name, Hearth.',
     why: 'Adam\u2019s no-iron tenet closed the bloomery thread for good, the desk gives the grimoire its home, and the station law makes crafting answer the thing she is actually facing \u2014 one target, one set of honest options. The rest is the world filling in: oak in the woods, wax in the hive, verbs on the pills.',
