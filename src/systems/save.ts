@@ -639,11 +639,25 @@ export interface SaveDraft {
  * literal — systems does not import game modules. An entry with
  * any other type makes the whole document corrupt (see header:
  * partial restores risk contents landing on the wrong house).
+ * Retired types are the one exception — see RETIRED_FIRE_TYPES.
  */
 const SAVE_FIRE_TYPES: ReadonlySet<string> = new Set([
   'campfire',
   'hearth',
   'kiln',
+]);
+
+/**
+ * Fire types that once existed and were removed by design. A
+ * saved fire of a retired type is DROPPED on load — the
+ * smallest migration: only that fire is lost, the rest of the
+ * document restores normally, and the next save writes without
+ * it. Retired is not unknown: any other type outside
+ * SAVE_FIRE_TYPES still makes the whole document corrupt.
+ * - 'bloomery' — removed 2026-10-30 (Adam's no-iron ruling:
+ *   witches don't touch iron, the iron path is closed).
+ */
+const RETIRED_FIRE_TYPES: ReadonlySet<string> = new Set([
   'bloomery',
 ]);
 
@@ -938,6 +952,14 @@ export function deserializeSave(value: unknown): SaveData | null {
     const fires: SavedFire[] = [];
     for (const entry of value.fires) {
       if (!isRecord(entry)) return null;
+      // Retired fire types drop on load (see
+      // RETIRED_FIRE_TYPES) — only that fire is lost.
+      if (
+        typeof entry.type === 'string' &&
+        RETIRED_FIRE_TYPES.has(entry.type)
+      ) {
+        continue;
+      }
       if (
         typeof entry.type !== 'string' ||
         !SAVE_FIRE_TYPES.has(entry.type)

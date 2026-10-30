@@ -622,7 +622,7 @@ export const ITEM_DESCRIPTIONS: Readonly<Record<string, string>> = {
   campfire: 'An open fire. Cooks acorns, lights torches, pushes back the dark.',
   hearth: 'Stone and clay, a lasting fire. Cooks, and gives light.',
   kiln: 'A clay kiln. Fires pottery and bricks.',
-  bloomery: 'Smelts bog iron.',
+
   'stumpy-workstation': 'A stump fed wood and cordage, grown into a workbench. A workstation for crafting.',
   'crafted-workstation': 'A built workbench. A workstation for crafting, where you place it.',
   'potters-wheel': "A wheel for shaping clay, on the clay's way to the kiln.",

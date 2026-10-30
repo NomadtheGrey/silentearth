@@ -19,9 +19,10 @@
  * - Salve / medicine / restorative recipes — mechanics not designed yet.
  * - Food prep recipes — food cooks on open fire (stick or fire-buried),
  *   not via recipes. Food items are harvests / trap catches, not crafts.
- * - The iron tool (post-axe) — gated by bog iron + bloomery; name and
- *   recipe TBD after the bloomery word veto. The bloomery itself is in
- *   here as a draft recipe, with its veto note attached.
+ * - Anything iron. NO IRON PATH (Adam, 2026-10-30: witches don't
+ *   touch iron — the whole iron path is closed, and the cauldron
+ *   is clay). There is no iron tool and no bloomery; the tool
+ *   ladder is stone to its top (the Trundle-Tool).
  *
  * No UI and no game wiring in this file. The crafting engine in
  * ./crafting.ts consumes this data; the inventory system is a later
@@ -690,22 +691,6 @@ const DRAFT_RECIPES: Recipe[] = [
     ingredients: [i(ITEMS.clay, 10), i(ITEMS.riverStone, 8)],
     notes: 'DRAFT. Fires pottery and bricks.',
   },
-  {
-    id: 'bloomery',
-    name: 'Bloomery',
-    status: 'draft',
-    output: { item: ITEMS.bloomery, quantity: 1 },
-    ingredients: [
-      i(ITEMS.riverStone, 8),
-      i(ITEMS.clay, 8),
-      i(ITEMS.snapWood, 4),
-    ],
-    notes:
-      'DRAFT. Smelts bog iron (bog iron + fuel consumed per smelt; ' +
-      'exact smelt cost TBD). WORD VETO STILL PENDING: Adam is to veto ' +
-      '"bloomery" or let it stand — the name is not settled.',
-  },
-
   // --- Stations.
   {
     id: 'stumpy-workstation',
