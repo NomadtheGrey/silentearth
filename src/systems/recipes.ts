@@ -162,6 +162,8 @@ export const ITEMS = {
   opossumCarcass: 'opossum-carcass',
   groundhogCarcass: 'groundhog-carcass',
   raccoonCarcass: 'raccoon-carcass',
+  mouseCarcass: 'mouse-carcass',
+  voleCarcass: 'vole-carcass',
   // Beehive honey (2026-10-28 — Systems follow-up to Background's
   // wildHive landing; see honey.ts for the harvest rule).
   honey: 'honey',

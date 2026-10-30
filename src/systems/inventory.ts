@@ -528,6 +528,8 @@ export const ITEM_DISPLAY_NAMES: Readonly<Record<string, string>> = {
   'opossum-carcass': 'Opossum Carcass',
   'groundhog-carcass': 'Groundhog Carcass',
   'raccoon-carcass': 'Raccoon Carcass',
+  'mouse-carcass': 'Mouse Carcass',
+  'vole-carcass': 'Vole Carcass',
   'salt-crystal': 'Salt Crystal',
   dirt: 'Dirt',
   mud: 'Mud',
@@ -684,6 +686,8 @@ export const ITEM_DESCRIPTIONS: Readonly<Record<string, string>> = {
   'opossum-carcass': 'A caught opossum. Renders into tallow in the cauldron.',
   'groundhog-carcass': 'A caught groundhog. Renders into tallow in the cauldron.',
   'raccoon-carcass': 'A caught raccoon. Renders into tallow in the cauldron.',
+  'mouse-carcass': 'A caught mouse. No use for it yet.',
+  'vole-carcass': 'A caught vole. No use for it yet.',
   // Foods (qualitative — no nutrition numbers, per the brief).
   acorns: 'Raw acorns. Cook them at an open fire before eating.',
   'cooked-acorns': 'Acorns, cooked at the fire. Eat them to restore hunger.',
