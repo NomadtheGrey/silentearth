@@ -47,6 +47,7 @@ import type { ScatterKind } from '../types';
 import type { MeshSpec } from './objects';
 import type { AnimalKind } from './animals';
 import { hashSeed, mulberry32 } from './seed';
+import { GROVE_CELL_M } from './sites';
 import { sunDirection, sunElevationAtCycle } from './sky';
 import { dayFraction } from './weather';
 
@@ -207,6 +208,94 @@ export function buildKindGeometry(spec: MeshSpec, kind: ScatterKind): THREE.Buff
       part(blob(0.95), shade(e, 0.9), { p: [0.7, extraDy + 0.5, 0.25] }),
       part(blob(0.8), shade(e, 1.05), { p: [-0.65, extraDy + 0.35, -0.3] }),
       part(blob(0.6), shade(e, 1.1), { p: [0.1, extraDy + 0.85, -0.5] }),
+    ]);
+  }
+  // Kind override (the Grove's old trees share the 'tree' shape
+  // slot, but they must read VISIBLY OLDER than a standing oak —
+  // Adam, 2026-10-30, the age is the game's side of the pill
+  // rule): a much thicker, greyer trunk, five heavy branches
+  // that droop instead of reaching, and a broader, lower crown
+  // with one moss-dark mass hanging at the side. Silhouette
+  // first: at maze distance the trunk girth and the droop are
+  // what say old.
+  if (kind === 'groveOak') {
+    const branches: THREE.BufferGeometry[] = [];
+    for (let i = 0; i < 5; i++) {
+      const a = (i / 5) * Math.PI * 2 + 0.3;
+      branches.push(
+        part(cyl(0.07, 0.11, 1.3, 4), c, {
+          p: [Math.cos(a) * 0.5, 0.55 + i * 0.08, Math.sin(a) * 0.5],
+          r: [Math.sin(a) * 0.95, 0, -Math.cos(a) * 0.95],
+        }),
+      );
+    }
+    return merge([
+      part(cyl(0.34, 0.55, 2.0, 7), c),
+      ...branches,
+      part(blob(1.45), e, { p: [0, extraDy + 0.05, 0] }),
+      part(blob(1.05), shade(e, 0.9), { p: [0.85, extraDy + 0.35, 0.3] }),
+      part(blob(0.9), shade(e, 1.05), { p: [-0.8, extraDy + 0.2, -0.35] }),
+      part(blob(0.7), shade(e, 1.1), { p: [0.15, extraDy + 0.75, -0.55] }),
+      part(blob(0.65), shade(e, 0.75), { p: [1.05, extraDy - 0.45, -0.4] }),
+    ]);
+  }
+  // Kind override (standing stone, sites landing 2026-10-30): a
+  // tall weathered slab on a darker plinth, the cap stone set a
+  // touch askew — the ring reads as placed, not grown. The
+  // scatter scale (0.9-1.35 from sites.ts) varies the heights.
+  if (kind === 'standingStone') {
+    return merge([
+      part(box(1.1, 0.35, 0.68), shade(c, 0.72), { p: [0, -0.85, 0] }),
+      part(box(0.95, 2.0, 0.5), c, { p: [0, 0.1, 0] }),
+      part(box(0.8, 0.45, 0.44), shade(c, 1.08), { p: [0.05, 1.25, 0], r: [0, 0, 0.07] }),
+    ]);
+  }
+  // Kind override (carved stone, sites landing 2026-10-30): a
+  // shorter slab with a pale face plate proud of its +z face —
+  // the surface the fragment's carving will live on (the carving
+  // itself stages with the marks system). sites.ts rotates the
+  // instance so the face meets the maze path.
+  if (kind === 'carvedStone') {
+    return merge([
+      part(box(1.0, 0.3, 0.6), shade(c, 0.75), { p: [0, -0.62, 0] }),
+      part(box(0.85, 1.25, 0.45), c, { p: [0, 0.1, 0] }),
+      part(box(0.56, 0.82, 0.07), e, { p: [0, 0.12, 0.26] }),
+    ]);
+  }
+  // Kind override (hedge wall, sites landing 2026-10-30): one
+  // maze cell-edge of dense hedgerow — a woody core box with a
+  // leafy top of flattened blobs, 2.2 m tall all told (over her
+  // 1.7 eye: first-person reads a true maze). Length is the
+  // maze's cell width from sites.ts, so geometry and collision
+  // boxes can never drift apart. Instances rotate to their edge.
+  if (kind === 'hedgeWall') {
+    const top: THREE.BufferGeometry[] = [];
+    for (let i = 0; i < 4; i++) {
+      const x = -GROVE_CELL_M / 2 + (i + 0.5) * (GROVE_CELL_M / 4);
+      top.push(
+        part(blob(0.5), i % 2 === 0 ? e : shade(e, 0.9), {
+          p: [x, 0.62, 0],
+          s: [1.15, 0.85, 0.95],
+        }),
+      );
+    }
+    return merge([
+      part(box(GROVE_CELL_M, 1.5, 0.62), c, { p: [0, -0.35, 0] }),
+      ...top,
+    ]);
+  }
+  // Kind override (the crow's hoard, sites landing 2026-10-30):
+  // a low earthen mound scattered with gathered things — small
+  // stones, sticks, a shard — all muted (what SHINES in it
+  // stages with the contents systems; v1 is the mound itself).
+  if (kind === 'hoardMound') {
+    return merge([
+      part(flatDisc(1.05, 14), shade(c, 0.7), { p: [0, -0.47, 0] }),
+      part(sphere(0.85, 10, 7), c, { p: [0, -0.38, 0], s: [1, 0.38, 1] }),
+      part(sphere(0.13, 6, 5), e, { p: [0.4, -0.12, 0.25] }),
+      part(sphere(0.1, 6, 5), shade(e, 0.85), { p: [-0.3, -0.14, 0.4] }),
+      part(box(0.34, 0.09, 0.22), shade(e, 1.05), { p: [-0.42, -0.12, -0.2], r: [0, 0.5, 0] }),
+      part(lyingCyl(0.03, 0.035, 0.7), shade(c, 1.35), { p: [0.15, -0.1, -0.42], r: [0, 0.8, 0] }),
     ]);
   }
   switch (spec.shape) {

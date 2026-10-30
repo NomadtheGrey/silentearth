@@ -698,6 +698,92 @@ export const SOURCES: HarvestSourceDef[] = [
     mesh: { shape: 'tree', color: 0x4a2e18, extraColor: 0x476b2a, baseY: 0.8, extraY: 2.4 },
   },
   {
+    id: 'groveOak',
+    kind: 'groveOak',
+    name: 'Grove Tree',
+    description:
+      'One of the Grove\'s old trees (Adam, 2026-10-30 — the site ' +
+      'system, sites.ts): older and broader than any wild oak, and ' +
+      'PROTECTED — she will not cut them; the refusal is hers, ' +
+      'in-fiction, enforced as a backstop in harvest.ts (the ' +
+      'surface is a name tag with no pill). In every mechanical ' +
+      'respect it is a real tree — the place, not the wood, is ' +
+      'what refuses.',
+    harvestable: true,
+    permitTier: 'axeTrowel',
+    permitFamily: 'axe',
+    removable: true,
+    fellOnHarvest: true,
+    primaryYield: 'SNAP_WOOD',
+    secondaryYields: [DOWNED_OAK_ALWAYS],
+    provenance: 'draft',
+    biomes: ['forest', 'tanglewood', 'oldfieldRise'],
+    mesh: { shape: 'tree', color: 0x4a3826, extraColor: 0x3d5c26, baseY: 0.8, extraY: 2.4 },
+  },
+  {
+    id: 'standingStone',
+    kind: 'standingStone',
+    name: 'Standing Stone',
+    description:
+      'A weathered slab of the Grove\'s ring (Adam, 2026-10-30). ' +
+      'Scenery, never a source: a mineable monument is a deleted ' +
+      'monument. The ring marks the place; it does not wall it.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['forest', 'tanglewood', 'oldfieldRise'],
+    mesh: { shape: 'stone', color: 0x8a8d90, baseY: 1.0 },
+  },
+  {
+    id: 'carvedStone',
+    kind: 'carvedStone',
+    name: 'Carved Stone',
+    description:
+      'A shorter slab deep in the Grove maze, its face turned to ' +
+      'the path (Adam, 2026-10-30). Scenery in this landing: the ' +
+      'carving it will carry — the fragment site — stages with ' +
+      'the marks system.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['forest', 'tanglewood', 'oldfieldRise'],
+    mesh: { shape: 'stone', color: 0x97928a, extraColor: 0xcfc7b4, baseY: 0.75 },
+  },
+  {
+    id: 'hedgeWall',
+    kind: 'hedgeWall',
+    name: 'Hedgerow',
+    description:
+      'A dense old hedgerow walling the Grove maze (Adam, ' +
+      '2026-10-30). Scenery — and the game\'s first collider: ' +
+      'its wall boxes live in sites.ts and the player resolves ' +
+      'against them near the grove. Never a harvest target.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['forest', 'tanglewood', 'oldfieldRise'],
+    mesh: { shape: 'bush', color: 0x2e4a22, extraColor: 0x3d5c2a, baseY: 1.1 },
+  },
+  {
+    id: 'hoardMound',
+    kind: 'hoardMound',
+    name: "Crow's Hoard",
+    description:
+      'A low mound of gathered things at the Grove maze\'s heart ' +
+      '(Adam, 2026-10-30). Scenery in this landing: what the crow ' +
+      'has stockpiled here — the first charm among it — stages ' +
+      'with its own systems.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['forest', 'tanglewood', 'oldfieldRise'],
+    mesh: { shape: 'disc', color: 0x5a4632, extraColor: 0x8a8d90, baseY: 0.5 },
+  },
+  {
     id: 'snapwoodThicket',
     kind: 'snapWood',
     name: 'Snap-Wood Thicket',

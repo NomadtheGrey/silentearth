@@ -68,6 +68,7 @@ import {
   type BogBootsQuery,
   type TerrainSpeedQuery,
 } from './movement';
+import { pushOutOfWalls, type SiteWallBox } from './sites';
 
 /** Mouse-look sensitivity (radians per pixel), shared by mouse + touch. */
 const LOOK_SENSITIVITY = 0.0025;
@@ -99,6 +100,20 @@ export interface UsePress {
 
 /** Shell-wired query: the nearest in-range harvest press, or null. */
 export type UseTargetQuery = () => UsePress | null;
+
+/**
+ * Site wall query (sites.ts): the wall boxes around a position,
+ * or null when the position is nowhere near a site's walls. The
+ * renderer wires the grove's; player.update resolves movement
+ * against whatever it returns.
+ */
+export type SiteWallsQuery = (
+  x: number,
+  z: number,
+) => readonly SiteWallBox[] | null;
+
+/** Her body radius against site walls, meters (DRAFT, 2026-10-30). */
+const PLAYER_WALL_RADIUS_M = 0.3;
 
 /** Saved looking direction: yaw + pitch (position saves separately). */
 export interface FacingSnapshot {
@@ -188,6 +203,20 @@ export class PlayerController {
   /** Renderer wiring for the terrain query (see above). */
   setTerrainSpeedQuery(query: TerrainSpeedQuery): void {
     this.terrainSpeedQuery = query;
+  }
+
+  /**
+   * Site wall query (renderer-owned wiring, sites landing
+   * 2026-10-30): returns the grove's hedge wall boxes when she
+   * is near the site, null in open country — the game's only
+   * collision, kept site-local by design (sites.ts). Unwired
+   * (tests) = no walls anywhere.
+   */
+  private siteWallsQuery: SiteWallsQuery | null = null;
+
+  /** Renderer wiring for the site wall query (see above). */
+  setSiteWallsQuery(query: SiteWallsQuery): void {
+    this.siteWallsQuery = query;
   }
 
   /**
@@ -634,6 +663,18 @@ export class PlayerController {
       this.x += fx * speed * dt;
       this.z += fz * speed * dt;
       this.facing = Math.atan2(fx, fz);
+    }
+
+    // Site walls (sites landing, 2026-10-30): the grove's
+    // hedges are the game's only colliders. The wired query
+    // returns null away from the site (one bounds test), so open
+    // country pays nothing; near the grove her step resolves
+    // out of the wall boxes, sliding along them.
+    const walls = this.siteWallsQuery?.(this.x, this.z) ?? null;
+    if (walls && walls.length > 0) {
+      const resolved = pushOutOfWalls(this.x, this.z, walls, PLAYER_WALL_RADIUS_M);
+      this.x = resolved.x;
+      this.z = resolved.z;
     }
 
     this.emitTimer += dt;

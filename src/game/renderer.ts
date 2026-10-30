@@ -43,6 +43,7 @@ import {
 import { terrainSpeedAt } from './movement';
 import { treeKindAt } from './treeKind';
 import { riverParamsFor, riverRibbonForChunk } from './river';
+import { groveSite, groveWallsNear, type GroveSite } from './sites';
 import type { RiverParams } from './river';
 import { fireState } from './fireState';
 import { torchState } from './torchState';
@@ -393,6 +394,9 @@ export class WorldRenderer {
   private chunks = new Map<string, LoadedChunk>();
   /** River course for the current world (seed + spawn); null until set. */
   private riverParams: RiverParams | null = null;
+  /** The Grove for the current world (sites.ts — a pure function
+   *  of the seed, recomputed beside the river on world change). */
+  private grove: GroveSite | null = null;
   private witch: THREE.Group;
   /** Carried umbrella graphic (models.ts), attached to the witch. */
   private umbrella: THREE.Group;
@@ -514,6 +518,19 @@ export class WorldRenderer {
     // generator delegates fieldsAt/weightsAt untouched, so the
     // slow reads true world data, not harvest state.
     this.player.setTerrainSpeedQuery((x, z) => terrainSpeedAt(this.gen, x, z));
+    // Site walls (sites landing, 2026-10-30): the renderer owns
+    // the generator and the player, so it wires the grove's hedge
+    // collision itself, same as the terrain query. The closure
+    // reads this.grove dynamically, so world changes
+    // (setWorldGen recomputes it) flow through without
+    // re-wiring. Away from the grove the query returns null and
+    // movement pays one bounds test.
+    this.grove = groveSite(String(gen.seed), gen.findSpawn(), (x, z) =>
+      gen.weightsAt(x, z).dominant,
+    );
+    this.player.setSiteWallsQuery((x, z) =>
+      this.grove ? groveWallsNear(this.grove, x, z, 2) : null,
+    );
     this.proximity = new ProximityTracker(this.gen, true, () => this.tents);
     // Chunk reload on harvest completion: the harvested chunk is
     // rebuilt, so the object visibly shrinks (or leaves, on remove
@@ -925,6 +942,11 @@ export class WorldRenderer {
     this.rebuildTrapGroup();
     this.gen = wrapGenWithState(gen);
     this.riverParams = riverParamsFor(String(gen.seed), gen.findSpawn());
+    // The new world's grove (sites.ts) — the site-wall query the
+    // constructor wired reads this field dynamically.
+    this.grove = groveSite(String(gen.seed), gen.findSpawn(), (x, z) =>
+      gen.weightsAt(x, z).dominant,
+    );
     // A new world gets a new sky: fresh stars for the seed + the
     // cycle restarts at dawn. Skipped on the dispose path
     // (disposed is already true there) — dispose() removes the

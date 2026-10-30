@@ -187,8 +187,13 @@ export interface EventMap {
       | 'not-harvestable'
       | 'target-mismatch'
       | 'inventory-full'
-      | 'too-hungry';
+      | 'too-hungry'
+      | 'grove-protected';
     yields: { item: string; quantity: number }[];
+    /** Optional refusal copy carried with the failure (the grove
+     *  protection's line, in her voice — sites.ts). Absent on
+     *  every other failure today. */
+    message?: string;
   };
   /**
    * Dropped piles (harvest overflow, Adam 2026-10-26 — see

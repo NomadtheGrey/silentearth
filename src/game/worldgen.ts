@@ -19,6 +19,7 @@ import { BIOMES, createFields, weightsAt, groundColorAt, marshWeight } from './b
 import type { Fields } from './biomes';
 import { mulberry32, deriveSeed } from './seed';
 import { treeKindAt } from './treeKind';
+import { groveSite } from './sites';
 import { CHUNK_SIZE, BASE_SCATTER_PER_CHUNK, GROUND_SEGMENTS } from '../constants';
 import type { ChunkData, ScatterKind, ScatterObject } from '../types';
 
@@ -263,6 +264,42 @@ export function createWorldGen(seed: string): WorldGen {
     for (const obj of objects) {
       if (obj.kind === 'tree' && treeKindAt(seed, obj.x, obj.z) === 'oak') {
         obj.kind = 'oakTree';
+      }
+    }
+
+    // The Grove (sites landing, 2026-10-30 — Adam; locations
+    // build #1): the site pass runs LAST, after every other pass
+    // has read the original scatter. The grove is a pure function
+    // of the seed (sites.ts, memoized), so this pass consumes NO
+    // rand from any stream: inside the clearing it suppresses
+    // ordinary scatter (position-based, so chunk borders agree),
+    // and it emits each site feature into exactly the chunk
+    // containing the feature's position. Outside the clearing
+    // radius the chunk is byte-identical to a world without
+    // sites — the grove-check probe proves it against a
+    // pre-change baseline.
+    {
+      const grove = groveSite(seed, findSpawn(), (x, z) => weightsAtPos(x, z).dominant);
+      const chunkMinX = originX;
+      const chunkMaxX = originX + CHUNK_SIZE;
+      const chunkMinZ = originZ;
+      const chunkMaxZ = originZ + CHUNK_SIZE;
+      // Circle vs chunk-rect distance: skip the pass entirely
+      // for the overwhelming majority of chunks.
+      const nearX = Math.max(chunkMinX, Math.min(grove.center.x, chunkMaxX));
+      const nearZ = Math.max(chunkMinZ, Math.min(grove.center.z, chunkMaxZ));
+      const d2 = (grove.center.x - nearX) ** 2 + (grove.center.z - nearZ) ** 2;
+      if (d2 <= grove.clearRadius * grove.clearRadius) {
+        for (let i = objects.length - 1; i >= 0; i--) {
+          const o = objects[i];
+          const od2 = (o.x - grove.center.x) ** 2 + (o.z - grove.center.z) ** 2;
+          if (od2 < grove.clearRadius * grove.clearRadius) objects.splice(i, 1);
+        }
+        for (const f of grove.features) {
+          if (f.x >= chunkMinX && f.x < chunkMaxX && f.z >= chunkMinZ && f.z < chunkMaxZ) {
+            objects.push({ ...f });
+          }
+        }
       }
     }
 
