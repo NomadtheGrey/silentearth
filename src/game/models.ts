@@ -1143,6 +1143,99 @@ export function buildTorch(): THREE.Group {
 }
 
 /**
+ * World height of a stump's top disc (the stump build:
+ * baseY 0.3 + trunk 0.6, with the top disc lifted 0.01
+ * against z-fighting). The dressing's candle stands on
+ * it; the renderer's candle light anchors off it too.
+ */
+export const STUMP_TOP_Y = 0.61;
+
+/**
+ * Where the altar candle stands on the stump top —
+ * off-centre toward the rim (radial ~0.23, inside the
+ * 0.42 top disc) so a bone staged at the centre (the
+ * renderer's staged-bone spot) never shares its exact
+ * spot. DRAFT (pin pass).
+ */
+export const ALTAR_CANDLE_X = 0.2;
+export const ALTAR_CANDLE_Z = 0.12;
+
+/** Radius of the placed-stones ring around the stump base. DRAFT. */
+export const ALTAR_STONE_RING_R = 0.85;
+
+/**
+ * The DRESSED STUMP (Background, claim approved 2026-10-30
+ * behind Systems' stumpy-altar shape): the altar
+ * transformation's visuals, keyed off the stump's STEP
+ * members — each element appears as its act completes, so
+ * a half-made altar looks half-made. Presentation reads
+ * the steps; ritual GRADE reads the 'altar' member
+ * (stumpState.isAltar) — never the other way round.
+ *
+ * The group origin is the stump's ground point; the stump
+ * itself stays in the instanced scatter (the workbench
+ * overlay precedent). Elements, each in a named subgroup:
+ *  - 'altar-stones': four river stones ringed at the base
+ *    (radius ALTAR_STONE_RING_R, just outside the root
+ *    flare; diagonal bearings, so the ring reads placed,
+ *    not cardinal), rounded grey, shade-varied.
+ *  - 'altar-glyph': a dark glyph on the stump's face —
+ *    three charcoal strokes (a stem and two arms) at
+ *    mid-trunk on the +Z facet. Heading-less like every
+ *    placed overlay (the record carries no rotY; tents
+ *    face +Z by the same law).
+ *  - 'altar-candle': buildCandle() standing on the top
+ *    disc at the offset above — flame included in the
+ *    build, lit as the act leaves it; the renderer adds
+ *    the candle-profile light beside it.
+ * 'workstation' (and any non-step member) draws nothing
+ * here — the workbench overlay is the renderer's own.
+ */
+export function buildStumpDressing(additions: readonly string[]): THREE.Group {
+  const g = new THREE.Group();
+  if (additions.includes('altar-stones')) {
+    const stones = new THREE.Group();
+    stones.name = 'altar-stones';
+    for (let i = 0; i < 4; i++) {
+      const a = Math.PI / 4 + (i * Math.PI) / 2;
+      const stone = new THREE.Mesh(
+        new THREE.SphereGeometry(0.17, 8, 6),
+        meshMat(shade(0x83878a, 0.9 + i * 0.07)),
+      );
+      stone.scale.set(1.15, 0.68, 0.95);
+      stone.position.set(Math.cos(a) * ALTAR_STONE_RING_R, 0.1, Math.sin(a) * ALTAR_STONE_RING_R);
+      stone.rotation.y = a;
+      stones.add(stone);
+    }
+    g.add(stones);
+  }
+  if (additions.includes('altar-glyph')) {
+    const glyph = new THREE.Group();
+    glyph.name = 'altar-glyph';
+    const charcoal = meshMat(0x14100c);
+    const stem = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.3, 0.02), charcoal);
+    stem.position.set(0, 0.32, 0.5);
+    glyph.add(stem);
+    for (const s of [-1, 1]) {
+      const arm = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.2, 0.02), charcoal);
+      arm.position.set(s * 0.055, 0.4, 0.495);
+      arm.rotation.z = s * 0.6;
+      glyph.add(arm);
+    }
+    g.add(glyph);
+  }
+  if (additions.includes('altar-candle')) {
+    const holder = new THREE.Group();
+    holder.name = 'altar-candle';
+    const candle = buildCandle();
+    candle.position.set(ALTAR_CANDLE_X, STUMP_TOP_Y, ALTAR_CANDLE_Z);
+    holder.add(candle);
+    g.add(holder);
+  }
+  return g;
+}
+
+/**
  * A made ritual altar (Adam 2026-10-27 — placeable + visible
  * ONLY, no ritual actions). The read-at-a-glance shape, my
  * design on the draft suggestion (flagged): a flat stone

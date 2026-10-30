@@ -27,7 +27,7 @@ import type { WorldGen } from './worldgen';
 import { PlayerController } from './player';
 import { marshWeight } from './biomes';
 import { SOURCE_FOR_KIND } from './objects';
-import { buildAltarGroup, buildAnimal, buildCampArrow, buildCandle, buildCauldronGroup, buildDeskGroup, buildEdgeArrow, buildKindGeometry, buildStagedBone, buildSunflowerHeadGeometry, buildTorch, buildUmbrella, buildWitch, CANDLE_FLAME_Y, DISC_RADIUS, sunflowerHeadMatrix, sunflowerHeadOrientation, TORCH_FLAME_Y, vertexLambert } from './models';
+import { buildAltarGroup, buildAnimal, buildCampArrow, buildCandle, buildCauldronGroup, buildDeskGroup, buildEdgeArrow, buildKindGeometry, buildStagedBone, buildStumpDressing, buildSunflowerHeadGeometry, buildTorch, buildUmbrella, buildWitch, ALTAR_CANDLE_X, ALTAR_CANDLE_Z, CANDLE_FLAME_Y, DISC_RADIUS, STUMP_TOP_Y, sunflowerHeadMatrix, sunflowerHeadOrientation, TORCH_FLAME_Y, vertexLambert } from './models';
 import { spawnAnimalsForChunk, updateAnimal } from './animals';
 import type { AnimalInstance, AnimalKind } from './animals';
 import { crowGlowIntensity, CROW_GLOW_EMISSIVE } from './crow';
@@ -452,6 +452,8 @@ export class WorldRenderer {
   private fireLights: THREE.PointLight[] = [];
   /** Placed-torch point lights (scene-level, rebuilt with the placed group). */
   private torchLights: THREE.PointLight[] = [];
+  /** Altar-candle point lights (scene-level, rebuilt with the placed group). */
+  private altarCandleLights: THREE.PointLight[] = [];
   /** Camp-arrow world group (one downward arrow per placed house). */
   private campArrowGroup: THREE.Group | null = null;
   /** Camp-arrow screen-edge arrows (camera children, one per placed house). */
@@ -619,6 +621,7 @@ export class WorldRenderer {
       bus.on('cauldron:placed', rebuild),
       bus.on('cauldron:removed', rebuild),
       bus.on('stump:upgraded', rebuild),
+      bus.on('stump:altar-stepped', rebuild),
     );
     // Staged bones rebuild on staging events only (separate
     // group, separate lifecycle — see the field comment).
@@ -1379,6 +1382,27 @@ export class WorldRenderer {
     this.torchLights.push(light);
   }
 
+  /**
+   * One scene-level point light for a dressed stump's altar
+   * candle, at its flame: the CANDLE profile (30/22/2,
+   * flicker ±12%) — the transformation sets the candle lit
+   * and it stays lit, so the light lives and dies with the
+   * dressing mesh. Anchored off the same models constants
+   * the dressing build uses, so light and flame can't drift.
+   */
+  private addAltarCandleLight(x: number, z: number): void {
+    const light = new THREE.PointLight(
+      CANDLE_LIGHT_COLOR,
+      CANDLE_LIGHT_INTENSITY,
+      CANDLE_LIGHT_DISTANCE,
+      CANDLE_LIGHT_DECAY,
+    );
+    light.position.set(x + ALTAR_CANDLE_X, STUMP_TOP_Y + CANDLE_FLAME_Y, z + ALTAR_CANDLE_Z);
+    light.userData.phase = flamePhase(x + ALTAR_CANDLE_X, z + ALTAR_CANDLE_Z);
+    this.scene.add(light);
+    this.altarCandleLights.push(light);
+  }
+
   /** Rebuild all player-placed meshes (fires + houses + looms). */
   private rebuildPlacedGroup(): void {
     if (this.placedGroup) {
@@ -1403,6 +1427,10 @@ export class WorldRenderer {
     // is always lit, so its light lives and dies with its mesh.
     for (const light of this.torchLights) this.scene.remove(light);
     this.torchLights = [];
+    // Altar-candle lights likewise: the transformation's
+    // candle is set lit and stays lit.
+    for (const light of this.altarCandleLights) this.scene.remove(light);
+    this.altarCandleLights = [];
     const group = new THREE.Group();
     const box = (
       w: number,
@@ -1766,16 +1794,31 @@ export class WorldRenderer {
       // draws ON TOP of it in the placed group: bench
       // slab + vise block, wood tones from the existing
       // palette. Slab bottom 0.62 clears the stump-top
-      // disc (world 0.61) with no coplanar face. Only
-      // the workstation addition draws here — the altar
-      // addition rides the ritual system and draws
-      // nothing in this loop, so the two coexist.
-      if (!record.additions.includes('workstation')) continue;
-      const wg = new THREE.Group();
-      wg.position.set(record.x, 0, record.z);
-      wg.add(box(1.1, 0.08, 0.8, 0x7a5a38, 0, 0.66, 0));
-      wg.add(box(0.25, 0.15, 0.2, 0x3a2818, 0.35, 0.775, 0));
-      group.add(wg);
+      // disc (world 0.61) with no coplanar face.
+      //
+      // Altar dressing (2026-10-30): the transformation's
+      // step members draw beside the workbench via
+      // buildStumpDressing — stones ring / glyph / lit
+      // candle, each appearing as its act completes. The
+      // two coexist on one stump (additions accumulate);
+      // the candle also gains its scene light here.
+      const hasWorkbench = record.additions.includes('workstation');
+      const dressing = buildStumpDressing(record.additions);
+      if (!hasWorkbench && dressing.children.length === 0) continue;
+      if (hasWorkbench) {
+        const wg = new THREE.Group();
+        wg.position.set(record.x, 0, record.z);
+        wg.add(box(1.1, 0.08, 0.8, 0x7a5a38, 0, 0.66, 0));
+        wg.add(box(0.25, 0.15, 0.2, 0x3a2818, 0.35, 0.775, 0));
+        group.add(wg);
+      }
+      if (dressing.children.length > 0) {
+        dressing.position.set(record.x, 0, record.z);
+        group.add(dressing);
+        if (record.additions.includes('altar-candle')) {
+          this.addAltarCandleLight(record.x, record.z);
+        }
+      }
     }
     for (const tent of this.tents) {
       // A-frame tent (camping branch): triangular prism
@@ -2194,6 +2237,13 @@ export class WorldRenderer {
       light.intensity =
         TORCH_LIGHT_INTENSITY *
         (1 + TORCH_FLICKER_AMPLITUDE * fireLightFlicker(this.flameTime, light.userData.phase as number));
+    }
+    // Altar-candle lights flicker at the candle amplitude —
+    // a set candle dances least of all.
+    for (const light of this.altarCandleLights) {
+      light.intensity =
+        CANDLE_LIGHT_INTENSITY *
+        (1 + CANDLE_FLICKER_AMPLITUDE * fireLightFlicker(this.flameTime, light.userData.phase as number));
     }
 
     // Witch mesh follows the player; hidden in first-person.
