@@ -43,7 +43,7 @@ import {
 import { standingInWater, terrainSpeedAt, type WaterDisc } from './movement';
 import { treeKindAt } from './treeKind';
 import { riverParamsFor, riverRibbonForChunk } from './river';
-import { farmhouseSite, groveSite, schoolhouseSite, villageSite, wallsNearSites, type SiteFootprint } from './sites';
+import { chapelSite, farmhouseSite, groveSite, schoolhouseSite, villageSite, wallsNearSites, type SiteFootprint } from './sites';
 import type { RiverParams } from './river';
 import { fireState } from './fireState';
 import { torchState } from './torchState';
@@ -106,6 +106,7 @@ function computeSites(gen: WorldGen): SiteFootprint[] {
     schoolhouseSite(String(gen.seed), spawn, (x, z) => gen.weightsAt(x, z)),
     villageSite(String(gen.seed), spawn, (x, z) => gen.weightsAt(x, z)),
     farmhouseSite(String(gen.seed), spawn, (x, z) => gen.weightsAt(x, z)),
+    chapelSite(String(gen.seed), spawn, (x, z) => gen.weightsAt(x, z)),
   ];
 }
 

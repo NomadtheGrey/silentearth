@@ -125,7 +125,14 @@ export type ScatterKind =
   | 'farmRoof'
   | 'farmPorch'
   | 'hearthStone'
-
+  // Site-pass kinds (the Chapel, sites.ts — same rule):
+  // tall wall segments, the steep roof, the steeple, and
+  // the graveyard's two stone shapes.
+  | 'chapelWall'
+  | 'chapelRoof'
+  | 'steeple'
+  | 'gravestone'
+  | 'gravestoneCross';
 
 /** One placed scatter object in a chunk. y is its base height above ground. */
 export interface ScatterObject {

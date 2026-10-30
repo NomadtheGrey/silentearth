@@ -1043,7 +1043,80 @@ export const SOURCES: HarvestSourceDef[] = [
     biomes: ['oldfieldRise'],
     mesh: { shape: 'stone', color: 0x8a8578, extraColor: 0x6e6a5e, baseY: 0.42 },
   },
-
+  // The Chapel set (Adam, 2026-10-30 — Circle ground;
+  // site-pass only, same rule as the sets above).
+  {
+    id: 'chapelWall',
+    kind: 'chapelWall',
+    name: 'Chapel Wall',
+    description:
+      'A standing stretch of the chapel wall (Adam, ' +
+      '2026-10-30) — taller than a house wall, with a tall ' +
+      'narrow window. Solid; she enters by the door.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['oldfieldRise', 'meadow'],
+    mesh: { shape: 'stone', color: 0x9a927f, extraColor: 0x1c1a24, baseY: 1.7 },
+  },
+  {
+    id: 'chapelRoof',
+    kind: 'chapelRoof',
+    name: 'Chapel Roof',
+    description:
+      'The chapel\u2019s steep roof, whole (Adam, 2026-10-30).',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['oldfieldRise', 'meadow'],
+    mesh: { shape: 'stone', color: 0x3f4450, extraColor: 0x59616e, baseY: 0 },
+  },
+  {
+    id: 'steeple',
+    kind: 'steeple',
+    name: 'Steeple',
+    description:
+      'The chapel steeple (Adam, 2026-10-30): tower, belfry ' +
+      'and spire over the door end — the silhouette she ' +
+      'navigates by. Solid at its base.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['oldfieldRise', 'meadow'],
+    mesh: { shape: 'stone', color: 0x8a8578, extraColor: 0x4a4238, baseY: 3.1 },
+  },
+  {
+    id: 'gravestone',
+    kind: 'gravestone',
+    name: 'Gravestone',
+    description:
+      'A rounded gravestone in the chapel yard (Adam, ' +
+      '2026-10-30). Low — she steps among the dead; the ' +
+      'stones do not bar her way.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['oldfieldRise', 'meadow'],
+    mesh: { shape: 'stone', color: 0x8f8b80, extraColor: 0x77736a, baseY: 0.35 },
+  },
+  {
+    id: 'gravestoneCross',
+    kind: 'gravestoneCross',
+    name: 'Gravestone Cross',
+    description:
+      'A cross gravestone in the chapel yard (Adam, ' +
+      '2026-10-30). Low — she steps among the dead.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['oldfieldRise', 'meadow'],
+    mesh: { shape: 'stone', color: 0x8f8b80, extraColor: 0x77736a, baseY: 0.5 },
+  },
   {
     id: 'snapwoodThicket',
     kind: 'snapWood',

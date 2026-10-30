@@ -1536,6 +1536,313 @@ export function farmhouseContains(site: FarmSite, x: number, z: number): boolean
   return Math.hypot(x - site.center.x, z - site.center.z) <= site.clearRadius;
 }
 
+// ---------------------------------------------------------------------------
+// THE CHAPEL — site #5 (Adam, 2026-10-30; claim approved by
+// DEV with the spacing margin at the standing 60). Circle
+// ground: a tall, mostly-intact shell with a steeple, and
+// its GRAVEYARD — a field of stones on one side, one of
+// them named (the inscription stone, exported for the
+// marks staging). It sites 350–650 m out where its people
+// farmed and gathered, spacing-checked against all four
+// earlier sites on the standing radii + 60 rule.
+// ---------------------------------------------------------------------------
+
+/** Siting band from spawn, meters (DRAFT). */
+export const CHAPEL_MIN_DIST_M = 350;
+export const CHAPEL_MAX_DIST_M = 650;
+/** Clearing radius around the chapel centre (DRAFT):
+ *  covers the shell and the yard. */
+export const CHAPEL_CLEAR_RADIUS_M = 24;
+/** Meadow weight at/over which a candidate reads meadow-edge. */
+export const CHAPEL_MEADOW_EDGE_WEIGHT = 0.2;
+/** Wall segment length / nave plan, meters (DRAFT): the
+ *  nave is 11 × 5.5 m of 2.75 m segments; walls stand
+ *  3.4 m — taller than a house's, a church's read. */
+export const CHAPEL_SEGMENT_M = 2.75;
+export const CHAPEL_WALL_W_M = 11;
+export const CHAPEL_WALL_D_M = 5.5;
+export const CHAPEL_WALL_H_M = 3.4;
+const CHAPEL_WALL_HALF_T = 0.16;
+
+/** The derived Chapel: one per world seed. */
+export interface ChapelSite {
+  id: string;
+  seed: string;
+  center: { x: number; z: number };
+  /** Dominant biome at the chosen centre. */
+  biome: BiomeId;
+  /** Siting distance from spawn, meters. */
+  distance: number;
+  clearRadius: number;
+  /** Which side the door is on, world frame. */
+  doorSide: 'north' | 'south' | 'east' | 'west';
+  /** Which side the graveyard lies on, world frame. */
+  yardSide: 'north' | 'south' | 'east' | 'west';
+  /** The named gravestone nearest the door path — the
+   *  marks staging's inscription anchor. */
+  inscriptionStone: { x: number; z: number };
+  features: ScatterObject[];
+  walls: SiteWallBox[];
+  bounds: { minX: number; maxX: number; minZ: number; maxZ: number };
+}
+
+const chapelCache = new Map<string, ChapelSite>();
+
+/**
+ * Derive the world's Chapel. `weightsAtPos` returns the
+ * full weights + dominant at a position. Memoized by seed.
+ */
+export function chapelSite(
+  seed: string,
+  spawn: { x: number; z: number },
+  weightsAtPos: (x: number, z: number) => BiomeWeights,
+): ChapelSite {
+  const cached = chapelCache.get(`${seed}::chapel`);
+  if (cached) return cached;
+
+  // Spacing against all four earlier sites (radii + 60).
+  const grove = groveSite(seed, spawn, (x, z) => weightsAtPos(x, z).dominant);
+  const school = schoolhouseSite(seed, spawn, weightsAtPos);
+  const village = villageSite(seed, spawn, weightsAtPos);
+  const farm = farmhouseSite(seed, spawn, weightsAtPos);
+  const spacingLegal = (x: number, z: number): boolean =>
+    [grove, school, village, farm].every(
+      (s) =>
+        Math.hypot(x - s.center.x, z - s.center.z) >=
+        s.clearRadius + CHAPEL_CLEAR_RADIUS_M + SITE_SPACING_MARGIN_M,
+    );
+
+  // Siting: own bearing stream over the band, the standing
+  // fallback shape.
+  const bearing = mulberry32(deriveSeed(seed, 'site:chapel'))() * Math.PI * 2;
+  const dirX = Math.cos(bearing);
+  const dirZ = Math.sin(bearing);
+  let center = {
+    x: spawn.x + dirX * CHAPEL_MAX_DIST_M,
+    z: spawn.z + dirZ * CHAPEL_MAX_DIST_M,
+  };
+  let biome = weightsAtPos(center.x, center.z).dominant;
+  let distance = CHAPEL_MAX_DIST_M;
+  let fallback: { x: number; z: number; biome: BiomeId; distance: number } | null = null;
+  for (let d = CHAPEL_MIN_DIST_M; d <= CHAPEL_MAX_DIST_M; d += GROVE_SCAN_STEP_M) {
+    const x = spawn.x + dirX * d;
+    const z = spawn.z + dirZ * d;
+    if (!spacingLegal(x, z)) continue;
+    const w = weightsAtPos(x, z);
+    if (!fallback) fallback = { x, z, biome: w.dominant, distance: d };
+    if (w.dominant === 'oldfieldRise' || (w.weights.meadow ?? 0) >= CHAPEL_MEADOW_EDGE_WEIGHT) {
+      center = { x, z };
+      biome = w.dominant;
+      distance = d;
+      break;
+    }
+    if (d === CHAPEL_MAX_DIST_M && fallback) {
+      center = { x: fallback.x, z: fallback.z };
+      biome = fallback.biome;
+      distance = fallback.distance;
+    }
+  }
+
+  // --- Plan (streams under the 'chapel' label) -------------------------------
+  const planRand = mulberry32(deriveSeed(seed, 'chapel:plan'));
+  const swap = planRand() < 0.5;
+  const theta = swap ? Math.PI / 2 : 0;
+  const toWorld = (lx: number, lz: number): { x: number; z: number } =>
+    swap
+      ? { x: center.x + lz, z: center.z - lx }
+      : { x: center.x + lx, z: center.z + lz };
+
+  const toSpawnX = spawn.x - center.x;
+  const toSpawnZ = spawn.z - center.z;
+  const localSpawnX = swap ? -toSpawnZ : toSpawnX;
+  const localSpawnZ = swap ? toSpawnX : toSpawnZ;
+  const doorSide: ChapelSite['doorSide'] =
+    Math.abs(localSpawnX) > Math.abs(localSpawnZ)
+      ? localSpawnX > 0
+        ? 'east'
+        : 'west'
+      : localSpawnZ > 0
+        ? 'south'
+        : 'north';
+  const toWorldSide = (s: 'north' | 'south' | 'east' | 'west'): 'north' | 'south' | 'east' | 'west' =>
+    !swap
+      ? s
+      : s === 'north'
+        ? 'west'
+        : s === 'west'
+          ? 'south'
+          : s === 'south'
+            ? 'east'
+            : 'north';
+
+  const W = CHAPEL_WALL_W_M;
+  const D = CHAPEL_WALL_D_M;
+  const SEG = CHAPEL_SEGMENT_M;
+
+  const features: ScatterObject[] = [];
+  const walls: SiteWallBox[] = [];
+  const feat = (kind: ScatterKind, x: number, z: number, y: number, scale: number, rotY: number): void => {
+    features.push({ kind, x, z, y, scale, rotY });
+  };
+  const box = (cx: number, cz: number, hx: number, hz: number): void => {
+    walls.push({ minX: cx - hx, maxX: cx + hx, minZ: cz - hz, maxZ: cz + hz });
+  };
+
+  interface Segment {
+    side: 'north' | 'south' | 'east' | 'west';
+    lx: number;
+    lz: number;
+    running: 'x' | 'z';
+    cornerAdjacent: boolean;
+  }
+  const segments: Segment[] = [];
+  const perLong = Math.round(W / SEG); // 4
+  const perShort = Math.round(D / SEG); // 2
+  for (let i = 0; i < perLong; i++) {
+    const lx = -W / 2 + SEG / 2 + i * SEG;
+    const corner = i === 0 || i === perLong - 1;
+    segments.push({ side: 'north', lx, lz: -D / 2, running: 'x', cornerAdjacent: corner });
+    segments.push({ side: 'south', lx, lz: D / 2, running: 'x', cornerAdjacent: corner });
+  }
+  for (let i = 0; i < perShort; i++) {
+    const lz = -D / 2 + SEG / 2 + i * SEG;
+    // Both segments of a 2-segment side touch a corner.
+    segments.push({ side: 'west', lx: -W / 2, lz, running: 'z', cornerAdjacent: true });
+    segments.push({ side: 'east', lx: W / 2, lz, running: 'z', cornerAdjacent: true });
+  }
+
+  // The door: a middle segment of the door side.
+  const doorPool = segments.filter((s) => s.side === doorSide);
+  const door =
+    doorPool.length % 2 === 0
+      ? doorPool[doorPool.length / 2 - 1 + Math.floor(planRand() * 2)]
+      : doorPool[Math.floor(doorPool.length / 2)];
+
+  // Mostly intact: at most one interior segment damaged
+  // (missing or a half-height stub).
+  const candidates = segments.filter((s) => !s.cornerAdjacent && s !== door);
+  let missingSeg: Segment | null = null;
+  let stubSeg: Segment | null = null;
+  if (candidates.length > 0 && planRand() < 0.6) {
+    const pick = candidates[Math.floor(planRand() * candidates.length)];
+    if (planRand() < 0.5) missingSeg = pick;
+    else stubSeg = pick;
+  }
+
+  const emitWall = (s: Segment, scale: number): void => {
+    const w = toWorld(s.lx, s.lz);
+    const runsWorldX = (s.running === 'x') !== swap;
+    feat('chapelWall', w.x, w.z, 0, scale, runsWorldX ? 0 : Math.PI / 2);
+    const halfLen = (SEG / 2) * scale;
+    if (runsWorldX) box(w.x, w.z, halfLen, CHAPEL_WALL_HALF_T);
+    else box(w.x, w.z, CHAPEL_WALL_HALF_T, halfLen);
+  };
+  for (const s of segments) {
+    if (s === door || s === missingSeg) continue;
+    emitWall(s, s === stubSeg ? 0.5 : 1);
+  }
+
+  // The roof: whole, steep (mostly intact).
+  feat('chapelRoof', center.x, center.z, CHAPEL_WALL_H_M, 1, theta);
+
+  // The steeple: at the door end's corner — over the
+  // entrance, the silhouette she navigates by. Its base
+  // collides.
+  const doorSign = doorSide === 'north' || doorSide === 'west' ? -1 : 1;
+  const steepleLocal =
+    doorSide === 'north' || doorSide === 'south'
+      ? { lx: -W / 2, lz: doorSign * (D / 2) }
+      : { lx: doorSign * (W / 2), lz: -D / 2 };
+  const steepleWorld = toWorld(steepleLocal.lx, steepleLocal.lz);
+  feat('steeple', steepleWorld.x, steepleWorld.z, 0, 1, theta);
+  box(steepleWorld.x, steepleWorld.z, 0.95, 0.95);
+
+  // The graveyard: on a long side — opposite the door when
+  // the door is on a long side, else a plan-picked long
+  // side. Rows of stones with jitter, facing the chapel.
+  // The stones carry NO collision (the claim's snag rule).
+  const yardLocalSide: 'north' | 'south' =
+    doorSide === 'north'
+      ? 'south'
+      : doorSide === 'south'
+        ? 'north'
+        : planRand() < 0.5
+          ? 'north'
+          : 'south';
+  const yardSign = yardLocalSide === 'north' ? -1 : 1;
+  const yardRand = mulberry32(deriveSeed(seed, 'chapel:yard'));
+  const stoneCount = 14 + Math.floor(yardRand() * 9); // 14..22
+  const stoneSpots: { x: number; z: number }[] = [];
+  {
+    const rows = [4.2, 6.6, 9.0];
+    let placed = 0;
+    for (const rowOff of rows) {
+      for (let lx = -W / 2 + 0.6; lx <= W / 2 - 0.6 && placed < stoneCount; lx += 2.2) {
+        const jx = (yardRand() * 2 - 1) * 0.55;
+        const jz = (yardRand() * 2 - 1) * 0.5;
+        const w = toWorld(lx + jx, yardSign * (D / 2 + rowOff) + jz);
+        const cross = yardRand() < 0.3;
+        // Stones face the chapel: their +Z looks at the
+        // shell (back along the yard direction), jittered.
+        const face = yardSign < 0 ? 0 : Math.PI;
+        feat(cross ? 'gravestoneCross' : 'gravestone', w.x, w.z, 0, 0.85 + yardRand() * 0.4, theta + face + (yardRand() * 2 - 1) * 0.12);
+        stoneSpots.push(w);
+        placed += 1;
+      }
+    }
+  }
+
+  // The inscription stone: the stone nearest the door
+  // path (the door's spot pushed outward 5 m).
+  const doorWorld = toWorld(door.lx, door.lz);
+  const outLocal =
+    doorSide === 'north'
+      ? { lx: door.lx, lz: door.lz - 5 }
+      : doorSide === 'south'
+        ? { lx: door.lx, lz: door.lz + 5 }
+        : doorSide === 'east'
+          ? { lx: door.lx + 5, lz: door.lz }
+          : { lx: door.lx - 5, lz: door.lz };
+  const pathPoint = toWorld(outLocal.lx, outLocal.lz);
+  let inscription = stoneSpots[0];
+  let best = Infinity;
+  for (const s of stoneSpots) {
+    const d = Math.hypot(s.x - pathPoint.x, s.z - pathPoint.z);
+    if (d < best) {
+      best = d;
+      inscription = s;
+    }
+  }
+
+  const site: ChapelSite = {
+    id: 'chapel',
+    seed,
+    center,
+    biome,
+    distance,
+    clearRadius: CHAPEL_CLEAR_RADIUS_M,
+    doorSide: toWorldSide(doorSide),
+    yardSide: toWorldSide(yardLocalSide),
+    inscriptionStone: inscription,
+    features,
+    walls,
+    bounds: {
+      minX: center.x - CHAPEL_CLEAR_RADIUS_M,
+      maxX: center.x + CHAPEL_CLEAR_RADIUS_M,
+      minZ: center.z - CHAPEL_CLEAR_RADIUS_M,
+      maxZ: center.z + CHAPEL_CLEAR_RADIUS_M,
+    },
+  };
+  chapelCache.set(`${seed}::chapel`, site);
+  return site;
+}
+
+/** True when a world position lies inside the chapel's
+ *  clearing (the footprint check). */
+export function chapelContains(site: ChapelSite, x: number, z: number): boolean {
+  return Math.hypot(x - site.center.x, z - site.center.z) <= site.clearRadius;
+}
+
 /** The standing spacing rule (formalized by DEV,
  *  2026-10-30): every site's siting scan keeps its centre
  *  at least (the other site's clear radius + its own

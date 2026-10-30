@@ -47,7 +47,7 @@ import type { ScatterKind } from '../types';
 import type { MeshSpec } from './objects';
 import type { AnimalKind } from './animals';
 import { hashSeed, mulberry32 } from './seed';
-import { FARM_SEGMENT_M, GROVE_CELL_M, SCHOOL_SEGMENT_M, VILLAGE_SEGMENT_M } from './sites';
+import { CHAPEL_SEGMENT_M, FARM_SEGMENT_M, GROVE_CELL_M, SCHOOL_SEGMENT_M, VILLAGE_SEGMENT_M } from './sites';
 import { sunDirection, sunElevationAtCycle } from './sky';
 import { dayFraction } from './weather';
 
@@ -518,7 +518,61 @@ export function buildKindGeometry(spec: MeshSpec, kind: ScatterKind): THREE.Buff
       part(box(1.05, 0.12, 0.75), shade(e, 1.0), { p: [0, 0.44, 0] }),
     ]);
   }
-
+  // Kind overrides (the Chapel set, sites.ts): a taller
+  // shell, a steep roof, the steeple silhouette, and the
+  // yard's two stones. Local ground is y = -baseY (walls
+  // 1.7, steeple 3.1, stones 0.35 / 0.5; the roof carries
+  // its height in the feature's y).
+  if (kind === 'chapelWall') {
+    return merge([
+      part(box(CHAPEL_SEGMENT_M, 3.4, 0.32), c),
+      part(box(CHAPEL_SEGMENT_M, 0.2, 0.38), shade(c, 1.08), { p: [0, 1.56, 0] }),
+      part(box(0.5, 1.9, 0.36), e, { p: [-0.55, 0.25, 0] }),
+      part(box(0.5, 1.9, 0.36), e, { p: [0.85, 0.25, 0] }),
+    ]);
+  }
+  if (kind === 'chapelRoof') {
+    // Steep gable, origin at the wall top: two slate
+    // planes meeting high, a ridge beam. The gable ends
+    // stay open (the farm/village precedent).
+    const slope = 0.98;
+    return merge([
+      part(box(11.6, 0.09, 3.9), c, { p: [0, 1.55, -1.35], r: [slope, 0, 0] }),
+      part(box(11.6, 0.09, 3.9), c, { p: [0, 1.55, 1.35], r: [-slope, 0, 0] }),
+      part(box(11.7, 0.16, 0.2), shade(e, 1.0), { p: [0, 2.95, 0] }),
+    ]);
+  }
+  if (kind === 'steeple') {
+    // Tower from the ground (local -3.1) through the roof
+    // line: stone shaft, a belfry with dark openings on
+    // every face, a four-sided spire, and the cross.
+    return merge([
+      part(box(1.7, 4.6, 1.7), c, { p: [0, -0.8, 0] }),
+      part(box(1.9, 1.1, 1.9), shade(c, 1.06), { p: [0, 1.95, 0] }),
+      part(box(1.2, 0.7, 0.06), e, { p: [0, 1.95, 0.96] }),
+      part(box(1.2, 0.7, 0.06), e, { p: [0, 1.95, -0.96] }),
+      part(box(0.06, 0.7, 1.2), e, { p: [0.96, 1.95, 0] }),
+      part(box(0.06, 0.7, 1.2), e, { p: [-0.96, 1.95, 0] }),
+      part(cone(1.45, 2.6, 4), shade(e, 1.0), { p: [0, 3.75, 0], r: [0, Math.PI / 4, 0] }),
+      part(box(0.08, 0.7, 0.08), e, { p: [0, 5.25, 0] }),
+      part(box(0.44, 0.08, 0.08), e, { p: [0, 5.32, 0] }),
+    ]);
+  }
+  if (kind === 'gravestone') {
+    // A rounded slab: a box with a squashed-sphere cap.
+    return merge([
+      part(box(0.62, 0.7, 0.1), c, { p: [0, -0.02, 0] }),
+      part(sphere(0.31, 10, 8), c, { p: [0, 0.3, 0], s: [1, 0.55, 0.32] }),
+      part(box(0.7, 0.1, 0.22), shade(e, 1.0), { p: [0, -0.32, 0] }),
+    ]);
+  }
+  if (kind === 'gravestoneCross') {
+    return merge([
+      part(box(0.16, 1.0, 0.12), c, { p: [0, 0, 0] }),
+      part(box(0.55, 0.14, 0.12), c, { p: [0, 0.22, 0] }),
+      part(box(0.5, 0.18, 0.3), shade(e, 1.0), { p: [0, -0.41, 0] }),
+    ]);
+  }
   switch (spec.shape) {
     case 'tree': {
       const branches: THREE.BufferGeometry[] = [];
