@@ -47,7 +47,7 @@ import type { ScatterKind } from '../types';
 import type { MeshSpec } from './objects';
 import type { AnimalKind } from './animals';
 import { hashSeed, mulberry32 } from './seed';
-import { CHAPEL_SEGMENT_M, FARM_SEGMENT_M, GROVE_CELL_M, SCHOOL_SEGMENT_M, VILLAGE_SEGMENT_M } from './sites';
+import { CHAPEL_SEGMENT_M, FARM_SEGMENT_M, GROVE_CELL_M, MILL_SEGMENT_M, SCHOOL_SEGMENT_M, STORE_SEGMENT_M, VILLAGE_SEGMENT_M } from './sites';
 import { CAVE_CELL_M } from './caves';
 import { sunDirection, sunElevationAtCycle } from './sky';
 import { dayFraction } from './weather';
@@ -629,6 +629,254 @@ export function buildKindGeometry(spec: MeshSpec, kind: ScatterKind): THREE.Buff
       part(sphere(0.09, 8, 6), shade(c, 0.9), { p: [0.02, -0.16, 0.16], s: [1, 0.6, 1] }),
     ]);
   }
+  // Kind overrides (the General Store set, sites.ts):
+  // walls, the false front, roof, boardwalk, and the
+  // interior fixtures. Local ground is y = -baseY.
+  if (kind === 'storeWall') {
+    return merge([
+      part(box(STORE_SEGMENT_M, 3.0, 0.3), c),
+      part(box(0.7, 0.9, 0.34), e, { p: [0.45, 0.35, 0] }),
+      part(box(STORE_SEGMENT_M, 0.18, 0.36), shade(c, 1.1), { p: [0, -1.42, 0] }),
+    ]);
+  }
+  if (kind === 'storeFront') {
+    // The false front: a 4.6 m board face — the wall body
+    // below, the parapet above the roofline, a broad dark
+    // shop window, and the blank sign board.
+    return merge([
+      part(box(STORE_SEGMENT_M, 4.6, 0.3), c),
+      part(box(1.5, 1.1, 0.34), e, { p: [0, -0.75, 0] }),
+      part(box(1.9, 0.5, 0.36), shade(e, 1.6), { p: [0, 1.15, 0] }),
+      part(box(STORE_SEGMENT_M + 0.1, 0.22, 0.44), shade(c, 0.9), { p: [0, 2.38, 0] }),
+    ]);
+  }
+  if (kind === 'storeRoof') {
+    // Gabled pair (the farm roof's shape, the store's
+    // span) + the stove's pipe toward the back.
+    return merge([
+      part(box(13.1, 0.09, 4.6), c, { p: [0, 1.35, -1.95], r: [0.6, 0, 0] }),
+      part(box(13.1, 0.09, 4.6), c, { p: [0, 1.35, 1.95], r: [-0.6, 0, 0] }),
+      part(cyl(0.09, 0.11, 0.9, 6), shade(e, 1.0), { p: [-1.5, 2.6, -0.9] }),
+    ]);
+  }
+  if (kind === 'storePorch') {
+    // One boardwalk segment: slab out from the wall line,
+    // a lean-to roof above, posts at the outer corners
+    // (inset 0.06 from the segment ends, so a run's joints
+    // read as paired posts, never coincident).
+    return merge([
+      part(box(STORE_SEGMENT_M, 0.14, 1.9), c, { p: [0, -0.45, 0.9] }),
+      part(box(STORE_SEGMENT_M, 0.08, 2.0), shade(c, 0.92), { p: [0, 1.55, 0.95], r: [0.08, 0, 0] }),
+      part(box(0.11, 2.0, 0.11), shade(e, 1.0), { p: [-1.19, 0.55, 1.75] }),
+      part(box(0.11, 2.0, 0.11), shade(e, 1.0), { p: [1.19, 0.55, 1.75] }),
+    ]);
+  }
+  if (kind === 'storeCounter') {
+    // A 2.4 m counter unit: slab top, front panel, end
+    // legs, and the silhouettes of goods left on top.
+    return merge([
+      part(box(2.4, 0.08, 0.75), c, { p: [0, 0.5, 0] }),
+      part(box(2.4, 1.0, 0.1), shade(c, 0.9), { p: [0, 0, 0.3] }),
+      part(box(0.1, 1.0, 0.65), shade(c, 0.85), { p: [-1.1, 0, 0] }),
+      part(box(0.1, 1.0, 0.65), shade(c, 0.85), { p: [1.1, 0, 0] }),
+      part(box(0.3, 0.25, 0.3), e, { p: [-0.7, 0.67, 0] }),
+      part(box(0.24, 0.2, 0.24), shade(e, 0.85), { p: [0.4, 0.64, -0.1] }),
+    ]);
+  }
+  if (kind === 'storeShelf') {
+    // A 2.2 m shelf unit: posts, three boards, and goods
+    // silhouettes (extraColor blocks and a jar — shapes
+    // only until the salvage claim).
+    return merge([
+      part(box(0.08, 2.2, 0.6), c, { p: [-1.06, 0, 0] }),
+      part(box(0.08, 2.2, 0.6), c, { p: [1.06, 0, 0] }),
+      part(box(2.2, 0.06, 0.55), shade(c, 1.08), { p: [0, -0.6, 0] }),
+      part(box(2.2, 0.06, 0.55), shade(c, 1.08), { p: [0, 0.1, 0] }),
+      part(box(2.2, 0.06, 0.55), shade(c, 1.08), { p: [0, 0.8, 0] }),
+      part(box(0.3, 0.35, 0.4), e, { p: [-0.7, -0.4, 0] }),
+      part(box(0.25, 0.5, 0.35), shade(e, 0.85), { p: [0.2, 0.38, 0] }),
+      part(cyl(0.09, 0.09, 0.28, 6), e, { p: [0.75, 0.97, 0] }),
+      part(box(0.4, 0.3, 0.4), shade(e, 1.15), { p: [-0.3, 0.98, 0] }),
+    ]);
+  }
+  // Kind overrides (the Drowned Mill set, sites.ts):
+  // stone walls with their tide band, the one standing
+  // slope, the fallen slope, the wheel, and the race.
+  // Local ground is y = -baseY.
+  if (kind === 'millWall') {
+    return merge([
+      part(box(MILL_SEGMENT_M, 3.2, 0.36), c),
+      part(box(MILL_SEGMENT_M, 0.9, 0.38), e, { p: [0, -1.15, 0] }),
+      part(box(MILL_SEGMENT_M, 0.22, 0.3), shade(c, 0.8), { p: [0, 1.5, 0] }),
+    ]);
+  }
+  if (kind === 'millWallFallen') {
+    // A wall segment lying flat: length along X, the
+    // wall's height fallen along Z, the tide band across
+    // its up-face.
+    return merge([
+      part(box(MILL_SEGMENT_M, 0.32, 3.2), c),
+      part(box(MILL_SEGMENT_M, 0.34, 0.9), e, { p: [0, 0.01, -1.0] }),
+      part(box(MILL_SEGMENT_M, 0.36, 0.24), shade(c, 0.85), { p: [0, 0.01, 1.35] }),
+    ]);
+  }
+  if (kind === 'millRoof') {
+    // ONE slope (over local +Z) + the ridge beam — the
+    // water slope is gone; the open side is the ruin.
+    return merge([
+      part(box(9.6, 0.09, 4.3), c, { p: [0, 1.32, 1.9], r: [-0.62, 0, 0] }),
+      part(box(9.6, 0.16, 0.22), e, { p: [0, 2.4, 0] }),
+    ]);
+  }
+  if (kind === 'millRoofFallen') {
+    // The fallen slope, crumpled against its wall.
+    return merge([
+      part(box(9.6, 0.09, 4.2), c, { p: [0, -0.1, 0], r: [0.5, 0, 0] }),
+      part(box(0.14, 0.14, 3.6), shade(e, 1.0), { p: [-2.2, 0.15, 0.3], r: [0.5, 0, 0.2] }),
+      part(box(0.14, 0.14, 3.6), shade(e, 1.0), { p: [2.2, 0.15, 0.3], r: [0.5, 0, -0.2] }),
+    ]);
+  }
+  if (kind === 'millWheel') {
+    // The great wheel in its local XY plane (axle along
+    // Z): hub, four spokes (eight arms), two rim rings of
+    // segments, and radial paddles — with a BROKEN ARC:
+    // segments 3 and 4 (rim + paddles) are simply gone.
+    const parts: THREE.BufferGeometry[] = [
+      part(cyl(0.26, 0.26, 0.55, 8), e, { r: [Math.PI / 2, 0, 0] }),
+    ];
+    for (let k = 0; k < 4; k++) {
+      parts.push(part(box(3.3, 0.13, 0.1), c, { r: [0, 0, (k * Math.PI) / 4] }));
+    }
+    for (let k = 0; k < 8; k++) {
+      if (k === 3 || k === 4) continue; // the broken arc
+      const a = (k * Math.PI) / 4;
+      const px = Math.cos(a) * 1.6;
+      const py = Math.sin(a) * 1.6;
+      parts.push(part(box(0.17, 1.25, 0.13), c, { p: [px, py, 0.3], r: [0, 0, a] }));
+      parts.push(part(box(0.17, 1.25, 0.13), c, { p: [px, py, -0.3], r: [0, 0, a] }));
+      parts.push(part(box(0.45, 0.07, 0.68), shade(e, 1.1), { p: [Math.cos(a) * 1.62, Math.sin(a) * 1.62, 0], r: [0, 0, a] }));
+    }
+    return merge(parts);
+  }
+  if (kind === 'millRace') {
+    // A stone-cheeked channel: two cheeks, a dark water
+    // strip between, cross boards at the ends.
+    return merge([
+      part(box(3.2, 0.5, 0.3), c, { p: [0, -0.05, 0.75] }),
+      part(box(3.2, 0.5, 0.3), c, { p: [0, -0.05, -0.75] }),
+      part(box(3.2, 0.06, 1.2), e, { p: [0, -0.2, 0] }),
+      part(box(0.3, 0.08, 1.8), shade(c, 0.9), { p: [-1.2, 0.22, 0] }),
+      part(box(0.3, 0.08, 1.8), shade(c, 0.9), { p: [1.2, 0.22, 0] }),
+    ]);
+  }
+  // Kind overrides (the Sunken Road set, sites.ts):
+  // pavement slabs (the sunken variant carries its tilt
+  // in the mesh), shoulder posts, the signed post.
+  // Local ground is y = -baseY.
+  if (kind === 'roadSlab') {
+    return merge([
+      part(box(5, 0.12, 4.4), c),
+      part(box(5, 0.13, 0.5), e, { p: [0, 0, 1.95] }),
+      part(box(5, 0.13, 0.5), e, { p: [0, 0, -1.95] }),
+      part(box(0.18, 0.13, 4.4), e, { p: [0.8, 0.005, 0] }),
+      part(box(2.2, 0.13, 0.16), e, { p: [-1.2, 0.005, 0.9] }),
+    ]);
+  }
+  if (kind === 'roadSlabSunk') {
+    const tilt: [number, number, number] = [0.05, 0, 0.035];
+    return merge([
+      part(box(5, 0.12, 4.4), c, { r: tilt }),
+      part(box(5, 0.13, 0.5), e, { p: [0, 0, 1.95], r: tilt }),
+      part(box(5, 0.13, 0.5), e, { p: [0, 0, -1.95], r: tilt }),
+      part(box(0.18, 0.13, 4.4), e, { p: [0.8, 0.005, 0], r: tilt }),
+    ]);
+  }
+  if (kind === 'roadPost') {
+    return merge([
+      part(box(0.14, 1.1, 0.14), c),
+      part(box(0.2, 0.08, 0.2), e, { p: [0, 0.58, 0] }),
+    ]);
+  }
+  if (kind === 'roadSign') {
+    return merge([
+      part(box(0.14, 1.8, 0.14), c),
+      part(box(1.1, 0.6, 0.06), e, { p: [0, 0.55, 0] }),
+      part(box(0.08, 0.5, 0.08), shade(c, 0.9), { p: [0, 0.55, -0.07] }),
+    ]);
+  }
+  // Kind overrides (the Rail Siding set, sites.ts): the
+  // bed with ties composed in, rails, the boxcar (door on
+  // its local +Z), platform, buffer. Ground = -baseY.
+  if (kind === 'sidingBed') {
+    const parts: THREE.BufferGeometry[] = [part(box(46, 0.1, 3.4), c)];
+    for (let x = -22; x <= 22; x += 2.9) {
+      parts.push(part(box(0.24, 0.06, 2.4), e, { p: [x, 0.07, 0] }));
+    }
+    return merge(parts);
+  }
+  if (kind === 'sidingRail') {
+    return merge([
+      part(box(92, 0.16, 0.09), c),
+      part(box(92, 0.03, 0.11), e, { p: [0, 0.09, 0] }),
+    ]);
+  }
+  if (kind === 'boxcarBody') {
+    // The car whole: underframe + wheels, floor, ribbed
+    // sides, roof — and on local +Z the sliding door,
+    // standing open: dark opening, panel slid aside, the
+    // shifted load right behind it, crates beyond.
+    const parts: THREE.BufferGeometry[] = [
+      part(box(9.5, 0.3, 2.6), e, { p: [0, -1.25, 0] }),
+      part(box(9.5, 0.12, 2.9), shade(e, 1.4), { p: [0, -1.05, 0] }),
+      part(box(9.5, 2.6, 0.12), c, { p: [0, 0.25, -1.39] }),
+      // The +Z side is built AROUND the door opening
+      // (x -1.55..0.35): two runs + a lintel.
+      part(box(3.2, 2.6, 0.12), c, { p: [-3.15, 0.25, 1.39] }),
+      part(box(4.4, 2.6, 0.12), c, { p: [2.55, 0.25, 1.39] }),
+      part(box(1.9, 0.3, 0.12), c, { p: [-0.6, 1.4, 1.39] }),
+      part(box(0.12, 2.6, 2.9), c, { p: [-4.69, 0.25, 0] }),
+      part(box(0.12, 2.6, 2.9), c, { p: [4.69, 0.25, 0] }),
+      part(box(9.7, 0.14, 3.1), shade(c, 0.9), { p: [0, 1.62, 0] }),
+      // The opening (dark) + the slid panel beside it.
+      part(box(1.9, 2.2, 0.06), e, { p: [-0.6, 0.15, 1.4] }),
+      part(box(1.9, 2.2, 0.08), shade(c, 0.92), { p: [-2.6, 0.15, 1.48] }),
+      // The shifted load, right behind the opening.
+      part(box(1.1, 1.1, 1.0), shade(e, 1.25), { p: [-0.6, -0.5, 0.85], r: [0, 0.3, 0] }),
+      // Dressing deeper in.
+      part(box(0.8, 0.8, 0.8), shade(e, 1.1), { p: [1.8, -0.6, 0.6] }),
+      part(box(0.8, 0.8, 0.8), shade(e, 0.95), { p: [2.7, -0.6, -0.5] }),
+      part(cyl(0.32, 0.32, 0.9, 8), shade(e, 1.2), { p: [0.8, -0.6, -0.8] }),
+    ];
+    for (const wx of [-3.4, 3.4]) {
+      for (const wz of [-0.75, 0.75]) {
+        parts.push(part(cyl(0.42, 0.42, 0.12, 10), e, { p: [wx, -1.15, wz], r: [Math.PI / 2, 0, 0] }));
+      }
+    }
+    for (const rx of [-3.5, -1.2, 1.2, 3.5]) {
+      parts.push(part(box(0.18, 2.6, 0.16), shade(c, 0.88), { p: [rx, 0.25, 1.39] }));
+      parts.push(part(box(0.18, 2.6, 0.16), shade(c, 0.88), { p: [rx, 0.25, -1.39] }));
+    }
+    return merge(parts);
+  }
+  if (kind === 'sidingPlatform') {
+    return merge([
+      part(box(8, 0.3, 2.2), c, { p: [0, 0.05, 0] }),
+      part(box(0.18, 0.35, 0.18), shade(e, 1.0), { p: [-3.6, -0.25, 0.9] }),
+      part(box(0.18, 0.35, 0.18), shade(e, 1.0), { p: [3.6, -0.25, 0.9] }),
+      part(box(0.18, 0.35, 0.18), shade(e, 1.0), { p: [-3.6, -0.25, -0.9] }),
+      part(box(0.18, 0.35, 0.18), shade(e, 1.0), { p: [3.6, -0.25, -0.9] }),
+      part(box(0.9, 0.9, 0.9), e, { p: [2.4, 0.65, 0] }),
+    ]);
+  }
+  if (kind === 'sidingBuffer') {
+    return merge([
+      part(box(0.3, 1.4, 0.3), e, { p: [0, 0, 1.1] }),
+      part(box(0.3, 1.4, 0.3), e, { p: [0, 0, -1.1] }),
+      part(box(0.35, 0.5, 2.6), c, { p: [0, 0.35, 0] }),
+      part(box(0.16, 1.5, 0.16), shade(e, 1.0), { p: [-0.5, -0.1, 1.1], r: [0, 0, 0.6] }),
+      part(box(0.16, 1.5, 0.16), shade(e, 1.0), { p: [-0.5, -0.1, -1.1], r: [0, 0, 0.6] }),
+    ]);
+  }
   switch (spec.shape) {
     case 'tree': {
       const branches: THREE.BufferGeometry[] = [];
@@ -987,6 +1235,207 @@ export function buildKindGeometry(spec: MeshSpec, kind: ScatterKind): THREE.Buff
       ]);
     }
   }
+}
+
+// ---------------------------------------------------------------------------
+// Cave brick variants (MODELS lane, claim approved by DEV
+// 2026-10-30). ADDITIVE EXPORTS ONLY: buildKindGeometry and every
+// existing kind above are untouched (the golden-probe rule — the
+// landed cave kinds are the control set). These are brick FORMS
+// the cave generators adopt later under their own claims;
+// per-instance seasoning (position, rotY, scale) stays
+// generation's job, exactly as for every other kind. Each builder
+// is a pure function of its spec's colors, built from fixed part
+// tables — no RNG, per this module's determinism law. Origins:
+// - hanging forms (stalactites, drape): y = 0 is the ceiling /
+//   wall-top attach plane, geometry extends DOWN (-y). Adopt
+//   with baseY 0 and the feature y at the attach height.
+// - floor forms (stalagmites, crystal, pool): y = 0 is the
+//   floor, geometry rises (+y). Adopt with baseY 0.
+// - fungus shelf: y = 0 is the lowest shelf's attach line on a
+//   vertical face, shelves protrude toward +z; rotate the
+//   instance to face the room. Adopt with baseY 0.
+// ---------------------------------------------------------------------------
+
+/** Stalactite cluster, sparse: 3 teeth, staggered lengths. */
+export function buildStalactiteClusterSparseGeometry(spec: MeshSpec): THREE.BufferGeometry {
+  const c = spec.color;
+  const e = spec.extraColor ?? c;
+  return merge([
+    part(cone(0.3, 1.5, 6), c, { p: [0, -0.75, 0], r: [Math.PI, 0, 0] }),
+    part(cone(0.18, 0.9, 5), shade(e, 1.08), { p: [0.42, -0.45, 0.12], r: [Math.PI, 0, 0] }),
+    part(cone(0.14, 0.65, 5), shade(c, 0.92), { p: [-0.38, -0.33, -0.1], r: [Math.PI, 0, 0] }),
+  ]);
+}
+
+/** Stalactite cluster, dense: a 7-tooth curtain. */
+export function buildStalactiteClusterDenseGeometry(spec: MeshSpec): THREE.BufferGeometry {
+  const c = spec.color;
+  const e = spec.extraColor ?? c;
+  // [x, z, radius, length] — fixed table, staggered curtain.
+  const teeth: [number, number, number, number][] = [
+    [0, 0, 0.26, 1.8],
+    [0.35, 0.1, 0.18, 1.2],
+    [-0.33, 0.14, 0.16, 1.05],
+    [0.18, -0.28, 0.15, 0.9],
+    [-0.2, -0.25, 0.19, 1.35],
+    [0.52, -0.15, 0.12, 0.7],
+    [-0.52, -0.05, 0.11, 0.6],
+  ];
+  const shades = [1.0, 1.08, 0.92];
+  return merge(
+    teeth.map(([x, z, r, h], i) =>
+      part(cone(r, h, 5), shade(i % 2 === 0 ? c : e, shades[i % 3]), {
+        p: [x, -h / 2, z],
+        r: [Math.PI, 0, 0],
+      }),
+    ),
+  );
+}
+
+/** Stalactite, giant: one massive tooth with two shoulders. */
+export function buildStalactiteGiantGeometry(spec: MeshSpec): THREE.BufferGeometry {
+  const c = spec.color;
+  const e = spec.extraColor ?? c;
+  return merge([
+    part(cone(0.55, 2.6, 7), c, { p: [0, -1.3, 0], r: [Math.PI, 0, 0] }),
+    part(cone(0.28, 1.3, 6), shade(e, 1.06), { p: [0.62, -0.65, 0.15], r: [Math.PI, 0, 0] }),
+    part(cone(0.22, 1.0, 5), shade(c, 0.94), { p: [-0.58, -0.5, -0.12], r: [Math.PI, 0, 0] }),
+  ]);
+}
+
+/** Stalagmite cluster, sparse: 3 upright teeth on a shared base.
+ *  (NEW brick — no landed equivalent; the landed set has only the
+ *  hanging stalactite.) */
+export function buildStalagmiteClusterSparseGeometry(spec: MeshSpec): THREE.BufferGeometry {
+  const c = spec.color;
+  const e = spec.extraColor ?? c;
+  return merge([
+    part(blob(0.55), shade(e, 1.0), { p: [0, 0.02, 0], s: [1, 0.35, 1] }),
+    part(cone(0.32, 1.1, 6), c, { p: [0, 0.55, 0] }),
+    part(cone(0.2, 0.7, 5), shade(c, 1.08), { p: [0.45, 0.35, 0.1] }),
+    part(cone(0.15, 0.5, 5), shade(e, 0.92), { p: [-0.4, 0.25, -0.12] }),
+  ]);
+}
+
+/** Stalagmite cluster, dense: 6 upright teeth, varied heights. */
+export function buildStalagmiteClusterDenseGeometry(spec: MeshSpec): THREE.BufferGeometry {
+  const c = spec.color;
+  const e = spec.extraColor ?? c;
+  // [x, z, radius, height] — fixed table.
+  const teeth: [number, number, number, number][] = [
+    [0, 0, 0.3, 1.4],
+    [0.42, 0.12, 0.2, 0.85],
+    [-0.4, 0.16, 0.18, 0.7],
+    [0.22, -0.3, 0.16, 0.6],
+    [-0.24, -0.28, 0.21, 1.0],
+    [0.55, -0.2, 0.13, 0.45],
+  ];
+  const shades = [1.0, 1.08, 0.92];
+  return merge([
+    part(blob(0.8), shade(e, 1.0), { p: [0, 0.02, 0], s: [1, 0.3, 1] }),
+    ...teeth.map(([x, z, r, h], i) =>
+      part(cone(r, h, 5), shade(i % 2 === 0 ? c : e, shades[i % 3]), { p: [x, h / 2, z] }),
+    ),
+  ]);
+}
+
+/** Stalagmite pillar: one thick broken-top column on a rock base —
+ *  the floor tooth that nearly meets the ceiling. */
+export function buildStalagmitePillarGeometry(spec: MeshSpec): THREE.BufferGeometry {
+  const c = spec.color;
+  const e = spec.extraColor ?? c;
+  return merge([
+    part(blob(0.75), shade(e, 1.0), { p: [0, 0.05, 0], s: [1, 0.4, 1] }),
+    // Tapered cylinder, not a cone: the flat top is the break.
+    part(cyl(0.18, 0.48, 2.3, 7), c, { p: [0, 1.2, 0] }),
+    part(cone(0.2, 0.8, 5), shade(c, 1.08), { p: [0.62, 0.4, 0.2] }),
+  ]);
+}
+
+/** Flowstone drape: layered rounded sheets descending a wall
+ *  plane, each lower sheet stepping out (+z) and darkening. */
+export function buildFlowstoneDrapeGeometry(spec: MeshSpec): THREE.BufferGeometry {
+  const c = spec.color;
+  const e = spec.extraColor ?? c;
+  return merge([
+    part(blob(0.55), shade(c, 1.05), { p: [0, -0.3, 0.05], s: [1.2, 0.8, 0.35] }),
+    part(blob(0.5), shade(e, 1.0), { p: [0.05, -0.85, 0.12], s: [1.05, 0.75, 0.32] }),
+    part(blob(0.44), shade(c, 0.95), { p: [-0.04, -1.35, 0.18], s: [0.9, 0.7, 0.3] }),
+    part(blob(0.36), shade(e, 0.9), { p: [0.02, -1.8, 0.24], s: [0.75, 0.6, 0.28] }),
+  ]);
+}
+
+/** Fungus shelf: 3 bracket shelves stacked up a vertical face,
+ *  protruding +z — distinct from twilightFungus' ground spots;
+ *  the adopting generator places it against a wall and the
+ *  renderer's fungus light logic can key on it the same way. */
+export function buildFungusShelfGeometry(spec: MeshSpec): THREE.BufferGeometry {
+  const c = spec.color;
+  const e = spec.extraColor ?? c;
+  // [x, y, radius] shelf attach points, rising up the face.
+  const shelves: [number, number, number][] = [
+    [-0.15, 0.15, 0.34],
+    [0.12, 0.6, 0.27],
+    [-0.05, 1.05, 0.38],
+  ];
+  const parts: THREE.BufferGeometry[] = [];
+  for (const [x, y, r] of shelves) {
+    // Squashed blobs, not spheres: a faceted bracket cap at a
+    // third of the vert cost (spheres would triple this brick).
+    parts.push(
+      part(cyl(0.035, 0.05, 0.22, 5), e, { p: [x, y - 0.1, 0.08], r: [0.5, 0, 0] }),
+      part(blob(r), c, { p: [x, y, 0.28], s: [1, 0.28, 0.75] }),
+    );
+  }
+  return merge(parts);
+}
+
+/** Crystal cluster (quartz dressing): 5 tilted elongated prisms
+ *  rising from a shared rock base. */
+export function buildCrystalClusterGeometry(spec: MeshSpec): THREE.BufferGeometry {
+  const c = spec.color;
+  const e = spec.extraColor ?? c;
+  // [x, z, radius, y-scale, tiltX, tiltZ] — fixed table.
+  const prisms: [number, number, number, number, number, number][] = [
+    [0, 0, 0.22, 2.6, 0, 0],
+    [0.34, 0.1, 0.16, 1.9, 0.1, -0.35],
+    [-0.3, 0.14, 0.14, 1.6, 0.15, 0.3],
+    [0.14, -0.3, 0.13, 1.4, -0.3, -0.1],
+    [-0.18, -0.26, 0.11, 1.15, -0.22, 0.18],
+  ];
+  return merge([
+    part(blob(0.6), shade(e, 1.0), { p: [0, 0.05, 0], s: [1, 0.45, 1] }),
+    ...prisms.map(([x, z, r, sy, tx, tz], i) =>
+      part(new THREE.OctahedronGeometry(r, 0), shade(c, i === 0 ? 1.0 : 1.15), {
+        p: [x, 0.28 + (r * sy) / 2, z],
+        r: [tx, 0, tz],
+        s: [1, sy, 1],
+      }),
+    ),
+  ]);
+}
+
+/** Cave pool, rimmed: the landed pool's flat disc (same 2.2
+ *  radius) ringed by a broken circle of rim rocks. */
+export function buildCavePoolRimmedGeometry(spec: MeshSpec): THREE.BufferGeometry {
+  const c = spec.color;
+  const rim = shade(c, 1.7);
+  // Rim rocks at fixed angles (a gap at angle index 3 — the
+  // broken ring she can step through).
+  const rocks: THREE.BufferGeometry[] = [];
+  for (let i = 0; i < 8; i++) {
+    if (i === 3) continue;
+    const a = (i / 8) * Math.PI * 2;
+    const r = i % 2 === 0 ? 0.28 : 0.2;
+    rocks.push(
+      part(blob(r), shade(rim, i % 2 === 0 ? 1.0 : 0.85), {
+        p: [Math.cos(a) * 2.15, 0.02, Math.sin(a) * 2.15],
+        s: [1, 0.55, 1],
+      }),
+    );
+  }
+  return merge([part(flatDisc(2.2, 16), c), ...rocks]);
 }
 
 // ---------------------------------------------------------------------------

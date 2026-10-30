@@ -57,6 +57,7 @@
  */
 
 import { deriveSeed, mulberry32 } from './seed';
+import { riverCenterAt, riverParamsFor, RIVER_WIDTH } from './river';
 import type { BiomeId, BiomeWeights, ScatterKind, ScatterObject } from '../types';
 
 /** One axis-aligned collision box (a hedge unit's footprint). */
@@ -2043,6 +2044,1330 @@ export function caveMouthContains(site: CaveMouthSite, x: number, z: number): bo
   return Math.hypot(x - site.center.x, z - site.center.z) <= site.clearRadius;
 }
 
+// ---------------------------------------------------------------------------
+// THE GENERAL STORE — site #7 (Adam, 2026-10-30; claim
+// approved by DEV). The locations doc's word: "salvage-
+// rich; the old world's goods on shelves" — a mostly-
+// intact candidate. A single building, so the interiors
+// rule makes it a WALK-IN shell (the farmhouse pattern):
+// walls, a whole roof, a boardwalk porch — and the piece
+// that makes it a store: a tall FALSE FRONT on the door
+// side, its silhouette. Inside: a long counter across
+// the room and shelf units along the walls (solid; their
+// dressing is silhouette geometry — the SALVAGE content,
+// what's actually takeable, is a later Systems claim
+// hanging off the exported shelfSpots).
+// ---------------------------------------------------------------------------
+
+/** Siting band from spawn, meters (DRAFT). */
+export const STORE_MIN_DIST_M = 500;
+export const STORE_MAX_DIST_M = 850;
+/** Clearing radius around the store (DRAFT). */
+export const STORE_CLEAR_RADIUS_M = 18;
+/** Meadow weight that also qualifies a scan point (DRAFT). */
+export const STORE_MEADOW_EDGE_WEIGHT = 0.2;
+/** Wall segment length, meters (the farm's measure). */
+export const STORE_SEGMENT_M = 2.5;
+/** Footprint: 12.5 x 7.5 m. */
+export const STORE_WALL_W_M = 12.5;
+export const STORE_WALL_D_M = 7.5;
+/** Wall height, meters (DRAFT). */
+export const STORE_WALL_H_M = 3.0;
+const STORE_WALL_HALF_T = 0.15;
+
+/** The derived General Store: one per world seed. */
+export interface StoreSite {
+  id: string;
+  seed: string;
+  center: { x: number; z: number };
+  /** Dominant biome at the chosen centre. */
+  biome: BiomeId;
+  /** Siting distance from spawn, meters. */
+  distance: number;
+  clearRadius: number;
+  /** The front (false-front + door) side, world frame. */
+  doorSide: 'north' | 'south' | 'east' | 'west';
+  /** Centre of the counter line (world). */
+  counterSpot: { x: number; z: number };
+  /** Shelf-unit anchors (world + facing): the salvage
+   *  pass's hooks for a later content claim. */
+  shelfSpots: { x: number; z: number; rotY: number }[];
+  /** The stove spot (world): the back shelf run leaves a
+   *  gap for it; an anchor only in this landing. */
+  stoveSpot: { x: number; z: number };
+  features: ScatterObject[];
+  walls: SiteWallBox[];
+  bounds: { minX: number; maxX: number; minZ: number; maxZ: number };
+}
+
+const storeCache = new Map<string, StoreSite>();
+
+/**
+ * Derive the world's General Store. `weightsAtPos` returns
+ * the full weights + dominant at a position. Memoized.
+ */
+export function generalStoreSite(
+  seed: string,
+  spawn: { x: number; z: number },
+  weightsAtPos: (x: number, z: number) => BiomeWeights,
+): StoreSite {
+  const cached = storeCache.get(`${seed}::store`);
+  if (cached) return cached;
+
+  // Spacing against all six earlier sites (radii + 60).
+  const grove = groveSite(seed, spawn, (x, z) => weightsAtPos(x, z).dominant);
+  const school = schoolhouseSite(seed, spawn, weightsAtPos);
+  const village = villageSite(seed, spawn, weightsAtPos);
+  const farm = farmhouseSite(seed, spawn, weightsAtPos);
+  const chapel = chapelSite(seed, spawn, weightsAtPos);
+  const mouth = caveMouthSite(seed, spawn, weightsAtPos);
+  const spacingLegal = (x: number, z: number): boolean =>
+    [grove, school, village, farm, chapel, mouth].every(
+      (s) =>
+        Math.hypot(x - s.center.x, z - s.center.z) >=
+        s.clearRadius + STORE_CLEAR_RADIUS_M + SITE_SPACING_MARGIN_M,
+    );
+
+  // Siting: own bearing stream; settled country —
+  // oldfieldRise dominant, or meadow at the edge weight.
+  const bearing = mulberry32(deriveSeed(seed, 'site:store'))() * Math.PI * 2;
+  const dirX = Math.cos(bearing);
+  const dirZ = Math.sin(bearing);
+  let center = {
+    x: spawn.x + dirX * STORE_MAX_DIST_M,
+    z: spawn.z + dirZ * STORE_MAX_DIST_M,
+  };
+  let biome = weightsAtPos(center.x, center.z).dominant;
+  let distance = STORE_MAX_DIST_M;
+  let fallback: { x: number; z: number; biome: BiomeId; distance: number } | null = null;
+  for (let d = STORE_MIN_DIST_M; d <= STORE_MAX_DIST_M; d += GROVE_SCAN_STEP_M) {
+    const x = spawn.x + dirX * d;
+    const z = spawn.z + dirZ * d;
+    if (!spacingLegal(x, z)) continue;
+    const w = weightsAtPos(x, z);
+    if (!fallback) fallback = { x, z, biome: w.dominant, distance: d };
+    if (w.dominant === 'oldfieldRise' || w.weights.meadow >= STORE_MEADOW_EDGE_WEIGHT) {
+      center = { x, z };
+      biome = w.dominant;
+      distance = d;
+      break;
+    }
+    if (d === STORE_MAX_DIST_M && fallback) {
+      center = { x: fallback.x, z: fallback.z };
+      biome = fallback.biome;
+      distance = fallback.distance;
+    }
+  }
+
+  // --- Plan (streams under the 'store' label; the
+  // farmhouse frame idiom: axis swap + local door side).
+  const planRand = mulberry32(deriveSeed(seed, 'store:plan'));
+  const swap = planRand() < 0.5;
+  const theta = swap ? Math.PI / 2 : 0;
+  const toWorld = (lx: number, lz: number): { x: number; z: number } =>
+    swap
+      ? { x: center.x + lz, z: center.z - lx }
+      : { x: center.x + lx, z: center.z + lz };
+  const toSpawnX = spawn.x - center.x;
+  const toSpawnZ = spawn.z - center.z;
+  const localSpawnX = swap ? -toSpawnZ : toSpawnX;
+  const localSpawnZ = swap ? toSpawnX : toSpawnZ;
+  const doorSide: StoreSite['doorSide'] =
+    Math.abs(localSpawnX) > Math.abs(localSpawnZ)
+      ? localSpawnX > 0
+        ? 'east'
+        : 'west'
+      : localSpawnZ > 0
+        ? 'south'
+        : 'north';
+  const worldDoorSide: StoreSite['doorSide'] = !swap
+    ? doorSide
+    : doorSide === 'north'
+      ? 'west'
+      : doorSide === 'west'
+        ? 'south'
+        : doorSide === 'south'
+          ? 'east'
+          : 'north';
+
+  const W = STORE_WALL_W_M;
+  const D = STORE_WALL_D_M;
+  const SEG = STORE_SEGMENT_M;
+
+  const features: ScatterObject[] = [];
+  const walls: SiteWallBox[] = [];
+  const feat = (kind: ScatterKind, x: number, z: number, y: number, scale: number, rotY: number): void => {
+    features.push({ kind, x, z, y, scale, rotY });
+  };
+  const box = (cx: number, cz: number, hx: number, hz: number): void => {
+    walls.push({ minX: cx - hx, maxX: cx + hx, minZ: cz - hz, maxZ: cz + hz });
+  };
+
+  interface Segment {
+    side: 'north' | 'south' | 'east' | 'west';
+    lx: number;
+    lz: number;
+    running: 'x' | 'z';
+    cornerAdjacent: boolean;
+  }
+  const segments: Segment[] = [];
+  const perLong = Math.round(W / SEG); // 5
+  const perShort = Math.round(D / SEG); // 3
+  for (let i = 0; i < perLong; i++) {
+    const lx = -W / 2 + SEG / 2 + i * SEG;
+    const corner = i === 0 || i === perLong - 1;
+    segments.push({ side: 'north', lx, lz: -D / 2, running: 'x', cornerAdjacent: corner });
+    segments.push({ side: 'south', lx, lz: D / 2, running: 'x', cornerAdjacent: corner });
+  }
+  for (let i = 0; i < perShort; i++) {
+    const lz = -D / 2 + SEG / 2 + i * SEG;
+    const corner = i === 0 || i === perShort - 1;
+    segments.push({ side: 'west', lx: -W / 2, lz, running: 'z', cornerAdjacent: corner });
+    segments.push({ side: 'east', lx: W / 2, lz, running: 'z', cornerAdjacent: corner });
+  }
+
+  const doorPool = segments.filter((s) => s.side === doorSide);
+  const door =
+    doorPool.length % 2 === 0
+      ? doorPool[doorPool.length / 2 - 1 + Math.floor(planRand() * 2)]
+      : doorPool[Math.floor(doorPool.length / 2)];
+
+  // Mostly intact (its candidacy): at most ONE interior
+  // segment damaged, missing or stub (the chapel shape).
+  const candidates = segments.filter((s) => !s.cornerAdjacent && s !== door);
+  for (let i = candidates.length - 1; i > 0; i--) {
+    const j = Math.floor(planRand() * (i + 1));
+    [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
+  }
+  const damagedCount = Math.floor(planRand() * 2); // 0..1
+  const missing = new Set<Segment>();
+  const stubs = new Set<Segment>();
+  if (damagedCount === 1 && candidates.length > 0) {
+    (planRand() < 0.5 ? missing : stubs).add(candidates[0]);
+  }
+
+  const emitWall = (kind: ScatterKind, lx: number, lz: number, running: 'x' | 'z', scale: number): void => {
+    const w = toWorld(lx, lz);
+    const runsWorldX = (running === 'x') !== swap;
+    feat(kind, w.x, w.z, 0, scale, runsWorldX ? 0 : Math.PI / 2);
+    const halfLen = (SEG / 2) * scale;
+    if (runsWorldX) box(w.x, w.z, halfLen, STORE_WALL_HALF_T);
+    else box(w.x, w.z, STORE_WALL_HALF_T, halfLen);
+  };
+  for (const s of segments) {
+    if (s === door || missing.has(s)) continue;
+    // The door side wears the FALSE FRONT; the rest plain wall.
+    emitWall(s.side === doorSide ? 'storeFront' : 'storeWall', s.lx, s.lz, s.running, stubs.has(s) ? 0.5 : 1);
+  }
+
+  // The roof: whole, behind the false front.
+  feat('storeRoof', center.x, center.z, STORE_WALL_H_M, 1, theta);
+
+  // The boardwalk porch: a slab per door-side segment,
+  // posts along its outer edge (boxes at the joints).
+  {
+    const outRot =
+      doorSide === 'north' ? Math.PI : doorSide === 'south' ? 0 : doorSide === 'east' ? Math.PI / 2 : -Math.PI / 2;
+    for (const s of doorPool) {
+      const out =
+        s.side === 'north'
+          ? { lx: s.lx, lz: s.lz - 0.95 }
+          : s.side === 'south'
+            ? { lx: s.lx, lz: s.lz + 0.95 }
+            : s.side === 'west'
+              ? { lx: s.lx - 0.95, lz: s.lz }
+              : { lx: s.lx + 0.95, lz: s.lz };
+      const w = toWorld(out.lx, out.lz);
+      feat('storePorch', w.x, w.z, 0, 1, theta + outRot);
+    }
+    const alongX = doorSide === 'north' || doorSide === 'south';
+    const runLen = alongX ? W : D;
+    const joints = Math.round(runLen / SEG);
+    for (let i = 0; i <= joints; i++) {
+      const along = -runLen / 2 + i * SEG;
+      const p =
+        doorSide === 'north'
+          ? { lx: along, lz: -D / 2 - 1.7 }
+          : doorSide === 'south'
+            ? { lx: along, lz: D / 2 + 1.7 }
+            : doorSide === 'west'
+              ? { lx: -W / 2 - 1.7, lz: along }
+              : { lx: W / 2 + 1.7, lz: along };
+      const w = toWorld(p.lx, p.lz);
+      box(w.x, w.z, 0.13, 0.13);
+    }
+  }
+
+  // Interior frame: front = the door wall; the counter
+  // runs parallel to it, 2.2 m into the room, with a
+  // keeper's gap at one plan-picked end.
+  const frontIsLong = doorSide === 'north' || doorSide === 'south';
+  const frontSign = doorSide === 'south' || doorSide === 'east' ? 1 : -1;
+  const counterLocal: { lx: number; lz: number } = frontIsLong
+    ? { lx: 0, lz: frontSign * (D / 2 - 2.2) }
+    : { lx: frontSign * (W / 2 - 2.2), lz: 0 };
+  const counterWorld = toWorld(counterLocal.lx, counterLocal.lz);
+  {
+    const runLen = (frontIsLong ? W : D) - 3; // counter length
+    const unit = 2.4;
+    const units = Math.floor(runLen / unit);
+    const gapAtStart = planRand() < 0.5;
+    for (let i = 0; i < units; i++) {
+      // The keeper's gap: skip the end unit on one side
+      // (only when a unit remains — a short counter IS
+      // the whole counter).
+      if (units >= 2 && ((gapAtStart && i === 0) || (!gapAtStart && i === units - 1))) continue;
+      const along = -runLen / 2 + unit / 2 + i * unit;
+      const p = frontIsLong
+        ? { lx: along, lz: counterLocal.lz }
+        : { lx: counterLocal.lx, lz: along };
+      const w = toWorld(p.lx, p.lz);
+      const runsWorldX = frontIsLong !== swap;
+      feat('storeCounter', w.x, w.z, 0, 1, runsWorldX ? 0 : Math.PI / 2);
+      if (runsWorldX) box(w.x, w.z, unit / 2, 0.35);
+      else box(w.x, w.z, 0.35, unit / 2);
+    }
+  }
+
+  // Shelves: every wall but the front, inset, corner-
+  // clear. One run skips its middle unit — the stove
+  // stands there (an anchor; the gap is its place): the
+  // back run when it is long enough, else a long side.
+  const shelfSpots: StoreSite['shelfSpots'] = [];
+  let stoveSpot = counterWorld;
+  {
+    const unit = 2.2;
+    const inset = 0.5;
+    const sides: ('north' | 'south' | 'east' | 'west')[] = ['north', 'south', 'east', 'west'];
+    const backSide = frontIsLong
+      ? doorSide === 'north'
+        ? 'south'
+        : 'north'
+      : doorSide === 'west'
+        ? 'east'
+        : 'west';
+    const gapSide =
+      backSide && Math.floor(((backSide === 'north' || backSide === 'south' ? W : D) - 1.4) / unit) >= 3
+        ? backSide
+        : sides.find((s) => s !== doorSide && (s === 'north' || s === 'south'));
+    for (const side of sides) {
+      if (side === doorSide) continue;
+      const isLong = side === 'north' || side === 'south';
+      const runLen = (isLong ? W : D) - 1.4; // corner clearance
+      const units = Math.floor(runLen / unit);
+      const isGap = side === gapSide;
+      for (let i = 0; i < units; i++) {
+        const along = -((units * unit) / 2) + unit / 2 + i * unit;
+        if (isGap && units >= 3 && i === Math.floor(units / 2)) {
+          // The stove gap.
+          const p =
+            side === 'north'
+              ? { lx: along, lz: -D / 2 + inset }
+              : side === 'south'
+                ? { lx: along, lz: D / 2 - inset }
+                : side === 'west'
+                  ? { lx: -W / 2 + inset, lz: along }
+                  : { lx: W / 2 - inset, lz: along };
+          stoveSpot = toWorld(p.lx, p.lz);
+          continue;
+        }
+        const p =
+          side === 'north'
+            ? { lx: along, lz: -D / 2 + inset }
+            : side === 'south'
+              ? { lx: along, lz: D / 2 - inset }
+              : side === 'west'
+                ? { lx: -W / 2 + inset, lz: along }
+                : { lx: W / 2 - inset, lz: along };
+        const w = toWorld(p.lx, p.lz);
+        const runsWorldX = isLong !== swap;
+        const rotY = runsWorldX ? 0 : Math.PI / 2;
+        feat('storeShelf', w.x, w.z, 0, 1, rotY);
+        if (runsWorldX) box(w.x, w.z, unit / 2, 0.32);
+        else box(w.x, w.z, 0.32, unit / 2);
+        shelfSpots.push({ x: w.x, z: w.z, rotY });
+      }
+    }
+  }
+
+  // A little rubble, as everywhere.
+  {
+    const rand = mulberry32(deriveSeed(seed, 'store:rubble'));
+    const count = 1 + Math.floor(rand() * 3);
+    for (let i = 0; i < count; i++) {
+      const w = toWorld((rand() * 2 - 1) * (W / 2 + 1.5), (rand() < 0.5 ? -1 : 1) * (D / 2 + 0.6 + rand()));
+      feat('rubble', w.x, w.z, 0, 0.6 + rand() * 0.5, rand() * Math.PI);
+    }
+  }
+
+  const site: StoreSite = {
+    id: 'store',
+    seed,
+    center,
+    biome,
+    distance,
+    clearRadius: STORE_CLEAR_RADIUS_M,
+    doorSide: worldDoorSide,
+    counterSpot: counterWorld,
+    shelfSpots,
+    stoveSpot,
+    features,
+    walls,
+    bounds: {
+      minX: center.x - STORE_CLEAR_RADIUS_M,
+      maxX: center.x + STORE_CLEAR_RADIUS_M,
+      minZ: center.z - STORE_CLEAR_RADIUS_M,
+      maxZ: center.z + STORE_CLEAR_RADIUS_M,
+    },
+  };
+  storeCache.set(`${seed}::store`, site);
+  return site;
+}
+
+/** True when a world position lies inside the store's
+ *  clearing (the footprint check). */
+export function generalStoreContains(site: StoreSite, x: number, z: number): boolean {
+  return Math.hypot(x - site.center.x, z - site.center.z) <= site.clearRadius;
+}
+
+// ---------------------------------------------------------------------------
+// THE DROWNED MILL — site #8 (Adam, 2026-10-30; claim
+// approved by DEV). The water avenue's anchor: "salvage
+// washes downstream; the river made a place." Its siting
+// breaks the settled-country pattern — a mill belongs ON
+// its water, so the seat is found by WALKING THE RIVER
+// (river.ts: an analytic meander, defined for every t):
+// the first centreline point in band that keeps the
+// spacing rule. The building stands on the bank in a
+// quarter-turn frame (the collision system's law); the
+// wheel and race aim at the water from the water-side
+// wall. DROWNED is built, not labeled: the broken wheel
+// stilled in the water, the race, a puddled floor, one
+// roof slope fallen in.
+// ---------------------------------------------------------------------------
+
+/** Siting band from spawn, meters (DRAFT). */
+export const MILL_MIN_DIST_M = 550;
+export const MILL_MAX_DIST_M = 900;
+/** Clearing radius around the mill (DRAFT). */
+export const MILL_CLEAR_RADIUS_M = 20;
+/** Wall segment length, meters (DRAFT). */
+export const MILL_SEGMENT_M = 2.25;
+/** Footprint: 9 x 6.75 m. */
+export const MILL_WALL_W_M = 9;
+export const MILL_WALL_D_M = 6.75;
+/** Wall height, meters (DRAFT). */
+export const MILL_WALL_H_M = 3.2;
+const MILL_WALL_HALF_T = 0.18;
+/** Bank margin: water-side wall to the water's edge (DRAFT). */
+export const MILL_BANK_MARGIN_M = 0.2;
+/** River-walk step, meters (DRAFT). */
+const MILL_WALK_STEP_M = 25;
+
+/** The derived Drowned Mill: one per world seed. */
+export interface MillSite {
+  id: string;
+  seed: string;
+  center: { x: number; z: number };
+  /** Dominant biome at the centreline seat. */
+  biome: BiomeId;
+  /** Siting distance from spawn, meters. */
+  distance: number;
+  clearRadius: number;
+  /** The door side (a dry side), world frame. For a
+   *  TIPPED mill this names the hinge (land) side — a
+   *  tipped mill has no working door. */
+  doorSide: 'north' | 'south' | 'east' | 'west';
+  /** The ruin state (Adam, 2026-10-30): 'standing' = the
+   *  drowned walk-in; 'tipped' = gone over toward the
+   *  water, a scramble-around ruin with no interior. */
+  state: 'standing' | 'tipped';
+  /** The wheel's world position. */
+  wheelSpot: { x: number; z: number };
+  /** The centreline parameter of the seat — downstream
+   *  staging (a later salvage claim) counts from here. */
+  riverT: number;
+  /** Which bank: +1 = the course's left perpendicular. */
+  bankSide: 1 | -1;
+  features: ScatterObject[];
+  walls: SiteWallBox[];
+  bounds: { minX: number; maxX: number; minZ: number; maxZ: number };
+}
+
+const millCache = new Map<string, MillSite>();
+
+/**
+ * Derive the world's Drowned Mill. `weightsAtPos` returns
+ * the full weights + dominant at a position. Memoized.
+ */
+export function drownedMillSite(
+  seed: string,
+  spawn: { x: number; z: number },
+  weightsAtPos: (x: number, z: number) => BiomeWeights,
+): MillSite {
+  const cached = millCache.get(`${seed}::mill`);
+  if (cached) return cached;
+
+  // Spacing against all seven earlier sites (radii + 60).
+  const wArg = weightsAtPos;
+  const earlier = [
+    groveSite(seed, spawn, (x, z) => wArg(x, z).dominant),
+    schoolhouseSite(seed, spawn, wArg),
+    villageSite(seed, spawn, wArg),
+    farmhouseSite(seed, spawn, wArg),
+    chapelSite(seed, spawn, wArg),
+    caveMouthSite(seed, spawn, wArg),
+    generalStoreSite(seed, spawn, wArg),
+  ];
+  const spacingLegal = (x: number, z: number): boolean =>
+    earlier.every(
+      (s) =>
+        Math.hypot(x - s.center.x, z - s.center.z) >=
+        s.clearRadius + MILL_CLEAR_RADIUS_M + SITE_SPACING_MARGIN_M,
+    );
+
+  // The river walk: step t outward in both directions
+  // from the spawn pass; the seat is the first centreline
+  // point in band whose BANK position keeps the spacing
+  // rule (the building, not the water, must clear the
+  // other places). Bank side: plan stream.
+  const params = riverParamsFor(seed, spawn);
+  const planRand = mulberry32(deriveSeed(seed, 'mill:plan'));
+  const bankSide = (planRand() < 0.5 ? 1 : -1) as 1 | -1;
+  const bankPointAt = (t: number): { seat: { x: number; z: number }; center: { x: number; z: number } } => {
+    const seat = riverCenterAt(params, t);
+    const ahead = riverCenterAt(params, t + 2);
+    const behind = riverCenterAt(params, t - 2);
+    let tx = ahead.x - behind.x;
+    let tz = ahead.z - behind.z;
+    const tl = Math.hypot(tx, tz) || 1;
+    tx /= tl;
+    tz /= tl;
+    // Left perpendicular of the course, times the side.
+    const bx = -tz * bankSide;
+    const bz = tx * bankSide;
+    const offset = RIVER_WIDTH / 2 + MILL_WALL_D_M / 2 + MILL_BANK_MARGIN_M;
+    return { seat, center: { x: seat.x + bx * offset, z: seat.z + bz * offset } };
+  };
+  let chosen: { t: number; seat: { x: number; z: number }; center: { x: number; z: number } } | null = null;
+  let fallback: typeof chosen = null;
+  for (let k = 1; k <= 160 && !chosen; k++) {
+    for (const t of [k * MILL_WALK_STEP_M, -k * MILL_WALK_STEP_M]) {
+      const bp = bankPointAt(t);
+      const dist = Math.hypot(bp.center.x - spawn.x, bp.center.z - spawn.z);
+      if (!spacingLegal(bp.center.x, bp.center.z)) continue;
+      if (!fallback) fallback = { t, ...bp };
+      if (dist >= MILL_MIN_DIST_M && dist <= MILL_MAX_DIST_M) {
+        chosen = { t, ...bp };
+        break;
+      }
+    }
+  }
+  const pick = chosen ?? fallback ?? { t: 0, ...bankPointAt(0) };
+  const center = pick.center;
+  const distance = Math.hypot(center.x - spawn.x, center.z - spawn.z);
+  const biome = weightsAtPos(pick.seat.x, pick.seat.z).dominant;
+
+  // --- Frame: quarter-turn (the collision law). The
+  // swap is DERIVED, not drawn: the water side must be a
+  // LONG side (the wheel wall; the fallen slope needs a
+  // slope facing the water), so try the plain frame and
+  // flip if the seat falls on a gable end.
+  const frameFor = (sw: boolean) => ({
+    toWorld: (lx: number, lz: number): { x: number; z: number } =>
+      sw
+        ? { x: center.x + lz, z: center.z - lx }
+        : { x: center.x + lx, z: center.z + lz },
+    toLocal: (wx: number, wz: number): { lx: number; lz: number } => {
+      const dx = wx - center.x;
+      const dz = wz - center.z;
+      return sw ? { lx: -dz, lz: dx } : { lx: dx, lz: dz };
+    },
+  });
+  const sideFacing = (loc: { lx: number; lz: number }): MillSite['doorSide'] =>
+    Math.abs(loc.lx) > Math.abs(loc.lz)
+      ? loc.lx > 0
+        ? 'east'
+        : 'west'
+      : loc.lz > 0
+        ? 'south'
+        : 'north';
+  let swap = false;
+  if (['east', 'west'].includes(sideFacing(frameFor(false).toLocal(pick.seat.x, pick.seat.z)))) swap = true;
+  const theta = swap ? Math.PI / 2 : 0;
+  const { toWorld, toLocal } = frameFor(swap);
+
+  // The water side (local): the side facing the seat —
+  // a long side by the frame's construction.
+  const seatLocal = toLocal(pick.seat.x, pick.seat.z);
+  const waterSide = sideFacing(seatLocal);
+  // The door: the best spawn-approach side that is DRY.
+  const spawnLocal = toLocal(spawn.x, spawn.z);
+  const sideScore = (s: MillSite['doorSide']): number =>
+    s === 'north' ? -spawnLocal.lz : s === 'south' ? spawnLocal.lz : s === 'east' ? spawnLocal.lx : -spawnLocal.lx;
+  const drySides = (['north', 'south', 'east', 'west'] as const).filter((s) => s !== waterSide);
+  const doorSide = drySides.reduce((a, b) => (sideScore(b) > sideScore(a) ? b : a), drySides[0]);
+  const toWorldSide = (s: MillSite['doorSide']): MillSite['doorSide'] =>
+    !swap ? s : s === 'north' ? 'west' : s === 'west' ? 'south' : s === 'south' ? 'east' : 'north';
+
+  const W = MILL_WALL_W_M;
+  const D = MILL_WALL_D_M;
+  const SEG = MILL_SEGMENT_M;
+
+  const features: ScatterObject[] = [];
+  const walls: SiteWallBox[] = [];
+  const feat = (kind: ScatterKind, x: number, z: number, y: number, scale: number, rotY: number): void => {
+    features.push({ kind, x, z, y, scale, rotY });
+  };
+  const box = (cx: number, cz: number, hx: number, hz: number): void => {
+    walls.push({ minX: cx - hx, maxX: cx + hx, minZ: cz - hz, maxZ: cz + hz });
+  };
+  const outRot = (s: MillSite['doorSide']): number =>
+    s === 'north' ? Math.PI : s === 'south' ? 0 : s === 'east' ? Math.PI / 2 : -Math.PI / 2;
+
+  interface Segment {
+    side: 'north' | 'south' | 'east' | 'west';
+    lx: number;
+    lz: number;
+    running: 'x' | 'z';
+    cornerAdjacent: boolean;
+  }
+  const segments: Segment[] = [];
+  const perLong = Math.round(W / SEG); // 4
+  const perShort = Math.round(D / SEG); // 3
+  for (let i = 0; i < perLong; i++) {
+    const lx = -W / 2 + SEG / 2 + i * SEG;
+    const corner = i === 0 || i === perLong - 1;
+    segments.push({ side: 'north', lx, lz: -D / 2, running: 'x', cornerAdjacent: corner });
+    segments.push({ side: 'south', lx, lz: D / 2, running: 'x', cornerAdjacent: corner });
+  }
+  for (let i = 0; i < perShort; i++) {
+    const lz = -D / 2 + SEG / 2 + i * SEG;
+    const corner = i === 0 || i === perShort - 1;
+    segments.push({ side: 'west', lx: -W / 2, lz, running: 'z', cornerAdjacent: corner });
+    segments.push({ side: 'east', lx: W / 2, lz, running: 'z', cornerAdjacent: corner });
+  }
+
+  const doorPool = segments.filter((s) => s.side === doorSide);
+  const door =
+    doorPool.length % 2 === 0
+      ? doorPool[doorPool.length / 2 - 1 + Math.floor(planRand() * 2)]
+      : doorPool[Math.floor(doorPool.length / 2)];
+
+  // The land side (opposite the water) and the STATE:
+  // Adam's amendment (2026-10-30) — some mills stand
+  // drowned; some have TIPPED into the river. The roll
+  // rides its OWN stream so the standing path's draws
+  // never shift. 50/50, DRAFT.
+  const landSide = (['north', 'south', 'east', 'west'] as const).find(
+    (s) =>
+      (waterSide === 'north' && s === 'south') ||
+      (waterSide === 'south' && s === 'north') ||
+      (waterSide === 'west' && s === 'east') ||
+      (waterSide === 'east' && s === 'west'),
+  )!;
+  const state: MillSite['state'] = mulberry32(deriveSeed(seed, 'mill:state'))() < 0.5 ? 'standing' : 'tipped';
+
+  const emitWall = (lx: number, lz: number, running: 'x' | 'z', scale: number): void => {
+    const w = toWorld(lx, lz);
+    const runsWorldX = (running === 'x') !== swap;
+    feat('millWall', w.x, w.z, 0, scale, runsWorldX ? 0 : Math.PI / 2);
+    const halfLen = (SEG / 2) * scale;
+    if (runsWorldX) box(w.x, w.z, halfLen, MILL_WALL_HALF_T);
+    else box(w.x, w.z, MILL_WALL_HALF_T, halfLen);
+  };
+  // The water wall's nearest segment to the seat — the
+  // wheel's seat in both states.
+  const wheelSeg = segments
+    .filter((s) => s.side === waterSide)
+    .reduce((a, b) => {
+      const da = Math.hypot(a.lx - seatLocal.lx, a.lz - seatLocal.lz);
+      const db = Math.hypot(b.lx - seatLocal.lx, b.lz - seatLocal.lz);
+      return db < da ? b : a;
+    });
+  const pushOut = (lx: number, lz: number, by: number): { lx: number; lz: number } =>
+    waterSide === 'north'
+      ? { lx, lz: lz - by }
+      : waterSide === 'south'
+        ? { lx, lz: lz + by }
+        : waterSide === 'west'
+          ? { lx: lx - by, lz }
+          : { lx: lx + by, lz };
+  let wheelSpot = center;
+
+  if (state === 'standing') {
+  // Heavier ruin than the store's: 1–3 interior segments
+  // damaged (water takes its share).
+  const candidates = segments.filter((s) => !s.cornerAdjacent && s !== door);
+  for (let i = candidates.length - 1; i > 0; i--) {
+    const j = Math.floor(planRand() * (i + 1));
+    [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
+  }
+  const damagedCount = 1 + Math.floor(planRand() * 3); // 1..3
+  const missing = new Set(candidates.slice(0, Math.ceil(damagedCount / 2)));
+  const stubs = new Set(candidates.slice(Math.ceil(damagedCount / 2), damagedCount));
+  for (const s of segments) {
+    if (s === door || missing.has(s)) continue;
+    emitWall(s.lx, s.lz, s.running, stubs.has(s) ? 0.45 : 1);
+  }
+
+  // The roof: the LAND slope stands; the water slope has
+  // fallen in against its wall.
+  feat('millRoof', center.x, center.z, MILL_WALL_H_M, 1, theta + outRot(landSide));
+  {
+    const wallSeg = segments
+      .filter((s) => s.side === waterSide)
+      .reduce((a, b) => (Math.abs(b.lx + b.lz) < Math.abs(a.lx + a.lz) ? b : a));
+    const out = pushOut(wallSeg.lx, wallSeg.lz, 1.5);
+    const w = toWorld(out.lx, out.lz);
+    feat('millRoofFallen', w.x, w.z, 0, 1, theta + outRot(waterSide));
+  }
+
+  // The wheel: on the water wall, at the wall point
+  // nearest the seat — sunk, broken, stilled. The race
+  // runs from it toward the water.
+  {
+    const out = pushOut(wheelSeg.lx, wheelSeg.lz, 0.55);
+    const w = toWorld(out.lx, out.lz);
+    wheelSpot = w;
+    feat('millWheel', w.x, w.z, 0, 1, theta + outRot(waterSide));
+    // The race: aimed exactly at the seat (features may
+    // turn freely; only boxes are axis-bound).
+    const dirX = pick.seat.x - w.x;
+    const dirZ = pick.seat.z - w.z;
+    const dl = Math.hypot(dirX, dirZ) || 1;
+    const rx = w.x + (dirX / dl) * 1.6;
+    const rz = w.z + (dirZ / dl) * 1.6;
+    feat('millRace', rx, rz, 0, 1, Math.atan2(dirX / dl, dirZ / dl));
+  }
+  } else {
+  // TIPPED (Adam's amendment): gone over toward the
+  // water. No leaning shell — collision here is upright
+  // boxes, and a tilted wall would lie about where she
+  // can stand. What stands: the hinge wall, broken. What
+  // fell: everything else, as slabs she scrambles across
+  // (no boxes — the wreck is ground, not a room).
+  const tipRand = mulberry32(deriveSeed(seed, 'mill:tipped'));
+  for (const s of segments) {
+    if (s.side !== landSide) continue;
+    emitWall(s.lx, s.lz, s.running, 0.45 + tipRand() * 0.25);
+  }
+  const emitSlab = (lx: number, lz: number): void => {
+    const out = pushOut(lx, lz, 0.9 + tipRand() * 0.9);
+    const w = toWorld(out.lx, out.lz);
+    feat('millWallFallen', w.x, w.z, 0, 1, theta + outRot(waterSide) + (tipRand() - 0.5) * 0.5);
+  };
+  for (const s of segments) {
+    if (s.side === landSide) continue;
+    emitSlab(s.lx, s.lz);
+  }
+  // Both roof slopes down: one in the river, one on the
+  // ground inside the footprint.
+  {
+    const mid = segments
+      .filter((s) => s.side === waterSide)
+      .reduce((a, b) => (Math.abs(b.lx + b.lz) < Math.abs(a.lx + a.lz) ? b : a));
+    const outRiver = pushOut(mid.lx, mid.lz, 2.6);
+    const wRiver = toWorld(outRiver.lx, outRiver.lz);
+    feat('millRoofFallen', wRiver.x, wRiver.z, 0, 1, theta + outRot(waterSide));
+    const outGround = pushOut(0, 0, 1.2);
+    const wGround = toWorld(outGround.lx, outGround.lz);
+    feat('millRoofFallen', wGround.x, wGround.z, 0, 1, theta + outRot(waterSide) + 0.3);
+  }
+  // The wheel DOWN in the current: off its wall, seated
+  // half a meter lower, yawed askew. The race stands,
+  // choked by a fallen slab.
+  {
+    const out = pushOut(wheelSeg.lx, wheelSeg.lz, 1.65);
+    const w = toWorld(out.lx, out.lz);
+    wheelSpot = w;
+    feat('millWheel', w.x, w.z, -0.5, 1, theta + outRot(waterSide) + 0.5);
+    const dirX = pick.seat.x - w.x;
+    const dirZ = pick.seat.z - w.z;
+    const dl = Math.hypot(dirX, dirZ) || 1;
+    const rx = w.x + (dirX / dl) * 1.6;
+    const rz = w.z + (dirZ / dl) * 1.6;
+    const raceRot = Math.atan2(dirX / dl, dirZ / dl);
+    feat('millRace', rx, rz, 0, 1, raceRot);
+    feat('millWallFallen', rx, rz, 0, 1, raceRot + 0.4);
+  }
+  }
+
+  // The drowned floor: standing-water + silt discs inside,
+  // drift logs at the bank (existing kinds — the water
+  // leaves what the scatter already knows).
+  {
+    const rand = mulberry32(deriveSeed(seed, 'mill:dressing'));
+    const puddles = state === 'tipped' ? 4 + Math.floor(rand() * 3) : 3 + Math.floor(rand() * 3);
+    for (let i = 0; i < puddles; i++) {
+      const w = toWorld((rand() * 2 - 1) * (W / 2 - 1.6), (rand() * 2 - 1) * (D / 2 - 1.4));
+      feat(i % 2 === 0 ? 'standingWater' : 'riverSilt', w.x, w.z, 0, 0.8 + rand() * 0.5, rand() * Math.PI);
+    }
+    for (let i = 0; i < 2; i++) {
+      const along = (rand() * 2 - 1) * ((waterSide === 'north' || waterSide === 'south' ? W : D) / 2);
+      const p =
+        waterSide === 'north'
+          ? { lx: along, lz: -D / 2 - 1.1 - rand() }
+          : waterSide === 'south'
+            ? { lx: along, lz: D / 2 + 1.1 + rand() }
+            : waterSide === 'west'
+              ? { lx: -W / 2 - 1.1 - rand(), lz: along }
+              : { lx: W / 2 + 1.1 + rand(), lz: along };
+      const w = toWorld(p.lx, p.lz);
+      feat('log', w.x, w.z, 0, 0.8 + rand() * 0.4, rand() * Math.PI);
+    }
+  }
+
+  const site: MillSite = {
+    id: 'mill',
+    seed,
+    center,
+    biome,
+    distance,
+    clearRadius: MILL_CLEAR_RADIUS_M,
+    doorSide: toWorldSide(state === 'tipped' ? landSide : doorSide),
+    state,
+    wheelSpot,
+    riverT: pick.t,
+    bankSide,
+    features,
+    walls,
+    bounds: {
+      minX: center.x - MILL_CLEAR_RADIUS_M,
+      maxX: center.x + MILL_CLEAR_RADIUS_M,
+      minZ: center.z - MILL_CLEAR_RADIUS_M,
+      maxZ: center.z + MILL_CLEAR_RADIUS_M,
+    },
+  };
+  millCache.set(`${seed}::mill`, site);
+  return site;
+}
+
+/** True when a world position lies inside the mill's
+ *  clearing (the footprint check). */
+export function drownedMillContains(site: MillSite, x: number, z: number): boolean {
+  return Math.hypot(x - site.center.x, z - site.center.z) <= site.clearRadius;
+}
+
+// ---------------------------------------------------------------------------
+// THE SUNKEN ROAD — site #9 (Adam, 2026-10-30; claim
+// approved by DEV). A LINEAR place: "a drowned stretch
+// of old road running somewhere with its ends lost" —
+// Travel fragments' ground (the marks staging rides the
+// exported line later). It registers as ONE RIBBON
+// footprint (Adam's ribbon ruling; refit the same day —
+// it was born as a chain of circles and the partition
+// machinery that shape needed is retired).
+// ---------------------------------------------------------------------------
+
+/** Siting band for the midpoint, meters (DRAFT). */
+export const ROAD_MIN_DIST_M = 500;
+export const ROAD_MAX_DIST_M = 850;
+/** Each footprint circle's clearing radius (DRAFT). */
+export const ROAD_SEGMENT_CLEAR_M = 13;
+/** Spacing between footprint centres along the line. */
+export const ROAD_SEGMENT_SPACING_M = 22;
+/** Footprint circles in the chain. */
+export const ROAD_SEGMENTS = 5;
+/** Road width, meters (DRAFT). */
+export const ROAD_WIDTH_M = 4.4;
+/** Wet-acceptance: creekBottom + deepBog weight (DRAFT). */
+export const ROAD_WET_WEIGHT = 0.3;
+/** The ribbon corridor's half-width (DRAFT) — the refit
+ *  corridor: a tighter, truer clearing than the retired
+ *  chain of r13 circles gave the line. */
+export const ROAD_RIBBON_HALF_WIDTH_M = 6.5;
+
+/** The derived Sunken Road: one per world seed. */
+export interface RoadSite {
+  id: string;
+  seed: string;
+  /** The line's midpoint — the siting anchor. */
+  center: { x: number; z: number };
+  /** Dominant biome at the midpoint. */
+  biome: BiomeId;
+  /** Midpoint distance from spawn, meters. */
+  distance: number;
+  /** Line endpoints (the exported line for staging). */
+  a: { x: number; z: number };
+  b: { x: number; z: number };
+  /** Unit direction a -> b. */
+  dir: { x: number; z: number };
+  /** The footprint centres along the line (staging). */
+  segmentCenters: { x: number; z: number }[];
+  /** The ONE ribbon footprint (what registers — refit
+   *  2026-10-30 under Adam's ribbon ruling; the chain of
+   *  circles and its partition machinery are retired). */
+  footprint: SiteFootprint;
+  /** All features (the footprint carries this list). */
+  features: ScatterObject[];
+  walls: SiteWallBox[];
+}
+
+const roadCache = new Map<string, RoadSite>();
+
+/**
+ * Derive the world's Sunken Road. `weightsAtPos` returns
+ * the full weights + dominant at a position. Memoized.
+ */
+export function sunkenRoadSite(
+  seed: string,
+  spawn: { x: number; z: number },
+  weightsAtPos: (x: number, z: number) => BiomeWeights,
+): RoadSite {
+  const cached = roadCache.get(`${seed}::road`);
+  if (cached) return cached;
+
+  const earlier = [
+    groveSite(seed, spawn, (x, z) => weightsAtPos(x, z).dominant),
+    schoolhouseSite(seed, spawn, weightsAtPos),
+    villageSite(seed, spawn, weightsAtPos),
+    farmhouseSite(seed, spawn, weightsAtPos),
+    chapelSite(seed, spawn, weightsAtPos),
+    caveMouthSite(seed, spawn, weightsAtPos),
+    generalStoreSite(seed, spawn, weightsAtPos),
+    drownedMillSite(seed, spawn, weightsAtPos),
+  ];
+
+  // Heading: the road's own draw — roads run somewhere,
+  // not at spawn.
+  const heading = mulberry32(deriveSeed(seed, 'road:heading'))() * Math.PI * 2;
+  const dir = { x: Math.cos(heading), z: Math.sin(heading) };
+  const halfSpan = ((ROAD_SEGMENTS - 1) / 2) * ROAD_SEGMENT_SPACING_M;
+  const centersAt = (mx: number, mz: number): { x: number; z: number }[] => {
+    const out: { x: number; z: number }[] = [];
+    for (let i = 0; i < ROAD_SEGMENTS; i++) {
+      const s = -halfSpan + i * ROAD_SEGMENT_SPACING_M;
+      out.push({ x: mx + dir.x * s, z: mz + dir.z * s });
+    }
+    return out;
+  };
+  const spacingLegal = (centers: { x: number; z: number }[]): boolean =>
+    centers.every((c) =>
+      earlier.every(
+        (s) =>
+          Math.hypot(c.x - s.center.x, c.z - s.center.z) >=
+          s.clearRadius + ROAD_SEGMENT_CLEAR_M + SITE_SPACING_MARGIN_M,
+      ),
+    );
+  const wetAt = (x: number, z: number): boolean => {
+    const w = weightsAtPos(x, z);
+    return (
+      w.dominant === 'creekBottom' ||
+      w.dominant === 'deepBog' ||
+      w.weights.creekBottom + w.weights.deepBog >= ROAD_WET_WEIGHT
+    );
+  };
+
+  // Midpoint scan on the bearing; acceptance = the whole
+  // chain spacing-legal AND the midpoint wet (the middle
+  // drowned; the ends reach for drier ground).
+  const bearing = mulberry32(deriveSeed(seed, 'site:road'))() * Math.PI * 2;
+  const bDir = { x: Math.cos(bearing), z: Math.sin(bearing) };
+  let center = { x: spawn.x + bDir.x * ROAD_MAX_DIST_M, z: spawn.z + bDir.z * ROAD_MAX_DIST_M };
+  let biome = weightsAtPos(center.x, center.z).dominant;
+  let distance = ROAD_MAX_DIST_M;
+  let fallback: { x: number; z: number; biome: BiomeId; distance: number } | null = null;
+  for (let d = ROAD_MIN_DIST_M; d <= ROAD_MAX_DIST_M; d += GROVE_SCAN_STEP_M) {
+    const x = spawn.x + bDir.x * d;
+    const z = spawn.z + bDir.z * d;
+    if (!spacingLegal(centersAt(x, z))) continue;
+    const w = weightsAtPos(x, z);
+    if (!fallback) fallback = { x, z, biome: w.dominant, distance: d };
+    if (wetAt(x, z)) {
+      center = { x, z };
+      biome = w.dominant;
+      distance = d;
+      break;
+    }
+    if (d === ROAD_MAX_DIST_M && fallback) {
+      center = { x: fallback.x, z: fallback.z };
+      biome = fallback.biome;
+      distance = fallback.distance;
+    }
+  }
+  const segmentCenters = centersAt(center.x, center.z);
+  const a = { x: center.x - dir.x * (halfSpan + ROAD_SEGMENT_CLEAR_M), z: center.z - dir.z * (halfSpan + ROAD_SEGMENT_CLEAR_M) };
+  const b = { x: center.x + dir.x * (halfSpan + ROAD_SEGMENT_CLEAR_M), z: center.z + dir.z * (halfSpan + ROAD_SEGMENT_CLEAR_M) };
+
+  // --- Layout (plan stream) --------------------------------
+  const planRand = mulberry32(deriveSeed(seed, 'road:plan'));
+  const perp = { x: -dir.z, z: dir.x };
+  const theta = Math.atan2(-dir.z, dir.x); // geometry +X -> dir
+  const features: ScatterObject[] = [];
+  const walls: SiteWallBox[] = [];
+  const at = (s: number, off: number): { x: number; z: number } => ({
+    x: center.x + dir.x * s + perp.x * off,
+    z: center.z + dir.z * s + perp.z * off,
+  });
+
+  // Broken pavement: stations every 5.2 m; existence and
+  // size thin toward the lost ends; the middle stations
+  // ride the sunken variant.
+  const slabSpan = halfSpan + 8;
+  for (let s = -slabSpan; s <= slabSpan; s += 5.2) {
+    const mid = Math.abs(s);
+    const p = mid <= 26 ? 0.95 : mid <= 42 ? 0.75 : 0.45;
+    if (planRand() > p) continue;
+    const sunk = mid <= 30 && planRand() < 0.55;
+    const w = at(s, (planRand() * 2 - 1) * 0.3);
+    features.push({
+      kind: sunk ? 'roadSlabSunk' : 'roadSlab',
+      x: w.x,
+      z: w.z,
+      y: 0,
+      scale: mid > 42 ? 0.8 : 1,
+      rotY: theta + (planRand() * 2 - 1) * 0.04,
+    });
+  }
+  // The drowned stretch: water + silt ON the line.
+  {
+    const count = 5 + Math.floor(planRand() * 3);
+    for (let i = 0; i < count; i++) {
+      const s = (planRand() * 2 - 1) * 30;
+      const w = at(s, (planRand() * 2 - 1) * 1.1);
+      features.push({
+        kind: i % 2 === 0 ? 'standingWater' : 'riverSilt',
+        x: w.x,
+        z: w.z,
+        y: 0,
+        scale: 1 + planRand() * 0.5,
+        rotY: planRand() * Math.PI,
+      });
+    }
+  }
+  // Posts along one shoulder; one of them (the standing
+  // post nearest her approach along the line) carries
+  // the sign. Standing posts box; broken ones are stubs.
+  {
+    const postSide = planRand() < 0.5 ? 1 : -1;
+    const sSpawn = Math.max(
+      -halfSpan,
+      Math.min(halfSpan, (spawn.x - center.x) * dir.x + (spawn.z - center.z) * dir.z),
+    );
+    interface PostSpot { s: number; standing: boolean }
+    const spots: PostSpot[] = [];
+    for (const s of [-44, -22, 0, 22, 44]) {
+      if (planRand() > 0.8) continue;
+      spots.push({ s, standing: planRand() < 0.7 });
+    }
+    let signS: number | null = null;
+    const standingSpots = spots.filter((p) => p.standing);
+    if (standingSpots.length > 0) {
+      signS = standingSpots.reduce((a2, b2) => (Math.abs(b2.s - sSpawn) < Math.abs(a2.s - sSpawn) ? b2 : a2)).s;
+    }
+    for (const p of spots) {
+      const w = at(p.s, postSide * (ROAD_WIDTH_M / 2 + 0.8));
+      if (p.s === signS) {
+        features.push({ kind: 'roadSign', x: w.x, z: w.z, y: 0, scale: 1, rotY: theta + Math.PI / 2 });
+        walls.push({ minX: w.x - 0.13, maxX: w.x + 0.13, minZ: w.z - 0.13, maxZ: w.z + 0.13 });
+      } else {
+        features.push({ kind: 'roadPost', x: w.x, z: w.z, y: 0, scale: p.standing ? 1 : 0.45, rotY: theta });
+        if (p.standing) walls.push({ minX: w.x - 0.13, maxX: w.x + 0.13, minZ: w.z - 0.13, maxZ: w.z + 0.13 });
+      }
+    }
+    if (signS === null) {
+      // No post stood: the sign stands alone at her
+      // approach point — the place keeps its marker.
+      const w = at(sSpawn, postSide * (ROAD_WIDTH_M / 2 + 0.8));
+      features.push({ kind: 'roadSign', x: w.x, z: w.z, y: 0, scale: 1, rotY: theta + Math.PI / 2 });
+      walls.push({ minX: w.x - 0.13, maxX: w.x + 0.13, minZ: w.z - 0.13, maxZ: w.z + 0.13 });
+    }
+  }
+
+  // The ribbon footprint: one corridor, features whole
+  // (the chain-of-circles partition is retired — the
+  // ribbon ruling made the line a first-class shape).
+  const footprint: SiteFootprint = {
+    center,
+    clearRadius: halfSpan + ROAD_SEGMENT_CLEAR_M + ROAD_RIBBON_HALF_WIDTH_M,
+    features,
+    walls,
+    bounds: {
+      minX: Math.min(a.x, b.x) - ROAD_RIBBON_HALF_WIDTH_M,
+      maxX: Math.max(a.x, b.x) + ROAD_RIBBON_HALF_WIDTH_M,
+      minZ: Math.min(a.z, b.z) - ROAD_RIBBON_HALF_WIDTH_M,
+      maxZ: Math.max(a.z, b.z) + ROAD_RIBBON_HALF_WIDTH_M,
+    },
+    ribbon: { a, b, halfWidth: ROAD_RIBBON_HALF_WIDTH_M },
+  };
+
+  const site: RoadSite = {
+    id: 'road',
+    seed,
+    center,
+    biome,
+    distance,
+    a,
+    b,
+    dir,
+    segmentCenters,
+    footprint,
+    features,
+    walls,
+  };
+  roadCache.set(`${seed}::road`, site);
+  return site;
+}
+
+/** True when a world position lies inside the road's
+ *  corridor (point-to-line distance within the staging
+ *  radius — wider than the ribbon's clearing half-width:
+ *  containment is the place's claim for staging, the
+ *  ribbon is its clearing). */
+export function sunkenRoadContains(site: RoadSite, x: number, z: number): boolean {
+  return distToSegment(x, z, site.a, site.b) <= ROAD_SEGMENT_CLEAR_M;
+}
+
+// ---------------------------------------------------------------------------
+// THE RAIL SIDING — site #10 (Adam, 2026-10-30; claim
+// approved by DEV). A RIBBON FROM BIRTH: a spur of track
+// that ends — gravel bed, ties, two rails (rusty
+// iron-brown SCENERY by Adam's mines precedent: the
+// tenet binds her hands and her crafting, not the old
+// world's leavings), a timber buffer stop, and a
+// stranded BOXCAR: door open, load shifted against it —
+// a look-in, not a walk-in (its own claim would settle
+// the floor question). "Small and strange." (the doc).
+// The line runs on the SURVEY GRID (N-S or E-W): rail in
+// gridded country does, and the grid is what lets the
+// boxcar stand square on its rails with honest boxes.
+// ---------------------------------------------------------------------------
+
+/** Siting band for the midpoint, meters (DRAFT). */
+export const SIDING_MIN_DIST_M = 550;
+export const SIDING_MAX_DIST_M = 900;
+/** The ribbon corridor's half-width (DRAFT). */
+export const SIDING_HALF_WIDTH_M = 7;
+/** Track length, meters (DRAFT). */
+export const SIDING_LENGTH_M = 92;
+/** Boxcar dimensions, meters. */
+export const BOXCAR_LENGTH_M = 9.5;
+export const BOXCAR_WIDTH_M = 2.9;
+
+/** The derived Rail Siding: one per world seed. */
+export interface SidingSite {
+  id: string;
+  seed: string;
+  center: { x: number; z: number };
+  /** Dominant biome at the midpoint. */
+  biome: BiomeId;
+  /** Midpoint distance from spawn, meters. */
+  distance: number;
+  a: { x: number; z: number };
+  b: { x: number; z: number };
+  dir: { x: number; z: number };
+  /** The boxcar's centre (world). */
+  boxcarSpot: { x: number; z: number };
+  /** The boxcar's door side, world frame. */
+  doorSide: 'north' | 'south' | 'east' | 'west';
+  /** Which end holds the buffer stop. */
+  bufferEnd: 'a' | 'b';
+  footprint: SiteFootprint;
+  features: ScatterObject[];
+  walls: SiteWallBox[];
+}
+
+const sidingCache = new Map<string, SidingSite>();
+
+/**
+ * Derive the world's Rail Siding. `weightsAtPos` returns
+ * the full weights + dominant at a position. Memoized.
+ */
+export function railSidingSite(
+  seed: string,
+  spawn: { x: number; z: number },
+  weightsAtPos: (x: number, z: number) => BiomeWeights,
+): SidingSite {
+  const cached = sidingCache.get(`${seed}::siding`);
+  if (cached) return cached;
+
+  const circles = [
+    groveSite(seed, spawn, (x, z) => weightsAtPos(x, z).dominant),
+    schoolhouseSite(seed, spawn, weightsAtPos),
+    villageSite(seed, spawn, weightsAtPos),
+    farmhouseSite(seed, spawn, weightsAtPos),
+    chapelSite(seed, spawn, weightsAtPos),
+    caveMouthSite(seed, spawn, weightsAtPos),
+    generalStoreSite(seed, spawn, weightsAtPos),
+    drownedMillSite(seed, spawn, weightsAtPos),
+  ];
+  const road = sunkenRoadSite(seed, spawn, weightsAtPos);
+
+  // Grid heading: E-W or N-S, its own draw.
+  const ew = mulberry32(deriveSeed(seed, 'siding:heading'))() < 0.5;
+  const dir = ew ? { x: 1, z: 0 } : { x: 0, z: 1 };
+  const perp = { x: -dir.z, z: dir.x };
+  const half = SIDING_LENGTH_M / 2;
+  // Spacing to the LINE (the generalized rule): sampled
+  // points keep (radius + halfWidth + 60) from every
+  // circle centre, and (road half + own half + 60) from
+  // the road's line.
+  const spacingLegal = (mx: number, mz: number): boolean => {
+    for (let s = -half; s <= half; s += 11) {
+      const x = mx + dir.x * s;
+      const z = mz + dir.z * s;
+      for (const c of circles) {
+        if (Math.hypot(x - c.center.x, z - c.center.z) < c.clearRadius + SIDING_HALF_WIDTH_M + SITE_SPACING_MARGIN_M) {
+          return false;
+        }
+      }
+      if (distToSegment(x, z, road.a, road.b) < ROAD_RIBBON_HALF_WIDTH_M + SIDING_HALF_WIDTH_M + SITE_SPACING_MARGIN_M) {
+        return false;
+      }
+    }
+    return true;
+  };
+
+  const bearing = mulberry32(deriveSeed(seed, 'site:siding'))() * Math.PI * 2;
+  const bDir = { x: Math.cos(bearing), z: Math.sin(bearing) };
+  let center = { x: spawn.x + bDir.x * SIDING_MAX_DIST_M, z: spawn.z + bDir.z * SIDING_MAX_DIST_M };
+  let biome = weightsAtPos(center.x, center.z).dominant;
+  let distance = SIDING_MAX_DIST_M;
+  let fallback: { x: number; z: number; biome: BiomeId; distance: number } | null = null;
+  for (let d = SIDING_MIN_DIST_M; d <= SIDING_MAX_DIST_M; d += GROVE_SCAN_STEP_M) {
+    const x = spawn.x + bDir.x * d;
+    const z = spawn.z + bDir.z * d;
+    if (!spacingLegal(x, z)) continue;
+    const w = weightsAtPos(x, z);
+    if (!fallback) fallback = { x, z, biome: w.dominant, distance: d };
+    if (w.dominant === 'oldfieldRise' || w.dominant === 'meadow' || w.dominant === 'forest') {
+      center = { x, z };
+      biome = w.dominant;
+      distance = d;
+      break;
+    }
+    if (d === SIDING_MAX_DIST_M && fallback) {
+      center = { x: fallback.x, z: fallback.z };
+      biome = fallback.biome;
+      distance = fallback.distance;
+    }
+  }
+  const a = { x: center.x - dir.x * half, z: center.z - dir.z * half };
+  const b = { x: center.x + dir.x * half, z: center.z + dir.z * half };
+
+  // --- Layout (plan stream) --------------------------------
+  const planRand = mulberry32(deriveSeed(seed, 'siding:plan'));
+  const theta = Math.atan2(-dir.z, dir.x);
+  const features: ScatterObject[] = [];
+  const walls: SiteWallBox[] = [];
+  const at = (s: number, off: number): { x: number; z: number } => ({
+    x: center.x + dir.x * s + perp.x * off,
+    z: center.z + dir.z * s + perp.z * off,
+  });
+  const feat = (kind: ScatterKind, x: number, z: number, y: number, scale: number, rotY: number): void => {
+    features.push({ kind, x, z, y, scale, rotY });
+  };
+
+  // Bed (two 46 m lengths; ties composed in the mesh)
+  // and the two rails the line's full length.
+  for (const s of [-half / 2, half / 2]) {
+    const w = at(s, 0);
+    feat('sidingBed', w.x, w.z, 0, 1, theta);
+  }
+  for (const off of [-0.75, 0.75]) {
+    const w = at(0, off);
+    feat('sidingRail', w.x, w.z, 0, 1, theta);
+  }
+
+  // The boxcar: mid-spur, on the rails. Its door side
+  // faces spawn. The perimeter boxes are FULL (the
+  // shifted load blocks the doorway — a look-in).
+  const sCar = -15 + Math.floor(planRand() * 31);
+  const carC = at(sCar, 0);
+  const doorSign = (spawn.x - carC.x) * perp.x + (spawn.z - carC.z) * perp.z >= 0 ? 1 : -1;
+  const doorVec = { x: perp.x * doorSign, z: perp.z * doorSign };
+  const doorSide: SidingSite['doorSide'] =
+    Math.abs(doorVec.x) > Math.abs(doorVec.z) ? (doorVec.x > 0 ? 'east' : 'west') : doorVec.z > 0 ? 'south' : 'north';
+  // Body geometry's door is on its local +Z; aim +Z at
+  // the door vector.
+  feat('boxcarBody', carC.x, carC.z, 0, 1, Math.atan2(doorVec.x, doorVec.z));
+  {
+    const hl = BOXCAR_LENGTH_M / 2;
+    const hw = BOXCAR_WIDTH_M / 2;
+    const t = 0.15;
+    // Long sides (along dir) and ends (along perp), as
+    // world AABBs — the grid heading keeps them exact.
+    const longBox = (off: number): SiteWallBox => {
+      const c = at(sCar, off);
+      return ew
+        ? { minX: c.x - hl, maxX: c.x + hl, minZ: c.z - t, maxZ: c.z + t }
+        : { minX: c.x - t, maxX: c.x + t, minZ: c.z - hl, maxZ: c.z + hl };
+    };
+    const endBox = (along: number): SiteWallBox => {
+      const c = at(sCar + along, 0);
+      return ew
+        ? { minX: c.x - t, maxX: c.x + t, minZ: c.z - hw, maxZ: c.z + hw }
+        : { minX: c.x - hw, maxX: c.x + hw, minZ: c.z - t, maxZ: c.z + t };
+    };
+    walls.push(longBox(hw), longBox(-hw), endBox(hl), endBox(-hl));
+  }
+  // The loading platform along the door side.
+  {
+    const w = at(sCar, doorSign * (BOXCAR_WIDTH_M / 2 + 1.3));
+    feat('sidingPlatform', w.x, w.z, 0, 1, theta);
+  }
+  // The buffer stop at one end.
+  const bufferEnd: SidingSite['bufferEnd'] = planRand() < 0.5 ? 'a' : 'b';
+  {
+    const sBuf = bufferEnd === 'a' ? -half + 1.5 : half - 1.5;
+    const w = at(sBuf, 0);
+    feat('sidingBuffer', w.x, w.z, 0, 1, theta);
+    walls.push(
+      ew
+        ? { minX: w.x - 0.4, maxX: w.x + 0.4, minZ: w.z - 1.6, maxZ: w.z + 1.6 }
+        : { minX: w.x - 1.6, maxX: w.x + 1.6, minZ: w.z - 0.4, maxZ: w.z + 0.4 },
+    );
+  }
+  // Ground dressing: a little rubble along the bed.
+  {
+    const count = 2 + Math.floor(planRand() * 2);
+    for (let i = 0; i < count; i++) {
+      const w = at((planRand() * 2 - 1) * (half - 4), (planRand() < 0.5 ? -1 : 1) * (2.6 + planRand() * 1.4));
+      feat('rubble', w.x, w.z, 0, 0.6 + planRand() * 0.5, planRand() * Math.PI);
+    }
+  }
+
+  const footprint: SiteFootprint = {
+    center,
+    clearRadius: half + SIDING_HALF_WIDTH_M,
+    features,
+    walls,
+    bounds: {
+      minX: Math.min(a.x, b.x) - SIDING_HALF_WIDTH_M,
+      maxX: Math.max(a.x, b.x) + SIDING_HALF_WIDTH_M,
+      minZ: Math.min(a.z, b.z) - SIDING_HALF_WIDTH_M,
+      maxZ: Math.max(a.z, b.z) + SIDING_HALF_WIDTH_M,
+    },
+    ribbon: { a, b, halfWidth: SIDING_HALF_WIDTH_M },
+  };
+
+  const site: SidingSite = {
+    id: 'siding',
+    seed,
+    center,
+    biome,
+    distance,
+    a,
+    b,
+    dir,
+    boxcarSpot: carC,
+    doorSide,
+    bufferEnd,
+    footprint,
+    features,
+    walls,
+  };
+  sidingCache.set(`${seed}::siding`, site);
+  return site;
+}
+
+/** True when a world position lies inside the siding's
+ *  corridor. */
+export function railSidingContains(site: SidingSite, x: number, z: number): boolean {
+  return distToSegment(x, z, site.a, site.b) <= SIDING_HALF_WIDTH_M;
+}
+
 /** The standing spacing rule (formalized by DEV,
  *  2026-10-30): every site's siting scan keeps its centre
  *  at least (the other site's clear radius + its own
@@ -2062,6 +3387,31 @@ export interface SiteFootprint {
   features: ScatterObject[];
   walls: SiteWallBox[];
   bounds: { minX: number; maxX: number; minZ: number; maxZ: number };
+  /** RIBBON (Adam's ruling, 2026-10-30): a linear place.
+   *  When present, the footprint is the corridor a -> b
+   *  with this half-width: suppression and the clustering
+   *  grove test measure to the LINE, and spacing doctrine
+   *  measures to the line too. center/clearRadius remain
+   *  as the bounding circle (broad-phase truth). */
+  ribbon?: {
+    a: { x: number; z: number };
+    b: { x: number; z: number };
+    halfWidth: number;
+  };
+}
+
+/** Distance from a point to the segment a -> b. */
+export function distToSegment(
+  x: number,
+  z: number,
+  a: { x: number; z: number },
+  b: { x: number; z: number },
+): number {
+  const abx = b.x - a.x;
+  const abz = b.z - a.z;
+  const len2 = abx * abx + abz * abz;
+  const t = len2 === 0 ? 0 : Math.max(0, Math.min(1, ((x - a.x) * abx + (z - a.z) * abz) / len2));
+  return Math.hypot(x - (a.x + abx * t), z - (a.z + abz * t));
 }
 
 /** True when a world position lies inside the grove's clearing —

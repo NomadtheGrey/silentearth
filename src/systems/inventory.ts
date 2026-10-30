@@ -89,8 +89,8 @@
  * - 0.5 lb: tender-vines, peat-moss, bone, flint, pointy-hat,
  *   mossy-mittens, plant-pulp, pressed-sheets, journal.
  * - 1 lb: snap-wood, river-silt, clay, dirt, mud, garden-trowel,
- *   sharp-trowel, shawl, umbrella, clay-pot, grimoire.
- * - 2 lb: river-stone, downed-oak, spade, axe-trowel,
+ *   sharp-trowel, shawl, umbrella, clay-pot, clay-jar, grimoire.
+ * - 2 lb: river-stone, downed-oak, water-jar, spade, axe-trowel,
  *   hooded-cloak, bog-boots.
  * - 4 lb: spade-axe, clay-brick, and homes / fires / stations
  *   while carried between craft and place (short interval —
@@ -289,6 +289,8 @@ export const ITEM_WEIGHT_LB: Readonly<Record<string, number>> = {
   [ITEMS.shawl]: 1,
   [ITEMS.umbrella]: 1,
   [ITEMS.clayPot]: 1,
+  [ITEMS.clayJar]: 1,
+  [ITEMS.waterJar]: 2,
   [ITEMS.grimoire]: 1,
   [ITEMS.journal]: 0.5,
   // 2 lb
@@ -476,6 +478,8 @@ export const ITEM_DISPLAY_NAMES: Readonly<Record<string, string>> = {
   altar: 'Altar',
   'writing-desk': 'Writing Desk',
   'clay-pot': 'Clay Pot',
+  'clay-jar': 'Clay Jar',
+  'water-jar': 'Water Jar',
   cauldron: 'Cauldron',
   'clay-brick': 'Clay Brick',
   'small-basket': 'Small Basket',
@@ -650,6 +654,8 @@ export const ITEM_DESCRIPTIONS: Readonly<Record<string, string>> = {
   // Crafted goods.
   'twined-cordage': 'Twined cord. It ties and binds half of everything you build.',
   'clay-pot': 'A fired clay pot. Stores food — and sunk in a creek, it is a pot trap. Not a cooking pot.',
+  'clay-jar': 'A kiln-fired clay jar. Fill it at open water — soups and brews will want what\'s in it.',
+  'water-jar': 'A clay jar filled with water. For soups and brews — and emptying it gives the jar back.',
   cauldron: 'A broad clay cauldron. Set it on a hearth — carcasses render, wax melts, and brews brew in it.',
   'clay-brick': 'A kiln-fired brick. No use for it yet.',
   torch: 'A torch, unlit. Light it from a fire, or with flint and stone.',

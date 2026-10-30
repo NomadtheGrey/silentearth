@@ -227,14 +227,26 @@ export function craftOwnershipStatus(
       : 'available';
   }
 
-  // Singles: garments + apron + umbrella + journal.
+  // Singles: garments + apron + umbrella + journal + clay jar.
   const isSingle =
     output === ITEMS.apron ||
     output === ITEMS.umbrella ||
     output === ITEMS.journal ||
+    output === ITEMS.clayJar ||
     GARMENTS.some((g) => g.item === output);
   if (isSingle) {
-    return inventory.count(output) >= 1 ? 'already-owned' : 'available';
+    // The clay jar has TWO forms (empty / filled with water):
+    // ownership counts either form, or a filled jar would leak
+    // a second jar through the listing.
+    const forms =
+      output === ITEMS.clayJar
+        ? [ITEMS.clayJar, ITEMS.waterJar]
+        : [output];
+    const held = forms.reduce(
+      (n, form) => n + inventory.count(form),
+      0,
+    );
+    return held >= 1 ? 'already-owned' : 'available';
   }
 
   return 'available';

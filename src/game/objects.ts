@@ -1222,6 +1222,327 @@ export const SOURCES: HarvestSourceDef[] = [
     biomes: ['deepBog'],
     mesh: { shape: 'stone', color: 0x9fd8c8, extraColor: 0x6fae9d, baseY: 0.25 },
   },
+  // The General Store set (Adam, 2026-10-30 — site-pass
+  // only, same rule as the sets above). The shelf dressing
+  // is silhouette geometry: nothing here is takeable until
+  // the salvage content claim lands.
+  {
+    id: 'storeWall',
+    kind: 'storeWall',
+    name: 'Store Wall',
+    description:
+      'A board wall of the old general store (Adam, ' +
+      '2026-10-30), still standing in settled country.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['oldfieldRise', 'meadow'],
+    mesh: { shape: 'stone', color: 0x6e5136, extraColor: 0x201812, baseY: 1.5 },
+  },
+  {
+    id: 'storeFront',
+    kind: 'storeFront',
+    name: 'Store Front',
+    description:
+      'The store\u2019s false front (Adam, 2026-10-30): a ' +
+      'tall board face built to look grander than the room ' +
+      'behind it, its shop window dark.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['oldfieldRise', 'meadow'],
+    mesh: { shape: 'stone', color: 0x77603f, extraColor: 0x1d1a14, baseY: 2.3 },
+  },
+  {
+    id: 'storeRoof',
+    kind: 'storeRoof',
+    name: 'Store Roof',
+    description:
+      'The general store\u2019s roof (Adam, 2026-10-30), ' +
+      'whole behind its tall front.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['oldfieldRise', 'meadow'],
+    mesh: { shape: 'stone', color: 0x54472e, extraColor: 0x6e5136, baseY: 0 },
+  },
+  {
+    id: 'storePorch',
+    kind: 'storePorch',
+    name: 'Boardwalk',
+    description:
+      'A stretch of the store\u2019s boardwalk porch (Adam, ' +
+      '2026-10-30), where the whole road once stopped.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['oldfieldRise', 'meadow'],
+    mesh: { shape: 'stone', color: 0x5d4630, extraColor: 0x6e5136, baseY: 0.55 },
+  },
+  {
+    id: 'storeCounter',
+    kind: 'storeCounter',
+    name: 'Counter',
+    description:
+      'The store\u2019s long counter (Adam, 2026-10-30). ' +
+      'Customers on one side, the keeper on the other; a ' +
+      'gap at one end where the keeper passed.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['oldfieldRise', 'meadow'],
+    mesh: { shape: 'stone', color: 0x7a6248, extraColor: 0x4a3b28, baseY: 0.55 },
+  },
+  {
+    id: 'storeShelf',
+    kind: 'storeShelf',
+    name: 'Shelf',
+    description:
+      'A store shelf (Adam, 2026-10-30), still holding the ' +
+      'shapes of the old world\u2019s goods. Shapes only — ' +
+      'what can be taken is a later reckoning.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['oldfieldRise', 'meadow'],
+    mesh: { shape: 'stone', color: 0x6b5638, extraColor: 0x8a7a5a, baseY: 1.1 },
+  },
+  // The Drowned Mill set (Adam, 2026-10-30 — site-pass
+  // only, same rule as the sets above). Wood and stone:
+  // the no-iron ruling binds the build as it binds her
+  // crafting.
+  {
+    id: 'millWall',
+    kind: 'millWall',
+    name: 'Mill Wall',
+    description:
+      'A stone wall of the drowned mill (Adam, 2026-10-30), ' +
+      'dark at its foot where the water has stood.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['creekBottom', 'mirewood'],
+    mesh: { shape: 'stone', color: 0x77706a, extraColor: 0x3f3a33, baseY: 1.6 },
+  },
+  {
+    id: 'millWallFallen',
+    kind: 'millWallFallen',
+    name: 'Fallen Mill Wall',
+    description:
+      'A wall of the tipped mill (Adam, 2026-10-30), gone ' +
+      'over toward the water and lying where it fell. She ' +
+      'scrambles across these; nothing here is a room.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['creekBottom', 'mirewood'],
+    mesh: { shape: 'stone', color: 0x6e675e, extraColor: 0x3f3a33, baseY: 0.2 },
+  },
+  {
+    id: 'millRoof',
+    kind: 'millRoof',
+    name: 'Mill Roof',
+    description:
+      'The mill\u2019s standing roof slope (Adam, 2026-10-30) — ' +
+      'the land side. The water side fell long ago.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['creekBottom', 'mirewood'],
+    mesh: { shape: 'stone', color: 0x4f4234, extraColor: 0x6e5136, baseY: 0 },
+  },
+  {
+    id: 'millRoofFallen',
+    kind: 'millRoofFallen',
+    name: 'Fallen Roof',
+    description:
+      'The mill\u2019s water-side roof slope (Adam, 2026-10-30), ' +
+      'slid down against the wall it used to cover.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['creekBottom', 'mirewood'],
+    mesh: { shape: 'stone', color: 0x5d4c38, extraColor: 0x3a3128, baseY: 0.8 },
+  },
+  {
+    id: 'millWheel',
+    kind: 'millWheel',
+    name: 'Mill Wheel',
+    description:
+      'The mill\u2019s great wooden wheel (Adam, 2026-10-30), ' +
+      'broken and stilled, its lower arc sunk in the water ' +
+      'it once drank from.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['creekBottom', 'mirewood'],
+    mesh: { shape: 'stone', color: 0x5d4630, extraColor: 0x3e2f20, baseY: 1.35 },
+  },
+  {
+    id: 'millRace',
+    kind: 'millRace',
+    name: 'Mill Race',
+    description:
+      'The mill\u2019s race (Adam, 2026-10-30): a stone-cheeked ' +
+      'channel that once hurried the river under the wheel. ' +
+      'Now it just lets the water through.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['creekBottom', 'mirewood'],
+    mesh: { shape: 'stone', color: 0x6e6a5e, extraColor: 0x141a16, baseY: 0.25 },
+  },
+  // The Sunken Road set (Adam, 2026-10-30 — site-pass
+  // only, same rule as the sets above).
+  {
+    id: 'roadSlab',
+    kind: 'roadSlab',
+    name: 'Road Slab',
+    description:
+      'A slab of the old road (Adam, 2026-10-30), cracked ' +
+      'and shouldered with ditch-dark edges. The road ran ' +
+      'somewhere once; its ends are lost.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['creekBottom', 'deepBog'],
+    mesh: { shape: 'stone', color: 0x5a574e, extraColor: 0x33302a, baseY: 0.06 },
+  },
+  {
+    id: 'roadSlabSunk',
+    kind: 'roadSlabSunk',
+    name: 'Sunken Slab',
+    description:
+      'A road slab (Adam, 2026-10-30) that sank where the ' +
+      'wet took the road\u2019s middle — tilted, drowned, ' +
+      'still holding the line.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['creekBottom', 'deepBog'],
+    mesh: { shape: 'stone', color: 0x504e45, extraColor: 0x2c2a24, baseY: 0.02 },
+  },
+  {
+    id: 'roadPost',
+    kind: 'roadPost',
+    name: 'Road Post',
+    description:
+      'A marker post from the old road\u2019s shoulder ' +
+      '(Adam, 2026-10-30). Some still stand; some broke.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['creekBottom', 'deepBog'],
+    mesh: { shape: 'stone', color: 0x5d4630, extraColor: 0x3e2f20, baseY: 0.55 },
+  },
+  {
+    id: 'roadSign',
+    kind: 'roadSign',
+    name: 'Road Sign',
+    description:
+      'The road\u2019s signed post (Adam, 2026-10-30). The ' +
+      'board is blank now — whatever it named, the weather ' +
+      'took it.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['creekBottom', 'deepBog'],
+    mesh: { shape: 'stone', color: 0x5d4630, extraColor: 0x8a7a5a, baseY: 0.9 },
+  },
+  // The Rail Siding set (Adam, 2026-10-30 — site-pass
+  // only, same rule as the sets above). The rails are
+  // rusty iron-brown SCENERY (the mines precedent): the
+  // no-iron tenet binds her hands and her crafting, not
+  // the old world's leavings.
+  {
+    id: 'sidingBed',
+    kind: 'sidingBed',
+    name: 'Rail Bed',
+    description:
+      'The siding\u2019s gravel bed (Adam, 2026-10-30), its ' +
+      'ties still holding the line\u2019s measure.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['oldfieldRise', 'meadow'],
+    mesh: { shape: 'stone', color: 0x6b665a, extraColor: 0x4a4238, baseY: 0.05 },
+  },
+  {
+    id: 'sidingRail',
+    kind: 'sidingRail',
+    name: 'Rail',
+    description:
+      'A rusted rail (Adam, 2026-10-30) — the old world\u2019s ' +
+      'iron, left where it lay. Scenery, not salvage: her ' +
+      'hands and her crafting keep the tenet; the ground ' +
+      'keeps its leavings.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['oldfieldRise', 'meadow'],
+    mesh: { shape: 'stone', color: 0x6e4a38, extraColor: 0x8a6a52, baseY: 0.14 },
+  },
+  {
+    id: 'boxcarBody',
+    kind: 'boxcarBody',
+    name: 'Boxcar',
+    description:
+      'A stranded boxcar (Adam, 2026-10-30), its sliding ' +
+      'door open on a load that shifted against it long ' +
+      'ago. She can look in. The load says no further.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['oldfieldRise', 'meadow'],
+    mesh: { shape: 'stone', color: 0x74584a, extraColor: 0x2e2622, baseY: 1.55 },
+  },
+  {
+    id: 'sidingPlatform',
+    kind: 'sidingPlatform',
+    name: 'Loading Platform',
+    description:
+      'The siding\u2019s loading platform (Adam, 2026-10-30), ' +
+      'built to meet a boxcar\u2019s door.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['oldfieldRise', 'meadow'],
+    mesh: { shape: 'stone', color: 0x6e5136, extraColor: 0x4a3b28, baseY: 0.22 },
+  },
+  {
+    id: 'sidingBuffer',
+    kind: 'sidingBuffer',
+    name: 'Buffer Stop',
+    description:
+      'The buffer stop (Adam, 2026-10-30) where the spur ' +
+      'gives up — the end of the line, in timber.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['oldfieldRise', 'meadow'],
+    mesh: { shape: 'stone', color: 0x5d4630, extraColor: 0x3e2f20, baseY: 0.7 },
+  },
   {
     id: 'snapwoodThicket',
     kind: 'snapWood',

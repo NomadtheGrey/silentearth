@@ -145,7 +145,40 @@ export type ScatterKind =
   | 'caveCeiling'
   | 'stalactite'
   | 'cavePool'
-  | 'twilightFungus';
+  | 'twilightFungus'
+  // Site-pass kinds (the General Store, sites.ts — same
+  // rule): walls, the false front, roof, boardwalk porch,
+  // and the interior fixtures (counter, shelves).
+  | 'storeWall'
+  | 'storeFront'
+  | 'storeRoof'
+  | 'storePorch'
+  | 'storeCounter'
+  | 'storeShelf'
+  // Site-pass kinds (the Drowned Mill, sites.ts — same
+  // rule): stone walls, the standing roof slope, the
+  // fallen slope, the wheel, and the race.
+  | 'millWall'
+  | 'millWallFallen'
+  | 'millRoof'
+  | 'millRoofFallen'
+  | 'millWheel'
+  | 'millRace'
+  // Site-pass kinds (the Sunken Road, sites.ts — same
+  // rule): pavement slabs (sound and sunken), shoulder
+  // posts, and the one signed post.
+  | 'roadSlab'
+  | 'roadSlabSunk'
+  | 'roadPost'
+  | 'roadSign'
+  // Site-pass kinds (the Rail Siding, sites.ts — same
+  // rule): the bed with its ties, the rails, the boxcar,
+  // the loading platform, the buffer stop.
+  | 'sidingBed'
+  | 'sidingRail'
+  | 'boxcarBody'
+  | 'sidingPlatform'
+  | 'sidingBuffer';
 
 /** One placed scatter object in a chunk. y is its base height above ground. */
 export interface ScatterObject {
