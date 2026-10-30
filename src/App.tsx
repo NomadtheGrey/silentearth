@@ -610,10 +610,13 @@
  *   the Cauldron is different from facing the Hearth")
  *   in that build's UI half — the carried-pot
  *   composition is dead and built nowhere; until then
- *   cauldron recipes stay hidden. LOOM IS NOT FED:
- *   looms have no winner kind today, so loom recipes
- *   stay hidden until a loom target exists (this
- *   landing's recorded caveat). executeCraft receives
+ *   cauldron recipes stay hidden. The LOOM joined the
+ *   winner race in the same landing (kind 'loom', the
+ *   placed-object idiom; its pill reads OPEN and its
+ *   press opens the Crafting panel — the pill is its
+ *   door), so 'loom' feeds from its faced target like
+ *   every other station: no station is dark.
+ *   executeCraft receives
  *   the same list, so a recipe is craftable exactly
  *   when it is visible. The
  *   whole derivation sits BELOW the useWinner call in
@@ -7960,7 +7963,7 @@ export default function App() {
     | { kind: 'trap'; id: string; distance: number }
     | { kind: 'hive'; x: number; z: number; distance: number }
     | { kind: 'site'; siteId: string; distance: number }
-    | { kind: 'fire' | 'tent' | 'torch'; id: string; distance: number }
+    | { kind: 'fire' | 'tent' | 'torch' | 'loom'; id: string; distance: number }
     | { kind: 'home'; distance: number }
     | { kind: 'scry'; distance: number };
 
@@ -8088,7 +8091,7 @@ export default function App() {
     }
     if (siteBest !== null) challengers.push(siteBest);
     const considerPlaced = (
-      kind: 'fire' | 'tent' | 'torch',
+      kind: 'fire' | 'tent' | 'torch' | 'loom',
       id: string,
       x: number,
       z: number,
@@ -8107,6 +8110,16 @@ export default function App() {
     }
     for (const torch of placedTorches) {
       considerPlaced('torch', torch.id, torch.x, torch.z);
+    }
+    // Placed looms (loom fold-in, 2026-10-30): looms join
+    // the winner race in the same placed-object idiom —
+    // Adam's completed station law needs the loom to be
+    // a FACED target (it had no winner kind, so its
+    // station could never feed). Read from the singleton
+    // directly (no React mirror exists for looms; the
+    // anchors loop reads snapshots the same way).
+    for (const loom of loomState.snapshot()) {
+      considerPlaced('loom', loom.id, loom.x, loom.z);
     }
     if (homeHouse !== undefined) {
       const f = facingOf(homeHouse.x, homeHouse.z);
@@ -8200,6 +8213,14 @@ export default function App() {
         break;
       case 'torch':
         setSelectedTorchId(winner.id);
+        break;
+      case 'loom':
+        // The loom's door is its pill: facing it and
+        // pressing USE opens the Crafting panel, which
+        // the feed (same winner) has already filtered
+        // to loom + hand recipes. No selected-loom
+        // state — the panel is the whole interaction.
+        openCraftingPanel();
         break;
       case 'home':
         setHomeMenuOpen(true);
@@ -8803,11 +8824,10 @@ export default function App() {
   //   Hearth, and facing the Cauldron is different from
   //   facing the Hearth. The carried-pot composition
   //   is dead; do not rebuild it.
-  // - LOOM IS NOT FED: looms have no winner kind today
-  //   (they never enter computeUseWinner), so no faced
-  //   reading exists and loom recipes stay hidden until
-  //   a loom target kind lands — the recorded caveat of
-  //   this landing, flagged to DEV with it.
+  // - a faced LOOM feeds 'loom' (winner kind 'loom' —
+  //   looms joined the winner race in this landing; the
+  //   loom's pill opens the Crafting panel, so the door
+  //   and the feed are the same target).
   // - nothing faced -> hand only.
   // stationPresenceValue is no longer read by this
   // feed at all (it still serves the station door and
@@ -8817,6 +8837,9 @@ export default function App() {
     useWinner.siteId.startsWith('stump:')
   ) {
     availableStations.push('workstation');
+  }
+  if (useWinner?.kind === 'loom') {
+    availableStations.push('loom');
   }
   const facedFire =
     useWinner?.kind === 'fire'
@@ -9123,6 +9146,7 @@ export default function App() {
                 useWinner.kind === 'fire' ||
                 useWinner.kind === 'tent' ||
                 useWinner.kind === 'torch' ||
+                useWinner.kind === 'loom' ||
                 useWinner.kind === 'home'
               ? 'OPEN'
               : useWinner.kind === 'scry'
