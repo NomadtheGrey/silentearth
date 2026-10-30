@@ -213,6 +213,7 @@ export const ITEMS = {
 export type CraftingStation =
   | 'workstation'
   | 'fire'
+  | 'cauldron'
   | 'hand'
   | 'kiln'
   | 'loom';
@@ -453,48 +454,59 @@ const DRAFT_RECIPES: Recipe[] = [
       ITEMS.groundhogCarcass,
       ITEMS.raccoonCarcass,
     ],
-    station: 'fire',
+    station: 'cauldron',
     notes:
       'DRAFT. The carcasses\' first consuming recipe: any ' +
-      'trap carcass, rendered at a lit fire, yields tallow ' +
-      'x1. ONE recipe for all ten kinds via the either/or ' +
-      'predecessor (upgradeFrom array — the Spade-Axe ' +
-      'convergence path): the carcass is the input, ' +
-      'consumed whole. Adam\'s wording was "a trap ' +
+      'trap carcass, rendered in the cauldron, yields ' +
+      'tallow x1. ONE recipe for all ten kinds via the ' +
+      'either/or predecessor (upgradeFrom array — the ' +
+      'Spade-Axe convergence path): the carcass is the ' +
+      'input, consumed whole. Adam\'s wording was "a trap ' +
       'carcass", un-narrowed, so all ten render; the ' +
       'mammal-only cut (fish / eel / crayfish / frog out) ' +
-      'stays available at his pin pass. Station "fire" — ' +
-      'dormant in-game until lit-fire presence wiring ' +
-      'lands (charcoal-stick note). Quantities draft.',
+      'stays available at his pin pass. Station ' +
+      '"cauldron" (Adam\'s ruling, 2026-10-30): the ' +
+      'station context carries the vessel — a lit fire ' +
+      'near + the cauldron carried (Background supplies ' +
+      'the presence, UI feeds the station; dormant ' +
+      'in-game until those land). Yield stays x1 so the ' +
+      'tallow road does not compound with the candle ' +
+      'x3. Quantities draft.',
   },
   {
     id: 'candle-from-beeswax',
     name: 'Candle (Beeswax)',
     status: 'draft',
-    output: { item: ITEMS.candle, quantity: 1 },
+    output: { item: ITEMS.candle, quantity: 3 },
     ingredients: [i(ITEMS.beeswax, 1), i(ITEMS.twinedCordage, 1)],
-    station: 'fire',
+    station: 'cauldron',
     notes:
       'DRAFT. One candle item, two roads (Adam, 2026-10-30: ' +
       '"We could do either, both really"). Beeswax x1 + ' +
-      'twined cordage x1 for the wick, melted and poured ' +
-      'at a lit fire. Beeswax SOURCE is flagged, not ' +
-      'faked: hives yield it alongside honey via ' +
-      'Background\'s harvest rider (DEV commissions it). ' +
-      'Quantities draft.',
+      'twined cordage x1 for the wick, melted in the ' +
+      'cauldron and dipped — one melt makes THREE candles ' +
+      '(Adam: the process is the involved part, so the ' +
+      'melt pays out; render-tallow stays x1 so this ' +
+      'road does not compound). Station "cauldron" ' +
+      '(Adam\'s ruling, 2026-10-30). Beeswax source: ' +
+      'hives yield it alongside honey (Background\'s ' +
+      'rider, landed). Quantities draft.',
   },
   {
     id: 'candle-from-tallow',
     name: 'Candle (Tallow)',
     status: 'draft',
-    output: { item: ITEMS.candle, quantity: 1 },
+    output: { item: ITEMS.candle, quantity: 3 },
     ingredients: [i(ITEMS.tallow, 1), i(ITEMS.twinedCordage, 1)],
-    station: 'fire',
+    station: 'cauldron',
     notes:
       'DRAFT. The tallow road to the same candle item: ' +
-      'tallow x1 + twined cordage x1 for the wick, at a ' +
-      'lit fire. Same output as the beeswax road — one ' +
-      'candle, two ways to feed it. Quantities draft.',
+      'tallow x1 + twined cordage x1 for the wick, melted ' +
+      'in the cauldron and dipped — one melt makes THREE ' +
+      'candles, same as the beeswax road (one carcass -> ' +
+      'one tallow -> three candles; the yield lives in ' +
+      'the melt, not the render). Station "cauldron" ' +
+      '(Adam\'s ruling, 2026-10-30). Quantities draft.',
   },
 
   // --- Torch: stick + binding + tinder, made by hand (Adam, 2026-10-27).
@@ -1005,12 +1017,11 @@ const DRAFT_RECIPES: Recipe[] = [
       'times its size). Set it on a fire and it works: ' +
       'carcasses render in it, wax melts in it, and her ' +
       'brews brew in it (the future potions / salves pot, ' +
-      'per Adam\'s hearth picture). HOW the fire recipes ' +
-      'gate on the vessel — a present-not-consumed ' +
-      'requirement, or a named cauldron station — is ' +
-      'Adam\'s decision this hour and lands as its own ' +
-      'follow-up; this recipe founds the vessel under ' +
-      'either. Quantities draft.',
+      'per Adam\'s hearth picture). The vessel gates its ' +
+      'recipes AS A STATION (Adam\'s ruling, 2026-10-30): ' +
+      'station "cauldron" — the context carries the ' +
+      'vessel (a lit fire near + the cauldron carried). ' +
+      'Quantities draft.',
   },
   {
     id: 'clay-brick',
