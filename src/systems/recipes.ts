@@ -73,7 +73,6 @@ export const ITEMS = {
   campfire: 'campfire',
   hearth: 'hearth',
   kiln: 'kiln',
-  bloomery: 'bloomery',
   // Stations.
   stumpyWorkstation: 'stumpy-workstation',
   craftedWorkstation: 'crafted-workstation',

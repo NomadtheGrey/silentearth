@@ -661,6 +661,23 @@ const RETIRED_FIRE_TYPES: ReadonlySet<string> = new Set([
   'bloomery',
 ]);
 
+/**
+ * Item ids that once existed and were removed by design. A
+ * saved stack of a retired id is DROPPED on load — parseStacks
+ * (pack + house stores) skips it, and the piles restore drops
+ * retired kinds (a spot left with no kinds vanishes rather
+ * than restoring as an empty pile). Item ids have no refusal
+ * doctrine (any string loads), so this is not save safety: a
+ * surviving stack would render as a phantom — its registry
+ * rows are erased, so it would show its raw id as its name
+ * and weigh the 1 lb default. Only that stack is lost.
+ * - 'bloomery' — the item retired 2026-10-30 with its fire
+ *   type (Adam's no-iron ruling); see RETIRED_FIRE_TYPES.
+ */
+const RETIRED_ITEM_IDS: ReadonlySet<string> = new Set([
+  'bloomery',
+]);
+
 const SAVE_HOUSE_TYPES: ReadonlySet<string> = new Set([
   'leanTo',
   'thatchHut',
@@ -915,8 +932,11 @@ function parseStacks(value: unknown): Record<string, number> | null {
   if (!isRecord(value)) return null;
   const out: Record<string, number> = {};
   for (const [item, quantity] of Object.entries(value)) {
-    if (!Number.isInteger(quantity) || (quantity as number) <= 0) return null;
     const id = normalizeItemId(item);
+    // Retired item ids drop on load (see RETIRED_ITEM_IDS) —
+    // only that stack is lost; the rest restore normally.
+    if (RETIRED_ITEM_IDS.has(id)) continue;
+    if (!Number.isInteger(quantity) || (quantity as number) <= 0) return null;
     out[id] = (out[id] ?? 0) + (quantity as number);
   }
   return out;
@@ -1084,12 +1104,19 @@ export function deserializeSave(value: unknown): SaveData | null {
         }
         const key = `${entry.x.toFixed(2)},${entry.z.toFixed(2)}`;
         let pile = pilesBySpot.get(key);
-        if (!pile) {
-          pile = { stacks: [], x: entry.x, z: entry.z };
-          pilesBySpot.set(key, pile);
-        }
         for (const kind of kinds) {
           const id = normalizeItemId(kind.item);
+          // Retired kinds drop on load (see
+          // RETIRED_ITEM_IDS). The pile is created lazily,
+          // on its first surviving kind, so a spot whose
+          // kinds all retired vanishes instead of restoring
+          // as an empty pile; a surviving pile's position is
+          // its first surviving entry's coords.
+          if (RETIRED_ITEM_IDS.has(id)) continue;
+          if (!pile) {
+            pile = { stacks: [], x: entry.x, z: entry.z };
+            pilesBySpot.set(key, pile);
+          }
           const existing = pile.stacks.find((s) => s.item === id);
           if (existing) {
             existing.quantity += kind.quantity;

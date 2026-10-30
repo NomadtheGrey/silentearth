@@ -96,7 +96,7 @@
  *   while carried between craft and place (short interval —
  *   flagged: primitive-lean-to, thatch-hut, wattle-and-daub-hut,
  *   woven-cottage, small-wooden-hut, moss-cradle, campfire,
- *   hearth, kiln, bloomery, stumpy-workstation,
+ *   hearth, kiln, stumpy-workstation,
  *   crafted-workstation, potters-wheel, loom).
  * - Unknown ids default to 1 lb (never block the game on a
  *   missing row — flagged). LANE JUDGMENTS inside that rule,
@@ -307,7 +307,6 @@ export const ITEM_WEIGHT_LB: Readonly<Record<string, number>> = {
   [ITEMS.campfire]: 4,
   [ITEMS.hearth]: 4,
   [ITEMS.kiln]: 4,
-  [ITEMS.bloomery]: 4,
   [ITEMS.stumpyWorkstation]: 4,
   [ITEMS.craftedWorkstation]: 4,
   [ITEMS.pottersWheel]: 4,
@@ -459,7 +458,6 @@ export const ITEM_DISPLAY_NAMES: Readonly<Record<string, string>> = {
   campfire: 'Campfire',
   hearth: 'Hearth',
   kiln: 'Kiln',
-  bloomery: 'Bloomery',
   'stumpy-workstation': 'Stumpy Workstation',
   'crafted-workstation': 'Crafted Workstation',
   'potters-wheel': "Potter's Wheel",

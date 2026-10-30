@@ -17,7 +17,7 @@
  *   (Adam: 20–30 s of rub). The lighting cost and timing live
  *   here, as lane-decided starting tunables (flagged below).
  * - Fire ladder context (not re-decided here): campfire → hearth
- *   (better/more food from cooking) → kiln → bloomery. V1
+ *   (better/more food from cooking) → kiln. V1
  *   cooking is UNIFORM across fire kinds: a hearth cooking
  *   bonus is NOT modelled yet (flagged future hook), so a hearth
  *   fire cooks exactly like a campfire fire in v1.
