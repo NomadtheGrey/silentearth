@@ -1164,6 +1164,31 @@
  *   next event). New AltarChip.tsx + App wiring.
  *   Parity: shared row button + label chip, touch +
  *   desktop. Placeable candles still later, distinct.
+ * - WRITING DESK PLACE + MARKER, LIVE (Adam's grimoire
+ *   design turn, 2026-10-30 — Systems 5e7bf06 +
+ *   Background bcddb2d): the altar pattern end to end.
+ *   The desk's inventory row gains Place (ITEMS.
+ *   writingDesk joins PLACEABLE_IDS for the BUTTON
+ *   only) placing INSTANTLY AT HER FEET. Grant FIRST
+ *   (Systems placeDesk consumes one carried desk;
+ *   failure touches nothing + shows the reason), then
+ *   the entity place (Background deskState.placeDesk,
+ *   emits desk:placed -> refreshDesks). Panel stays
+ *   open, count drops, deskNote carries the result
+ *   ('Placed a writing desk.'). One world-anchored
+ *   chip per placed desk — the AltarChip with label
+ *   'Writing Desk', LABEL-ONLY (no desk actions exist;
+ *   the grimoire's workings arrive with its own design
+ *   turn; no Pick-up — moving a placed desk is Adam's
+ *   word later). No hunger gate (a move, like drop/
+ *   pickup). Save: desks ride saveNow from the entity
+ *   snapshot + boot restore BEFORE construction
+ *   (Background pattern; the SavedDesk id is OPTIONAL
+ *   — id-less entries are kept and minted ids by
+ *   restore, never dropped). Crafting: writing-desk,
+ *   journal, and grimoire group together under
+ *   'Fire & Workshop' (the desk-and-books set, DEV
+ *   2026-10-30; Adam can re-split at the pin pass).
  * - RITUAL WAKING UI, LIVE (Adam, 2026-10-27 — DEV
  *   signal, Systems 939e9b3 + Background 58537ef):
  *   tier-1 Waking, altar sites only (see flags). The
@@ -1734,6 +1759,8 @@ import { torchState, type PlacedTorch as PlacedTorchEntity } from './game/torchS
 import { lightTorches, placeTorch as grantPlaceTorch, pickupTorch as grantPickupTorch } from './systems/torch';
 import { altarState, type PlacedAltar as PlacedAltarEntity } from './game/altarState';
 import { placeAltar as grantPlaceAltar } from './systems/altar';
+import { deskState, type PlacedDesk as PlacedDeskEntity } from './game/deskState';
+import { placeDesk as grantPlaceDesk } from './systems/desk';
 import { ritualSiteState, stumpSiteId } from './game/ritualSite';
 import { boneKindAt } from './game/boneKind';
 import {
@@ -1865,16 +1892,18 @@ const HOUSE_ITEM_TO_TYPE: Record<string, HouseType> = {
 };
 
 /** Item ids the inventory panel offers a Place button for.
- * Lit torches, altars, and campfires ride this set for the
- * BUTTON only — their handlers branch to instant-at-feet
- * (see handlePlaceItem), never the preview-ghost flow the
- * other ids (hearth/kiln/houses/looms) use. */
+ * Lit torches, altars, writing desks, and campfires ride
+ * this set for the BUTTON only — their handlers branch to
+ * instant-at-feet (see handlePlaceItem), never the
+ * preview-ghost flow the other ids (hearth/kiln/houses/
+ * looms) use. */
 const PLACEABLE_IDS: ReadonlySet<string> = new Set([
   ...Object.keys(FIRE_ITEM_TO_TYPE),
   ...Object.keys(HOUSE_ITEM_TO_TYPE),
   ITEMS.loom,
   ITEMS.litTorch,
   ITEMS.altar,
+  ITEMS.writingDesk,
   ITEMS.tent,
 ]);
 
@@ -1952,6 +1981,9 @@ const CRAFTING_GROUP_BY_RECIPE_ID: Record<string, string> = {
   'dry-kindling': 'Fire & Workshop',
   torch: 'Fire & Workshop',
   altar: 'Fire & Workshop',
+  'writing-desk': 'Fire & Workshop',
+  journal: 'Fire & Workshop',
+  grimoire: 'Fire & Workshop',
   'hooded-cloak': 'Clothes',
   shawl: 'Clothes',
   'pointy-hat': 'Clothes',
@@ -1967,7 +1999,6 @@ const CRAFTING_GROUP_BY_RECIPE_ID: Record<string, string> = {
   'plant-pulp': 'Materials & Carrying',
   'pressed-sheets': 'Materials & Carrying',
   paper: 'Materials & Carrying',
-  grimoire: 'Materials & Carrying',
   snare: 'Traps',
   'fish-weir-trap': 'Traps',
   'pot-trap': 'Traps',
@@ -2391,6 +2422,7 @@ export default function App() {
   const [torchNote, setTorchNote] = useState<string | null>(null);
   const [tentNote, setTentNote] = useState<string | null>(null);
   const [altarNote, setAltarNote] = useState<string | null>(null);
+  const [deskNote, setDeskNote] = useState<string | null>(null);
   const [fireNote, setFireNote] = useState<string | null>(null);
   const [dropNote, setDropNote] = useState<string | null>(null);
   const [storageNote, setStorageNote] = useState<string | null>(null);
@@ -2594,6 +2626,16 @@ export default function App() {
   );
   const [altarAnchors, setAltarAnchors] = useState<
     { altar: PlacedAltarEntity; x: number; y: number }[]
+  >([]);
+  // Placed writing desks (Background singleton) and their
+  // projected anchors — the altar pattern minus both the
+  // menu and the placed-list state: the chip is label-only
+  // (no desk actions exist yet, no Pick-up invented), so
+  // there is no selected-desk state, and no consumer needs
+  // a placedDesks list — the anchors loop reads the
+  // singleton directly, like the altars loop does.
+  const [deskAnchors, setDeskAnchors] = useState<
+    { desk: PlacedDeskEntity; x: number; y: number }[]
   >([]);
   // Ritual staging (tier-1 Waking build): the shell owns
   // one StagingBook (site + kind keyed stagings) and one
@@ -3072,6 +3114,13 @@ export default function App() {
           // restore validates on load and drops id-less
           // entries). Placed altars survive refresh.
           altars: altarState.snapshot(),
+          // PLACED-DESK SAVE WIRING: the live placed-desk
+          // set rides every save as-is (positions verbatim;
+          // ids ride when the entity provides them — the
+          // SavedDesk id is optional, and restore keeps
+          // id-less entries and mints ids). Placed desks
+          // survive refresh.
+          desks: deskState.snapshot(),
           // RITUAL SAVE WIRING: stagings + awakenings ride
           // every save as-is (StagingBook / CharmState
           // snapshots; serialize writes them verbatim,
@@ -3651,6 +3700,13 @@ export default function App() {
       altars.push({ altar, x: anchor.x, y: anchor.y });
     }
     setAltarAnchors(altars);
+    const desks: { desk: PlacedDeskEntity; x: number; y: number }[] = [];
+    for (const desk of deskState.snapshot()) {
+      const anchor = projectAnchor(desk.x, desk.z, 'scatter');
+      if (!anchor) continue;
+      desks.push({ desk, x: anchor.x, y: anchor.y });
+    }
+    setDeskAnchors(desks);
     // Stump ritual anchors (bone build): stumps in
     // range at her feet (Background's stumpPositions —
     // felled + grown, deduped), projected 'scatter'
@@ -3888,6 +3944,28 @@ export default function App() {
               x: altar.x,
               z: altar.z,
             })),
+        );
+        // PLACED-DESK SAVE WIRING (same restore-before-
+        // first-build pattern): deskState.restore() is
+        // silent and the constructor's initial placed-group
+        // build picks restored desks up. SavedDesk.id is
+        // OPTIONAL (Systems' shape) while the entity's
+        // PlacedDesk.id is required — restore owns that
+        // gap: id-less entries are KEPT and minted ids,
+        // provided ids preserved, entries with non-finite
+        // positions dropped inside restore. The shell
+        // therefore passes entries through with only the
+        // id-when-present shaping (NOT the altar id filter
+        // — dropping id-less desks here would lose real
+        // desks the save deliberately kept).
+        deskState.restore(
+          (bootSaved.desks ?? []).map((desk) => ({
+            x: desk.x,
+            z: desk.z,
+            ...(typeof desk.id === 'string' && desk.id !== ''
+              ? { id: desk.id }
+              : {}),
+          })),
         );
         // RITUAL SAVE WIRING (same pre-construction pattern):
         // StagingBook + CharmState restore (pure systems,
@@ -4309,6 +4387,13 @@ export default function App() {
       setPlacedAltars(altarState.snapshot());
       recomputeAnchors();
     };
+    // Placed-desk subscriptions: anchors re-project from
+    // the Background singleton on every desk event, altar
+    // pattern (no placed-list state to re-read — see the
+    // deskAnchors declaration).
+    const refreshDesks = () => {
+      recomputeAnchors();
+    };
     // PAUSE SUBSCRIPTION (core 54e525c): the shell's half of the
     // flag. The ref gates the timers (below + the turn-stick and
     // FPS loops); the state drives the Paused indicator. Fires
@@ -4359,6 +4444,8 @@ export default function App() {
     const offTorchRemoved = bus.on('torch:removed', refreshTorches);
     const offAltarPlaced = bus.on('altar:placed', refreshAltars);
     const offAltarRemoved = bus.on('altar:removed', refreshAltars);
+    const offDeskPlaced = bus.on('desk:placed', refreshDesks);
+    const offDeskRemoved = bus.on('desk:removed', refreshDesks);
     // Ritual subscriptions: the panel re-renders on every
     // stage/unstage (the book + site state mutate without
     // rendering by themselves — ritualVersion is the
@@ -4595,6 +4682,8 @@ export default function App() {
       offTorchRemoved();
       offAltarPlaced();
       offAltarRemoved();
+      offDeskPlaced();
+      offDeskRemoved();
       offRitualStaged();
       offRitualUnstaged();
       offShelterPlaced();
@@ -5403,6 +5492,30 @@ export default function App() {
     setAltarNote('Placed an altar.');
   };
 
+  // Writing-desk placement (desk build, 2026-10-30): the
+  // altar twin — Systems' placeDesk grant consumes one
+  // carried desk (failure touches nothing and the reason
+  // shows), then Background's deskState.placeDesk places
+  // the entity at her feet (desk:placed -> refreshDesks
+  // re-projects the chip anchors). No preview flow, no
+  // hunger gate (a move, like drop/pickup).
+  const handlePlaceDesk = () => {
+    const player = playerRef.current;
+    if (!player) return;
+    const outcome = grantPlaceDesk(inventory, player.x, player.z);
+    // Equality check, not truthiness: non-strict tsc does
+    // not narrow this union's boolean discriminant on
+    // truthiness (same note as handlePlaceAltar).
+    if (outcome.placed === false) {
+      setDeskNote(outcome.reason);
+      return;
+    }
+    deskState.placeDesk(outcome.desk.x, outcome.desk.z);
+    refreshInventory();
+    saveNow();
+    setDeskNote('Placed a writing desk.');
+  };
+
   // RITUAL SKY FACTS (shell supplies, systems never imports
   // game): phase from cyclePhase at the world's fixed start
   // month (the renderer feeds the sky SEASON_START_MONTH,
@@ -5710,6 +5823,13 @@ export default function App() {
     // the branch above places instantly at her feet.
     if (itemId === ITEMS.altar) {
       handlePlaceAltar();
+      return;
+    }
+    // Placed writing desks never enter the preview flow
+    // either — the altar twin: one press places one desk
+    // at her feet via the grant + entity pair above.
+    if (itemId === ITEMS.writingDesk) {
+      handlePlaceDesk();
       return;
     }
     // Placed tents never enter the preview flow either —
@@ -9010,6 +9130,13 @@ export default function App() {
             </WorldAnchor>
           </Fragment>
         ))}
+        {deskAnchors.map(({ desk, x, y }) => (
+          <Fragment key={desk.id}>
+            <WorldAnchor x={x} y={y} interactive>
+              <AltarChip label="Writing Desk" />
+            </WorldAnchor>
+          </Fragment>
+        ))}
         {stumpAnchors.map(({ siteId, x, y }) => (
           <Fragment key={siteId}>
             <WorldAnchor x={x} y={y} interactive>
@@ -9726,6 +9853,11 @@ export default function App() {
         {altarNote ? (
           <p className="rounded bg-black/45 px-2 py-1 text-xs text-stone-200">
             {altarNote}
+          </p>
+        ) : null}
+        {deskNote ? (
+          <p className="rounded bg-black/45 px-2 py-1 text-xs text-stone-200">
+            {deskNote}
           </p>
         ) : null}
         {fireNote ? (
