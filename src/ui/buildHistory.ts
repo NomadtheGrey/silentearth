@@ -45,10 +45,7 @@ const ALL_RECORDS: BuildRecord[] = [
   {
     merge: 'Merge #34',
     pr: 69,
-    // The merge SHA is unknowable before the merge lands;
-    // it is written in by the correction merge that
-    // follows this one, per the standing drill.
-    sha: 'pending',
+    sha: '2420645',
     date: '2026-10-30',
     what: 'Four more of the world\u2019s old places, and a save that stays saved. The General Store: a mostly-standing false-front shop on the oldfield edge \u2014 boardwalk porch, a counter with the keeper\u2019s gap, shelves of goods nobody can take, and a gap at the back where the stove stood. The Drowned Mill: seated on the river itself \u2014 in some worlds standing, its wheel in the current and its race running to the water; in others gone over entirely, hinge wall broken and slabs in the wreck. The Sunken Road: a drowned stretch of old pavement running somewhere with its ends lost, water over its middle and one blank sign where her approach meets it. The Rail Siding: a grid-straight spur ending at a timber buffer, a stranded boxcar mid-line with its door open on a load that shifted against it long ago. And a fix she will feel rather than see: starting a new game, or bringing one down from the cloud, can no longer be undone by the page closing \u2014 the unload was quietly rewriting the old session over the fresh start.',
     why: 'Adam\u2019s locations buildout, carried through the standing places \u2014 and underneath them the world learned a new shape: the ribbon, a place that is a line with a width, so a road and a rail line sit in the world as what they are instead of as chains of circles. The save fix closes a race Adam found live on his phone: the pagehide autosave firing during the very reload that was meant to leave the old session behind.',
