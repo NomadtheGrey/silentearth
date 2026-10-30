@@ -601,9 +601,16 @@
  *   one target at a time): 'fire' when the winner is a
  *   placed fire and it is lit (any type — a faced lit
  *   kiln feeds charcoal), 'kiln' when that fire is a lit
- *   kiln, 'cauldron' when it is a lit campfire or hearth
- *   AND a cauldron is carried (a cauldron doesn't sit on
- *   a kiln). executeCraft receives the same list, so a
+ *   kiln. 'Cauldron' is NOT fed from a faced fire (Adam's
+ *   amendment, 2026-10-30: "Cauldron would go on the
+ *   Hearth, not the kiln. And facing the Cauldron is
+ *   different from facing the Hearth") — the cauldron is
+ *   a PLACED target of its own, and its feed line keys
+ *   on that target (the cauldron sitting on a lit
+ *   hearth) in the placed-cauldron build's UI half; the
+ *   carried-pot composition it replaces is dead and
+ *   built nowhere. Until that build, cauldron-station
+ *   recipes stay hidden. executeCraft receives the same list, so a
  *   recipe is craftable exactly when it is visible. The
  *   whole derivation sits BELOW the useWinner call in
  *   the component body (relocated 2026-10-30 — it reads
@@ -8782,11 +8789,15 @@ export default function App() {
   // pills). The winner here is the shell's one USE
   // winner for this render; a placed fire feeds 'fire'
   // when lit (any type — a faced lit kiln is still a
-  // lit fire for charcoal), a lit kiln feeds 'kiln',
-  // and a lit campfire or hearth feeds 'cauldron' when
-  // a cauldron is carried (a cauldron doesn't sit on a
-  // kiln; Adam's hearth-only thought is still open and
-  // would narrow the type set to hearth alone here).
+  // lit fire for charcoal), and a lit kiln feeds 'kiln'.
+  // 'Cauldron' is deliberately NOT fed here (Adam's
+  // amendment, 2026-10-30): the cauldron goes on the
+  // Hearth, and facing the Cauldron is different from
+  // facing the Hearth — it is a placed target of its
+  // own, and its feed line keys on that target kind in
+  // the placed-cauldron build's UI half. The earlier
+  // carried-pot composition (faced lit fire + cauldron
+  // carried) is dead; do not rebuild it.
   // Background's radius litFire presence is deliberately
   // NOT this feed's source. Workstation/loom above stay
   // radius presence, unchanged.
@@ -8798,13 +8809,6 @@ export default function App() {
     availableStations.push('fire');
     if (facedFire.type === 'kiln') {
       availableStations.push('kiln');
-    }
-    if (
-      (facedFire.type === 'campfire' ||
-        facedFire.type === 'hearth') &&
-      inventory.count(ITEMS.cauldron) > 0
-    ) {
-      availableStations.push('cauldron');
     }
   }
   // Header display names (stump-header fix, Adam-approved
