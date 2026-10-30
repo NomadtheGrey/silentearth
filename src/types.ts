@@ -117,7 +117,35 @@ export type ScatterKind =
   | 'villageRoof'
   | 'villageRoofFallen'
   | 'villageWell'
-  | 'ashPatch';
+  | 'ashPatch'
+  // Site-pass kinds (the Farmhouse, sites.ts — same rule):
+  // wall segments, the gable roof, the composed porch, and
+  // the hearth stone (hearth block + the Great Stone).
+  | 'farmWall'
+  | 'farmRoof'
+  | 'farmPorch'
+  | 'hearthStone'
+  // Site-pass kinds (the Chapel, sites.ts — same rule):
+  // tall wall segments, the steep roof, the steeple, and
+  // the graveyard's two stone shapes.
+  | 'chapelWall'
+  | 'chapelRoof'
+  | 'steeple'
+  | 'gravestone'
+  | 'gravestoneCross'
+  // Site-pass kind (the Cave Mouth, sites.ts — same rule):
+  // the facade's dark opening, and its rock surround.
+  | 'caveMouth'
+  | 'caveBoulder'
+  // Dimension kinds (caves.ts — emitted by the cave
+  // generator only, never by the surface worldgen):
+  // chamber walls, ceiling slabs, stalactites, pools, and
+  // the entrance's twilight fungus.
+  | 'caveRock'
+  | 'caveCeiling'
+  | 'stalactite'
+  | 'cavePool'
+  | 'twilightFungus';
 
 /** One placed scatter object in a chunk. y is its base height above ground. */
 export interface ScatterObject {

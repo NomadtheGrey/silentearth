@@ -666,6 +666,27 @@ export class SkyRig {
     this.cycleT = t;
   }
 
+  /**
+   * Cave mode (Adam 2026-10-30 — dimensions): while she is
+   * in a non-surface dimension the sky is GONE — true dark.
+   * The group (dome, bodies, stars, clouds) hides, both
+   * lights go to zero, and update() only advances the
+   * cycle (time still passes underground; sleep and hunger
+   * keep their clocks). No sight floor: what she sees by
+   * down there, she carries.
+   */
+  private caveMode = false;
+
+  setCaveMode(on: boolean): void {
+    this.caveMode = on;
+    this.group.visible = !on;
+    if (on) {
+      this.sunLight.intensity = 0;
+      this.hemiLight.intensity = 0;
+      this.lastNightFactor = 1;
+    }
+  }
+
   update(dt: number, input: SkyUpdateInput): void {
     const month = input.month ?? SEASON_START_MONTH;
     const prevT = this.cycleT;
@@ -673,6 +694,12 @@ export class SkyRig {
     // A wrap is a dawn: the phase cycle advances one game-day.
     // (Sleep-to-dawn jumps count via restore()'s dawn rule.)
     if (this.cycleT < prevT) this.daysElapsed += 1;
+    if (this.caveMode) {
+      // True dark: time passed above; nothing visual moves.
+      this.sunLight.intensity = 0;
+      this.hemiLight.intensity = 0;
+      return;
+    }
     const split = cycleSplit(this.cycleT, month);
     const sunElev = sunElevationAtCycle(this.cycleT, month);
     const dayFactor = clamp01((sunElev + 0.05) / 0.3);

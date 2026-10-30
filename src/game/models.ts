@@ -47,7 +47,8 @@ import type { ScatterKind } from '../types';
 import type { MeshSpec } from './objects';
 import type { AnimalKind } from './animals';
 import { hashSeed, mulberry32 } from './seed';
-import { GROVE_CELL_M, SCHOOL_SEGMENT_M, VILLAGE_SEGMENT_M } from './sites';
+import { CHAPEL_SEGMENT_M, FARM_SEGMENT_M, GROVE_CELL_M, SCHOOL_SEGMENT_M, VILLAGE_SEGMENT_M } from './sites';
+import { CAVE_CELL_M } from './caves';
 import { sunDirection, sunElevationAtCycle } from './sky';
 import { dayFraction } from './weather';
 
@@ -60,6 +61,7 @@ export const DISC_RADIUS: Partial<Record<ScatterKind, number>> = {
   peatMoss: 0.9,
   riverSilt: 1.0,
   ashPatch: 1.6,
+  cavePool: 2.2,
 };
 
 /** Fixed food accents (not source colors): bog berries, flower center, apples. */
@@ -468,6 +470,163 @@ export function buildKindGeometry(spec: MeshSpec, kind: ScatterKind): THREE.Buff
       part(box(2.05, 0.1, 0.14), shade(e, 1.1), { p: [0, 0.52, 0] }),
       part(box(1.5, 0.07, 0.8), shade(e, 0.9), { p: [-0.36, 0.78, 0], r: [0, 0, 0.5] }),
       part(box(1.5, 0.07, 0.8), shade(e, 0.9), { p: [0.36, 0.78, 0], r: [0, 0, -0.5] }),
+    ]);
+  }
+  // Kind overrides (the Farmhouse set, sites.ts): a mostly
+  // intact house — boards, a whole mossy roof, the composed
+  // porch, and the hearth's hewn stone. Local ground is
+  // y = -baseY (walls 1.3, porch 1.15, stone 0.42; the roof
+  // carries its height in the feature's y).
+  if (kind === 'farmWall') {
+    return merge([
+      part(box(FARM_SEGMENT_M, 2.6, 0.3), c),
+      part(box(FARM_SEGMENT_M, 0.18, 0.36), shade(c, 1.1), { p: [0, 1.18, 0] }),
+      part(box(FARM_SEGMENT_M, 0.05, 0.33), shade(c, 0.85), { p: [0, -0.5, 0] }),
+      part(box(0.62, 0.85, 0.34), e, { p: [-0.6, 0.1, 0] }),
+    ]);
+  }
+  if (kind === 'farmRoof') {
+    // Gable roof, origin at the wall top: two mossy planes,
+    // a ridge beam, and the stone chimney (extraColor) over
+    // the hearth end (local -X, where sites.ts puts it).
+    const slope = 0.62;
+    return merge([
+      part(box(10.6, 0.09, 4.9), c, { p: [0, 1.42, -2.0], r: [slope, 0, 0] }),
+      part(box(10.6, 0.09, 4.9), c, { p: [0, 1.42, 2.0], r: [-slope, 0, 0] }),
+      part(box(10.7, 0.15, 0.22), shade(c, 1.12), { p: [0, 2.62, 0] }),
+      part(box(0.55, 1.25, 0.55), e, { p: [-3.6, 2.35, 0] }),
+      part(box(0.7, 0.12, 0.7), shade(e, 0.9), { p: [-3.6, 3.0, 0] }),
+    ]);
+  }
+  if (kind === 'farmPorch') {
+    // The composed porch, origin at the door's wall line,
+    // local +Z pointing OUT of the house: two front posts
+    // (their spots are the collision boxes sites.ts ships),
+    // a near-flat roof slab on a back beam, a step stone.
+    return merge([
+      part(box(0.14, 2.3, 0.14), c, { p: [-1.65, 0, 2.05] }),
+      part(box(0.14, 2.3, 0.14), c, { p: [1.65, 0, 2.05] }),
+      part(box(3.9, 0.16, 0.12), shade(c, 1.05), { p: [0, 1.05, 0.06] }),
+      part(box(3.9, 0.09, 2.5), shade(e, 1.0), { p: [0, 1.13, 1.12], r: [0.05, 0, 0] }),
+      part(box(1.6, 0.12, 0.7), 0x8a8578, { p: [0, -1.09, 0.95] }),
+    ]);
+  }
+  if (kind === 'hearthStone') {
+    // One great hewn block with a cap slab — the hearth
+    // block (scaled up by sites) and the Great Stone share
+    // the build; the stone is the carrier.
+    return merge([
+      part(box(0.95, 0.8, 0.65), c, { p: [0, -0.02, 0] }),
+      part(box(1.05, 0.12, 0.75), shade(e, 1.0), { p: [0, 0.44, 0] }),
+    ]);
+  }
+  // Kind overrides (the Chapel set, sites.ts): a taller
+  // shell, a steep roof, the steeple silhouette, and the
+  // yard's two stones. Local ground is y = -baseY (walls
+  // 1.7, steeple 3.1, stones 0.35 / 0.5; the roof carries
+  // its height in the feature's y).
+  if (kind === 'chapelWall') {
+    return merge([
+      part(box(CHAPEL_SEGMENT_M, 3.4, 0.32), c),
+      part(box(CHAPEL_SEGMENT_M, 0.2, 0.38), shade(c, 1.08), { p: [0, 1.56, 0] }),
+      part(box(0.5, 1.9, 0.36), e, { p: [-0.55, 0.25, 0] }),
+      part(box(0.5, 1.9, 0.36), e, { p: [0.85, 0.25, 0] }),
+    ]);
+  }
+  if (kind === 'chapelRoof') {
+    // Steep gable, origin at the wall top: two slate
+    // planes meeting high, a ridge beam. The gable ends
+    // stay open (the farm/village precedent).
+    const slope = 0.98;
+    return merge([
+      part(box(11.6, 0.09, 3.9), c, { p: [0, 1.55, -1.35], r: [slope, 0, 0] }),
+      part(box(11.6, 0.09, 3.9), c, { p: [0, 1.55, 1.35], r: [-slope, 0, 0] }),
+      part(box(11.7, 0.16, 0.2), shade(e, 1.0), { p: [0, 2.95, 0] }),
+    ]);
+  }
+  if (kind === 'steeple') {
+    // Tower from the ground (local -3.1) through the roof
+    // line: stone shaft, a belfry with dark openings on
+    // every face, a four-sided spire, and the cross.
+    return merge([
+      part(box(1.7, 4.6, 1.7), c, { p: [0, -0.8, 0] }),
+      part(box(1.9, 1.1, 1.9), shade(c, 1.06), { p: [0, 1.95, 0] }),
+      part(box(1.2, 0.7, 0.06), e, { p: [0, 1.95, 0.96] }),
+      part(box(1.2, 0.7, 0.06), e, { p: [0, 1.95, -0.96] }),
+      part(box(0.06, 0.7, 1.2), e, { p: [0.96, 1.95, 0] }),
+      part(box(0.06, 0.7, 1.2), e, { p: [-0.96, 1.95, 0] }),
+      part(cone(1.45, 2.6, 4), shade(e, 1.0), { p: [0, 3.75, 0], r: [0, Math.PI / 4, 0] }),
+      part(box(0.08, 0.7, 0.08), e, { p: [0, 5.25, 0] }),
+      part(box(0.44, 0.08, 0.08), e, { p: [0, 5.32, 0] }),
+    ]);
+  }
+  if (kind === 'gravestone') {
+    // A rounded slab: a box with a squashed-sphere cap.
+    return merge([
+      part(box(0.62, 0.7, 0.1), c, { p: [0, -0.02, 0] }),
+      part(sphere(0.31, 10, 8), c, { p: [0, 0.3, 0], s: [1, 0.55, 0.32] }),
+      part(box(0.7, 0.1, 0.22), shade(e, 1.0), { p: [0, -0.32, 0] }),
+    ]);
+  }
+  if (kind === 'gravestoneCross') {
+    return merge([
+      part(box(0.16, 1.0, 0.12), c, { p: [0, 0, 0] }),
+      part(box(0.55, 0.14, 0.12), c, { p: [0, 0.22, 0] }),
+      part(box(0.5, 0.18, 0.3), shade(e, 1.0), { p: [0, -0.41, 0] }),
+    ]);
+  }
+  // Kind overrides (the cave sets, caves.ts + sites.ts):
+  // the mouth facade, its boulders, and the dimension's
+  // rock — walls, ceiling, teeth, pools, and the entrance
+  // fungus. Local ground is y = -baseY.
+  if (kind === 'caveMouth') {
+    // Two side rocks, a lintel, and the black inset
+    // (extraColor) set into the face — the dark itself.
+    return merge([
+      part(box(0.9, 3.0, 0.8), c, { p: [-1.3, 0, 0] }),
+      part(box(0.9, 3.0, 0.8), c, { p: [1.3, 0, 0] }),
+      part(box(3.5, 1.0, 0.9), shade(c, 0.92), { p: [0, 1.7, 0] }),
+      part(box(1.9, 2.7, 0.3), e, { p: [0, -0.15, -0.25] }),
+      part(box(2.2, 0.25, 0.9), shade(c, 1.08), { p: [0, -1.42, 0.5] }),
+    ]);
+  }
+  if (kind === 'caveBoulder') {
+    return merge([
+      part(blob(0.85), c, { p: [0, -0.12, 0], s: [1, 0.78, 1] }),
+      part(blob(0.5), shade(e, 1.0), { p: [0.55, -0.3, 0.2], s: [1, 0.7, 1] }),
+    ]);
+  }
+  if (kind === 'caveRock') {
+    // A chamber wall segment: one cell long, ceiling
+    // height, with an irregular brow along the top.
+    return merge([
+      part(box(CAVE_CELL_M, 3.2, 0.55), c),
+      part(box(CAVE_CELL_M, 0.3, 0.72), shade(c, 0.9), { p: [0, 1.55, 0], r: [0, 0, 0.02] }),
+      part(box(0.5, 0.8, 0.62), shade(c, 1.06), { p: [-1.1, -1.2, 0] }),
+    ]);
+  }
+  if (kind === 'caveCeiling') {
+    return merge([
+      part(box(CAVE_CELL_M, 0.35, CAVE_CELL_M), c),
+      part(box(0.5, 0.3, 0.5), shade(c, 0.88), { p: [0.4, -0.3, -0.3] }),
+    ]);
+  }
+  if (kind === 'stalactite') {
+    return merge([
+      part(cone(0.34, 1.7, 6), c, { p: [0, 0.55, 0], r: [Math.PI, 0, 0] }),
+      part(cone(0.2, 0.9, 5), shade(c, 1.08), { p: [0.32, 0.95, 0.1], r: [Math.PI, 0, 0] }),
+    ]);
+  }
+  if (kind === 'twilightFungus') {
+    // A small cluster of pale caps on short stems — the
+    // bright color plus the renderer's dim light at these
+    // spots is the entrance glow.
+    return merge([
+      part(cyl(0.03, 0.04, 0.22, 5), e, { p: [-0.18, -0.14, 0.04] }),
+      part(sphere(0.16, 8, 6), c, { p: [-0.18, 0.0, 0.04], s: [1, 0.62, 1] }),
+      part(cyl(0.025, 0.035, 0.16, 5), e, { p: [0.14, -0.17, -0.08] }),
+      part(sphere(0.12, 8, 6), c, { p: [0.14, -0.05, -0.08], s: [1, 0.62, 1] }),
+      part(sphere(0.09, 8, 6), shade(c, 0.9), { p: [0.02, -0.16, 0.16], s: [1, 0.6, 1] }),
     ]);
   }
   switch (spec.shape) {

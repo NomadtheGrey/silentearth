@@ -982,6 +982,246 @@ export const SOURCES: HarvestSourceDef[] = [
     biomes: ['oldfieldRise', 'creekBottom'],
     mesh: { shape: 'disc', color: 0x9a958c, baseY: 0 },
   },
+  // The Farmhouse set (Adam, 2026-10-30 — the Home
+  // fragments' home ground; site-pass only, same rule as
+  // the sets above).
+  {
+    id: 'farmWall',
+    kind: 'farmWall',
+    name: 'Farmhouse Wall',
+    description:
+      'A standing stretch of the farmhouse wall (Adam, ' +
+      '2026-10-30). Weathered boards under a whole roof; ' +
+      'solid — she enters through the door, under the porch.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['oldfieldRise'],
+    mesh: { shape: 'stone', color: 0x7a6248, extraColor: 0x201812, baseY: 1.3 },
+  },
+  {
+    id: 'farmRoof',
+    kind: 'farmRoof',
+    name: 'Farmhouse Roof',
+    description:
+      'The farmhouse roof, whole (Adam, 2026-10-30) — the ' +
+      'house kept it, which is most of why the house stands.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['oldfieldRise'],
+    mesh: { shape: 'stone', color: 0x4f4630, extraColor: 0x7d7668, baseY: 0 },
+  },
+  {
+    id: 'farmPorch',
+    kind: 'farmPorch',
+    name: 'Farmhouse Porch',
+    description:
+      'The porch over the farmhouse door (Adam, 2026-10-30): ' +
+      'two posts, a flat roof, a step stone. Its posts are solid.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['oldfieldRise'],
+    mesh: { shape: 'stone', color: 0x6e5136, extraColor: 0x59422a, baseY: 1.15 },
+  },
+  {
+    id: 'hearthStone',
+    kind: 'hearthStone',
+    name: 'Hearth Stone',
+    description:
+      'A great hewn stone of the farmhouse hearth (Adam, ' +
+      '2026-10-30). Home fragments are carried on stones ' +
+      'like this one.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['oldfieldRise'],
+    mesh: { shape: 'stone', color: 0x8a8578, extraColor: 0x6e6a5e, baseY: 0.42 },
+  },
+  // The Chapel set (Adam, 2026-10-30 — Circle ground;
+  // site-pass only, same rule as the sets above).
+  {
+    id: 'chapelWall',
+    kind: 'chapelWall',
+    name: 'Chapel Wall',
+    description:
+      'A standing stretch of the chapel wall (Adam, ' +
+      '2026-10-30) — taller than a house wall, with a tall ' +
+      'narrow window. Solid; she enters by the door.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['oldfieldRise', 'meadow'],
+    mesh: { shape: 'stone', color: 0x9a927f, extraColor: 0x1c1a24, baseY: 1.7 },
+  },
+  {
+    id: 'chapelRoof',
+    kind: 'chapelRoof',
+    name: 'Chapel Roof',
+    description:
+      'The chapel\u2019s steep roof, whole (Adam, 2026-10-30).',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['oldfieldRise', 'meadow'],
+    mesh: { shape: 'stone', color: 0x3f4450, extraColor: 0x59616e, baseY: 0 },
+  },
+  {
+    id: 'steeple',
+    kind: 'steeple',
+    name: 'Steeple',
+    description:
+      'The chapel steeple (Adam, 2026-10-30): tower, belfry ' +
+      'and spire over the door end — the silhouette she ' +
+      'navigates by. Solid at its base.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['oldfieldRise', 'meadow'],
+    mesh: { shape: 'stone', color: 0x8a8578, extraColor: 0x4a4238, baseY: 3.1 },
+  },
+  {
+    id: 'gravestone',
+    kind: 'gravestone',
+    name: 'Gravestone',
+    description:
+      'A rounded gravestone in the chapel yard (Adam, ' +
+      '2026-10-30). Low — she steps among the dead; the ' +
+      'stones do not bar her way.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['oldfieldRise', 'meadow'],
+    mesh: { shape: 'stone', color: 0x8f8b80, extraColor: 0x77736a, baseY: 0.35 },
+  },
+  {
+    id: 'gravestoneCross',
+    kind: 'gravestoneCross',
+    name: 'Gravestone Cross',
+    description:
+      'A cross gravestone in the chapel yard (Adam, ' +
+      '2026-10-30). Low — she steps among the dead.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['oldfieldRise', 'meadow'],
+    mesh: { shape: 'stone', color: 0x8f8b80, extraColor: 0x77736a, baseY: 0.5 },
+  },
+  // The Cave Mouth set (Adam, 2026-10-30 — site-pass only,
+  // same rule as the sets above).
+  {
+    id: 'caveMouth',
+    kind: 'caveMouth',
+    name: 'Cave Mouth',
+    description:
+      'A dark opening in a rock face (Adam, 2026-10-30). ' +
+      'True dark inside; what light she has down there, ' +
+      'she carries. Entering is a travel act at its threshold.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['tanglewood', 'forest'],
+    mesh: { shape: 'stone', color: 0x6b675e, extraColor: 0x050505, baseY: 1.5 },
+  },
+  {
+    id: 'caveBoulder',
+    kind: 'caveBoulder',
+    name: 'Cave Rock',
+    description:
+      'Fallen rock around the cave mouth — and rubble on ' +
+      'the cave floor inside (Adam, 2026-10-30).',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['tanglewood', 'forest'],
+    mesh: { shape: 'stone', color: 0x716d64, extraColor: 0x5b574f, baseY: 0.55 },
+  },
+  // The cave-dimension set (Adam, 2026-10-30 — emitted by
+  // the cave generator only; the surface world never
+  // spawns them).
+  {
+    id: 'caveRock',
+    kind: 'caveRock',
+    name: 'Cave Wall',
+    description:
+      'The living rock of the cave (Adam, 2026-10-30). ' +
+      'Solid; the chambers are cut through it.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['deepBog'],
+    mesh: { shape: 'stone', color: 0x4c463f, extraColor: 0x3a362f, baseY: 1.6 },
+  },
+  {
+    id: 'caveCeiling',
+    kind: 'caveCeiling',
+    name: 'Cave Ceiling',
+    description:
+      'The cave\u2019s roof of rock (Adam, 2026-10-30), ' +
+      'always overhead inside.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['deepBog'],
+    mesh: { shape: 'stone', color: 0x403b34, extraColor: 0x332f2a, baseY: 0 },
+  },
+  {
+    id: 'stalactite',
+    kind: 'stalactite',
+    name: 'Stalactite',
+    description:
+      'A stone tooth hanging from the cave ceiling (Adam, ' +
+      '2026-10-30).',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['deepBog'],
+    mesh: { shape: 'stone', color: 0x7a7264, extraColor: 0x655d50, baseY: 1.5 },
+  },
+  {
+    id: 'cavePool',
+    kind: 'cavePool',
+    name: 'Cave Pool',
+    description:
+      'Still black water pooled on the cave floor (Adam, ' +
+      '2026-10-30).',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['deepBog'],
+    mesh: { shape: 'disc', color: 0x10161c, baseY: 0 },
+  },
+  {
+    id: 'twilightFungus',
+    kind: 'twilightFungus',
+    name: 'Twilight Fungus',
+    description:
+      'A pale-glowing fungus that grows where the cave ' +
+      'still remembers the entrance (Adam, 2026-10-30). ' +
+      'Its light reaches a few steps, no farther.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['deepBog'],
+    mesh: { shape: 'stone', color: 0x9fd8c8, extraColor: 0x6fae9d, baseY: 0.25 },
+  },
   {
     id: 'snapwoodThicket',
     kind: 'snapWood',
