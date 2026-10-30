@@ -612,7 +612,10 @@
  *   composition is dead and built nowhere; until then
  *   cauldron recipes stay hidden. The LOOM joined the
  *   winner race in the same landing (kind 'loom', the
- *   placed-object idiom; its pill reads OPEN and its
+ *   placed-object idiom; its pill reads WEAVE (Adam,
+ *   2026-10-30: "What do we do at a loom? We weave,
+ *   right?" — the stump keeps OPEN, it opens a
+ *   multi-act door; the loom does exactly one thing) and its
  *   press opens the Crafting panel — the pill is its
  *   door), so 'loom' feeds from its faced target like
  *   every other station: no station is dark.
@@ -9142,13 +9145,14 @@ export default function App() {
           ? 'COLLECT'
           : useWinner.kind === 'hive'
             ? 'HARVEST'
-            : useWinner.kind === 'site' ||
-                useWinner.kind === 'fire' ||
-                useWinner.kind === 'tent' ||
-                useWinner.kind === 'torch' ||
-                useWinner.kind === 'loom' ||
-                useWinner.kind === 'home'
-              ? 'OPEN'
+            : useWinner.kind === 'loom'
+              ? 'WEAVE'
+              : useWinner.kind === 'site' ||
+                  useWinner.kind === 'fire' ||
+                  useWinner.kind === 'tent' ||
+                  useWinner.kind === 'torch' ||
+                  useWinner.kind === 'home'
+                ? 'OPEN'
               : useWinner.kind === 'scry'
                 ? 'SCRY'
                 : undefined;
