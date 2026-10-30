@@ -1311,6 +1311,7 @@ export function farmhouseSite(
   };
   let biome = weightsAtPos(center.x, center.z).dominant;
   let distance = FARM_MAX_DIST_M;
+  let accepted = false;
   let fallback: { x: number; z: number; biome: BiomeId; distance: number } | null = null;
   for (let d = FARM_MIN_DIST_M; d <= FARM_MAX_DIST_M; d += GROVE_SCAN_STEP_M) {
     const x = spawn.x + dirX * d;
@@ -1322,12 +1323,30 @@ export function farmhouseSite(
       center = { x, z };
       biome = w.dominant;
       distance = d;
+      accepted = true;
       break;
     }
-    if (d === FARM_MAX_DIST_M && fallback) {
-      center = { x: fallback.x, z: fallback.z };
-      biome = fallback.biome;
-      distance = fallback.distance;
+  }
+  // Resolve AFTER the loop (the barn's shape): the
+  // in-loop seat never fired when the band's last point
+  // was itself spacing-illegal — the continue skipped
+  // it and the initialized max point stood, illegally.
+  if (!accepted && fallback) {
+    center = { x: fallback.x, z: fallback.z };
+    biome = fallback.biome;
+    distance = fallback.distance;
+  }
+  if (!accepted && !fallback) {
+    // Starved bearing: extend past the band for the
+    // first spacing-legal point (the barn's guard).
+    for (let d = FARM_MAX_DIST_M + GROVE_SCAN_STEP_M; d <= 1200; d += GROVE_SCAN_STEP_M) {
+      const x = spawn.x + dirX * d;
+      const z = spawn.z + dirZ * d;
+      if (!spacingLegal(x, z)) continue;
+      center = { x, z };
+      biome = weightsAtPos(x, z).dominant;
+      distance = d;
+      break;
     }
   }
 
@@ -1624,6 +1643,7 @@ export function chapelSite(
   };
   let biome = weightsAtPos(center.x, center.z).dominant;
   let distance = CHAPEL_MAX_DIST_M;
+  let accepted = false;
   let fallback: { x: number; z: number; biome: BiomeId; distance: number } | null = null;
   for (let d = CHAPEL_MIN_DIST_M; d <= CHAPEL_MAX_DIST_M; d += GROVE_SCAN_STEP_M) {
     const x = spawn.x + dirX * d;
@@ -1635,12 +1655,30 @@ export function chapelSite(
       center = { x, z };
       biome = w.dominant;
       distance = d;
+      accepted = true;
       break;
     }
-    if (d === CHAPEL_MAX_DIST_M && fallback) {
-      center = { x: fallback.x, z: fallback.z };
-      biome = fallback.biome;
-      distance = fallback.distance;
+  }
+  // Resolve AFTER the loop (the barn's shape): the
+  // in-loop seat never fired when the band's last point
+  // was itself spacing-illegal — the continue skipped
+  // it and the initialized max point stood, illegally.
+  if (!accepted && fallback) {
+    center = { x: fallback.x, z: fallback.z };
+    biome = fallback.biome;
+    distance = fallback.distance;
+  }
+  if (!accepted && !fallback) {
+    // Starved bearing: extend past the band for the
+    // first spacing-legal point (the barn's guard).
+    for (let d = CHAPEL_MAX_DIST_M + GROVE_SCAN_STEP_M; d <= 1200; d += GROVE_SCAN_STEP_M) {
+      const x = spawn.x + dirX * d;
+      const z = spawn.z + dirZ * d;
+      if (!spacingLegal(x, z)) continue;
+      center = { x, z };
+      biome = weightsAtPos(x, z).dominant;
+      distance = d;
+      break;
     }
   }
 
@@ -2139,6 +2177,7 @@ export function generalStoreSite(
   };
   let biome = weightsAtPos(center.x, center.z).dominant;
   let distance = STORE_MAX_DIST_M;
+  let accepted = false;
   let fallback: { x: number; z: number; biome: BiomeId; distance: number } | null = null;
   for (let d = STORE_MIN_DIST_M; d <= STORE_MAX_DIST_M; d += GROVE_SCAN_STEP_M) {
     const x = spawn.x + dirX * d;
@@ -2150,12 +2189,30 @@ export function generalStoreSite(
       center = { x, z };
       biome = w.dominant;
       distance = d;
+      accepted = true;
       break;
     }
-    if (d === STORE_MAX_DIST_M && fallback) {
-      center = { x: fallback.x, z: fallback.z };
-      biome = fallback.biome;
-      distance = fallback.distance;
+  }
+  // Resolve AFTER the loop (the barn's shape): the
+  // in-loop seat never fired when the band's last point
+  // was itself spacing-illegal — the continue skipped
+  // it and the initialized max point stood, illegally.
+  if (!accepted && fallback) {
+    center = { x: fallback.x, z: fallback.z };
+    biome = fallback.biome;
+    distance = fallback.distance;
+  }
+  if (!accepted && !fallback) {
+    // Starved bearing: extend past the band for the
+    // first spacing-legal point (the barn's guard).
+    for (let d = STORE_MAX_DIST_M + GROVE_SCAN_STEP_M; d <= 1200; d += GROVE_SCAN_STEP_M) {
+      const x = spawn.x + dirX * d;
+      const z = spawn.z + dirZ * d;
+      if (!spacingLegal(x, z)) continue;
+      center = { x, z };
+      biome = weightsAtPos(x, z).dominant;
+      distance = d;
+      break;
     }
   }
 
