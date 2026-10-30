@@ -43,6 +43,17 @@
  * Every number below is DRAFT (Adam's pin pass), and the maze
  * grid size is ONE named constant (GROVE_GRID_CELLS) so the pin
  * pass can shrink the maze by changing a single number.
+ *
+ * INSTANCES (Adam, 2026-10-30, design steer): groves come in the
+ * plural eventually — lesser groves holding Circle fragments,
+ * each maze seeded from its own instance stream. This build
+ * places ONE (the crow's Grove), but the registry stays
+ * instance-friendly: the layout derivation (deriveMazeLayout)
+ * takes a label and a centre and hard-codes nothing about being
+ * the only place; a lesser grove registers by deriving its own
+ * layout under its own label ('grove:lesser-1' style streams)
+ * and adding its features to the same site pass. Siting for
+ * instances is their own future claim.
  */
 
 import { deriveSeed, mulberry32 } from './seed';
@@ -64,7 +75,10 @@ export interface MazeCell {
 
 /** The derived Grove: one per world seed. */
 export interface GroveSite {
-  id: 'grove';
+  /** Instance id ('grove' for the crow's Grove; lesser groves
+   *  register their own ids — the registry is instance-shaped,
+   *  see the header note). */
+  id: string;
   seed: string;
   /** World position of the grove's centre (the maze's heart). */
   center: { x: number; z: number };
@@ -115,16 +129,18 @@ const GROVE_BIOMES: ReadonlySet<BiomeId> = new Set(['forest', 'tanglewood', 'old
 
 /** Maze grid size: cells per side. ONE constant — the pin pass
  *  shrinks or grows the whole maze by changing this alone. Odd,
- *  so a single centre cell (the heart) exists. */
-export const GROVE_GRID_CELLS = 7;
+ *  so a single centre cell (the heart) exists. FLOOR 11 (Adam,
+ *  2026-10-30): a solved-once maze earns nothing by being small,
+ *  so the grid never goes below 11x11. */
+export const GROVE_GRID_CELLS = 11;
 /** Maze cell width, meters (also the hedge geometry's length). */
 export const GROVE_CELL_M = 2.6;
-export const GROVE_RING_RADIUS_M = 14;
-export const GROVE_CLEAR_RADIUS_M = 19;
-export const GROVE_STONE_COUNT = 7;
-export const GROVE_OAK_COUNT = 5;
-const GROVE_OAK_MIN_R = 15.2;
-const GROVE_OAK_MAX_R = 17.6;
+export const GROVE_RING_RADIUS_M = 22;
+export const GROVE_CLEAR_RADIUS_M = 28;
+export const GROVE_STONE_COUNT = 9;
+export const GROVE_OAK_COUNT = 7;
+const GROVE_OAK_MIN_R = 23.5;
+const GROVE_OAK_MAX_R = 26;
 /** Hedge collision thickness, meters (the visual row is bushier;
  *  her body stops at the woody core). */
 export const GROVE_WALL_THICKNESS_M = 0.6;
@@ -134,16 +150,16 @@ const groveCache = new Map<string, GroveSite>();
 /**
  * Derive the world's Grove. `biomeAt` returns the DOMINANT biome
  * at a position (the generator's weightsAt().dominant). Memoized
- * by seed: spawn and biome fields are pure functions of the seed,
- * so the first caller's arguments define the site for every later
- * caller of the same world.
+ * by seed + instance id: spawn and biome fields are pure
+ * functions of the seed, so the first caller's arguments define
+ * the site for every later caller of the same world.
  */
 export function groveSite(
   seed: string,
   spawn: { x: number; z: number },
   biomeAt: (x: number, z: number) => BiomeId,
 ): GroveSite {
-  const cached = groveCache.get(seed);
+  const cached = groveCache.get(`${seed}::grove`);
   if (cached) return cached;
 
   // Siting: a seeded bearing from spawn, scanned outward in
@@ -170,6 +186,74 @@ export function groveSite(
     }
   }
 
+
+  // Entrance side: the perimeter side facing spawn (she arrives
+  // from spawn's direction). The layout derivation turns the
+  // side into the entrance cell (the side's middle cell).
+  const toSpawnX = spawn.x - center.x;
+  const toSpawnZ = spawn.z - center.z;
+  const entranceSide: GroveSite['entranceSide'] =
+    Math.abs(toSpawnX) > Math.abs(toSpawnZ)
+      ? toSpawnX > 0
+        ? 'east'
+        : 'west'
+      : toSpawnZ > 0
+        ? 'south'
+        : 'north';
+
+  const layout = deriveMazeLayout(seed, 'grove', center, entranceSide);
+
+  const site: GroveSite = {
+    id: 'grove',
+    seed,
+    center,
+    biome,
+    distance,
+    clearRadius: GROVE_CLEAR_RADIUS_M,
+    ringRadius: GROVE_RING_RADIUS_M,
+    entranceSide,
+    entranceCell: layout.entranceCell,
+    heartCell: layout.heartCell,
+    fragmentCell: layout.fragmentCell,
+    features: layout.features,
+    walls: layout.walls,
+    bounds: {
+      minX: center.x - GROVE_CLEAR_RADIUS_M,
+      maxX: center.x + GROVE_CLEAR_RADIUS_M,
+      minZ: center.z - GROVE_CLEAR_RADIUS_M,
+      maxZ: center.z + GROVE_CLEAR_RADIUS_M,
+    },
+  };
+  groveCache.set(`${seed}::grove`, site);
+  return site;
+}
+
+/** One maze-grove instance's layout: everything about the place
+ *  that derives from (seed, label, centre, entrance side). */
+export interface MazeLayout {
+  entranceCell: MazeCell;
+  heartCell: MazeCell;
+  fragmentCell: MazeCell;
+  features: ScatterObject[];
+  walls: SiteWallBox[];
+}
+
+/**
+ * Derive a maze-grove layout under an instance label. The
+ * label names the instance's streams ('grove' for the crow's
+ * Grove; a lesser grove passes its own label and gets its own
+ * maze, stones, and trees from the same code — instance-friendly
+ * by construction, nothing here assumes it is the only place).
+ * Ring radius, oak band, and clearing come from the shared
+ * constants today; an instance that needs its own scale can
+ * grow parameters here when its claim lands.
+ */
+export function deriveMazeLayout(
+  seed: string,
+  label: string,
+  center: { x: number; z: number },
+  entranceSide: GroveSite['entranceSide'],
+): MazeLayout {
   const grid = GROVE_GRID_CELLS;
   const mid = (grid - 1) / 2;
   const cellM = GROVE_CELL_M;
@@ -177,28 +261,22 @@ export function groveSite(
     x: center.x + (col - mid) * cellM,
     z: center.z + (row - mid) * cellM,
   });
-
-  // Entrance: the perimeter side facing spawn (she arrives from
-  // spawn's direction), middle cell of that side.
-  const toSpawnX = spawn.x - center.x;
-  const toSpawnZ = spawn.z - center.z;
-  let entranceSide: GroveSite['entranceSide'];
-  let entranceCell: MazeCell;
-  if (Math.abs(toSpawnX) > Math.abs(toSpawnZ)) {
-    entranceSide = toSpawnX > 0 ? 'east' : 'west';
-    entranceCell = { col: toSpawnX > 0 ? grid - 1 : 0, row: mid };
-  } else {
-    entranceSide = toSpawnZ > 0 ? 'south' : 'north';
-    entranceCell = { col: mid, row: toSpawnZ > 0 ? grid - 1 : 0 };
-  }
+  const entranceCell: MazeCell =
+    entranceSide === 'east'
+      ? { col: grid - 1, row: mid }
+      : entranceSide === 'west'
+        ? { col: 0, row: mid }
+        : entranceSide === 'south'
+          ? { col: mid, row: grid - 1 }
+          : { col: mid, row: 0 };
 
   // The maze: recursive backtracker over the cell graph, seeded
-  // from the grove's own stream. A backtracker maze is a spanning
-  // tree — every cell reachable, exactly one path between any two
-  // cells, and its leaves are the dead ends. hOpen[r][c] is the
-  // passage between (c, r) and (c+1, r); vOpen[r][c] between
-  // (c, r) and (c, r+1).
-  const mazeRand = mulberry32(deriveSeed(seed, 'grove:maze'));
+  // from the instance's own stream. A backtracker maze is a
+  // spanning tree — every cell reachable, exactly one path
+  // between any two cells, and its leaves are the dead ends.
+  // hOpen[r][c] is the passage between (c, r) and (c+1, r);
+  // vOpen[r][c] between (c, r) and (c, r+1).
+  const mazeRand = mulberry32(deriveSeed(seed, `${label}:maze`));
   const hOpen: boolean[][] = Array.from({ length: grid }, () =>
     new Array<boolean>(grid - 1).fill(false),
   );
@@ -317,7 +395,7 @@ export function groveSite(
   // facing. Stones have no collision — she walks between them;
   // the ring MARKS the place, the hedge is the wall.
   {
-    const rand = mulberry32(deriveSeed(seed, 'grove:stones'));
+    const rand = mulberry32(deriveSeed(seed, `${label}:stones`));
     for (let i = 0; i < GROVE_STONE_COUNT; i++) {
       const a = (i / GROVE_STONE_COUNT) * Math.PI * 2 + (rand() - 0.5) * 0.3;
       const r = GROVE_RING_RADIUS_M + (rand() - 0.5) * 1.0;
@@ -335,7 +413,7 @@ export function groveSite(
   // silhouettes over the walls), visibly older than wild trees —
   // their own kind ('groveOak', models.ts gives the older look).
   {
-    const rand = mulberry32(deriveSeed(seed, 'grove:oaks'));
+    const rand = mulberry32(deriveSeed(seed, `${label}:oaks`));
     for (let i = 0; i < GROVE_OAK_COUNT; i++) {
       const a = (i / GROVE_OAK_COUNT) * Math.PI * 2 + rand() * 0.5;
       const r = GROVE_OAK_MIN_R + rand() * (GROVE_OAK_MAX_R - GROVE_OAK_MIN_R);
@@ -397,7 +475,7 @@ export function groveSite(
   // hoard's CONTENTS stage with their own systems — the mound is
   // the place they will live.
   {
-    const rand = mulberry32(deriveSeed(seed, 'grove:heart'));
+    const rand = mulberry32(deriveSeed(seed, `${label}:heart`));
     const heart = cellCenter(heartCell.col, heartCell.row);
     feat('hoardMound', heart.x + 0.3, heart.z + 0.35, 1, rand() * Math.PI * 2);
     feat('groveOak', heart.x - 0.85, heart.z - 0.85, 1.6, rand() * Math.PI * 2);
@@ -418,31 +496,8 @@ export function groveSite(
     feat('carvedStone', fc.x - openX * 0.7, fc.z - openZ * 0.7, 1, Math.atan2(openX, openZ));
   }
 
-  const site: GroveSite = {
-    id: 'grove',
-    seed,
-    center,
-    biome,
-    distance,
-    clearRadius: GROVE_CLEAR_RADIUS_M,
-    ringRadius: GROVE_RING_RADIUS_M,
-    entranceSide,
-    entranceCell,
-    heartCell,
-    fragmentCell,
-    features,
-    walls,
-    bounds: {
-      minX: center.x - GROVE_CLEAR_RADIUS_M,
-      maxX: center.x + GROVE_CLEAR_RADIUS_M,
-      minZ: center.z - GROVE_CLEAR_RADIUS_M,
-      maxZ: center.z + GROVE_CLEAR_RADIUS_M,
-    },
-  };
-  groveCache.set(seed, site);
-  return site;
+  return { entranceCell, heartCell, fragmentCell, features, walls };
 }
-
 /** True when a world position lies inside the grove's clearing —
  *  the footprint check (UI's 'Grove Tree' name-tag rule and
  *  harvest's protection backstop both read this fact). */
