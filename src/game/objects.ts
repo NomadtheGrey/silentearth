@@ -718,7 +718,7 @@ export const SOURCES: HarvestSourceDef[] = [
     secondaryYields: [DOWNED_OAK_ALWAYS],
     provenance: 'draft',
     biomes: ['forest', 'tanglewood', 'oldfieldRise'],
-    mesh: { shape: 'tree', color: 0x4a3826, extraColor: 0x3d5c26, baseY: 0.8, extraY: 2.4 },
+    mesh: { shape: 'tree', color: 0x453324, extraColor: 0x55663c, baseY: 0.8, extraY: 2.4 },
   },
   {
     id: 'standingStone',

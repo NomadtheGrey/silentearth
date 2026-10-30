@@ -213,11 +213,17 @@ export function buildKindGeometry(spec: MeshSpec, kind: ScatterKind): THREE.Buff
   // Kind override (the Grove's old trees share the 'tree' shape
   // slot, but they must read VISIBLY OLDER than a standing oak —
   // Adam, 2026-10-30, the age is the game's side of the pill
-  // rule): a much thicker, greyer trunk, five heavy branches
-  // that droop instead of reaching, and a broader, lower crown
-  // with one moss-dark mass hanging at the side. Silhouette
-  // first: at maze distance the trunk girth and the droop are
-  // what say old.
+  // rule; amended the same day: the difference must read BEFORE
+  // SHE'S CLOSE, at maze-approach distance). Distance carries
+  // on silhouette + palette, so: a much thicker, greyer trunk
+  // with a slight lean and a root flare gripping the ground;
+  // five heavy branches that droop instead of reaching, plus
+  // one pale DEAD limb standing out of the crown (bare wood
+  // reads old from far off); a broader, lower crown in a
+  // silvered moss-green (the def's extraColor — paler than any
+  // wild canopy, so the grove's trees lift out of the forest's
+  // deep greens); moss-dark masses hanging at the crown's edge
+  // with thin moss strands below them.
   if (kind === 'groveOak') {
     const branches: THREE.BufferGeometry[] = [];
     for (let i = 0; i < 5; i++) {
@@ -229,14 +235,39 @@ export function buildKindGeometry(spec: MeshSpec, kind: ScatterKind): THREE.Buff
         }),
       );
     }
+    const flare: THREE.BufferGeometry[] = [];
+    for (let i = 0; i < 3; i++) {
+      const a = (i / 3) * Math.PI * 2 + 0.8;
+      flare.push(
+        part(blob(0.42), shade(c, 0.9), {
+          p: [Math.cos(a) * 0.36, -0.82, Math.sin(a) * 0.36],
+          s: [1, 0.45, 1],
+        }),
+      );
+    }
+    const moss: THREE.BufferGeometry[] = [];
+    for (let i = 0; i < 4; i++) {
+      const a = (i / 4) * Math.PI * 2 + 0.55;
+      moss.push(
+        part(cyl(0.02, 0.032, 0.9, 4), shade(e, 0.6), {
+          p: [Math.cos(a) * 1.12, extraDy - 0.35, Math.sin(a) * 1.12],
+        }),
+      );
+    }
     return merge([
-      part(cyl(0.34, 0.55, 2.0, 7), c),
+      part(cyl(0.34, 0.55, 2.0, 7), c, { r: [0, 0, 0.05] }),
+      ...flare,
       ...branches,
+      part(cyl(0.03, 0.05, 1.5, 4), shade(c, 1.55), {
+        p: [0.3, extraDy + 0.55, 0.15],
+        r: [0.25, 0, -0.35],
+      }),
       part(blob(1.45), e, { p: [0, extraDy + 0.05, 0] }),
       part(blob(1.05), shade(e, 0.9), { p: [0.85, extraDy + 0.35, 0.3] }),
       part(blob(0.9), shade(e, 1.05), { p: [-0.8, extraDy + 0.2, -0.35] }),
       part(blob(0.7), shade(e, 1.1), { p: [0.15, extraDy + 0.75, -0.55] }),
       part(blob(0.65), shade(e, 0.75), { p: [1.05, extraDy - 0.45, -0.4] }),
+      ...moss,
     ]);
   }
   // Kind override (standing stone, sites landing 2026-10-30): a
