@@ -373,6 +373,27 @@ export interface SavedCauldron {
 }
 
 /**
+ * The boot-at-the-mouth fact: the cave visit a save
+ * was written in, as handed over by Background's
+ * dimensionState.snapshot() (the shell passes its
+ * key + mouthId at save time). Boot always starts on
+ * the surface — the shell reads this record to place
+ * her at the mouth she entered by rather than at
+ * spawn (the boot wiring is the shell's).
+ * `mouthId` is the surface mouth's id (null only if
+ * the source had none). The snapshot's `layer` is
+ * DELIBERATELY not persisted: boot places her at the
+ * mouth, never mid-cave, so the layer a save was
+ * written at has no boot consumer (Background's
+ * session-state note). Absent / null = a surface
+ * save; boot proceeds as it always has.
+ */
+export interface SavedDimensionVisit {
+  key: string;
+  mouthId: string | null;
+}
+
+/**
  * A placed tent, as saved. No shelter state is stored —
  * the tent is the SITE; the shelter effect rides
  * Background's tent-aware shelterQuery branch when it
@@ -520,6 +541,9 @@ export interface SaveData {
   desks: SavedDesk[];
   /** Placed cauldrons (keyed to their hearths); [] for old saves. */
   cauldrons: SavedCauldron[];
+  /** The cave visit this save was written in (boot-at-the-mouth
+   * fact); null for surface saves and old saves. */
+  dimensionVisit: SavedDimensionVisit | null;
   /** Placed tents (portable shelters); [] for old saves. */
   tents: SavedTent[];
   /** Partial-true-name look counts; [] for old saves. */
@@ -660,6 +684,17 @@ export interface SaveDraft {
     z: number;
     id?: string;
   }>;
+  /**
+   * The cave visit, from dimensionState.snapshot() at
+   * save time (the shell passes key + mouthId; the
+   * snapshot's layer is not persisted — see
+   * SavedDimensionVisit). OPTIONAL, same trap-save
+   * pattern as cauldrons; null/absent = surface.
+   */
+  dimensionVisit?: {
+    key: string;
+    mouthId: string | null;
+  } | null;
   /**
    * Placed tents from the placed-tent source
    * (Background's entity snapshot, once it lands).
@@ -929,6 +964,15 @@ export function serializeSave(draft: SaveDraft): SaveData {
       z: cauldron.z,
       ...(cauldron.id !== undefined ? { id: cauldron.id } : {}),
     })),
+    // The visit fact: written AS-IS (dimension key +
+    // entry mouth verbatim). Absent/null in the draft
+    // writes null — a surface save.
+    dimensionVisit: draft.dimensionVisit
+      ? {
+          key: draft.dimensionVisit.key,
+          mouthId: draft.dimensionVisit.mouthId,
+        }
+      : null,
     // Tents: written AS-IS (positions verbatim, id when
     // the entity provides one — no filtering, no
     // normalization). Invalid entries are restore()'s
@@ -1407,6 +1451,25 @@ export function deserializeSave(value: unknown): SaveData | null {
         });
       }
     }
+    // The visit fact is optional on read: an old v1
+    // save without it loads with dimensionVisit: null.
+    // A record passes with its key verbatim and its
+    // mouth kept when a string (else null) — the boot
+    // consumer resolves the mouth and drops what it
+    // cannot use, so a bad visit record can never
+    // corrupt the whole document. A non-record field
+    // loads as null.
+    const dimensionVisit: SavedDimensionVisit | null = isRecord(
+      value.dimensionVisit,
+    )
+      ? {
+          key: value.dimensionVisit.key as string,
+          mouthId:
+            typeof value.dimensionVisit.mouthId === 'string'
+              ? value.dimensionVisit.mouthId
+              : null,
+        }
+      : null;
     // Tents are optional on read, same leniency as
     // altars: an old v1 save without them loads with
     // tents: []. Entries pass through UNVALIDATED —
@@ -1563,6 +1626,7 @@ export function deserializeSave(value: unknown): SaveData | null {
       altars,
       desks,
       cauldrons,
+      dimensionVisit,
       tents,
       nameSight,
       stagings,
