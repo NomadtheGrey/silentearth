@@ -203,6 +203,7 @@ import {
 import type { WorldGen } from './worldgen';
 import { boneItemId, boneKindAt } from './boneKind';
 import { TOO_HUNGRY_STAGE, type HungerStageQuery } from './hunger';
+import { fireState } from './fireState';
 import { loomState } from './loomState';
 import { pileState } from './pileState';
 import { torchState } from './torchState';
@@ -299,21 +300,34 @@ export function clayBonusChanceFor(moleActive: boolean): number {
 }
 
 /**
- * Station presence at (x, z): a stump within HARVEST_RANGE means a
- * workstation is available (stumps are workstation anchors in
- * objects.ts). Query, not event — crafting checks availability at
- * craft time, and UI can re-check whenever 'harvest:inRange' fires.
- * Shape for consumers: workstation true maps to Systems'
- * StationContext 'workstation', false maps to null. Other stations
- * (wheel, loom, kiln, hearth) do not exist yet, so they
- * correctly read as unavailable — no placeholder stations are
- * invented here, and none are returned.
+ * Station presence at (x, z), as FACTS the shell composes
+ * into Systems' StationContext values. Query, not event —
+ * crafting checks availability at craft time, and UI can
+ * re-check whenever 'harvest:inRange' fires. Three facts,
+ * all read at the same HARVEST_RANGE (2.5 m):
+ * - workstation: a stump within range (stumps are
+ *   workstation anchors in objects.ts) -> station
+ *   'workstation'.
+ * - loom: a placed loom within range (loomState) ->
+ *   station 'loom'.
+ * - litFire: a LIT fire within range (fireState; an
+ *   unlit fire never counts) -> station 'fire' directly,
+ *   and station 'cauldron' composed shell-side with the
+ *   carried half (lit fire + cauldron carried; the
+ *   carried check is the shell's, not this query's).
+ *   The fact is generic — any lit fire of any type —
+ *   and settles nothing about narrower composition
+ *   rules (e.g. a hearth-specific cauldron), which stay
+ *   open for Adam and would narrow shell-side.
+ * No placeholder stations are invented here: presence
+ * for the remaining station tags is not built, and no
+ * fact is returned for them.
  */
 export function stationPresence(
   gen: WorldGen,
   x: number,
   z: number,
-): { workstation: boolean; loom: boolean } {
+): { workstation: boolean; loom: boolean; litFire: boolean } {
   // Felled stumps count too — and this check must read state, not
   // just the passed generator, because callers pass the RAW
   // generator (App passes genRef.current) while felled stumps live
@@ -342,7 +356,12 @@ export function stationPresence(
   // precedent) counts as station 'loom'. This reads live
   // loomState, like the felled-stump check reads live state.
   const loom = loomState.loomsInRange(x, z, HARVEST_RANGE);
-  return { workstation, loom };
+  // Lit-fire presence (Background, 2026-10-30): a LIT fire
+  // within the same HARVEST_RANGE counts as the fire fact
+  // (station 'fire'; shell-side half of 'cauldron'). Reads
+  // live fireState; unlit fires never count.
+  const litFire = fireState.litFireInRange(x, z, HARVEST_RANGE);
+  return { workstation, loom, litFire };
 }
 
 /**
