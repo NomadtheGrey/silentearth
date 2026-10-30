@@ -43,6 +43,17 @@ export interface BuildRecord {
 
 const ALL_RECORDS: BuildRecord[] = [
   {
+    merge: 'Merge #30',
+    pr: 61,
+    // sha pending: the merge sha is unknowable before the
+    // merge; the pre-authorized correction merge replaces
+    // this with the real one.
+    sha: 'pending',
+    date: '2026-10-30',
+    what: 'The placed cauldron is complete end to end: from the pack it goes onto a faced hearth, and from then on the pot is a target of its own \u2014 it outranks its own hearth when both are faced, its pill reads RENDER, and picking it up refuses on a full pack and leaves the pot standing. Its save binds by hearth alone. So rendering tallow and melting candles now happen where they belong: at a faced pot on a lit hearth. The same batch sweeps the station-presence surface clean \u2014 the dead lit-fire fact, its orphaned query, and the caller-less fallback mapper are out, and the two live facts stay for the station door and anchor. No station is dark anywhere now.',
+    why: 'The cauldron was founded in the last batch; this one gives it its hands. And the presence cleanup is the faced-target law keeping its own house \u2014 what no longer feeds anything no longer stands in the code.',
+  },
+  {
     merge: 'Merge #29',
     pr: 59,
     sha: '5feba05',

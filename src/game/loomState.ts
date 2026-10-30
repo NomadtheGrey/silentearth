@@ -12,16 +12,18 @@
  * garment recipes, PINNED requirement), but no loom presence
  * existed, so garments were uncraftable in play. A placed loom
  * supplies station 'loom' the same way a stump supplies
- * 'workstation': presence is wiring input, read by
- * stationPresence in harvest.ts (which maps it onto Systems'
- * StationContext 'loom' via stationContextForPresence).
+ * 'workstation'. How presence feeds stations has changed
+ * since: under Adam's faced-target law (2026-10-30) the loom
+ * station feeds from the FACED loom in the shell's winner
+ * race; stationPresence in harvest.ts still reads this
+ * module's range query for its loom fact, which now serves
+ * the shell's station-anchor derivation.
  *
  * STATION TAG — CONFIRMED MATCH: Systems' CraftingStation
  * (src/systems/recipes.ts) includes the literal 'loom', and
  * the loom recipe itself has id 'loom'. This module uses
- * that same literal nowhere as a string constant — the tag
- * lives in the presence mapping (harvest.ts), not here —
- * so there is no second spelling to drift.
+ * that same literal nowhere as a string constant — so there
+ * is no second spelling to drift.
  *
  * PLACEMENT: free — no zone, plot, or biome gate (same free-
  * placement rule as fires and houses). placeLoom is a
