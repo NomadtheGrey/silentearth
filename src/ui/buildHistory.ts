@@ -43,6 +43,17 @@ export interface BuildRecord {
 
 const ALL_RECORDS: BuildRecord[] = [
   {
+    merge: 'Merge #33',
+    pr: 67,
+    // sha pending: the merge sha is unknowable before the
+    // merge; the pre-authorized correction merge replaces
+    // this with the real one.
+    sha: 'pending',
+    date: '2026-10-30',
+    what: 'Two more of the world\u2019s old places, and the first way down. The Farmhouse: a roofed ruin in the oldfield country \u2014 porch, a partition wall, a hearth with its great stone, and a cellar door set in the back foundation. The Chapel: a taller shell with a steeple over the door end and a quiet graveyard of stones beside it, one stone by the door path carrying the inscription. And the cave: a dark opening in broken ground, seeded like every other place, with the farmhouse\u2019s cellar door for its second mouth \u2014 step through and she is somewhere else entirely, a pocket dimension of rock chambers in true dark, pale fungus glowing near the entrance and nothing lit deeper except what she carries; in some worlds a shaft drops to a second layer. She comes out the mouth she went in by, and a save written underground wakes her at that mouth, never down in the dark. Every place now also keeps the one distance from every other \u2014 the same margin, everywhere.',
+    why: 'Adam\u2019s locations buildout, and his ruling that caves are their own dimension: the overworld is dimension 0, and this cave is the first other entry on that list. The farmhouse is the Home story\u2019s ground and the chapel the Circle\u2019s; the cave machinery underneath \u2014 dimensions, travel that checks the ground before it moves her \u2014 is built to carry every pocket place that comes after.',
+  },
+  {
     merge: 'Merge #32',
     pr: 65,
     sha: '0b08e06',
