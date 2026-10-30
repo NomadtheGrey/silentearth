@@ -96,7 +96,7 @@
  *   while carried between craft and place (short interval —
  *   flagged: primitive-lean-to, thatch-hut, wattle-and-daub-hut,
  *   woven-cottage, small-wooden-hut, moss-cradle, campfire,
- *   hearth, kiln, writing-desk, stumpy-workstation,
+ *   hearth, kiln, cauldron, writing-desk, stumpy-workstation,
  *   crafted-workstation, potters-wheel, loom).
  * - Unknown ids default to 1 lb (never block the game on a
  *   missing row — flagged). LANE JUDGMENTS inside that rule,
@@ -312,6 +312,7 @@ export const ITEM_WEIGHT_LB: Readonly<Record<string, number>> = {
   [ITEMS.campfire]: 4,
   [ITEMS.hearth]: 4,
   [ITEMS.kiln]: 4,
+  [ITEMS.cauldron]: 4,
   [ITEMS.writingDesk]: 4,
   [ITEMS.stumpyWorkstation]: 4,
   [ITEMS.craftedWorkstation]: 4,
@@ -475,6 +476,7 @@ export const ITEM_DISPLAY_NAMES: Readonly<Record<string, string>> = {
   altar: 'Altar',
   'writing-desk': 'Writing Desk',
   'clay-pot': 'Clay Pot',
+  cauldron: 'Cauldron',
   'clay-brick': 'Clay Brick',
   'small-basket': 'Small Basket',
   'large-basket': 'Large Basket',
@@ -646,6 +648,7 @@ export const ITEM_DESCRIPTIONS: Readonly<Record<string, string>> = {
   // Crafted goods.
   'twined-cordage': 'Twined cord. It ties and binds half of everything you build.',
   'clay-pot': 'A fired clay pot. Stores food — and sunk in a creek, it is a pot trap. Not a cooking pot.',
+  cauldron: 'A broad clay cauldron. Set it on a fire — carcasses render, wax melts, and brews brew in it.',
   'clay-brick': 'A kiln-fired brick. No use for it yet.',
   torch: 'A torch, unlit. Light it from a fire, or with flint and stone.',
   'lit-torch': 'A lit torch. Bright light, and it never burns out.',

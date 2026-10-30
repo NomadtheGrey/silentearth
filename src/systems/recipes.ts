@@ -53,6 +53,7 @@ export const ITEMS = {
   candle: 'candle',
   beeswax: 'beeswax',
   tallow: 'tallow',
+  cauldron: 'cauldron',
   // New items (2026-10-25 design work).
   clay: 'clay',
   flint: 'flint',
@@ -989,6 +990,27 @@ const DRAFT_RECIPES: Recipe[] = [
       'second station). Food storage + salves / medicine / ' +
       'restoratives / reagents. NOT cooking. Also the pot trap: sink ' +
       'a pot in the creek.',
+  },
+  {
+    id: 'cauldron',
+    name: 'Cauldron',
+    status: 'draft',
+    output: { item: ITEMS.cauldron, quantity: 1 },
+    ingredients: [i(ITEMS.clay, 8)],
+    station: 'kiln',
+    notes:
+      'DRAFT. The big vessel, founded here (Adam\'s ' +
+      'no-iron ruling, 2026-10-30: the cauldron is CLAY — ' +
+      'shaped and kiln-fired like the pot, at several ' +
+      'times its size). Set it on a fire and it works: ' +
+      'carcasses render in it, wax melts in it, and her ' +
+      'brews brew in it (the future potions / salves pot, ' +
+      'per Adam\'s hearth picture). HOW the fire recipes ' +
+      'gate on the vessel — a present-not-consumed ' +
+      'requirement, or a named cauldron station — is ' +
+      'Adam\'s decision this hour and lands as its own ' +
+      'follow-up; this recipe founds the vessel under ' +
+      'either. Quantities draft.',
   },
   {
     id: 'clay-brick',
