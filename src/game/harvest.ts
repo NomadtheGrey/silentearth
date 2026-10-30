@@ -305,7 +305,7 @@ export function clayBonusChanceFor(moleActive: boolean): number {
  * craft time, and UI can re-check whenever 'harvest:inRange' fires.
  * Shape for consumers: workstation true maps to Systems'
  * StationContext 'workstation', false maps to null. Other stations
- * (wheel, loom, kiln, hearth, bloomery) do not exist yet, so they
+ * (wheel, loom, kiln, hearth) do not exist yet, so they
  * correctly read as unavailable — no placeholder stations are
  * invented here, and none are returned.
  */
