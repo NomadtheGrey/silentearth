@@ -605,6 +605,7 @@ export function schoolhouseSite(
   };
   let biome = weightsAtPos(center.x, center.z).dominant;
   let distance = SCHOOL_MAX_DIST_M;
+  let accepted = false;
   let fallback: { x: number; z: number; biome: BiomeId; distance: number } | null = null;
   for (let d = SCHOOL_MIN_DIST_M; d <= SCHOOL_MAX_DIST_M; d += GROVE_SCAN_STEP_M) {
     const x = spawn.x + dirX * d;
@@ -616,12 +617,31 @@ export function schoolhouseSite(
       center = { x, z };
       biome = w.dominant;
       distance = d;
+      accepted = true;
       break;
     }
-    if (d === SCHOOL_MAX_DIST_M && fallback) {
-      center = { x: fallback.x, z: fallback.z };
-      biome = fallback.biome;
-      distance = fallback.distance;
+  }
+  // Resolve AFTER the loop (the fallback fix's shape,
+  // swept to this scan 2026-10-30): the in-loop seat
+  // never fired when the band's last point was itself
+  // spacing-illegal — the continue skipped it and the
+  // initialized max point stood, illegally.
+  if (!accepted && fallback) {
+    center = { x: fallback.x, z: fallback.z };
+    biome = fallback.biome;
+    distance = fallback.distance;
+  }
+  if (!accepted && !fallback) {
+    // Starved bearing: extend past the band for the
+    // first spacing-legal point.
+    for (let d = SCHOOL_MAX_DIST_M + GROVE_SCAN_STEP_M; d <= 1200; d += GROVE_SCAN_STEP_M) {
+      const x = spawn.x + dirX * d;
+      const z = spawn.z + dirZ * d;
+      if (!(Math.hypot(x - grove.center.x, z - grove.center.z) >= spacing)) continue;
+      center = { x, z };
+      biome = weightsAtPos(x, z).dominant;
+      distance = d;
+      break;
     }
   }
 
@@ -987,6 +1007,7 @@ export function villageSite(
   };
   let biome = weightsAtPos(center.x, center.z).dominant;
   let distance = VILLAGE_MAX_DIST_M;
+  let accepted = false;
   let fallback: { x: number; z: number; biome: BiomeId; distance: number } | null = null;
   for (let d = VILLAGE_MIN_DIST_M; d <= VILLAGE_MAX_DIST_M; d += GROVE_SCAN_STEP_M) {
     const x = spawn.x + dirX * d;
@@ -1001,12 +1022,31 @@ export function villageSite(
       center = { x, z };
       biome = w.dominant;
       distance = d;
+      accepted = true;
       break;
     }
-    if (d === VILLAGE_MAX_DIST_M && fallback) {
-      center = { x: fallback.x, z: fallback.z };
-      biome = fallback.biome;
-      distance = fallback.distance;
+  }
+  // Resolve AFTER the loop (the fallback fix's shape,
+  // swept to this scan 2026-10-30): the in-loop seat
+  // never fired when the band's last point was itself
+  // spacing-illegal — the continue skipped it and the
+  // initialized max point stood, illegally.
+  if (!accepted && fallback) {
+    center = { x: fallback.x, z: fallback.z };
+    biome = fallback.biome;
+    distance = fallback.distance;
+  }
+  if (!accepted && !fallback) {
+    // Starved bearing: extend past the band for the
+    // first spacing-legal point.
+    for (let d = VILLAGE_MAX_DIST_M + GROVE_SCAN_STEP_M; d <= 1200; d += GROVE_SCAN_STEP_M) {
+      const x = spawn.x + dirX * d;
+      const z = spawn.z + dirZ * d;
+      if (!(spacingLegal(x, z))) continue;
+      center = { x, z };
+      biome = weightsAtPos(x, z).dominant;
+      distance = d;
+      break;
     }
   }
 
@@ -2038,6 +2078,7 @@ export function caveMouthSite(
   };
   let biome = weightsAtPos(center.x, center.z).dominant;
   let distance = CAVE_MOUTH_MAX_DIST_M;
+  let accepted = false;
   let fallback: { x: number; z: number; biome: BiomeId; distance: number } | null = null;
   for (let d = CAVE_MOUTH_MIN_DIST_M; d <= CAVE_MOUTH_MAX_DIST_M; d += GROVE_SCAN_STEP_M) {
     const x = spawn.x + dirX * d;
@@ -2049,12 +2090,31 @@ export function caveMouthSite(
       center = { x, z };
       biome = w.dominant;
       distance = d;
+      accepted = true;
       break;
     }
-    if (d === CAVE_MOUTH_MAX_DIST_M && fallback) {
-      center = { x: fallback.x, z: fallback.z };
-      biome = fallback.biome;
-      distance = fallback.distance;
+  }
+  // Resolve AFTER the loop (the fallback fix's shape,
+  // swept to this scan 2026-10-30): the in-loop seat
+  // never fired when the band's last point was itself
+  // spacing-illegal — the continue skipped it and the
+  // initialized max point stood, illegally.
+  if (!accepted && fallback) {
+    center = { x: fallback.x, z: fallback.z };
+    biome = fallback.biome;
+    distance = fallback.distance;
+  }
+  if (!accepted && !fallback) {
+    // Starved bearing: extend past the band for the
+    // first spacing-legal point.
+    for (let d = CAVE_MOUTH_MAX_DIST_M + GROVE_SCAN_STEP_M; d <= 1200; d += GROVE_SCAN_STEP_M) {
+      const x = spawn.x + dirX * d;
+      const z = spawn.z + dirZ * d;
+      if (!(spacingLegal(x, z))) continue;
+      center = { x, z };
+      biome = weightsAtPos(x, z).dominant;
+      distance = d;
+      break;
     }
   }
 
@@ -3043,6 +3103,7 @@ export function sunkenRoadSite(
   let center = { x: spawn.x + bDir.x * ROAD_MAX_DIST_M, z: spawn.z + bDir.z * ROAD_MAX_DIST_M };
   let biome = weightsAtPos(center.x, center.z).dominant;
   let distance = ROAD_MAX_DIST_M;
+  let accepted = false;
   let fallback: { x: number; z: number; biome: BiomeId; distance: number } | null = null;
   for (let d = ROAD_MIN_DIST_M; d <= ROAD_MAX_DIST_M; d += GROVE_SCAN_STEP_M) {
     const x = spawn.x + bDir.x * d;
@@ -3054,12 +3115,31 @@ export function sunkenRoadSite(
       center = { x, z };
       biome = w.dominant;
       distance = d;
+      accepted = true;
       break;
     }
-    if (d === ROAD_MAX_DIST_M && fallback) {
-      center = { x: fallback.x, z: fallback.z };
-      biome = fallback.biome;
-      distance = fallback.distance;
+  }
+  // Resolve AFTER the loop (the fallback fix's shape,
+  // swept to this scan 2026-10-30): the in-loop seat
+  // never fired when the band's last point was itself
+  // spacing-illegal — the continue skipped it and the
+  // initialized max point stood, illegally.
+  if (!accepted && fallback) {
+    center = { x: fallback.x, z: fallback.z };
+    biome = fallback.biome;
+    distance = fallback.distance;
+  }
+  if (!accepted && !fallback) {
+    // Starved bearing: extend past the band for the
+    // first spacing-legal point.
+    for (let d = ROAD_MAX_DIST_M + GROVE_SCAN_STEP_M; d <= 1200; d += GROVE_SCAN_STEP_M) {
+      const x = spawn.x + bDir.x * d;
+      const z = spawn.z + bDir.z * d;
+      if (!(spacingLegal(centersAt(x, z)))) continue;
+      center = { x, z };
+      biome = weightsAtPos(x, z).dominant;
+      distance = d;
+      break;
     }
   }
   const segmentCenters = centersAt(center.x, center.z);
@@ -3300,6 +3380,7 @@ export function railSidingSite(
   let center = { x: spawn.x + bDir.x * SIDING_MAX_DIST_M, z: spawn.z + bDir.z * SIDING_MAX_DIST_M };
   let biome = weightsAtPos(center.x, center.z).dominant;
   let distance = SIDING_MAX_DIST_M;
+  let accepted = false;
   let fallback: { x: number; z: number; biome: BiomeId; distance: number } | null = null;
   for (let d = SIDING_MIN_DIST_M; d <= SIDING_MAX_DIST_M; d += GROVE_SCAN_STEP_M) {
     const x = spawn.x + bDir.x * d;
@@ -3311,12 +3392,31 @@ export function railSidingSite(
       center = { x, z };
       biome = w.dominant;
       distance = d;
+      accepted = true;
       break;
     }
-    if (d === SIDING_MAX_DIST_M && fallback) {
-      center = { x: fallback.x, z: fallback.z };
-      biome = fallback.biome;
-      distance = fallback.distance;
+  }
+  // Resolve AFTER the loop (the fallback fix's shape,
+  // swept to this scan 2026-10-30): the in-loop seat
+  // never fired when the band's last point was itself
+  // spacing-illegal — the continue skipped it and the
+  // initialized max point stood, illegally.
+  if (!accepted && fallback) {
+    center = { x: fallback.x, z: fallback.z };
+    biome = fallback.biome;
+    distance = fallback.distance;
+  }
+  if (!accepted && !fallback) {
+    // Starved bearing: extend past the band for the
+    // first spacing-legal point.
+    for (let d = SIDING_MAX_DIST_M + GROVE_SCAN_STEP_M; d <= 1200; d += GROVE_SCAN_STEP_M) {
+      const x = spawn.x + bDir.x * d;
+      const z = spawn.z + bDir.z * d;
+      if (!(spacingLegal(x, z))) continue;
+      center = { x, z };
+      biome = weightsAtPos(x, z).dominant;
+      distance = d;
+      break;
     }
   }
   const a = { x: center.x - dir.x * half, z: center.z - dir.z * half };
