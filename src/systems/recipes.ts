@@ -448,23 +448,25 @@ const DRAFT_RECIPES: Recipe[] = [
       ITEMS.muskratCarcass,
       ITEMS.fishCarcass,
       ITEMS.eelCarcass,
-      ITEMS.crayfishCarcass,
-      ITEMS.frogCarcass,
       ITEMS.opossumCarcass,
       ITEMS.groundhogCarcass,
       ITEMS.raccoonCarcass,
     ],
     station: 'cauldron',
     notes:
-      'DRAFT. The carcasses\' first consuming recipe: any ' +
+      'DRAFT. The carcasses\' first consuming recipe: a ' +
       'trap carcass, rendered in the cauldron, yields ' +
-      'tallow x1. ONE recipe for all ten kinds via the ' +
+      'tallow x1. ONE recipe for EIGHT kinds via the ' +
       'either/or predecessor (upgradeFrom array — the ' +
       'Spade-Axe convergence path): the carcass is the ' +
-      'input, consumed whole. Adam\'s wording was "a trap ' +
-      'carcass", un-narrowed, so all ten render; the ' +
-      'mammal-only cut (fish / eel / crayfish / frog out) ' +
-      'stays available at his pin pass. Station ' +
+      'input, consumed whole. FROG and CRAYFISH are OUT ' +
+      '(Adam, 2026-10-30: no tallow worth the name in ' +
+      'either, and a crayfish doesn\'t come from a rabbit ' +
+      'trap); fish and eel stay in unless the pin pass ' +
+      'narrows further. A fatty-kinds premium (raccoon / ' +
+      'opossum yielding more) is an UNUSED dial — the ' +
+      'x3 melt is the longer road\'s reward, shared by ' +
+      'both roads. Station ' +
       '"cauldron" (Adam\'s ruling, 2026-10-30): the ' +
       'context is the FACED cauldron, placed on its ' +
       'hearth, with the hearth lit (Background + UI ' +

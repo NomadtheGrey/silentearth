@@ -673,14 +673,14 @@ export const ITEM_DESCRIPTIONS: Readonly<Record<string, string>> = {
   'pot-trap': 'A clay pot sunk in the creek. Set where you craft it; it catches passing game.',
   pitfall: 'A dug pit under a moss cover. Set where you craft it — digging one takes a spade-tier tool.',
   deadfall: 'Oak and stone, weighted to fall. Set where you craft it; it catches passing game.',
-  // Trap catches (not food; render into tallow in the cauldron).
+  // Trap catches (not food; most render into tallow in the cauldron — frog and crayfish don't).
   'rabbit-carcass': 'A caught rabbit. Renders into tallow in the cauldron.',
   'squirrel-carcass': 'A caught squirrel. Renders into tallow in the cauldron.',
   'muskrat-carcass': 'A caught muskrat. Renders into tallow in the cauldron.',
   'fish-carcass': 'A caught fish. Renders into tallow in the cauldron.',
   'eel-carcass': 'A caught eel. Renders into tallow in the cauldron.',
-  'crayfish-carcass': 'A caught crayfish. Renders into tallow in the cauldron.',
-  'frog-carcass': 'A caught frog. Renders into tallow in the cauldron.',
+  'crayfish-carcass': 'A caught crayfish. No use for it yet.',
+  'frog-carcass': 'A caught frog. No use for it yet.',
   'opossum-carcass': 'A caught opossum. Renders into tallow in the cauldron.',
   'groundhog-carcass': 'A caught groundhog. Renders into tallow in the cauldron.',
   'raccoon-carcass': 'A caught raccoon. Renders into tallow in the cauldron.',
