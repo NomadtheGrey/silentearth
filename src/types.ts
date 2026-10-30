@@ -154,7 +154,16 @@ export type ScatterKind =
   | 'storeRoof'
   | 'storePorch'
   | 'storeCounter'
-  | 'storeShelf';
+  | 'storeShelf'
+  // Site-pass kinds (the Drowned Mill, sites.ts — same
+  // rule): stone walls, the standing roof slope, the
+  // fallen slope, the wheel, and the race.
+  | 'millWall'
+  | 'millWallFallen'
+  | 'millRoof'
+  | 'millRoofFallen'
+  | 'millWheel'
+  | 'millRace';
 
 /** One placed scatter object in a chunk. y is its base height above ground. */
 export interface ScatterObject {

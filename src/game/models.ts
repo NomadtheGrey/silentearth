@@ -47,7 +47,7 @@ import type { ScatterKind } from '../types';
 import type { MeshSpec } from './objects';
 import type { AnimalKind } from './animals';
 import { hashSeed, mulberry32 } from './seed';
-import { CHAPEL_SEGMENT_M, FARM_SEGMENT_M, GROVE_CELL_M, SCHOOL_SEGMENT_M, STORE_SEGMENT_M, VILLAGE_SEGMENT_M } from './sites';
+import { CHAPEL_SEGMENT_M, FARM_SEGMENT_M, GROVE_CELL_M, MILL_SEGMENT_M, SCHOOL_SEGMENT_M, STORE_SEGMENT_M, VILLAGE_SEGMENT_M } from './sites';
 import { CAVE_CELL_M } from './caves';
 import { sunDirection, sunElevationAtCycle } from './sky';
 import { dayFraction } from './weather';
@@ -697,6 +697,76 @@ export function buildKindGeometry(spec: MeshSpec, kind: ScatterKind): THREE.Buff
       part(box(0.25, 0.5, 0.35), shade(e, 0.85), { p: [0.2, 0.38, 0] }),
       part(cyl(0.09, 0.09, 0.28, 6), e, { p: [0.75, 0.97, 0] }),
       part(box(0.4, 0.3, 0.4), shade(e, 1.15), { p: [-0.3, 0.98, 0] }),
+    ]);
+  }
+  // Kind overrides (the Drowned Mill set, sites.ts):
+  // stone walls with their tide band, the one standing
+  // slope, the fallen slope, the wheel, and the race.
+  // Local ground is y = -baseY.
+  if (kind === 'millWall') {
+    return merge([
+      part(box(MILL_SEGMENT_M, 3.2, 0.36), c),
+      part(box(MILL_SEGMENT_M, 0.9, 0.38), e, { p: [0, -1.15, 0] }),
+      part(box(MILL_SEGMENT_M, 0.22, 0.3), shade(c, 0.8), { p: [0, 1.5, 0] }),
+    ]);
+  }
+  if (kind === 'millWallFallen') {
+    // A wall segment lying flat: length along X, the
+    // wall's height fallen along Z, the tide band across
+    // its up-face.
+    return merge([
+      part(box(MILL_SEGMENT_M, 0.32, 3.2), c),
+      part(box(MILL_SEGMENT_M, 0.34, 0.9), e, { p: [0, 0.01, -1.0] }),
+      part(box(MILL_SEGMENT_M, 0.36, 0.24), shade(c, 0.85), { p: [0, 0.01, 1.35] }),
+    ]);
+  }
+  if (kind === 'millRoof') {
+    // ONE slope (over local +Z) + the ridge beam — the
+    // water slope is gone; the open side is the ruin.
+    return merge([
+      part(box(9.6, 0.09, 4.3), c, { p: [0, 1.32, 1.9], r: [-0.62, 0, 0] }),
+      part(box(9.6, 0.16, 0.22), e, { p: [0, 2.4, 0] }),
+    ]);
+  }
+  if (kind === 'millRoofFallen') {
+    // The fallen slope, crumpled against its wall.
+    return merge([
+      part(box(9.6, 0.09, 4.2), c, { p: [0, -0.1, 0], r: [0.5, 0, 0] }),
+      part(box(0.14, 0.14, 3.6), shade(e, 1.0), { p: [-2.2, 0.15, 0.3], r: [0.5, 0, 0.2] }),
+      part(box(0.14, 0.14, 3.6), shade(e, 1.0), { p: [2.2, 0.15, 0.3], r: [0.5, 0, -0.2] }),
+    ]);
+  }
+  if (kind === 'millWheel') {
+    // The great wheel in its local XY plane (axle along
+    // Z): hub, four spokes (eight arms), two rim rings of
+    // segments, and radial paddles — with a BROKEN ARC:
+    // segments 3 and 4 (rim + paddles) are simply gone.
+    const parts: THREE.BufferGeometry[] = [
+      part(cyl(0.26, 0.26, 0.55, 8), e, { r: [Math.PI / 2, 0, 0] }),
+    ];
+    for (let k = 0; k < 4; k++) {
+      parts.push(part(box(3.3, 0.13, 0.1), c, { r: [0, 0, (k * Math.PI) / 4] }));
+    }
+    for (let k = 0; k < 8; k++) {
+      if (k === 3 || k === 4) continue; // the broken arc
+      const a = (k * Math.PI) / 4;
+      const px = Math.cos(a) * 1.6;
+      const py = Math.sin(a) * 1.6;
+      parts.push(part(box(0.17, 1.25, 0.13), c, { p: [px, py, 0.3], r: [0, 0, a] }));
+      parts.push(part(box(0.17, 1.25, 0.13), c, { p: [px, py, -0.3], r: [0, 0, a] }));
+      parts.push(part(box(0.45, 0.07, 0.68), shade(e, 1.1), { p: [Math.cos(a) * 1.62, Math.sin(a) * 1.62, 0], r: [0, 0, a] }));
+    }
+    return merge(parts);
+  }
+  if (kind === 'millRace') {
+    // A stone-cheeked channel: two cheeks, a dark water
+    // strip between, cross boards at the ends.
+    return merge([
+      part(box(3.2, 0.5, 0.3), c, { p: [0, -0.05, 0.75] }),
+      part(box(3.2, 0.5, 0.3), c, { p: [0, -0.05, -0.75] }),
+      part(box(3.2, 0.06, 1.2), e, { p: [0, -0.2, 0] }),
+      part(box(0.3, 0.08, 1.8), shade(c, 0.9), { p: [-1.2, 0.22, 0] }),
+      part(box(0.3, 0.08, 1.8), shade(c, 0.9), { p: [1.2, 0.22, 0] }),
     ]);
   }
   switch (spec.shape) {

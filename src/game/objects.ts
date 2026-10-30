@@ -1313,6 +1313,97 @@ export const SOURCES: HarvestSourceDef[] = [
     biomes: ['oldfieldRise', 'meadow'],
     mesh: { shape: 'stone', color: 0x6b5638, extraColor: 0x8a7a5a, baseY: 1.1 },
   },
+  // The Drowned Mill set (Adam, 2026-10-30 — site-pass
+  // only, same rule as the sets above). Wood and stone:
+  // the no-iron ruling binds the build as it binds her
+  // crafting.
+  {
+    id: 'millWall',
+    kind: 'millWall',
+    name: 'Mill Wall',
+    description:
+      'A stone wall of the drowned mill (Adam, 2026-10-30), ' +
+      'dark at its foot where the water has stood.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['creekBottom', 'mirewood'],
+    mesh: { shape: 'stone', color: 0x77706a, extraColor: 0x3f3a33, baseY: 1.6 },
+  },
+  {
+    id: 'millWallFallen',
+    kind: 'millWallFallen',
+    name: 'Fallen Mill Wall',
+    description:
+      'A wall of the tipped mill (Adam, 2026-10-30), gone ' +
+      'over toward the water and lying where it fell. She ' +
+      'scrambles across these; nothing here is a room.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['creekBottom', 'mirewood'],
+    mesh: { shape: 'stone', color: 0x6e675e, extraColor: 0x3f3a33, baseY: 0.2 },
+  },
+  {
+    id: 'millRoof',
+    kind: 'millRoof',
+    name: 'Mill Roof',
+    description:
+      'The mill\u2019s standing roof slope (Adam, 2026-10-30) — ' +
+      'the land side. The water side fell long ago.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['creekBottom', 'mirewood'],
+    mesh: { shape: 'stone', color: 0x4f4234, extraColor: 0x6e5136, baseY: 0 },
+  },
+  {
+    id: 'millRoofFallen',
+    kind: 'millRoofFallen',
+    name: 'Fallen Roof',
+    description:
+      'The mill\u2019s water-side roof slope (Adam, 2026-10-30), ' +
+      'slid down against the wall it used to cover.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['creekBottom', 'mirewood'],
+    mesh: { shape: 'stone', color: 0x5d4c38, extraColor: 0x3a3128, baseY: 0.8 },
+  },
+  {
+    id: 'millWheel',
+    kind: 'millWheel',
+    name: 'Mill Wheel',
+    description:
+      'The mill\u2019s great wooden wheel (Adam, 2026-10-30), ' +
+      'broken and stilled, its lower arc sunk in the water ' +
+      'it once drank from.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['creekBottom', 'mirewood'],
+    mesh: { shape: 'stone', color: 0x5d4630, extraColor: 0x3e2f20, baseY: 1.35 },
+  },
+  {
+    id: 'millRace',
+    kind: 'millRace',
+    name: 'Mill Race',
+    description:
+      'The mill\u2019s race (Adam, 2026-10-30): a stone-cheeked ' +
+      'channel that once hurried the river under the wheel. ' +
+      'Now it just lets the water through.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['creekBottom', 'mirewood'],
+    mesh: { shape: 'stone', color: 0x6e6a5e, extraColor: 0x141a16, baseY: 0.25 },
+  },
   {
     id: 'snapwoodThicket',
     kind: 'snapWood',
