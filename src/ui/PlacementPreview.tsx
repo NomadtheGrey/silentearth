@@ -20,7 +20,7 @@
  * the caller decides for that spot.
  *
  * SHARED BY FIRE AND SHELTER: the same preview serves a
- * campfire/hearth/kiln/bloomery being placed and a house being
+ * campfire/hearth/kiln being placed and a house being
  * placed — the label names the thing, the shape stays the same.
  * It is pointer-transparent (it must never swallow the click
  * that confirms or cancels placement).
