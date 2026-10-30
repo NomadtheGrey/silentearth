@@ -1472,6 +1472,60 @@ export const SOURCES: HarvestSourceDef[] = [
   // the old world's leavings.
   // The Barn set (Adam, 2026-10-30 — site-pass only,
   // same rule as the sets above).
+  // The Grain Silo set (Adam, 2026-10-30 — site-pass
+  // only, same rule as the sets above).
+  {
+    id: 'siloBody',
+    kind: 'siloBody',
+    name: 'Grain Silo',
+    description:
+      'A grain silo (Adam, 2026-10-30), galvanized and rust-streaked, its hatch shut on the dark inside.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['oldfieldRise', 'meadow'],
+    mesh: { shape: 'stone', color: 0x9a958c, extraColor: 0x6e6a62, baseY: 4.7 },
+  },
+  {
+    id: 'siloBreached',
+    kind: 'siloBreached',
+    name: 'Breached Silo',
+    description:
+      'A grain silo (Adam, 2026-10-30) with its seam split \u2014 old grain spilled at its base.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['oldfieldRise', 'meadow'],
+    mesh: { shape: 'stone', color: 0x948e84, extraColor: 0x655f57, baseY: 4.7 },
+  },
+  {
+    id: 'siloFallen',
+    kind: 'siloFallen',
+    name: 'Fallen Silo',
+    description:
+      'A grain silo (Adam, 2026-10-30) down on its side where it fell.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['oldfieldRise', 'meadow'],
+    mesh: { shape: 'stone', color: 0x8f8a80, extraColor: 0x5f5a52, baseY: 1.7 },
+  },
+  {
+    id: 'grainBin',
+    kind: 'grainBin',
+    name: 'Grain Bin',
+    description:
+      'A squat grain bin (Adam, 2026-10-30), the silo\u2019s smaller companion.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['oldfieldRise', 'meadow'],
+    mesh: { shape: 'stone', color: 0x8a857c, extraColor: 0x6e6a62, baseY: 1.5 },
+  },
   {
     id: 'barnWall',
     kind: 'barnWall',

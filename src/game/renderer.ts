@@ -43,7 +43,7 @@ import {
 import { standingInWater, terrainSpeedAt, type WaterDisc } from './movement';
 import { treeKindAt } from './treeKind';
 import { riverParamsFor, riverRibbonForChunk } from './river';
-import { barnSite, caveMouthSite, chapelSite, drownedMillSite, farmhouseSite, generalStoreSite, groveSite, railSidingSite, schoolhouseSite, sunkenRoadSite, villageSite, wallsNearSites, type SiteFootprint } from './sites';
+import { barnSite, caveMouthSite, chapelSite, drownedMillSite, farmhouseSite, generalStoreSite, groveSite, railSidingSite, schoolhouseSite, siloSite, sunkenRoadSite, villageSite, wallsNearSites, type SiteFootprint } from './sites';
 import { caveFootprintFor, caveLayoutFor } from './caves';
 import type { RiverParams } from './river';
 import { fireState } from './fireState';
@@ -118,6 +118,7 @@ function computeSites(gen: WorldGen): SiteFootprint[] {
     sunkenRoadSite(String(gen.seed), spawn, (x, z) => gen.weightsAt(x, z)).footprint,
     railSidingSite(String(gen.seed), spawn, (x, z) => gen.weightsAt(x, z)).footprint,
     barnSite(String(gen.seed), spawn, (x, z) => gen.weightsAt(x, z)),
+    siloSite(String(gen.seed), spawn, (x, z) => gen.weightsAt(x, z)),
   ];
 }
 

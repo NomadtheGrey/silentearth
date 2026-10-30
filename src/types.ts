@@ -192,7 +192,14 @@ export type ScatterKind =
   | 'barnDoor'
   | 'barnLoft'
   | 'barnLeanTo'
-  | 'hayBale';
+  | 'hayBale'
+  // Site-pass kinds (the Grain Silo, sites.ts):
+  // the standing body, the breached body, the fallen
+  // body, and the companion grain bin.
+  | 'siloBody'
+  | 'siloBreached'
+  | 'siloFallen'
+  | 'grainBin';
 
 /** One placed scatter object in a chunk. y is its base height above ground. */
 export interface ScatterObject {

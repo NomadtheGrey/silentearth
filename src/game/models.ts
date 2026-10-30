@@ -965,6 +965,57 @@ export function buildKindGeometry(spec: MeshSpec, kind: ScatterKind): THREE.Buff
       part(cyl(0.46, 0.46, 0.1, 10), e, { r: [0, 0, Math.PI / 2] }),
     ]);
   }
+  // Kind overrides (the Grain Silo set, sites.ts): the
+  // standing body (ladder on local +Z, pipe at +X, rust
+  // streaks baked in), the breached body (dark seam on
+  // +Z, pale spill at its foot), the fallen body (lying
+  // along local +Z from the base, dome at the far end,
+  // its ladder shed beside it), the companion bin.
+  // Local ground is y = -baseY.
+  if (kind === 'siloBody' || kind === 'siloBreached') {
+    const parts: THREE.BufferGeometry[] = [
+      part(cyl(1.7, 1.7, 8.0, 14), c, { p: [0, -0.7, 0] }),
+      part(new THREE.SphereGeometry(1.7, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2), shade(c, 1.08), { p: [0, 3.3, 0], s: [1, 0.82, 1] }),
+      part(cyl(1.78, 1.78, 0.25, 14), e, { p: [0, -4.58, 0] }),
+      part(cyl(0.09, 0.09, 8.6, 8), e, { p: [1.95, -0.4, 0.35] }),
+      part(cyl(0.09, 0.09, 1.1, 8), e, { p: [1.45, 3.85, 0.35], r: [0, 0, Math.PI / 2] }),
+      part(box(0.28, 5.5, 0.03), shade(c, 0.72), { p: [Math.sin(0.7) * 1.71, -1.2, Math.cos(0.7) * 1.71], r: [0, 0.7, 0] }),
+      part(box(0.28, 5.5, 0.03), shade(c, 0.72), { p: [Math.sin(2.4) * 1.71, -1.2, Math.cos(2.4) * 1.71], r: [0, 2.4, 0] }),
+      part(box(0.28, 5.5, 0.03), shade(c, 0.72), { p: [Math.sin(4.4) * 1.71, -1.2, Math.cos(4.4) * 1.71], r: [0, 4.4, 0] }),
+    ];
+    if (kind === 'siloBody') {
+      parts.push(part(box(0.05, 7.6, 0.05), e, { p: [-0.28, -0.9, 1.74] }));
+      parts.push(part(box(0.05, 7.6, 0.05), e, { p: [0.28, -0.9, 1.74] }));
+      for (let i = 0; i < 8; i++) {
+        parts.push(part(box(0.6, 0.05, 0.05), e, { p: [0, -4.2 + i * 0.95, 1.74] }));
+      }
+      parts.push(part(box(0.8, 1.1, 0.06), shade(c, 0.8), { p: [0, -4.1, 1.71] }));
+    } else {
+      parts.push(part(box(0.7, 5.6, 0.08), 0x14100c, { p: [0, -1.4, 1.7] }));
+      parts.push(part(box(0.9, 0.5, 0.1), shade(c, 1.1), { p: [0, 1.5, 1.71], r: [0.3, 0, 0.15] }));
+      parts.push(part(sphere(1.5, 10, 8), 0xbfa96a, { p: [0, -4.55, 2.3], s: [1, 0.32, 1] }));
+    }
+    return merge(parts);
+  }
+  if (kind === 'siloFallen') {
+    return merge([
+      part(cyl(1.7, 1.7, 7.6, 14), c, { p: [0, 0, 3.8], r: [Math.PI / 2, 0, 0] }),
+      part(sphere(1.7, 14, 10), shade(c, 1.08), { p: [0, 0, 7.9], s: [1, 1, 0.75] }),
+      part(cyl(1.78, 1.78, 0.25, 14), e, { p: [0, 0, 0.3], r: [Math.PI / 2, 0, 0] }),
+      part(box(0.6, 0.06, 5.5), e, { p: [2.3, -1.62, 4.4], r: [0, 0.12, 0] }),
+      part(box(0.06, 0.08, 5.5), shade(e, 1.1), { p: [2.02, -1.58, 4.4], r: [0, 0.12, 0] }),
+      part(box(0.06, 0.08, 5.5), shade(e, 1.1), { p: [2.58, -1.58, 4.4], r: [0, 0.12, 0] }),
+      part(sphere(1.1, 10, 8), 0xbfa96a, { p: [0, -1.5, -0.9], s: [1.2, 0.3, 1.2] }),
+    ]);
+  }
+  if (kind === 'grainBin') {
+    return merge([
+      part(cyl(2.2, 2.2, 2.2, 14), c, { p: [0, -0.4, 0] }),
+      part(cone(2.45, 0.9, 14), e, { p: [0, 1.15, 0] }),
+      part(cyl(0.3, 0.3, 0.25, 8), e, { p: [0, 1.62, 0] }),
+      part(box(0.7, 1.0, 0.06), shade(c, 0.8), { p: [0, -1.0, 2.21] }),
+    ]);
+  }
   switch (spec.shape) {
     case 'tree': {
       const branches: THREE.BufferGeometry[] = [];

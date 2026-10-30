@@ -3781,6 +3781,309 @@ export function barnContains(site: BarnSite, x: number, z: number): boolean {
   return Math.hypot(x - site.center.x, z - site.center.z) <= site.clearRadius;
 }
 
+// ---------------------------------------------------------------------------
+// The Grain Silo — site #12
+// ---------------------------------------------------------------------------
+//
+// WHAT IT IS: farm country's vertical landmark — a
+// galvanized cylinder (r 1.7 m, body 8 m, dome on top,
+// ~9.4 m at scale 1) with a ladder up one side and the
+// fill pipe beside it, on a cracked pad. Not a room: the
+// base hatch opens on the grain shaft's dark, and in
+// this landing the hatch is shut — the silo is a marker
+// she navigates by, the tallest thing in its country.
+//
+// THE DIAL SHEET (Adam's variety ruling, 2026-10-30 —
+// each stream consumed in a FIXED order per instance):
+//   SCALE ('silo:scale'): ONE uniform draw 0.85–1.25 —
+//     height lands 8–12 m and the radius with it; a
+//     family of silos, not a size chart (the one-geometry-
+//     per-kind constraint, stated in the claim).
+//   RUIN STORY ('silo:state'): standing / breached (a
+//     split seam down one side — dark gash in the mesh,
+//     a pale spill mound at its base, geometry-honest) /
+//     fallen (the whole cylinder down on its side along
+//     a CARDINAL heading, so its long box stays exact —
+//     the mill's lesson: gone over or standing, never a
+//     lean the boxes would lie about). DRAFT 50/25/25.
+//   ARRANGEMENT ('silo:plan'): the ladder faces the
+//     spawn approach, jittered a quarter-turn either
+//     way; the bin stands on a rolled side; the fall
+//     and the gash take rolled cardinals.
+//   FEATURE PICKS: the pad always; a squat GRAIN BIN
+//     companion at ~35% (DRAFT); rubble 0–2 at the base.
+//   WEAR: rust streaks baked into the body's geometry,
+//     never tint.
+//
+// Siting (DEV's spacing rule): band 400–750 m; spacing
+// against ALL eleven predecessors (nine circles, the
+// barn radially, both ribbons by line); acceptance
+// oldfieldRise-dominant OR meadow ≥ 0.2, school-style
+// fallback; born with the resolve-after-loop scan and
+// its starved-bearing guard.
+
+export const SILO_MIN_DIST_M = 400;
+export const SILO_MAX_DIST_M = 750;
+export const SILO_CLEAR_RADIUS_M = 16;
+export const SILO_MEADOW_EDGE_WEIGHT = 0.2;
+export const SILO_BASE_RADIUS_M = 1.7;
+/** Body 8.0 + dome ~1.4, at scale 1. */
+export const SILO_TOTAL_HEIGHT_M = 9.4;
+
+export type SiloState = 'standing' | 'breached' | 'fallen';
+
+export interface SiloSite {
+  id: 'silo';
+  center: { x: number; z: number };
+  clearRadius: number;
+  biome: BiomeId;
+  distance: number;
+  state: SiloState;
+  /** The uniform scale draw (0.85–1.25). */
+  scale: number;
+  /** World cardinal the body fell toward (fallen only). */
+  fallSide: 'north' | 'south' | 'east' | 'west' | null;
+  /** At the base hatch, on the ladder side. */
+  hatchSpot: { x: number; z: number };
+  /** The standing silo's crown (a staging hook). */
+  topSpot: { x: number; z: number };
+  topHeightM: number;
+  binSpot: { x: number; z: number } | null;
+  features: ScatterObject[];
+  walls: SiteWallBox[];
+  bounds: { minX: number; maxX: number; minZ: number; maxZ: number };
+}
+
+const siloCache = new Map<string, SiloSite>();
+
+type CardinalVec = { x: number; z: number; side: 'north' | 'east' | 'south' | 'west' };
+const CARDINALS: CardinalVec[] = [
+  { x: 0, z: -1, side: 'north' },
+  { x: 1, z: 0, side: 'east' },
+  { x: 0, z: 1, side: 'south' },
+  { x: -1, z: 0, side: 'west' },
+];
+
+export function siloSite(
+  seed: string,
+  spawn: { x: number; z: number },
+  weightsAtPos: (x: number, z: number) => BiomeWeights,
+): SiloSite {
+  const key = `${seed}::silo`;
+  const cached = siloCache.get(key);
+  if (cached) return cached;
+
+  const grove = groveSite(seed, spawn, (x, z) => weightsAtPos(x, z).dominant);
+  const school = schoolhouseSite(seed, spawn, weightsAtPos);
+  const village = villageSite(seed, spawn, weightsAtPos);
+  const farm = farmhouseSite(seed, spawn, weightsAtPos);
+  const chapel = chapelSite(seed, spawn, weightsAtPos);
+  const mouth = caveMouthSite(seed, spawn, weightsAtPos);
+  const store = generalStoreSite(seed, spawn, weightsAtPos);
+  const mill = drownedMillSite(seed, spawn, weightsAtPos);
+  const barn = barnSite(seed, spawn, weightsAtPos);
+  const road = sunkenRoadSite(seed, spawn, weightsAtPos);
+  const siding = railSidingSite(seed, spawn, weightsAtPos);
+  const circles = [grove, school, village, farm, chapel, mouth, store, mill, barn];
+  const spacingLegal = (x: number, z: number): boolean =>
+    circles.every(
+      (s) =>
+        Math.hypot(x - s.center.x, z - s.center.z) >=
+        s.clearRadius + SILO_CLEAR_RADIUS_M + SITE_SPACING_MARGIN_M,
+    ) &&
+    distToSegment(x, z, road.a, road.b) >= ROAD_RIBBON_HALF_WIDTH_M + SILO_CLEAR_RADIUS_M + SITE_SPACING_MARGIN_M &&
+    distToSegment(x, z, siding.a, siding.b) >= SIDING_HALF_WIDTH_M + SILO_CLEAR_RADIUS_M + SITE_SPACING_MARGIN_M;
+
+  const bearing = mulberry32(deriveSeed(seed, 'site:silo'))() * Math.PI * 2;
+  const dirX = Math.cos(bearing);
+  const dirZ = Math.sin(bearing);
+  let center = {
+    x: spawn.x + dirX * SILO_MAX_DIST_M,
+    z: spawn.z + dirZ * SILO_MAX_DIST_M,
+  };
+  let biome = weightsAtPos(center.x, center.z).dominant;
+  let distance = SILO_MAX_DIST_M;
+  let fallback: { x: number; z: number; biome: BiomeId; distance: number } | null = null;
+  let accepted = false;
+  for (let d = SILO_MIN_DIST_M; d <= SILO_MAX_DIST_M; d += GROVE_SCAN_STEP_M) {
+    const x = spawn.x + dirX * d;
+    const z = spawn.z + dirZ * d;
+    if (!spacingLegal(x, z)) continue;
+    const w = weightsAtPos(x, z);
+    if (!fallback) fallback = { x, z, biome: w.dominant, distance: d };
+    if (w.dominant === 'oldfieldRise' || w.weights.meadow >= SILO_MEADOW_EDGE_WEIGHT) {
+      center = { x, z };
+      biome = w.dominant;
+      distance = d;
+      accepted = true;
+      break;
+    }
+  }
+  if (!accepted && fallback) {
+    center = { x: fallback.x, z: fallback.z };
+    biome = fallback.biome;
+    distance = fallback.distance;
+  }
+  if (!accepted && !fallback) {
+    for (let d = SILO_MAX_DIST_M + GROVE_SCAN_STEP_M; d <= 1200; d += GROVE_SCAN_STEP_M) {
+      const x = spawn.x + dirX * d;
+      const z = spawn.z + dirZ * d;
+      if (!spacingLegal(x, z)) continue;
+      center = { x, z };
+      biome = weightsAtPos(x, z).dominant;
+      distance = d;
+      break;
+    }
+  }
+
+  // --- The dial sheet (fixed consumption order) --------
+  const scale = 0.85 + mulberry32(deriveSeed(seed, 'silo:scale'))() * 0.4;
+  const stateRand = mulberry32(deriveSeed(seed, 'silo:state'));
+  const stateRoll = stateRand();
+  const state: SiloState = stateRoll < 0.5 ? 'standing' : stateRoll < 0.75 ? 'breached' : 'fallen';
+  const planRand = mulberry32(deriveSeed(seed, 'silo:plan'));
+  const ladderJitter = Math.floor(planRand() * 3) - 1;
+  const binPresent = planRand() < 0.35;
+  const binQuarter = Math.floor(planRand() * 4);
+  const fallQuarter = Math.floor(planRand() * 4);
+  const gashQuarter = Math.floor(planRand() * 4);
+  const rubbleCount = Math.floor(planRand() * 3);
+
+  const r = SILO_BASE_RADIUS_M * scale;
+  // The approach cardinal: the compass quarter the
+  // spawn direction falls in, from the silo's seat.
+  const toSpawn = { x: spawn.x - center.x, z: spawn.z - center.z };
+  const approachQuarter =
+    Math.abs(toSpawn.x) > Math.abs(toSpawn.z)
+      ? toSpawn.x > 0
+        ? 1
+        : 3
+      : toSpawn.z > 0
+        ? 2
+        : 0;
+  const ladderDir = CARDINALS[(approachQuarter + ladderJitter + 4) % 4];
+  const rotYOf = (d: { x: number; z: number }): number => Math.atan2(d.x, d.z);
+
+  const features: ScatterObject[] = [];
+  const walls: SiteWallBox[] = [];
+  const wall = (cx: number, cz: number, hx: number, hz: number): void => {
+    walls.push({ minX: cx - hx, maxX: cx + hx, minZ: cz - hz, maxZ: cz + hz });
+  };
+
+  features.push({
+    kind: 'riverSilt',
+    x: center.x,
+    z: center.z,
+    y: 0,
+    scale: 2.2 + scale,
+    rotY: 0,
+  });
+
+  let fallSide: SiloSite['fallSide'] = null;
+  let topHeightM = SILO_TOTAL_HEIGHT_M * scale;
+  if (state === 'fallen') {
+    const fall = CARDINALS[fallQuarter];
+    fallSide = fall.side;
+    features.push({
+      kind: 'siloFallen',
+      x: center.x,
+      z: center.z,
+      y: 0,
+      scale,
+      rotY: rotYOf(fall),
+    });
+    const len = SILO_TOTAL_HEIGHT_M * scale;
+    if (fall.x !== 0) {
+      walls.push({
+        minX: Math.min(center.x, center.x + fall.x * len),
+        maxX: Math.max(center.x, center.x + fall.x * len),
+        minZ: center.z - r,
+        maxZ: center.z + r,
+      });
+    } else {
+      walls.push({
+        minX: center.x - r,
+        maxX: center.x + r,
+        minZ: Math.min(center.z, center.z + fall.z * len),
+        maxZ: Math.max(center.z, center.z + fall.z * len),
+      });
+    }
+    topHeightM = SILO_BASE_RADIUS_M * 2 * scale;
+  } else {
+    features.push({
+      kind: state === 'breached' ? 'siloBreached' : 'siloBody',
+      x: center.x,
+      z: center.z,
+      y: 0,
+      scale,
+      rotY: state === 'breached' ? rotYOf(CARDINALS[gashQuarter]) : rotYOf(ladderDir),
+    });
+    wall(center.x, center.z, r, r);
+  }
+
+  let binSpot: { x: number; z: number } | null = null;
+  if (binPresent) {
+    const binDir = CARDINALS[binQuarter];
+    binSpot = { x: center.x + binDir.x * 5.4, z: center.z + binDir.z * 5.4 };
+    features.push({
+      kind: 'grainBin',
+      x: binSpot.x,
+      z: binSpot.z,
+      y: 0,
+      scale: 1,
+      rotY: rotYOf(binDir),
+    });
+    wall(binSpot.x, binSpot.z, 2.3, 2.3);
+  }
+
+  for (let i = 0; i < rubbleCount; i++) {
+    const a = planRand() * Math.PI * 2;
+    const dd = 2.6 + planRand() * 1.2;
+    features.push({
+      kind: 'rubble',
+      x: center.x + Math.cos(a) * dd,
+      z: center.z + Math.sin(a) * dd,
+      y: 0,
+      scale: 0.5 + planRand() * 0.4,
+      rotY: planRand() * Math.PI,
+    });
+  }
+
+  const site: SiloSite = {
+    id: 'silo',
+    center,
+    clearRadius: SILO_CLEAR_RADIUS_M,
+    biome,
+    distance,
+    state,
+    scale,
+    fallSide,
+    hatchSpot: {
+      x: center.x + ladderDir.x * (r + 0.6),
+      z: center.z + ladderDir.z * (r + 0.6),
+    },
+    topSpot: { x: center.x, z: center.z },
+    topHeightM,
+    binSpot,
+    features,
+    walls,
+    bounds: {
+      minX: center.x - SILO_CLEAR_RADIUS_M,
+      maxX: center.x + SILO_CLEAR_RADIUS_M,
+      minZ: center.z - SILO_CLEAR_RADIUS_M,
+      maxZ: center.z + SILO_CLEAR_RADIUS_M,
+    },
+  };
+  siloCache.set(key, site);
+  return site;
+}
+
+/** True when a world position lies inside the silo's
+ *  clearing. */
+export function siloContains(site: SiloSite, x: number, z: number): boolean {
+  return Math.hypot(x - site.center.x, z - site.center.z) <= site.clearRadius;
+}
+
 /** The standing spacing rule (formalized by DEV,
  *  2026-10-30): every site's siting scan keeps its centre
  *  at least (the other site's clear radius + its own
