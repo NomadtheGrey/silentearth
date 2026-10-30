@@ -204,7 +204,6 @@ import type { WorldGen } from './worldgen';
 import { boneItemId, boneKindAt } from './boneKind';
 import { treeKindAt } from './treeKind';
 import { TOO_HUNGRY_STAGE, type HungerStageQuery } from './hunger';
-import { fireState } from './fireState';
 import { loomState } from './loomState';
 import { pileState } from './pileState';
 import { torchState } from './torchState';
@@ -301,34 +300,27 @@ export function clayBonusChanceFor(moleActive: boolean): number {
 }
 
 /**
- * Station presence at (x, z), as FACTS the shell composes
- * into Systems' StationContext values. Query, not event —
- * crafting checks availability at craft time, and UI can
- * re-check whenever 'harvest:inRange' fires. Three facts,
- * all read at the same HARVEST_RANGE (2.5 m):
+ * Station presence at (x, z): two FACTS, both read at
+ * the same HARVEST_RANGE (2.5 m):
  * - workstation: a stump within range (stumps are
- *   workstation anchors in objects.ts) -> station
- *   'workstation'.
- * - loom: a placed loom within range (loomState) ->
- *   station 'loom'.
- * - litFire: a LIT fire within range (fireState; an
- *   unlit fire never counts) -> station 'fire' directly,
- *   and station 'cauldron' composed shell-side with the
- *   carried half (lit fire + cauldron carried; the
- *   carried check is the shell's, not this query's).
- *   The fact is generic — any lit fire of any type —
- *   and settles nothing about narrower composition
- *   rules (e.g. a hearth-specific cauldron), which stay
- *   open for Adam and would narrow shell-side.
- * No placeholder stations are invented here: presence
- * for the remaining station tags is not built, and no
- * fact is returned for them.
+ *   workstation anchors in objects.ts).
+ * - loom: a placed loom within range (loomState).
+ * Their consumers are the shell's StationPanel door
+ * (keyed on workstation) and the station-anchor
+ * derivation (the harvest column's projection point,
+ * gated on both) — NOT the crafting feed: under
+ * Adam's faced-target law (2026-10-30) every station
+ * feeds from her one faced target, so no fire fact is
+ * carried here and no context mapping is built on
+ * this. (A litFire fact + a fallback mapper lived
+ * here briefly and were removed in the #30 cleanup —
+ * zero consumers once the feed went faced-target.)
  */
 export function stationPresence(
   gen: WorldGen,
   x: number,
   z: number,
-): { workstation: boolean; loom: boolean; litFire: boolean } {
+): { workstation: boolean; loom: boolean } {
   // Felled stumps count too — and this check must read state, not
   // just the passed generator, because callers pass the RAW
   // generator (App passes genRef.current) while felled stumps live
@@ -357,12 +349,7 @@ export function stationPresence(
   // precedent) counts as station 'loom'. This reads live
   // loomState, like the felled-stump check reads live state.
   const loom = loomState.loomsInRange(x, z, HARVEST_RANGE);
-  // Lit-fire presence (Background, 2026-10-30): a LIT fire
-  // within the same HARVEST_RANGE counts as the fire fact
-  // (station 'fire'; shell-side half of 'cauldron'). Reads
-  // live fireState; unlit fires never count.
-  const litFire = fireState.litFireInRange(x, z, HARVEST_RANGE);
-  return { workstation, loom, litFire };
+  return { workstation, loom };
 }
 
 /**
@@ -460,29 +447,6 @@ export function placedTorchNearHive(
     if (Math.hypot(torch.x - hiveX, torch.z - hiveZ) <= range) return true;
   }
   return false;
-}
-
-/**
- * Map station presence onto Systems' StationContext values.
- * Loom takes precedence when both are nearby: canCraft
- * requires an EXACT station match, so a single context cannot
- * satisfy both families at once, and the gap this landing
- * closes is garments — standing at a loom must read as
- * 'loom', or garments stay uncraftable. FLAGGED WART: while
- * both a stump and a loom are in range, workstation recipes
- * read as mismatched until she steps out of loom range.
- * The presence object itself carries both booleans, so UI's
- * later CraftingMenu wiring can surface both contexts if it
- * wants; this mapping is the single-context fallback. The
- * `loom` field is optional so presence objects built before
- * this landing (workstation only) still map.
- */
-export function stationContextForPresence(presence: {
-  workstation: boolean;
-  loom?: boolean;
-}): 'workstation' | 'loom' | null {
-  if (presence.loom) return 'loom';
-  return presence.workstation ? 'workstation' : null;
 }
 
 /** Type guard: the permitted:false arm of HarvestYieldOutcome. */
