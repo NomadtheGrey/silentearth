@@ -313,6 +313,23 @@ export interface EventMap {
    */
   'altar:removed': { id: string };
   /**
+   * A writing desk was placed (deskState.placeDesk, Adam
+   * 2026-10-30 — placeable + visible ONLY, no desk
+   * actions; the grimoire resides on it and its workings
+   * arrive with the grimoire's own design turn). Free
+   * placement, cost-free engine primitive — the craft +
+   * consume lives with Systems + UI. Renderer rebuilds
+   * the placed group from this.
+   */
+  'desk:placed': { id: string; x: number; z: number };
+  /**
+   * A placed desk was removed (deskState.removeDesk). No
+   * pickup/removal mechanic exists in this order — the
+   * event exists so the renderer + shell stay in sync if
+   * one ever does. Renderer rebuilds the placed group.
+   */
+  'desk:removed': { id: string };
+  /**
    * A stump anchor gained the workstation addition
    * (stumpState.upgradeStump, Adam 2026-10-28 — stumpy
    * workstation upgrade). Same stumpSiteId, same

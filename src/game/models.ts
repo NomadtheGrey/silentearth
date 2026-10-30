@@ -967,6 +967,49 @@ export function buildAltarGroup(): THREE.Group {
 }
 
 /**
+ * A placed writing desk (Adam 2026-10-30 — the grimoire's
+ * site, placeable + visible only, no desk actions).
+ * Primitives, all wood, so it reads as a desk where the
+ * altar reads as a stone table: a wooden top, four legs,
+ * an apron rail under the top's front edge, and a shallow
+ * drawer front with a knob. NO candle: a candle on the
+ * desk is Adam's parked design aside — none exists and
+ * none is drawn. Sizes are lane-decided drafts for his
+ * sighting (top 1.2 x 0.65 m, surface at 0.78 m).
+ */
+export function buildDeskGroup(): THREE.Group {
+  const g = new THREE.Group();
+  // Four legs at the top's corners, inset.
+  const legGeo = new THREE.BoxGeometry(0.07, 0.72, 0.07);
+  const legMat = meshMat(0x6b4a2f);
+  for (const sx of [-1, 1]) {
+    for (const sz of [-1, 1]) {
+      const leg = new THREE.Mesh(legGeo, legMat);
+      leg.position.set(sx * 0.52, 0.36, sz * 0.26);
+      g.add(leg);
+    }
+  }
+  // Apron rail under the top, front edge: the frame band
+  // a desk shows between its legs and its top.
+  const rail = new THREE.Mesh(new THREE.BoxGeometry(1.04, 0.14, 0.04), meshMat(0x6b4a2f));
+  rail.position.set(0, 0.65, 0.28);
+  g.add(rail);
+  // Drawer front, centred on the rail, a shade darker —
+  // the writing-desk read — with a small knob.
+  const drawer = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.13, 0.02), meshMat(0x5a4028));
+  drawer.position.set(0, 0.65, 0.305);
+  g.add(drawer);
+  const knob = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.04, 0.03), meshMat(0x3a2818));
+  knob.position.set(0, 0.65, 0.325);
+  g.add(knob);
+  // Wooden top: 1.2 x 0.06 x 0.65, top surface at 0.78.
+  const top = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.06, 0.65), meshMat(0x7a5a38));
+  top.position.set(0, 0.75, 0);
+  g.add(top);
+  return g;
+}
+
+/**
  * A staged ritual bone (Adam 2026-10-27 — tier-1 Waking,
  * site side). The read-at-a-glance shape, my design
  * (flagged): a small pale bone LYING FLAT — shaft with a
