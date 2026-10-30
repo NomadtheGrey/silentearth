@@ -2849,6 +2849,288 @@ export function drownedMillContains(site: MillSite, x: number, z: number): boole
   return Math.hypot(x - site.center.x, z - site.center.z) <= site.clearRadius;
 }
 
+// ---------------------------------------------------------------------------
+// THE SUNKEN ROAD — site #9 (Adam, 2026-10-30; claim
+// approved by DEV). A LINEAR place: "a drowned stretch
+// of old road running somewhere with its ends lost" —
+// Travel fragments' ground (the marks staging rides the
+// exported line later). The registry's shape does NOT
+// change for it: the road registers as a CHAIN OF
+// STANDARD FOOTPRINTS (five overlapping circles along
+// the line), each carrying its own partitioned features,
+// so the site pass, the clustering check, and every
+// other consumer keep speaking centre + radius.
+// ---------------------------------------------------------------------------
+
+/** Siting band for the midpoint, meters (DRAFT). */
+export const ROAD_MIN_DIST_M = 500;
+export const ROAD_MAX_DIST_M = 850;
+/** Each footprint circle's clearing radius (DRAFT). */
+export const ROAD_SEGMENT_CLEAR_M = 13;
+/** Spacing between footprint centres along the line. */
+export const ROAD_SEGMENT_SPACING_M = 22;
+/** Footprint circles in the chain. */
+export const ROAD_SEGMENTS = 5;
+/** Road width, meters (DRAFT). */
+export const ROAD_WIDTH_M = 4.4;
+/** Wet-acceptance: creekBottom + deepBog weight (DRAFT). */
+export const ROAD_WET_WEIGHT = 0.3;
+
+/** The derived Sunken Road: one per world seed. */
+export interface RoadSite {
+  id: string;
+  seed: string;
+  /** The line's midpoint — the siting anchor. */
+  center: { x: number; z: number };
+  /** Dominant biome at the midpoint. */
+  biome: BiomeId;
+  /** Midpoint distance from spawn, meters. */
+  distance: number;
+  /** Line endpoints (the exported line for staging). */
+  a: { x: number; z: number };
+  b: { x: number; z: number };
+  /** Unit direction a -> b. */
+  dir: { x: number; z: number };
+  /** The footprint centres along the line. */
+  segmentCenters: { x: number; z: number }[];
+  /** The chain of standard footprints (what registers). */
+  footprints: SiteFootprint[];
+  /** All features (the footprints partition this list). */
+  features: ScatterObject[];
+  walls: SiteWallBox[];
+}
+
+const roadCache = new Map<string, RoadSite>();
+
+/**
+ * Derive the world's Sunken Road. `weightsAtPos` returns
+ * the full weights + dominant at a position. Memoized.
+ */
+export function sunkenRoadSite(
+  seed: string,
+  spawn: { x: number; z: number },
+  weightsAtPos: (x: number, z: number) => BiomeWeights,
+): RoadSite {
+  const cached = roadCache.get(`${seed}::road`);
+  if (cached) return cached;
+
+  const earlier = [
+    groveSite(seed, spawn, (x, z) => weightsAtPos(x, z).dominant),
+    schoolhouseSite(seed, spawn, weightsAtPos),
+    villageSite(seed, spawn, weightsAtPos),
+    farmhouseSite(seed, spawn, weightsAtPos),
+    chapelSite(seed, spawn, weightsAtPos),
+    caveMouthSite(seed, spawn, weightsAtPos),
+    generalStoreSite(seed, spawn, weightsAtPos),
+    drownedMillSite(seed, spawn, weightsAtPos),
+  ];
+
+  // Heading: the road's own draw — roads run somewhere,
+  // not at spawn.
+  const heading = mulberry32(deriveSeed(seed, 'road:heading'))() * Math.PI * 2;
+  const dir = { x: Math.cos(heading), z: Math.sin(heading) };
+  const halfSpan = ((ROAD_SEGMENTS - 1) / 2) * ROAD_SEGMENT_SPACING_M;
+  const centersAt = (mx: number, mz: number): { x: number; z: number }[] => {
+    const out: { x: number; z: number }[] = [];
+    for (let i = 0; i < ROAD_SEGMENTS; i++) {
+      const s = -halfSpan + i * ROAD_SEGMENT_SPACING_M;
+      out.push({ x: mx + dir.x * s, z: mz + dir.z * s });
+    }
+    return out;
+  };
+  const spacingLegal = (centers: { x: number; z: number }[]): boolean =>
+    centers.every((c) =>
+      earlier.every(
+        (s) =>
+          Math.hypot(c.x - s.center.x, c.z - s.center.z) >=
+          s.clearRadius + ROAD_SEGMENT_CLEAR_M + SITE_SPACING_MARGIN_M,
+      ),
+    );
+  const wetAt = (x: number, z: number): boolean => {
+    const w = weightsAtPos(x, z);
+    return (
+      w.dominant === 'creekBottom' ||
+      w.dominant === 'deepBog' ||
+      w.weights.creekBottom + w.weights.deepBog >= ROAD_WET_WEIGHT
+    );
+  };
+
+  // Midpoint scan on the bearing; acceptance = the whole
+  // chain spacing-legal AND the midpoint wet (the middle
+  // drowned; the ends reach for drier ground).
+  const bearing = mulberry32(deriveSeed(seed, 'site:road'))() * Math.PI * 2;
+  const bDir = { x: Math.cos(bearing), z: Math.sin(bearing) };
+  let center = { x: spawn.x + bDir.x * ROAD_MAX_DIST_M, z: spawn.z + bDir.z * ROAD_MAX_DIST_M };
+  let biome = weightsAtPos(center.x, center.z).dominant;
+  let distance = ROAD_MAX_DIST_M;
+  let fallback: { x: number; z: number; biome: BiomeId; distance: number } | null = null;
+  for (let d = ROAD_MIN_DIST_M; d <= ROAD_MAX_DIST_M; d += GROVE_SCAN_STEP_M) {
+    const x = spawn.x + bDir.x * d;
+    const z = spawn.z + bDir.z * d;
+    if (!spacingLegal(centersAt(x, z))) continue;
+    const w = weightsAtPos(x, z);
+    if (!fallback) fallback = { x, z, biome: w.dominant, distance: d };
+    if (wetAt(x, z)) {
+      center = { x, z };
+      biome = w.dominant;
+      distance = d;
+      break;
+    }
+    if (d === ROAD_MAX_DIST_M && fallback) {
+      center = { x: fallback.x, z: fallback.z };
+      biome = fallback.biome;
+      distance = fallback.distance;
+    }
+  }
+  const segmentCenters = centersAt(center.x, center.z);
+  const a = { x: center.x - dir.x * (halfSpan + ROAD_SEGMENT_CLEAR_M), z: center.z - dir.z * (halfSpan + ROAD_SEGMENT_CLEAR_M) };
+  const b = { x: center.x + dir.x * (halfSpan + ROAD_SEGMENT_CLEAR_M), z: center.z + dir.z * (halfSpan + ROAD_SEGMENT_CLEAR_M) };
+
+  // --- Layout (plan stream) --------------------------------
+  const planRand = mulberry32(deriveSeed(seed, 'road:plan'));
+  const perp = { x: -dir.z, z: dir.x };
+  const theta = Math.atan2(-dir.z, dir.x); // geometry +X -> dir
+  const features: ScatterObject[] = [];
+  const walls: SiteWallBox[] = [];
+  const at = (s: number, off: number): { x: number; z: number } => ({
+    x: center.x + dir.x * s + perp.x * off,
+    z: center.z + dir.z * s + perp.z * off,
+  });
+
+  // Broken pavement: stations every 5.2 m; existence and
+  // size thin toward the lost ends; the middle stations
+  // ride the sunken variant.
+  const slabSpan = halfSpan + 8;
+  for (let s = -slabSpan; s <= slabSpan; s += 5.2) {
+    const mid = Math.abs(s);
+    const p = mid <= 26 ? 0.95 : mid <= 42 ? 0.75 : 0.45;
+    if (planRand() > p) continue;
+    const sunk = mid <= 30 && planRand() < 0.55;
+    const w = at(s, (planRand() * 2 - 1) * 0.3);
+    features.push({
+      kind: sunk ? 'roadSlabSunk' : 'roadSlab',
+      x: w.x,
+      z: w.z,
+      y: 0,
+      scale: mid > 42 ? 0.8 : 1,
+      rotY: theta + (planRand() * 2 - 1) * 0.04,
+    });
+  }
+  // The drowned stretch: water + silt ON the line.
+  {
+    const count = 5 + Math.floor(planRand() * 3);
+    for (let i = 0; i < count; i++) {
+      const s = (planRand() * 2 - 1) * 30;
+      const w = at(s, (planRand() * 2 - 1) * 1.1);
+      features.push({
+        kind: i % 2 === 0 ? 'standingWater' : 'riverSilt',
+        x: w.x,
+        z: w.z,
+        y: 0,
+        scale: 1 + planRand() * 0.5,
+        rotY: planRand() * Math.PI,
+      });
+    }
+  }
+  // Posts along one shoulder; one of them (the standing
+  // post nearest her approach along the line) carries
+  // the sign. Standing posts box; broken ones are stubs.
+  {
+    const postSide = planRand() < 0.5 ? 1 : -1;
+    const sSpawn = Math.max(
+      -halfSpan,
+      Math.min(halfSpan, (spawn.x - center.x) * dir.x + (spawn.z - center.z) * dir.z),
+    );
+    interface PostSpot { s: number; standing: boolean }
+    const spots: PostSpot[] = [];
+    for (const s of [-44, -22, 0, 22, 44]) {
+      if (planRand() > 0.8) continue;
+      spots.push({ s, standing: planRand() < 0.7 });
+    }
+    let signS: number | null = null;
+    const standingSpots = spots.filter((p) => p.standing);
+    if (standingSpots.length > 0) {
+      signS = standingSpots.reduce((a2, b2) => (Math.abs(b2.s - sSpawn) < Math.abs(a2.s - sSpawn) ? b2 : a2)).s;
+    }
+    for (const p of spots) {
+      const w = at(p.s, postSide * (ROAD_WIDTH_M / 2 + 0.8));
+      if (p.s === signS) {
+        features.push({ kind: 'roadSign', x: w.x, z: w.z, y: 0, scale: 1, rotY: theta + Math.PI / 2 });
+        walls.push({ minX: w.x - 0.13, maxX: w.x + 0.13, minZ: w.z - 0.13, maxZ: w.z + 0.13 });
+      } else {
+        features.push({ kind: 'roadPost', x: w.x, z: w.z, y: 0, scale: p.standing ? 1 : 0.45, rotY: theta });
+        if (p.standing) walls.push({ minX: w.x - 0.13, maxX: w.x + 0.13, minZ: w.z - 0.13, maxZ: w.z + 0.13 });
+      }
+    }
+    if (signS === null) {
+      // No post stood: the sign stands alone at her
+      // approach point — the place keeps its marker.
+      const w = at(sSpawn, postSide * (ROAD_WIDTH_M / 2 + 0.8));
+      features.push({ kind: 'roadSign', x: w.x, z: w.z, y: 0, scale: 1, rotY: theta + Math.PI / 2 });
+      walls.push({ minX: w.x - 0.13, maxX: w.x + 0.13, minZ: w.z - 0.13, maxZ: w.z + 0.13 });
+    }
+  }
+
+  // Partition into the chain of footprints: every
+  // feature and wall to its nearest centre, exactly once.
+  const footprints: SiteFootprint[] = segmentCenters.map((c) => ({
+    center: c,
+    clearRadius: ROAD_SEGMENT_CLEAR_M,
+    features: [],
+    walls: [],
+    bounds: {
+      minX: c.x - ROAD_SEGMENT_CLEAR_M,
+      maxX: c.x + ROAD_SEGMENT_CLEAR_M,
+      minZ: c.z - ROAD_SEGMENT_CLEAR_M,
+      maxZ: c.z + ROAD_SEGMENT_CLEAR_M,
+    },
+  }));
+  const nearestFp = (x: number, z: number): number => {
+    let best = 0;
+    let bd = Infinity;
+    segmentCenters.forEach((c, i) => {
+      const d = Math.hypot(x - c.x, z - c.z);
+      if (d < bd) {
+        bd = d;
+        best = i;
+      }
+    });
+    return best;
+  };
+  for (const f of features) footprints[nearestFp(f.x, f.z)].features.push(f);
+  for (const w of walls) footprints[nearestFp((w.minX + w.maxX) / 2, (w.minZ + w.maxZ) / 2)].walls.push(w);
+
+  const site: RoadSite = {
+    id: 'road',
+    seed,
+    center,
+    biome,
+    distance,
+    a,
+    b,
+    dir,
+    segmentCenters,
+    footprints,
+    features,
+    walls,
+  };
+  roadCache.set(`${seed}::road`, site);
+  return site;
+}
+
+/** True when a world position lies inside the road's
+ *  corridor (point-to-line distance within the chain's
+ *  clearing radius — a slight superset of the union of
+ *  circles at the pinches, noted in the claim). */
+export function sunkenRoadContains(site: RoadSite, x: number, z: number): boolean {
+  const abx = site.b.x - site.a.x;
+  const abz = site.b.z - site.a.z;
+  const t = Math.max(0, Math.min(1, ((x - site.a.x) * abx + (z - site.a.z) * abz) / (abx * abx + abz * abz)));
+  const px = site.a.x + abx * t;
+  const pz = site.a.z + abz * t;
+  return Math.hypot(x - px, z - pz) <= ROAD_SEGMENT_CLEAR_M;
+}
+
 /** The standing spacing rule (formalized by DEV,
  *  2026-10-30): every site's siting scan keeps its centre
  *  at least (the other site's clear radius + its own

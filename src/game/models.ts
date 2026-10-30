@@ -769,6 +769,41 @@ export function buildKindGeometry(spec: MeshSpec, kind: ScatterKind): THREE.Buff
       part(box(0.3, 0.08, 1.8), shade(c, 0.9), { p: [1.2, 0.22, 0] }),
     ]);
   }
+  // Kind overrides (the Sunken Road set, sites.ts):
+  // pavement slabs (the sunken variant carries its tilt
+  // in the mesh), shoulder posts, the signed post.
+  // Local ground is y = -baseY.
+  if (kind === 'roadSlab') {
+    return merge([
+      part(box(5, 0.12, 4.4), c),
+      part(box(5, 0.13, 0.5), e, { p: [0, 0, 1.95] }),
+      part(box(5, 0.13, 0.5), e, { p: [0, 0, -1.95] }),
+      part(box(0.18, 0.13, 4.4), e, { p: [0.8, 0.005, 0] }),
+      part(box(2.2, 0.13, 0.16), e, { p: [-1.2, 0.005, 0.9] }),
+    ]);
+  }
+  if (kind === 'roadSlabSunk') {
+    const tilt: [number, number, number] = [0.05, 0, 0.035];
+    return merge([
+      part(box(5, 0.12, 4.4), c, { r: tilt }),
+      part(box(5, 0.13, 0.5), e, { p: [0, 0, 1.95], r: tilt }),
+      part(box(5, 0.13, 0.5), e, { p: [0, 0, -1.95], r: tilt }),
+      part(box(0.18, 0.13, 4.4), e, { p: [0.8, 0.005, 0], r: tilt }),
+    ]);
+  }
+  if (kind === 'roadPost') {
+    return merge([
+      part(box(0.14, 1.1, 0.14), c),
+      part(box(0.2, 0.08, 0.2), e, { p: [0, 0.58, 0] }),
+    ]);
+  }
+  if (kind === 'roadSign') {
+    return merge([
+      part(box(0.14, 1.8, 0.14), c),
+      part(box(1.1, 0.6, 0.06), e, { p: [0, 0.55, 0] }),
+      part(box(0.08, 0.5, 0.08), shade(c, 0.9), { p: [0, 0.55, -0.07] }),
+    ]);
+  }
   switch (spec.shape) {
     case 'tree': {
       const branches: THREE.BufferGeometry[] = [];

@@ -1404,6 +1404,67 @@ export const SOURCES: HarvestSourceDef[] = [
     biomes: ['creekBottom', 'mirewood'],
     mesh: { shape: 'stone', color: 0x6e6a5e, extraColor: 0x141a16, baseY: 0.25 },
   },
+  // The Sunken Road set (Adam, 2026-10-30 — site-pass
+  // only, same rule as the sets above).
+  {
+    id: 'roadSlab',
+    kind: 'roadSlab',
+    name: 'Road Slab',
+    description:
+      'A slab of the old road (Adam, 2026-10-30), cracked ' +
+      'and shouldered with ditch-dark edges. The road ran ' +
+      'somewhere once; its ends are lost.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['creekBottom', 'deepBog'],
+    mesh: { shape: 'stone', color: 0x5a574e, extraColor: 0x33302a, baseY: 0.06 },
+  },
+  {
+    id: 'roadSlabSunk',
+    kind: 'roadSlabSunk',
+    name: 'Sunken Slab',
+    description:
+      'A road slab (Adam, 2026-10-30) that sank where the ' +
+      'wet took the road\u2019s middle — tilted, drowned, ' +
+      'still holding the line.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['creekBottom', 'deepBog'],
+    mesh: { shape: 'stone', color: 0x504e45, extraColor: 0x2c2a24, baseY: 0.02 },
+  },
+  {
+    id: 'roadPost',
+    kind: 'roadPost',
+    name: 'Road Post',
+    description:
+      'A marker post from the old road\u2019s shoulder ' +
+      '(Adam, 2026-10-30). Some still stand; some broke.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['creekBottom', 'deepBog'],
+    mesh: { shape: 'stone', color: 0x5d4630, extraColor: 0x3e2f20, baseY: 0.55 },
+  },
+  {
+    id: 'roadSign',
+    kind: 'roadSign',
+    name: 'Road Sign',
+    description:
+      'The road\u2019s signed post (Adam, 2026-10-30). The ' +
+      'board is blank now — whatever it named, the weather ' +
+      'took it.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['creekBottom', 'deepBog'],
+    mesh: { shape: 'stone', color: 0x5d4630, extraColor: 0x8a7a5a, baseY: 0.9 },
+  },
   {
     id: 'snapwoodThicket',
     kind: 'snapWood',

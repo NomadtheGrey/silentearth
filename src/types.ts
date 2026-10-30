@@ -163,7 +163,14 @@ export type ScatterKind =
   | 'millRoof'
   | 'millRoofFallen'
   | 'millWheel'
-  | 'millRace';
+  | 'millRace'
+  // Site-pass kinds (the Sunken Road, sites.ts — same
+  // rule): pavement slabs (sound and sunken), shoulder
+  // posts, and the one signed post.
+  | 'roadSlab'
+  | 'roadSlabSunk'
+  | 'roadPost'
+  | 'roadSign';
 
 /** One placed scatter object in a chunk. y is its base height above ground. */
 export interface ScatterObject {
