@@ -1829,6 +1829,15 @@ import {
   type PlacedCauldron as PlacedCauldronEntity,
 } from './game/cauldronState';
 import { groveContains, groveSite } from './game/sites';
+import { caveLayoutFor, caveMouths } from './game/caves';
+import { dimensionState } from './game/dimensionState';
+import {
+  ascend,
+  descend,
+  enterCave,
+  exitCave,
+  type TravelOutcome,
+} from './game/dimensionTravel';
 import {
   placeCauldron as grantPlaceCauldron,
   pickupCauldron as grantPickupCauldron,
@@ -8295,6 +8304,11 @@ export default function App() {
     | { kind: 'site'; siteId: string; distance: number }
     | { kind: 'fire' | 'tent' | 'torch' | 'loom'; id: string; distance: number }
     | { kind: 'cauldron'; id: string; distance: number }
+    | {
+        kind: 'cave-enter' | 'cave-exit' | 'cave-descend' | 'cave-climb';
+        id: string;
+        distance: number;
+      }
     | { kind: 'home'; distance: number }
     | { kind: 'scry'; distance: number };
 
@@ -8480,6 +8494,55 @@ export default function App() {
     for (const cauldron of cauldronState.snapshot()) {
       considerPlaced('cauldron', cauldron.hearthId, cauldron.x, cauldron.z);
     }
+    // CAVE TRAVEL (claim as approved 2026-10-30): the
+    // dimension anchors join the same race — on the
+    // surface, the cave dimension's mouths (the cave
+    // mouth site + the farm's cellar door, one arm);
+    // underground, the current layer's anchors (layer 1:
+    // the entry anchor is the way OUT, its shaft anchor
+    // the way DOWN; layer 2: the entry anchor she
+    // arrived at is the way back UP). Read live from
+    // Background's caves module, like the looms read
+    // their singleton — no shell mirror.
+    const considerCave = (
+      kind: 'cave-enter' | 'cave-exit' | 'cave-descend' | 'cave-climb',
+      id: string,
+      x: number,
+      z: number,
+    ): void => {
+      const f = facingOf(x, z);
+      if (f.distance <= HARVEST_RANGE) anyCandidateInRange = true;
+      if (f.isFaced && f.distance <= HARVEST_RANGE) {
+        challengers.push({ kind, id, distance: f.distance });
+      }
+    };
+    if (!dimensionState.isUnderground()) {
+      const gen = genRef.current;
+      if (gen) {
+        for (const mouth of caveMouths(
+          String(gen.seed),
+          gen.findSpawn(),
+          (x, z) => gen.weightsAt(x, z),
+        )) {
+          considerCave('cave-enter', mouth.id, mouth.spot.x, mouth.spot.z);
+        }
+      }
+    } else {
+      const layout = caveLayoutFor(seed);
+      if (dimensionState.currentLayer() === 1) {
+        considerCave(
+          'cave-exit',
+          '',
+          layout.entryAnchor.x,
+          layout.entryAnchor.z,
+        );
+        const shaft = layout.layers[0]?.shaftAnchor;
+        if (shaft) considerCave('cave-descend', '', shaft.x, shaft.z);
+      } else if (dimensionState.currentLayer() === 2) {
+        const entry = layout.layers[1]?.entryAnchor;
+        if (entry) considerCave('cave-climb', '', entry.x, entry.z);
+      }
+    }
     if (homeHouse !== undefined) {
       const f = facingOf(homeHouse.x, homeHouse.z);
       // WHOLE-HUT ZONE (Adam, 2026-10-29 — inside his hut
@@ -8539,6 +8602,62 @@ export default function App() {
       return { kind: 'ground', target: ground, distance: 0 };
     }
     return null;
+  };
+
+  // CAVE TRAVEL REFUSALS (her register, DRAFT for
+  // Adam's pin pass): Background's travel validates
+  // before anything moves, so a refusal is whole — the
+  // line is the whole surface. 'wrong-dimension' and
+  // 'unknown-mouth' are unreachable from a correct
+  // winner and share the blocked line as backstop.
+  const CAVE_TRAVEL_REFUSALS: Record<string, string> = {
+    'no-deeper-layer': 'The shaft goes no deeper.',
+    'already-deepest': 'There is nowhere deeper here.',
+    'anchor-blocked': 'The way is blocked.',
+    'wrong-dimension': 'The way is blocked.',
+    'unknown-mouth': 'The way is blocked.',
+  };
+
+  // The travel press: compose Background's validated
+  // travel functions from the faced winner. The faced
+  // anchor's position is re-derived for the refusal's
+  // feedback chip (the winner union carries ids, not
+  // positions — the placed-kind pattern).
+  const handleCaveTravel = (winner: {
+    kind: 'cave-enter' | 'cave-exit' | 'cave-descend' | 'cave-climb';
+    id: string;
+  }): void => {
+    const player = playerRef.current;
+    const renderer = rendererRef.current;
+    const gen = genRef.current;
+    if (!player || !renderer || !gen) return;
+    let anchorPos: { x: number; z: number } | null = null;
+    let outcome: TravelOutcome;
+    if (winner.kind === 'cave-enter') {
+      const mouth = caveMouths(
+        String(gen.seed),
+        gen.findSpawn(),
+        (x, z) => gen.weightsAt(x, z),
+      ).find((m) => m.id === winner.id);
+      anchorPos = mouth?.spot ?? null;
+      outcome = enterCave(renderer, player, gen, winner.id);
+    } else if (winner.kind === 'cave-exit') {
+      anchorPos = caveLayoutFor(seed).entryAnchor;
+      outcome = exitCave(renderer, player);
+    } else if (winner.kind === 'cave-descend') {
+      anchorPos = caveLayoutFor(seed).layers[0]?.shaftAnchor ?? null;
+      outcome = descend(player);
+    } else {
+      anchorPos = caveLayoutFor(seed).layers[1]?.entryAnchor ?? null;
+      outcome = ascend(player);
+    }
+    if (outcome.ok === false) {
+      const line = CAVE_TRAVEL_REFUSALS[outcome.reason] ?? 'The way is blocked.';
+      if (anchorPos) {
+        const anchor = projectAnchor(anchorPos.x, anchorPos.z, 'scatter');
+        if (anchor) showFeedback(line, 'blocked', anchor.x, anchor.y);
+      }
+    }
   };
 
   // The USE press itself: fire the winner's common
@@ -8604,6 +8723,12 @@ export default function App() {
         break;
       case 'cauldron':
         setSelectedCauldronHearthId(winner.id);
+        break;
+      case 'cave-enter':
+      case 'cave-exit':
+      case 'cave-descend':
+      case 'cave-climb':
+        handleCaveTravel(winner);
         break;
       case 'home':
         setHomeMenuOpen(true);
@@ -9596,9 +9721,17 @@ export default function App() {
                   useWinner.kind === 'torch' ||
                   useWinner.kind === 'home'
                 ? 'OPEN'
-              : useWinner.kind === 'scry'
-                ? 'SCRY'
-                : undefined;
+              : useWinner.kind === 'cave-enter'
+                ? 'ENTER'
+                : useWinner.kind === 'cave-descend'
+                  ? 'DESCEND'
+                  : useWinner.kind === 'cave-climb'
+                    ? 'CLIMB'
+                    : useWinner.kind === 'cave-exit'
+                      ? 'EXIT'
+                      : useWinner.kind === 'scry'
+                        ? 'SCRY'
+                        : undefined;
 
 
 
