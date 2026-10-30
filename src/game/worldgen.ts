@@ -17,11 +17,11 @@
 
 import { BIOMES, createFields, weightsAt, groundColorAt, marshWeight } from './biomes';
 import type { Fields } from './biomes';
-import { mulberry32, deriveSeed } from './seed';
+import { mulberry32, deriveSeed, hashSeed } from './seed';
 import { treeKindAt } from './treeKind';
-import { groveSite, schoolhouseSite } from './sites';
+import { groveSite, schoolhouseSite, type SiteFootprint } from './sites';
 import { CHUNK_SIZE, BASE_SCATTER_PER_CHUNK, GROUND_SEGMENTS } from '../constants';
-import type { ChunkData, ScatterKind, ScatterObject } from '../types';
+import type { BiomeWeights, ChunkData, ScatterKind, ScatterObject } from '../types';
 
 export interface WorldGen {
   seed: string;
@@ -73,12 +73,190 @@ const SCATTER_KINDS: ScatterKind[] = [
   'ladySlipper', 'iris', 'waterLily',
 ];
 
+// === Clustering pass (Adam, 2026-10-30) ======================================
+//
+// Adam's landscape grammar: "some spread out trees, ya, but
+// also smaller groves, larger forests, etc." Until now trees
+// were pure mix picks — uniform within a chunk, no grove or
+// stand formation anywhere. This pass is a POST-PASS over the
+// slot loop's output, on its own derived streams: every
+// non-tree object stays byte-identical, and only standing-tree
+// objects ('tree', and scenery 'tallTree' for the thinning
+// half) are filtered and added. Downstream passes (acorns,
+// hives, oak conversion, sites) read the final tree set, so
+// they follow the clustered world without knowing it exists.
+
+// Grove centres derive from a coarse world grid, independent
+// of chunks: cell size in meters (DRAFT).
+export const CLUSTER_CELL_M = 128;
+// Woodland weight (forest + tanglewood + mirewood) at the
+// centre at or above which a cell runs the full spectrum.
+export const CLUSTER_WOODLAND_MIN = 0.35;
+// Presence rolls per cell (DRAFT).
+export const CLUSTER_PRESENCE_FULL = 0.65;
+export const CLUSTER_PRESENCE_SMALL = 0.3;
+// Fraction of lone trees (outside every grove) culled (DRAFT):
+// the thinning is what makes groves read as groves.
+export const CLUSTER_THIN_CULL = 0.4;
+// Scenery tall trees cull gentler (DRAFT): they plant no
+// groves of their own, so the full cull would halve the
+// world's emergent silhouettes; a light cull keeps them
+// reading as open-country landmarks.
+export const CLUSTER_TALL_THIN_CULL = 0.2;
+
+export interface ClusterGrove {
+  /** World position of the grove centre. */
+  x: number;
+  z: number;
+  radius: number;
+  /** Standing trees the grove plants (before chunk containment). */
+  count: number;
+  sizeClass: 'small' | 'large' | 'huge';
+  /** The grid cell this grove derives from (its stream key). */
+  cellX: number;
+  cellZ: number;
+}
+
+/**
+ * The grove (if any) deriving from grid cell (gx, gz) — a pure
+ * function of the seed, the biome weights, and the registered
+ * sites. The biome mask (Adam's tentative shape): no groves
+ * where saltFlat or deepBog dominates; the full spectrum where
+ * woodland carries; small groves only in meadow / oldfieldRise
+ * country (hedgerow character). DEV's condition: a centre
+ * whose radius would overlap a site's clear footprint is
+ * skipped outright — a stand beheaded by a clearing would read
+ * as a bug, not a grove.
+ */
+export function groveForCell(
+  seed: string,
+  gx: number,
+  gz: number,
+  weightsAtPos: (x: number, z: number) => BiomeWeights,
+  sites: readonly SiteFootprint[],
+): ClusterGrove | null {
+  const rand = mulberry32(deriveSeed(seed, `grove-cell:${gx},${gz}`));
+  const jitter = CLUSTER_CELL_M / 4;
+  const x = (gx + 0.5) * CLUSTER_CELL_M + (rand() * 2 - 1) * jitter;
+  const z = (gz + 0.5) * CLUSTER_CELL_M + (rand() * 2 - 1) * jitter;
+  const w = weightsAtPos(x, z);
+  if (w.dominant === 'saltFlat' || w.dominant === 'deepBog') return null;
+  const woodland =
+    (w.weights.forest ?? 0) + (w.weights.tanglewood ?? 0) + (w.weights.mirewood ?? 0);
+  let tier: 'full' | 'small' | null = null;
+  if (woodland >= CLUSTER_WOODLAND_MIN) tier = 'full';
+  else if (w.dominant === 'meadow' || w.dominant === 'oldfieldRise') tier = 'small';
+  if (tier === null) return null;
+  if (rand() >= (tier === 'full' ? CLUSTER_PRESENCE_FULL : CLUSTER_PRESENCE_SMALL)) {
+    return null;
+  }
+  let sizeClass: ClusterGrove['sizeClass'];
+  let radius: number;
+  let count: number;
+  const roll = tier === 'small' ? 0 : rand();
+  if (tier === 'small' || roll < 0.55) {
+    sizeClass = 'small';
+    radius = 6 + rand() * 4;
+    count = 5 + Math.floor(rand() * 5);
+  } else if (roll < 0.9) {
+    sizeClass = 'large';
+    radius = 14 + rand() * 8;
+    count = 16 + Math.floor(rand() * 17);
+  } else {
+    // Huge forests: Adam's "maybe" — present in v1, rare.
+    sizeClass = 'huge';
+    radius = 35 + rand() * 15;
+    count = 50 + Math.floor(rand() * 33);
+  }
+  for (const site of sites) {
+    if (Math.hypot(x - site.center.x, z - site.center.z) < radius + site.clearRadius) {
+      return null;
+    }
+  }
+  return { x, z, radius, count, sizeClass, cellX: gx, cellZ: gz };
+}
+
+/**
+ * Apply the clustering pass to one chunk's freshly rolled
+ * scatter: thin the lone trees, then plant each nearby grove's
+ * trees that land inside this chunk. Grove candidate positions
+ * derive per grove from its own stream, drawn unconditionally
+ * in a fixed order, so every chunk that consults a grove
+ * reproduces the same candidates and takes only its own — no
+ * duplicates, no misses at borders.
+ */
+function applyClustering(
+  objects: ScatterObject[],
+  seed: string,
+  cx: number,
+  cz: number,
+  weightsAtPos: (x: number, z: number) => BiomeWeights,
+  sites: readonly SiteFootprint[],
+): void {
+  const originX = cx * CHUNK_SIZE;
+  const originZ = cz * CHUNK_SIZE;
+  // This chunk's cell + its neighbours: a grove's farthest
+  // reach (jitter 32 + radius 50 = 82 m) never crosses more
+  // than one cell border, so the 3x3 is exhaustive.
+  const cellX = Math.floor(originX / CLUSTER_CELL_M);
+  const cellZ = Math.floor(originZ / CLUSTER_CELL_M);
+  const groves: ClusterGrove[] = [];
+  for (let gx = cellX - 1; gx <= cellX + 1; gx++) {
+    for (let gz = cellZ - 1; gz <= cellZ + 1; gz++) {
+      const g = groveForCell(seed, gx, gz, weightsAtPos, sites);
+      if (g) groves.push(g);
+    }
+  }
+  // Thinning: lone standing trees outside every grove are
+  // culled at CLUSTER_THIN_CULL, rolled per position (seeded),
+  // so the verdict is the tree's, not the chunk's.
+  for (let i = objects.length - 1; i >= 0; i--) {
+    const o = objects[i];
+    if (o.kind !== 'tree' && o.kind !== 'tallTree') continue;
+    if (groves.some((g) => Math.hypot(o.x - g.x, o.z - g.z) <= g.radius)) continue;
+    const roll = mulberry32(hashSeed(`${seed}::thin:${o.x.toFixed(2)},${o.z.toFixed(2)}`))();
+    const cull = o.kind === 'tallTree' ? CLUSTER_TALL_THIN_CULL : CLUSTER_THIN_CULL;
+    if (roll < cull) objects.splice(i, 1);
+  }
+  // Planting: each grove's candidate trees, centre-weighted
+  // (the pow curve crowds the middle and softens the edge).
+  for (const g of groves) {
+    const rand = mulberry32(deriveSeed(seed, `grove-trees:${g.cellX},${g.cellZ}`));
+    for (let i = 0; i < g.count; i++) {
+      const angle = rand() * Math.PI * 2;
+      const dist = g.radius * Math.pow(rand(), 0.58);
+      const scale = 0.7 + rand() * 0.7;
+      const rotY = rand() * Math.PI * 2;
+      const x = g.x + Math.cos(angle) * dist;
+      const z = g.z + Math.sin(angle) * dist;
+      if (x < originX || x >= originX + CHUNK_SIZE || z < originZ || z >= originZ + CHUNK_SIZE) {
+        continue;
+      }
+      objects.push({ kind: 'tree', x, z, y: 0, scale, rotY });
+    }
+  }
+}
+
 export function createWorldGen(seed: string): WorldGen {
   const fieldsAt = createFields(seed);
 
   const weightsAtPos = (x: number, z: number) => weightsAt(fieldsAt(x, z));
   const groundColorAtPos = (x: number, z: number) =>
     groundColorAt(fieldsAt(x, z), weightsAtPos(x, z));
+
+  // The registered sites, derived once per generator (both the
+  // clustering pass and the site pass consult them; findSpawn
+  // is a full scan, so it runs once here, not once per chunk).
+  let sitesCache: SiteFootprint[] | null = null;
+  const getSites = (): SiteFootprint[] => {
+    if (!sitesCache) {
+      sitesCache = [
+        groveSite(seed, findSpawn(), (x, z) => weightsAtPos(x, z).dominant),
+        schoolhouseSite(seed, findSpawn(), weightsAtPos),
+      ];
+    }
+    return sitesCache;
+  };
 
   function generateChunk(cx: number, cz: number): ChunkData {
     // One PRNG stream per chunk, derived from seed + chunk coords. Scatter
@@ -153,6 +331,11 @@ export function createWorldGen(seed: string): WorldGen {
         rotY: rand() * Math.PI * 2,
       });
     }
+
+    // Clustering pass (Adam, 2026-10-30): groves and stands
+    // form, lone trees thin — its own streams, so only the
+    // tree set moves; every later pass reads the final trees.
+    applyClustering(objects, seed, cx, cz, weightsAtPos, getSites());
 
     // Ground acorns (Adam, 2026-10-26): one cluster beside each
     // downed oak in this chunk — acorns are hand-picked from the
@@ -279,10 +462,7 @@ export function createWorldGen(seed: string): WorldGen {
     // world without sites — the site probes prove it against a
     // pre-change baseline.
     {
-      const sites = [
-        groveSite(seed, findSpawn(), (x, z) => weightsAtPos(x, z).dominant),
-        schoolhouseSite(seed, findSpawn(), weightsAtPos),
-      ];
+      const sites = getSites();
       const chunkMinX = originX;
       const chunkMaxX = originX + CHUNK_SIZE;
       const chunkMinZ = originZ;
