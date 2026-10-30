@@ -32,16 +32,18 @@
  *   'harvest:progress' fractions, press counts, verbs, and
  *   struggle/success lines as carried. Nothing here
  *   invents a yield, a reason, or a progress value.
- * - Station presence: crafting checks the real presence query
- *   (stationPresence on the current generator at her position,
- *   carrying BOTH booleans: stump in range = workstation,
- *   placed loom in range = loom). Craftability ORs over
- *   every present station and execution takes the whole
- *   array, so a stump beside a loom serves both ladders at
- *   once; the menu names the nearby stations. No placeholder
- *   stations are invented, and other stations (wheel, kiln,
- *   hearth) correctly stay unavailable until they exist. The
- *   raw generator is used because stumps are never depleted,
+ * - Station presence: stationPresence (on the current
+ *   generator at her position) carries TWO booleans —
+ *   stump in range = workstation, placed loom in range =
+ *   loom — and serves ONLY the StationPanel door and the
+ *   station anchor now. Crafting's station feed is the
+ *   FACED target (the USE winner), not presence: Adam's
+ *   station law retired the radius feed whole (see the
+ *   derivation's own comment). Background's presence
+ *   cleanup (c5192c0) removed the litFire fact, the
+ *   litFireInRange query, and the single-context mapper
+ *   whole — no fire fact rides presence at all. The raw
+ *   generator is used because stumps are never depleted,
  *   so it gives the same stump set as the renderer's
  *   depletion-wrapped generator.
  * - Inventory capacity (Adam, 2026-10-27): weights pinned —
@@ -605,12 +607,14 @@
  *   'fire' (any type — a faced lit kiln feeds
  *   charcoal), faced lit kiln -> 'kiln' as well; nothing
  *   faced -> hand only. 'Cauldron' keys on the placed-
- *   cauldron target when it exists (Adam: "Cauldron
- *   would go on the Hearth, not the kiln. And facing
- *   the Cauldron is different from facing the Hearth")
- *   in that build's UI half — the carried-pot
- *   composition is dead and built nowhere; until then
- *   cauldron recipes stay hidden. The LOOM joined the
+ *   cauldron target (Adam: "Cauldron would go on the
+ *   Hearth, not the kiln. And facing the Cauldron is
+ *   different from facing the Hearth") — the pot is a
+ *   winner target of its own (kind 'cauldron', identity
+ *   = its hearthId, outranking its own hearth at the
+ *   tie) and feeds 'cauldron' when its hearth is lit
+ *   (placed-cauldron UI half, #30). The carried-pot
+ *   composition is dead and built nowhere. The LOOM joined the
  *   winner race in the same landing (kind 'loom', the
  *   placed-object idiom; its pill reads WEAVE (Adam,
  *   2026-10-30: "What do we do at a loom? We weave,
@@ -1811,6 +1815,14 @@ import { altarState, type PlacedAltar as PlacedAltarEntity } from './game/altarS
 import { placeAltar as grantPlaceAltar } from './systems/altar';
 import { deskState, type PlacedDesk as PlacedDeskEntity } from './game/deskState';
 import { placeDesk as grantPlaceDesk } from './systems/desk';
+import {
+  cauldronState,
+  type PlacedCauldron as PlacedCauldronEntity,
+} from './game/cauldronState';
+import {
+  placeCauldron as grantPlaceCauldron,
+  pickupCauldron as grantPickupCauldron,
+} from './systems/cauldron';
 import { ritualSiteState, stumpSiteId } from './game/ritualSite';
 import { boneKindAt } from './game/boneKind';
 import {
@@ -1954,6 +1966,7 @@ const PLACEABLE_IDS: ReadonlySet<string> = new Set([
   ITEMS.litTorch,
   ITEMS.altar,
   ITEMS.writingDesk,
+  ITEMS.cauldron,
   ITEMS.tent,
 ]);
 
@@ -2478,6 +2491,7 @@ export default function App() {
   const [tentNote, setTentNote] = useState<string | null>(null);
   const [altarNote, setAltarNote] = useState<string | null>(null);
   const [deskNote, setDeskNote] = useState<string | null>(null);
+  const [cauldronNote, setCauldronNote] = useState<string | null>(null);
   const [fireNote, setFireNote] = useState<string | null>(null);
   const [dropNote, setDropNote] = useState<string | null>(null);
   const [storageNote, setStorageNote] = useState<string | null>(null);
@@ -2602,6 +2616,11 @@ export default function App() {
     { fire: PlacedFire; x: number; y: number }[]
   >([]);
   const [selectedFireId, setSelectedFireId] = useState<string | null>(null);
+  // The cauldron whose menu is open, keyed by its hearth's
+  // id — the cauldron's whole identity (Background's
+  // binding model).
+  const [selectedCauldronHearthId, setSelectedCauldronHearthId] =
+    useState<string | null>(null);
   // Campfire tap (Adam, 2026-10-28): the pending pointerdown
   // for tap-near-fire (touch-only, container handlers below).
   // A ref, not state — a tap must not re-render on press.
@@ -2691,6 +2710,9 @@ export default function App() {
   // singleton directly, like the altars loop does.
   const [deskAnchors, setDeskAnchors] = useState<
     { desk: PlacedDeskEntity; x: number; y: number }[]
+  >([]);
+  const [cauldronAnchors, setCauldronAnchors] = useState<
+    { cauldron: PlacedCauldronEntity; x: number; y: number }[]
   >([]);
   // Ritual staging (tier-1 Waking build): the shell owns
   // one StagingBook (site + kind keyed stagings) and one
@@ -3176,6 +3198,13 @@ export default function App() {
           // id-less entries and mints ids). Placed desks
           // survive refresh.
           desks: deskState.snapshot(),
+          // PLACED-CAULDRON SAVE WIRING: the entity
+          // snapshot rides as-is ({hearthId, x, z} —
+          // Systems' widened SavedCauldron passthrough);
+          // the hearthId is the only load-bearing field
+          // (restore rebinds position from the fire).
+          // Placed cauldrons survive refresh.
+          cauldrons: cauldronState.snapshot(),
           // RITUAL SAVE WIRING: stagings + awakenings ride
           // every save as-is (StagingBook / CharmState
           // snapshots; serialize writes them verbatim,
@@ -3762,6 +3791,17 @@ export default function App() {
       desks.push({ desk, x: anchor.x, y: anchor.y });
     }
     setDeskAnchors(desks);
+    const cauldrons: {
+      cauldron: PlacedCauldronEntity;
+      x: number;
+      y: number;
+    }[] = [];
+    for (const cauldron of cauldronState.snapshot()) {
+      const anchor = projectAnchor(cauldron.x, cauldron.z, 'scatter');
+      if (!anchor) continue;
+      cauldrons.push({ cauldron, x: anchor.x, y: anchor.y });
+    }
+    setCauldronAnchors(cauldrons);
     // Stump ritual anchors (bone build): stumps in
     // range at her feet (Background's stumpPositions —
     // felled + grown, deduped), projected 'scatter'
@@ -4022,6 +4062,15 @@ export default function App() {
               : {}),
           })),
         );
+        // PLACED-CAULDRON SAVE WIRING (same restore-
+        // before-first-build pattern): cauldronState.
+        // restore MUST run after fireState.restore (it
+        // binds each saved hearthId against the live
+        // fires and drops what cannot bind — unknown id
+        // or not a hearth). The boot order restores
+        // fires earlier in this block, so riding the
+        // desk block's tail is safe. Silent.
+        cauldronState.restore(bootSaved.cauldrons ?? []);
         // RITUAL SAVE WIRING (same pre-construction pattern):
         // StagingBook + CharmState restore (pure systems,
         // boot-only, bad entries dropped). ritualSiteState
@@ -4449,6 +4498,12 @@ export default function App() {
     const refreshDesks = () => {
       recomputeAnchors();
     };
+    // Placed-cauldron subscriptions: anchors re-project
+    // from the Background singleton on every cauldron
+    // event, desk pattern.
+    const refreshCauldrons = () => {
+      recomputeAnchors();
+    };
     // PAUSE SUBSCRIPTION (core 54e525c): the shell's half of the
     // flag. The ref gates the timers (below + the turn-stick and
     // FPS loops); the state drives the Paused indicator. Fires
@@ -4501,6 +4556,8 @@ export default function App() {
     const offAltarRemoved = bus.on('altar:removed', refreshAltars);
     const offDeskPlaced = bus.on('desk:placed', refreshDesks);
     const offDeskRemoved = bus.on('desk:removed', refreshDesks);
+    const offCauldronPlaced = bus.on('cauldron:placed', refreshCauldrons);
+    const offCauldronRemoved = bus.on('cauldron:removed', refreshCauldrons);
     // Ritual subscriptions: the panel re-renders on every
     // stage/unstage (the book + site state mutate without
     // rendering by themselves — ritualVersion is the
@@ -4739,6 +4796,8 @@ export default function App() {
       offAltarRemoved();
       offDeskPlaced();
       offDeskRemoved();
+      offCauldronPlaced();
+      offCauldronRemoved();
       offRitualStaged();
       offRitualUnstaged();
       offShelterPlaced();
@@ -4869,13 +4928,13 @@ export default function App() {
   // Station presence from the real query at her position
   // (see the header): stump in range = workstation, placed
   // loom in range = loom — BOTH booleans, not one context.
-  // The old single-context mapping read 'loom' whenever a
-  // loom was near, so workstation recipes mismatched at a
-  // dual site until she stepped out of loom range (the
-  // flagged wart). Craftability now ORs over every present
-  // station (below), and execution takes the whole array
-  // (executeCraft's StationInput is already set-based) —
-  // so a stump beside a loom serves both ladders at once.
+  // Its consumers are the StationPanel door (below) and
+  // the stationAnchor derivation — NOTHING ELSE: the
+  // crafting feed derives from the faced USE winner
+  // (Adam's station law; see the derivation below
+  // useWinner), and Background's presence cleanup
+  // (c5192c0, #30) removed the litFire fact from this
+  // shape whole, so no fire fact rides it at all.
   // Recomputed when she moves or the world regenerates.
   const stationPresenceValue = useMemo(() => {
     return stationPresence(genRef.current, position.x, position.z);
@@ -5345,6 +5404,44 @@ export default function App() {
     setDeskNote('Placed a writing desk.');
   };
 
+  // Cauldron placement (placed-cauldron build, 2026-10-30):
+  // the one placeable whose target is another placed
+  // object — the pot goes ON a hearth. The target hearth
+  // is the faced fire winner read as a hearth (facing the
+  // pot itself reads its hearth too, so the grant's
+  // occupied refusal answers there); not facing a hearth
+  // passes '' and the grant's 'No hearth there.' is the
+  // answer she sees. Grant FIRST (Systems placeCauldron
+  // consumes one carried cauldron; failure touches
+  // nothing), then Background's cauldronState binds the
+  // entity to the hearth (no coordinates passed — the
+  // binding resolves the position). No lit gate: she
+  // sets the pot before she lights the hearth. Panel
+  // stays open, cauldronNote carries the result.
+  const handlePlaceCauldron = () => {
+    const winner = computeUseWinner();
+    let hearthId = '';
+    if (winner?.kind === 'fire') {
+      const fire = fireState.get(winner.id);
+      if (fire?.type === 'hearth') hearthId = winner.id;
+    } else if (winner?.kind === 'cauldron') {
+      hearthId = winner.id;
+    }
+    const outcome = grantPlaceCauldron(
+      inventory,
+      hearthId,
+      cauldronState.cauldronForHearth(hearthId) !== undefined,
+    );
+    if (outcome.placed === false) {
+      setCauldronNote(outcome.reason);
+      return;
+    }
+    cauldronState.placeCauldron(outcome.cauldron.hearthId);
+    refreshInventory();
+    saveNow();
+    setCauldronNote('Placed a cauldron on the hearth.');
+  };
+
   // RITUAL SKY FACTS (shell supplies, systems never imports
   // game): phase from cyclePhase at the world's fixed start
   // month (the renderer feeds the sky SEASON_START_MONTH,
@@ -5659,6 +5756,14 @@ export default function App() {
     // at her feet via the grant + entity pair above.
     if (itemId === ITEMS.writingDesk) {
       handlePlaceDesk();
+      return;
+    }
+    // Placed cauldrons never enter the preview flow
+    // either — the press runs the hearth-targeted grant
+    // above (the pot lands on the faced hearth, not at
+    // her feet).
+    if (itemId === ITEMS.cauldron) {
+      handlePlaceCauldron();
       return;
     }
     // Placed tents never enter the preview flow either —
@@ -6408,6 +6513,48 @@ export default function App() {
       updatePlacedTents(placedTentsRef.current.filter((t) => t.id !== tentId));
       setSelectedTentId(null);
       say('Took down the tent.', 'gain');
+      refreshInventory();
+      saveNow();
+    }
+    recomputeAnchors();
+  };
+
+  // CAULDRON MENU ACTIONS (placed-cauldron build): Pick
+  // up + Close — the tent menu's shape.
+  const cauldronMenuActions = (): ContextAction[] => [
+    { id: 'pick-up', label: 'Pick up cauldron' },
+    { id: 'close', label: 'Close' },
+  ];
+
+  const handleCauldronAction = (hearthId: string, actionId: string) => {
+    const anchor =
+      cauldronAnchors.find((a) => a.cauldron.hearthId === hearthId) ?? null;
+    const say = (text: string, tone: FeedbackTone) => {
+      if (anchor) showFeedback(text, tone, anchor.x, anchor.y);
+    };
+    if (actionId === 'close') {
+      setSelectedCauldronHearthId(null);
+      return;
+    }
+    if (actionId === 'pick-up') {
+      // Grant FIRST, then the entity removal — the
+      // tent rule (take granted only): a pack that
+      // cannot take the pot refuses, the cauldron
+      // STAYS placed and the menu stays open; a
+      // granted pickup removes the entity and the
+      // menu closes. No hunger gate (a move).
+      const outcome = grantPickupCauldron(
+        inventory,
+        hearthId,
+        cauldronState.cauldronForHearth(hearthId) !== undefined,
+      );
+      if (outcome.pickedUp === false) {
+        say(outcome.reason, 'blocked');
+        return;
+      }
+      cauldronState.removeCauldron(hearthId);
+      setSelectedCauldronHearthId(null);
+      say('Picked up the cauldron.', 'gain');
       refreshInventory();
       saveNow();
     }
@@ -7256,6 +7403,20 @@ export default function App() {
       ? null
       : (fireAnchors.find((a) => a.fire.id === selectedFire.id) ?? null);
 
+  // The cauldron whose menu is open, with its anchor —
+  // the fire pattern, over Background's singleton: a
+  // picked-up cauldron leaves the menu with nothing.
+  const selectedCauldron =
+    selectedCauldronHearthId === null
+      ? undefined
+      : cauldronState.cauldronForHearth(selectedCauldronHearthId);
+  const selectedCauldronAnchor =
+    selectedCauldron === undefined
+      ? null
+      : (cauldronAnchors.find(
+          (a) => a.cauldron.hearthId === selectedCauldron.hearthId,
+        ) ?? null);
+
   // The torch whose menu is open, with its anchor — the
   // fire pattern, live: the menu renders from placedTorches,
   // so a picked-up torch leaves the menu with nothing.
@@ -7601,6 +7762,10 @@ export default function App() {
         setSelectedTentId(null);
         return;
       }
+      if (selectedCauldronHearthId !== null) {
+        setSelectedCauldronHearthId(null);
+        return;
+      }
       if (selectedFireId !== null) {
         setSelectedFireId(null);
         return;
@@ -7637,6 +7802,7 @@ export default function App() {
     selectedTorchId,
     selectedTentId,
     selectedFireId,
+    selectedCauldronHearthId,
     selectedSiteId,
     charmsOpen,
     craftingOpen,
@@ -7966,6 +8132,7 @@ export default function App() {
     | { kind: 'hive'; x: number; z: number; distance: number }
     | { kind: 'site'; siteId: string; distance: number }
     | { kind: 'fire' | 'tent' | 'torch' | 'loom'; id: string; distance: number }
+    | { kind: 'cauldron'; id: string; distance: number }
     | { kind: 'home'; distance: number }
     | { kind: 'scry'; distance: number };
 
@@ -8093,7 +8260,7 @@ export default function App() {
     }
     if (siteBest !== null) challengers.push(siteBest);
     const considerPlaced = (
-      kind: 'fire' | 'tent' | 'torch' | 'loom',
+      kind: 'fire' | 'tent' | 'torch' | 'loom' | 'cauldron',
       id: string,
       x: number,
       z: number,
@@ -8123,6 +8290,12 @@ export default function App() {
     for (const loom of loomState.snapshot()) {
       considerPlaced('loom', loom.id, loom.x, loom.z);
     }
+    // Placed cauldrons (placed-cauldron build): the pot
+    // is its own target, keyed by its hearth's id — read
+    // from Background's singleton like the looms.
+    for (const cauldron of cauldronState.snapshot()) {
+      considerPlaced('cauldron', cauldron.hearthId, cauldron.x, cauldron.z);
+    }
     if (homeHouse !== undefined) {
       const f = facingOf(homeHouse.x, homeHouse.z);
       // WHOLE-HUT ZONE (Adam, 2026-10-29 — inside his hut
@@ -8145,6 +8318,19 @@ export default function App() {
     let winner = pairWinner;
     for (const challenger of challengers) {
       if (winner === null || challenger.distance < winner.distance) {
+        winner = challenger;
+      } else if (
+        // CAULDRON TIE RULE (DEV, 2026-10-30): the pot
+        // and its hearth share (x, z) exactly, so their
+        // distances are always equal — at the tie the
+        // CAULDRON outranks its own hearth (the smaller,
+        // more specific target). Only its own hearth
+        // yields; no other pairing is affected.
+        challenger.kind === 'cauldron' &&
+        winner.kind === 'fire' &&
+        challenger.id === winner.id &&
+        challenger.distance === winner.distance
+      ) {
         winner = challenger;
       }
     }
@@ -8223,6 +8409,9 @@ export default function App() {
         // to loom + hand recipes. No selected-loom
         // state — the panel is the whole interaction.
         openCraftingPanel();
+        break;
+      case 'cauldron':
+        setSelectedCauldronHearthId(winner.id);
         break;
       case 'home':
         setHomeMenuOpen(true);
@@ -8332,6 +8521,13 @@ export default function App() {
       ];
       if (target && !target.disabled) {
         handleFireAction(selectedFire.id, target.id);
+      }
+      return;
+    }
+    if (selectedCauldron !== undefined) {
+      const target = flattenMenuTargets(cauldronMenuActions())[digit - 1];
+      if (target && !target.disabled) {
+        handleCauldronAction(selectedCauldron.hearthId, target.id);
       }
       return;
     }
@@ -8820,12 +9016,12 @@ export default function App() {
   //   type — a faced lit kiln is still a lit fire for
   //   charcoal), and 'kiln' when that fire is a lit
   //   kiln (both, for a kiln).
-  // - 'cauldron' keys on the placed-cauldron target
-  //   when that target exists (the placed-cauldron
-  //   build's UI half) — the cauldron goes on the
-  //   Hearth, and facing the Cauldron is different from
-  //   facing the Hearth. The carried-pot composition
-  //   is dead; do not rebuild it.
+  // - a faced CAULDRON feeds 'cauldron' when its
+  //   hearth is lit (winner kind 'cauldron', the
+  //   placed-cauldron build's UI half) — the cauldron
+  //   goes on the Hearth, and facing the Cauldron is
+  //   different from facing the Hearth. The carried-
+  //   pot composition is dead; do not rebuild it.
   // - a faced LOOM feeds 'loom' (winner kind 'loom' —
   //   looms joined the winner race in this landing; the
   //   loom's pill opens the Crafting panel, so the door
@@ -8851,6 +9047,12 @@ export default function App() {
     availableStations.push('fire');
     if (facedFire.type === 'kiln') {
       availableStations.push('kiln');
+    }
+  }
+  if (useWinner?.kind === 'cauldron') {
+    const hostFire = fireState.get(useWinner.id);
+    if (hostFire?.lit === true) {
+      availableStations.push('cauldron');
     }
   }
   // Header display names (stump-header fix, Adam-approved
@@ -9174,8 +9376,10 @@ export default function App() {
               : useWinner.kind === 'site' &&
                   useWinner.siteId.startsWith('stump:')
                 ? 'KRAFT'
-                : useWinner.kind === 'fire'
-                  ? fireWinnerLabel
+                : useWinner.kind === 'cauldron'
+                  ? 'RENDER'
+                  : useWinner.kind === 'fire'
+                    ? fireWinnerLabel
                   : useWinner.kind === 'site' ||
                     useWinner.kind === 'tent' ||
                   useWinner.kind === 'torch' ||
@@ -9310,6 +9514,18 @@ export default function App() {
             </WorldAnchor>
           </Fragment>
         ))}
+        {cauldronAnchors.map(({ cauldron, x, y }) => (
+          <Fragment key={cauldron.hearthId}>
+            <WorldAnchor x={x} y={y} interactive>
+              <AltarChip
+                label="Cauldron"
+                onSelect={() =>
+                  setSelectedCauldronHearthId(cauldron.hearthId)
+                }
+              />
+            </WorldAnchor>
+          </Fragment>
+        ))}
         {stumpAnchors.map(({ siteId, x, y }) => (
           <Fragment key={siteId}>
             <WorldAnchor x={x} y={y} interactive>
@@ -9387,6 +9603,23 @@ export default function App() {
               showKeyHints={!isTouch}
               onSelect={(id) => handleTentAction(selectedTent.id, id)}
               onClose={() => setSelectedTentId(null)}
+            />
+          </WorldAnchor>
+        ) : null}
+        {selectedCauldron && selectedCauldronAnchor ? (
+          <WorldAnchor
+            x={selectedCauldronAnchor.x}
+            y={selectedCauldronAnchor.y}
+            interactive
+          >
+            <ContextMenu theme={lookThemes.world}
+              objectName="Cauldron"
+              actions={cauldronMenuActions()}
+              showKeyHints={!isTouch}
+              onSelect={(id) =>
+                handleCauldronAction(selectedCauldron.hearthId, id)
+              }
+              onClose={() => setSelectedCauldronHearthId(null)}
             />
           </WorldAnchor>
         ) : null}
@@ -10031,6 +10264,11 @@ export default function App() {
         {deskNote ? (
           <p className="rounded bg-black/45 px-2 py-1 text-xs text-stone-200">
             {deskNote}
+          </p>
+        ) : null}
+        {cauldronNote ? (
+          <p className="rounded bg-black/45 px-2 py-1 text-xs text-stone-200">
+            {cauldronNote}
           </p>
         ) : null}
         {fireNote ? (
