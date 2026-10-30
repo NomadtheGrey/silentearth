@@ -27,7 +27,7 @@ import type { WorldGen } from './worldgen';
 import { PlayerController } from './player';
 import { marshWeight } from './biomes';
 import { SOURCE_FOR_KIND } from './objects';
-import { buildAltarGroup, buildAnimal, buildCampArrow, buildCandle, buildDeskGroup, buildEdgeArrow, buildKindGeometry, buildStagedBone, buildSunflowerHeadGeometry, buildTorch, buildUmbrella, buildWitch, CANDLE_FLAME_Y, sunflowerHeadMatrix, sunflowerHeadOrientation, TORCH_FLAME_Y, vertexLambert } from './models';
+import { buildAltarGroup, buildAnimal, buildCampArrow, buildCandle, buildCauldronGroup, buildDeskGroup, buildEdgeArrow, buildKindGeometry, buildStagedBone, buildSunflowerHeadGeometry, buildTorch, buildUmbrella, buildWitch, CANDLE_FLAME_Y, sunflowerHeadMatrix, sunflowerHeadOrientation, TORCH_FLAME_Y, vertexLambert } from './models';
 import { spawnAnimalsForChunk, updateAnimal } from './animals';
 import type { AnimalInstance, AnimalKind } from './animals';
 import { crowGlowIntensity, CROW_GLOW_EMISSIVE } from './crow';
@@ -46,6 +46,7 @@ import type { RiverParams } from './river';
 import { fireState } from './fireState';
 import { torchState } from './torchState';
 import { altarState } from './altarState';
+import { cauldronState } from './cauldronState';
 import { deskState } from './deskState';
 import { ritualSiteState } from './ritualSite';
 import type { PlacedHouse, TentPosition } from './shelter';
@@ -541,6 +542,8 @@ export class WorldRenderer {
       bus.on('altar:removed', rebuild),
       bus.on('desk:placed', rebuild),
       bus.on('desk:removed', rebuild),
+      bus.on('cauldron:placed', rebuild),
+      bus.on('cauldron:removed', rebuild),
       bus.on('stump:upgraded', rebuild),
     );
     // Staged bones rebuild on staging events only (separate
@@ -901,6 +904,9 @@ export class WorldRenderer {
     altarState.clear();
     // Placed desks belong to the old world's map too.
     deskState.clear();
+    // Placed cauldrons belong to the old world's map too
+    // (their hearths are cleared with the fires above).
+    cauldronState.clear();
     // Placed tents belong to the old world's map too (the shell
     // re-supplies them via setTents on boot restore).
     this.tents = [];
@@ -1448,6 +1454,17 @@ export class WorldRenderer {
         hlog.rotation.z = Math.PI / 2;
         fg.add(hlog);
         if (lit) { fg.add(this.flameMesh(fire.x, fire.z, 0.6, 1.1)); this.addFireLight(fire.x, fire.z, 0.6, 1.1); }
+        // The cauldron, when this hearth bears one (Adam
+        // 2026-10-30 — its own target, distinct from the
+        // fire): the clay pot sits on the base slab over
+        // the logs, belly above the flame. Riding the
+        // hearth's own group binds the pot's life to its
+        // hearth's — it can never float hearth-less.
+        if (cauldronState.cauldronForHearth(fire.id)) {
+          const pot = buildCauldronGroup();
+          pot.position.set(0, 0.5, 0.1);
+          fg.add(pot);
+        }
       } else if (fire.type === 'kiln') {
         // Firing chamber: base slab, body, dome, stoke-hole opening,
         // brick band around the middle.

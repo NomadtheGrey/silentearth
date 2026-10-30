@@ -330,6 +330,23 @@ export interface EventMap {
    */
   'desk:removed': { id: string };
   /**
+   * A cauldron was placed on a hearth
+   * (cauldronState.placeCauldron, Adam 2026-10-30 — the
+   * cauldron is its OWN target, distinct from the hearth
+   * fire beneath it). Free placement onto a faced
+   * hearth, cost-free engine primitive — the grant +
+   * consume lives with Systems + UI. Renderer rebuilds
+   * the placed group from this.
+   */
+  'cauldron:placed': { hearthId: string; x: number; z: number };
+  /**
+   * A cauldron was picked up from its hearth
+   * (cauldronState.removeCauldron — pickup IS built for
+   * the cauldron; it travels between hearths). Renderer
+   * rebuilds the placed group.
+   */
+  'cauldron:removed': { hearthId: string };
+  /**
    * A stump anchor gained the workstation addition
    * (stumpState.upgradeStump, Adam 2026-10-28 — stumpy
    * workstation upgrade). Same stumpSiteId, same

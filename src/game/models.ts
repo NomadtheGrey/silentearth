@@ -1010,6 +1010,50 @@ export function buildDeskGroup(): THREE.Group {
 }
 
 /**
+ * A placed cauldron (Adam 2026-10-30 — the clay pot that
+ * goes ON a hearth; cauldronState binds it to its
+ * hearth, the renderer sits it over the fire). CLAY
+ * throughout (Adam's no-iron ruling — the cauldron item
+ * is clay x8, kiln-fired): a lathe-profile pot (foot,
+ * belly, shoulder, neck, rim — the altar-bowl
+ * technique), dark-fired clay, with a rim ring and two
+ * lug handles. No iron, no legs — it sits IN the
+ * hearth, on the base slab. Sizes are lane-decided
+ * drafts for his sighting (belly 0.6 m wide, 0.5 m
+ * tall).
+ */
+export function buildCauldronGroup(): THREE.Group {
+  const g = new THREE.Group();
+  const profile: THREE.Vector2[] = [
+    new THREE.Vector2(0.02, 0),
+    new THREE.Vector2(0.2, 0.01),
+    new THREE.Vector2(0.28, 0.1),
+    new THREE.Vector2(0.3, 0.22),
+    new THREE.Vector2(0.24, 0.36),
+    new THREE.Vector2(0.2, 0.42),
+    new THREE.Vector2(0.23, 0.48),
+    new THREE.Vector2(0.23, 0.5),
+  ];
+  const potMat = new THREE.MeshLambertMaterial({ color: 0x6e4a38, side: THREE.DoubleSide });
+  const pot = new THREE.Mesh(new THREE.LatheGeometry(profile, 18), potMat);
+  g.add(pot);
+  // Rim ring, a shade darker — the pot's mouth reads
+  // even before the hollow does.
+  const rim = new THREE.Mesh(new THREE.CylinderGeometry(0.235, 0.235, 0.04, 18), meshMat(0x54382a));
+  rim.position.set(0, 0.48, 0);
+  g.add(rim);
+  // Two lug handles at the shoulders.
+  const lugGeo = new THREE.BoxGeometry(0.05, 0.1, 0.04);
+  const lugMat = meshMat(0x54382a);
+  for (const sx of [-1, 1]) {
+    const lug = new THREE.Mesh(lugGeo, lugMat);
+    lug.position.set(sx * 0.27, 0.34, 0);
+    g.add(lug);
+  }
+  return g;
+}
+
+/**
  * A staged ritual bone (Adam 2026-10-27 — tier-1 Waking,
  * site side). The read-at-a-glance shape, my design
  * (flagged): a small pale bone LYING FLAT — shaft with a
