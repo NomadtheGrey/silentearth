@@ -27,11 +27,13 @@
  * - Catch items are kind-specific carcass ids
  *   (draft, Adam pins names/weights/uses). Weight
  *   rides the 1 lb unknown-id default until pin
- *   pass (no fake-precision rows). NO SINK YET:
- *   carcasses are not food (not in FOOD_ITEMS) and
- *   not ritual offerings until Adam pins cooking /
- *   butchery / fur uses — placeholder like generic
- *   bone, stated plainly.
+ *   pass (no fake-precision rows). FIRST SINK
+ *   (2026-10-30): render-tallow — eight kinds render
+ *   in the cauldron (recipes.ts). Frog, crayfish,
+ *   mice, and voles stay sinkless, stated plainly in
+ *   their descriptors. Carcasses are not food (not
+ *   in FOOD_ITEMS) and not ritual offerings until
+ *   Adam pins cooking / butchery / fur uses.
  *
  * COLLECTION (DEV lean): the trap STAYS placed but
  * EMPTY after collect; it re-catches over time; the
@@ -53,9 +55,13 @@
  * mirrors of game/traps.ts TrapType (systems never
  * imports game — the save.ts literal-mirror
  * pattern). Excluded everywhere: bat (flying),
- * bear (size). UNASSIGNED (flagged): deer (trap
- * set undecided) + beaver + mice/voles (approved
- * trap set, assigned to no trap).
+ * bear (size). DEER IS UNTRAPPABLE (Adam's
+ * agreement, 2026-10-30): nothing in the five
+ * honestly takes one — deer belong to encounters.
+ * UNASSIGNED (flagged): beaver (assigned to no
+ * trap yet). Mice / voles ride the pot-trap (the
+ * small-critter trap takes the small critters,
+ * Adam, 2026-10-30).
  * Kind words are the doc's words ('eels' plural);
  * carcass ids singular-normalize (eels→eel).
  */
@@ -76,7 +82,7 @@ export const TRAP_CATCH_RATE_BAITED = 0.10;
 export const TRAP_CATCH_SETS: Record<string, readonly string[]> = {
   snare: ['rabbit', 'squirrel', 'muskrat'],
   'fish-weir-trap': ['fish', 'eels', 'crayfish'],
-  'pot-trap': ['crayfish', 'frog', 'muskrat'],
+  'pot-trap': ['crayfish', 'frog', 'muskrat', 'mice', 'voles'],
   pitfall: ['rabbit', 'opossum', 'groundhog', 'raccoon'],
   deadfall: ['squirrel', 'raccoon', 'opossum'],
 };
@@ -129,6 +135,8 @@ const CATCH_ITEM_BY_KIND: Record<string, string> = {
   opossum: ITEMS.opossumCarcass,
   groundhog: ITEMS.groundhogCarcass,
   raccoon: ITEMS.raccoonCarcass,
+  mice: ITEMS.mouseCarcass,
+  voles: ITEMS.voleCarcass,
 };
 
 /** Carcass item for a caught kind, or null when unknown. */

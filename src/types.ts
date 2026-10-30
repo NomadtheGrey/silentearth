@@ -52,6 +52,7 @@ export type ScatterKind =
   | 'bogPatch'
   | 'standingWater'
   | 'tree'
+  | 'oakTree'
   | 'snapWood'
   | 'tenderVines'
   | 'peatMoss'

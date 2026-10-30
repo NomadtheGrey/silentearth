@@ -27,7 +27,7 @@ import type { WorldGen } from './worldgen';
 import { PlayerController } from './player';
 import { marshWeight } from './biomes';
 import { SOURCE_FOR_KIND } from './objects';
-import { buildAltarGroup, buildAnimal, buildCampArrow, buildCandle, buildEdgeArrow, buildKindGeometry, buildStagedBone, buildSunflowerHeadGeometry, buildTorch, buildUmbrella, buildWitch, CANDLE_FLAME_Y, sunflowerHeadMatrix, sunflowerHeadOrientation, TORCH_FLAME_Y, vertexLambert } from './models';
+import { buildAltarGroup, buildAnimal, buildCampArrow, buildCandle, buildCauldronGroup, buildDeskGroup, buildEdgeArrow, buildKindGeometry, buildStagedBone, buildSunflowerHeadGeometry, buildTorch, buildUmbrella, buildWitch, CANDLE_FLAME_Y, sunflowerHeadMatrix, sunflowerHeadOrientation, TORCH_FLAME_Y, vertexLambert } from './models';
 import { spawnAnimalsForChunk, updateAnimal } from './animals';
 import type { AnimalInstance, AnimalKind } from './animals';
 import { crowGlowIntensity, CROW_GLOW_EMISSIVE } from './crow';
@@ -41,11 +41,14 @@ import {
   wrapGenWithState,
 } from './harvestState';
 import { terrainSpeedAt } from './movement';
+import { treeKindAt } from './treeKind';
 import { riverParamsFor, riverRibbonForChunk } from './river';
 import type { RiverParams } from './river';
 import { fireState } from './fireState';
 import { torchState } from './torchState';
 import { altarState } from './altarState';
+import { cauldronState } from './cauldronState';
+import { deskState } from './deskState';
 import { ritualSiteState } from './ritualSite';
 import type { PlacedHouse, TentPosition } from './shelter';
 import { FIRE_DEFS } from './fire';
@@ -538,6 +541,10 @@ export class WorldRenderer {
       bus.on('torch:removed', rebuild),
       bus.on('altar:placed', rebuild),
       bus.on('altar:removed', rebuild),
+      bus.on('desk:placed', rebuild),
+      bus.on('desk:removed', rebuild),
+      bus.on('cauldron:placed', rebuild),
+      bus.on('cauldron:removed', rebuild),
       bus.on('stump:upgraded', rebuild),
     );
     // Staged bones rebuild on staging events only (separate
@@ -896,6 +903,11 @@ export class WorldRenderer {
     torchState.clear();
     // Placed altars belong to the old world's map too.
     altarState.clear();
+    // Placed desks belong to the old world's map too.
+    deskState.clear();
+    // Placed cauldrons belong to the old world's map too
+    // (their hearths are cleared with the fires above).
+    cauldronState.clear();
     // Placed tents belong to the old world's map too (the shell
     // re-supplies them via setTents on boot restore).
     this.tents = [];
@@ -1443,6 +1455,17 @@ export class WorldRenderer {
         hlog.rotation.z = Math.PI / 2;
         fg.add(hlog);
         if (lit) { fg.add(this.flameMesh(fire.x, fire.z, 0.6, 1.1)); this.addFireLight(fire.x, fire.z, 0.6, 1.1); }
+        // The cauldron, when this hearth bears one (Adam
+        // 2026-10-30 — its own target, distinct from the
+        // fire): the clay pot sits on the base slab over
+        // the logs, belly above the flame. Riding the
+        // hearth's own group binds the pot's life to its
+        // hearth's — it can never float hearth-less.
+        if (cauldronState.cauldronForHearth(fire.id)) {
+          const pot = buildCauldronGroup();
+          pot.position.set(0, 0.5, 0.1);
+          fg.add(pot);
+        }
       } else if (fire.type === 'kiln') {
         // Firing chamber: base slab, body, dome, stoke-hole opening,
         // brick band around the middle.
@@ -1641,6 +1664,22 @@ export class WorldRenderer {
       ag.position.set(altar.x, 0, altar.z);
       ag.add(buildAltarGroup());
       group.add(ag);
+    }
+    for (const desk of deskState.snapshot()) {
+      // Placed writing desk (Adam 2026-10-30 — placeable +
+      // visible ONLY, no desk actions; the grimoire's
+      // site): the all-wood desk graphic at the placed
+      // position. Scene-level like all placed entities —
+      // chunk reload never touches it, and save restore
+      // rebuilds it via the constructor's initial
+      // rebuildPlacedGroup (deskState.restore first). No
+      // light: a desk is not a light source — the candle
+      // that belongs on it someday is Adam's parked
+      // design aside, not built, and no candle is drawn.
+      const dg = new THREE.Group();
+      dg.position.set(desk.x, 0, desk.z);
+      dg.add(buildDeskGroup());
+      group.add(dg);
     }
     for (const record of stumpState.snapshot()) {
       // Workbench overlay (Adam 2026-10-28 — stumpy
@@ -1941,18 +1980,30 @@ export class WorldRenderer {
       .spawnedTreesSnapshot()
       .filter((sapling) => this.chunks.has(this.chunkKey(sapling.cx, sapling.cz)));
     if (saplings.length > 0) {
-      const treeRender = KIND_RENDER['tree'];
-      const mesh = new THREE.InstancedMesh(treeRender.geometry, treeRender.material, saplings.length);
-      saplings.forEach((sapling, i) => {
-        const s = 0.3 + 0.7 * harvestState.saplingGrowth(sapling, now);
-        dummy.position.set(sapling.x, treeRender.baseY * s, sapling.z);
-        dummy.rotation.set(0, 0, 0);
-        dummy.scale.setScalar(s);
-        dummy.updateMatrix();
-        mesh.setMatrixAt(i, dummy.matrix);
-      });
-      mesh.instanceMatrix.needsUpdate = true;
-      group.add(mesh);
+      // Saplings draw in their spot's kind (Adam, 2026-10-30 —
+      // kind belongs to the ground): oak-spot saplings grow up
+      // in the oak's broader shape, the rest in the common
+      // tree's, one instanced mesh per kind.
+      const byKind: { tree: typeof saplings; oakTree: typeof saplings } = { tree: [], oakTree: [] };
+      for (const sapling of saplings) {
+        byKind[treeKindAt(this.gen.seed, sapling.x, sapling.z) === 'oak' ? 'oakTree' : 'tree'].push(sapling);
+      }
+      for (const kind of ['tree', 'oakTree'] as const) {
+        const list = byKind[kind];
+        if (list.length === 0) continue;
+        const kindRender = KIND_RENDER[kind];
+        const mesh = new THREE.InstancedMesh(kindRender.geometry, kindRender.material, list.length);
+        list.forEach((sapling, i) => {
+          const s = 0.3 + 0.7 * harvestState.saplingGrowth(sapling, now);
+          dummy.position.set(sapling.x, kindRender.baseY * s, sapling.z);
+          dummy.rotation.set(0, 0, 0);
+          dummy.scale.setScalar(s);
+          dummy.updateMatrix();
+          mesh.setMatrixAt(i, dummy.matrix);
+        });
+        mesh.instanceMatrix.needsUpdate = true;
+        group.add(mesh);
+      }
       // No extra branch: the sapling canopy rides inside the merged
       // tree geometry (models.ts), scaled with the trunk.
     }

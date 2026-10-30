@@ -19,9 +19,10 @@
  * - Salve / medicine / restorative recipes — mechanics not designed yet.
  * - Food prep recipes — food cooks on open fire (stick or fire-buried),
  *   not via recipes. Food items are harvests / trap catches, not crafts.
- * - The iron tool (post-axe) — gated by bog iron + bloomery; name and
- *   recipe TBD after the bloomery word veto. The bloomery itself is in
- *   here as a draft recipe, with its veto note attached.
+ * - Anything iron. NO IRON PATH (Adam, 2026-10-30: witches don't
+ *   touch iron — the whole iron path is closed, and the cauldron
+ *   is clay). There is no iron tool and no bloomery; the tool
+ *   ladder is stone to its top (the Trundle-Tool).
  *
  * No UI and no game wiring in this file. The crafting engine in
  * ./crafting.ts consumes this data; the inventory system is a later
@@ -48,6 +49,11 @@ export const ITEMS = {
   riverStone: 'river-stone',
   luminousSpores: 'luminous-spores',
   dryKindling: 'dry-kindling',
+  charcoalStick: 'charcoal-stick',
+  candle: 'candle',
+  beeswax: 'beeswax',
+  tallow: 'tallow',
+  cauldron: 'cauldron',
   // New items (2026-10-25 design work).
   clay: 'clay',
   flint: 'flint',
@@ -72,7 +78,6 @@ export const ITEMS = {
   campfire: 'campfire',
   hearth: 'hearth',
   kiln: 'kiln',
-  bloomery: 'bloomery',
   // Stations.
   stumpyWorkstation: 'stumpy-workstation',
   craftedWorkstation: 'crafted-workstation',
@@ -105,9 +110,11 @@ export const ITEMS = {
   pressedSheets: 'pressed-sheets',
   paper: 'paper',
   grimoire: 'grimoire',
+  journal: 'journal',
   // Ritual altar (2026-10-27 — made ritual site, placeable
   // only; see altar.ts for the place grant + scope guard).
   altar: 'altar',
+  writingDesk: 'writing-desk',
   // Primal bones (2026-10-27 first charm + 2026-10-28
   // individual bones build; see charms.ts). Kind rule,
   // documented: 'primal-bone-<shape-slug>'. Grouped by
@@ -155,6 +162,8 @@ export const ITEMS = {
   opossumCarcass: 'opossum-carcass',
   groundhogCarcass: 'groundhog-carcass',
   raccoonCarcass: 'raccoon-carcass',
+  mouseCarcass: 'mouse-carcass',
+  voleCarcass: 'vole-carcass',
   // Beehive honey (2026-10-28 — Systems follow-up to Background's
   // wildHive landing; see honey.ts for the harvest rule).
   honey: 'honey',
@@ -206,6 +215,7 @@ export const ITEMS = {
 export type CraftingStation =
   | 'workstation'
   | 'fire'
+  | 'cauldron'
   | 'hand'
   | 'kiln'
   | 'loom';
@@ -408,6 +418,100 @@ const DRAFT_RECIPES: Recipe[] = [
       'the friction-lighting fuel: slow lighting consumes 1 ' +
       'dry-kindling (fire.ts), not raw snap-wood.',
   },
+  {
+    id: 'charcoal-stick',
+    name: 'Charcoal Stick',
+    status: 'draft',
+    output: { item: ITEMS.charcoalStick, quantity: 1 },
+    ingredients: [i(ITEMS.snapWood, 1)],
+    station: 'fire',
+    notes:
+      'DRAFT. Adam\'s shape (2026-10-30): "a simple easy to ' +
+      'fashion bit of charcoal — a stick burnt on the end." ' +
+      'One snap wood, its end charred at a lit fire: station ' +
+      '"fire" (the CraftingStation literal — any lit fire; ' +
+      'the shell\'s fire presence must mean LIT, wiring is ' +
+      'Background/App\'s step, so this recipe sits dormant ' +
+      'in-game until that lands). The glyph-drawer for the ' +
+      'Stumpy Altar working (stone + glyph + candle): the ' +
+      'stick draws the glyph; consumption per glyph rides ' +
+      'the transformation claim, not this recipe. ' +
+      'Quantities draft.',
+  },
+  {
+    id: 'render-tallow',
+    name: 'Render Tallow',
+    status: 'draft',
+    output: { item: ITEMS.tallow, quantity: 1 },
+    ingredients: [],
+    upgradeFrom: [
+      ITEMS.rabbitCarcass,
+      ITEMS.squirrelCarcass,
+      ITEMS.muskratCarcass,
+      ITEMS.fishCarcass,
+      ITEMS.eelCarcass,
+      ITEMS.opossumCarcass,
+      ITEMS.groundhogCarcass,
+      ITEMS.raccoonCarcass,
+    ],
+    station: 'cauldron',
+    notes:
+      'DRAFT. The carcasses\' first consuming recipe: a ' +
+      'trap carcass, rendered in the cauldron, yields ' +
+      'tallow x1. ONE recipe for EIGHT kinds via the ' +
+      'either/or predecessor (upgradeFrom array — the ' +
+      'Spade-Axe convergence path): the carcass is the ' +
+      'input, consumed whole. FROG and CRAYFISH are OUT ' +
+      '(Adam, 2026-10-30: no tallow worth the name in ' +
+      'either, and a crayfish doesn\'t come from a rabbit ' +
+      'trap); fish and eel stay in unless the pin pass ' +
+      'narrows further. A fatty-kinds premium (raccoon / ' +
+      'opossum yielding more) is an UNUSED dial — the ' +
+      'x3 melt is the longer road\'s reward, shared by ' +
+      'both roads. Station ' +
+      '"cauldron" (Adam\'s ruling, 2026-10-30): the ' +
+      'context is the FACED cauldron, placed on its ' +
+      'hearth, with the hearth lit (Background + UI ' +
+      'supply the feed; dormant in-game until those ' +
+      'land). Yield stays x1 so the ' +
+      'tallow road does not compound with the candle ' +
+      'x3. Quantities draft.',
+  },
+  {
+    id: 'candle-from-beeswax',
+    name: 'Candle (Beeswax)',
+    status: 'draft',
+    output: { item: ITEMS.candle, quantity: 3 },
+    ingredients: [i(ITEMS.beeswax, 1), i(ITEMS.twinedCordage, 1)],
+    station: 'cauldron',
+    notes:
+      'DRAFT. One candle item, two roads (Adam, 2026-10-30: ' +
+      '"We could do either, both really"). Beeswax x1 + ' +
+      'twined cordage x1 for the wick, melted in the ' +
+      'cauldron and dipped — one melt makes THREE candles ' +
+      '(Adam: the process is the involved part, so the ' +
+      'melt pays out; render-tallow stays x1 so this ' +
+      'road does not compound). Station "cauldron" ' +
+      '(Adam\'s ruling, 2026-10-30). Beeswax source: ' +
+      'hives yield it alongside honey (Background\'s ' +
+      'rider, landed). Quantities draft.',
+  },
+  {
+    id: 'candle-from-tallow',
+    name: 'Candle (Tallow)',
+    status: 'draft',
+    output: { item: ITEMS.candle, quantity: 3 },
+    ingredients: [i(ITEMS.tallow, 1), i(ITEMS.twinedCordage, 1)],
+    station: 'cauldron',
+    notes:
+      'DRAFT. The tallow road to the same candle item: ' +
+      'tallow x1 + twined cordage x1 for the wick, melted ' +
+      'in the cauldron and dipped — one melt makes THREE ' +
+      'candles, same as the beeswax road (one carcass -> ' +
+      'one tallow -> three candles; the yield lives in ' +
+      'the melt, not the render). Station "cauldron" ' +
+      '(Adam\'s ruling, 2026-10-30). Quantities draft.',
+  },
 
   // --- Torch: stick + binding + tinder, made by hand (Adam, 2026-10-27).
   {
@@ -507,6 +611,22 @@ const DRAFT_RECIPES: Recipe[] = [
       '(record) behavior ties to the discovery mechanic ' +
       '(still proposal, not pinned) and is a follow-up ' +
       'when discovery pins. Quantities draft.',
+  },
+  {
+    id: 'journal',
+    name: 'Journal',
+    status: 'draft',
+    output: { item: ITEMS.journal, quantity: 1 },
+    ingredients: [i(ITEMS.paper, 2), i(ITEMS.twinedCordage, 1)],
+    station: 'hand',
+    notes:
+      'DRAFT. The pocket book: the grimoire recipe\'s binding ' +
+      'idiom at half scale (paper 2 + cordage 1, by hand). ' +
+      'MUNDANE as crafted — the enchantment that links it to ' +
+      'the grimoire is a separate later step (Adam\'s altar ' +
+      'decision), NOT part of this recipe. One journal only ' +
+      '(a listed single in crafting.ts: names live in it, a ' +
+      'second would split the record). Quantities draft.',
   },
 
   // --- Tool ladder: ONE tool, evolving. Upgrade costs, not rebuilds.
@@ -690,22 +810,6 @@ const DRAFT_RECIPES: Recipe[] = [
     ingredients: [i(ITEMS.clay, 10), i(ITEMS.riverStone, 8)],
     notes: 'DRAFT. Fires pottery and bricks.',
   },
-  {
-    id: 'bloomery',
-    name: 'Bloomery',
-    status: 'draft',
-    output: { item: ITEMS.bloomery, quantity: 1 },
-    ingredients: [
-      i(ITEMS.riverStone, 8),
-      i(ITEMS.clay, 8),
-      i(ITEMS.snapWood, 4),
-    ],
-    notes:
-      'DRAFT. Smelts bog iron (bog iron + fuel consumed per smelt; ' +
-      'exact smelt cost TBD). WORD VETO STILL PENDING: Adam is to veto ' +
-      '"bloomery" or let it stand — the name is not settled.',
-  },
-
   // --- Stations.
   {
     id: 'stumpy-workstation',
@@ -904,6 +1008,26 @@ const DRAFT_RECIPES: Recipe[] = [
       'a pot in the creek.',
   },
   {
+    id: 'cauldron',
+    name: 'Cauldron',
+    status: 'draft',
+    output: { item: ITEMS.cauldron, quantity: 1 },
+    ingredients: [i(ITEMS.clay, 8)],
+    station: 'kiln',
+    notes:
+      'DRAFT. The big vessel, founded here (Adam\'s ' +
+      'no-iron ruling, 2026-10-30: the cauldron is CLAY — ' +
+      'shaped and kiln-fired like the pot, at several ' +
+      'times its size). Set it on a hearth and it ' +
+      'works: carcasses render in it, wax melts in it, ' +
+      'and her brews brew in it (the future potions / ' +
+      'salves pot, per Adam\'s hearth picture). The ' +
+      'vessel gates its recipes AS A STATION (Adam\'s ' +
+      'ruling, 2026-10-30): station "cauldron" — the ' +
+      'context is the faced cauldron, placed on its ' +
+      'hearth, with the hearth lit. Quantities draft.',
+  },
+  {
     id: 'clay-brick',
     name: 'Clay Brick',
     status: 'draft',
@@ -1035,6 +1159,21 @@ const DRAFT_RECIPES: Recipe[] = [
       'DRAFT — BRAINSTORM, NOTHING PICKED. River stone is the ' +
       'weight. Craftable by hand anywhere — no workstation ' +
       'needed (Adam\'s ruling, 2026-10-26: traps are hand-crafted).',
+  },
+  {
+    id: 'writing-desk',
+    name: 'Writing Desk',
+    status: 'draft',
+    output: { item: ITEMS.writingDesk, quantity: 1 },
+    ingredients: [i(ITEMS.snapWood, 6)],
+    station: 'workstation',
+    notes:
+      'DRAFT. A desk for the big book, built at the stump ' +
+      'workstation (her workbench builds her desk). ' +
+      'Placeable-only, in the altar idiom (desk.ts carries ' +
+      'the place grant; the desk is the grimoire\'s SITE — ' +
+      'the workings themselves arrive with the grimoire\'s ' +
+      'design turn, not this recipe). Quantities draft.',
   },
   {
     id: 'altar',

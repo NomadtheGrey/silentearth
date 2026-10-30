@@ -183,6 +183,32 @@ export function buildKindGeometry(spec: MeshSpec, kind: ScatterKind): THREE.Buff
     }
     return merge([part(flatDisc(DISC_RADIUS[kind] ?? 1.0, 12), c), ...mounds]);
   }
+  // Kind override (oak tree shares the 'tree' shape slot with
+  // the common tree, but an oak must READ differently in the
+  // canopy — Adam, 2026-10-30): a stouter trunk and a broader,
+  // rounder crown — four blobs spread wide where the common
+  // tree's three sit close. Silhouette first, tint second (the
+  // oak source's fuller green rides the same parts).
+  if (kind === 'oakTree') {
+    const branches: THREE.BufferGeometry[] = [];
+    for (let i = 0; i < 4; i++) {
+      const a = (i / 4) * Math.PI * 2 + 0.4;
+      branches.push(
+        part(cyl(0.05, 0.08, 1.1, 4), c, {
+          p: [Math.cos(a) * 0.42, 0.6 + i * 0.1, Math.sin(a) * 0.42],
+          r: [Math.sin(a) * 0.75, 0, -Math.cos(a) * 0.75],
+        }),
+      );
+    }
+    return merge([
+      part(cyl(0.24, 0.36, 1.7, 7), c),
+      ...branches,
+      part(blob(1.3), e, { p: [0, extraDy + 0.1, 0] }),
+      part(blob(0.95), shade(e, 0.9), { p: [0.7, extraDy + 0.5, 0.25] }),
+      part(blob(0.8), shade(e, 1.05), { p: [-0.65, extraDy + 0.35, -0.3] }),
+      part(blob(0.6), shade(e, 1.1), { p: [0.1, extraDy + 0.85, -0.5] }),
+    ]);
+  }
   switch (spec.shape) {
     case 'tree': {
       const branches: THREE.BufferGeometry[] = [];
@@ -963,6 +989,93 @@ export function buildAltarGroup(): THREE.Group {
   const bowl = new THREE.Mesh(new THREE.LatheGeometry(profile, 20), bowlMat);
   bowl.position.set(0, 0.84, 0);
   g.add(bowl);
+  return g;
+}
+
+/**
+ * A placed writing desk (Adam 2026-10-30 — the grimoire's
+ * site, placeable + visible only, no desk actions).
+ * Primitives, all wood, so it reads as a desk where the
+ * altar reads as a stone table: a wooden top, four legs,
+ * an apron rail under the top's front edge, and a shallow
+ * drawer front with a knob. NO candle: a candle on the
+ * desk is Adam's parked design aside — none exists and
+ * none is drawn. Sizes are lane-decided drafts for his
+ * sighting (top 1.2 x 0.65 m, surface at 0.78 m).
+ */
+export function buildDeskGroup(): THREE.Group {
+  const g = new THREE.Group();
+  // Four legs at the top's corners, inset.
+  const legGeo = new THREE.BoxGeometry(0.07, 0.72, 0.07);
+  const legMat = meshMat(0x6b4a2f);
+  for (const sx of [-1, 1]) {
+    for (const sz of [-1, 1]) {
+      const leg = new THREE.Mesh(legGeo, legMat);
+      leg.position.set(sx * 0.52, 0.36, sz * 0.26);
+      g.add(leg);
+    }
+  }
+  // Apron rail under the top, front edge: the frame band
+  // a desk shows between its legs and its top.
+  const rail = new THREE.Mesh(new THREE.BoxGeometry(1.04, 0.14, 0.04), meshMat(0x6b4a2f));
+  rail.position.set(0, 0.65, 0.28);
+  g.add(rail);
+  // Drawer front, centred on the rail, a shade darker —
+  // the writing-desk read — with a small knob.
+  const drawer = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.13, 0.02), meshMat(0x5a4028));
+  drawer.position.set(0, 0.65, 0.305);
+  g.add(drawer);
+  const knob = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.04, 0.03), meshMat(0x3a2818));
+  knob.position.set(0, 0.65, 0.325);
+  g.add(knob);
+  // Wooden top: 1.2 x 0.06 x 0.65, top surface at 0.78.
+  const top = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.06, 0.65), meshMat(0x7a5a38));
+  top.position.set(0, 0.75, 0);
+  g.add(top);
+  return g;
+}
+
+/**
+ * A placed cauldron (Adam 2026-10-30 — the clay pot that
+ * goes ON a hearth; cauldronState binds it to its
+ * hearth, the renderer sits it over the fire). CLAY
+ * throughout (Adam's no-iron ruling — the cauldron item
+ * is clay x8, kiln-fired): a lathe-profile pot (foot,
+ * belly, shoulder, neck, rim — the altar-bowl
+ * technique), dark-fired clay, with a rim ring and two
+ * lug handles. No iron, no legs — it sits IN the
+ * hearth, on the base slab. Sizes are lane-decided
+ * drafts for his sighting (belly 0.6 m wide, 0.5 m
+ * tall).
+ */
+export function buildCauldronGroup(): THREE.Group {
+  const g = new THREE.Group();
+  const profile: THREE.Vector2[] = [
+    new THREE.Vector2(0.02, 0),
+    new THREE.Vector2(0.2, 0.01),
+    new THREE.Vector2(0.28, 0.1),
+    new THREE.Vector2(0.3, 0.22),
+    new THREE.Vector2(0.24, 0.36),
+    new THREE.Vector2(0.2, 0.42),
+    new THREE.Vector2(0.23, 0.48),
+    new THREE.Vector2(0.23, 0.5),
+  ];
+  const potMat = new THREE.MeshLambertMaterial({ color: 0x6e4a38, side: THREE.DoubleSide });
+  const pot = new THREE.Mesh(new THREE.LatheGeometry(profile, 18), potMat);
+  g.add(pot);
+  // Rim ring, a shade darker — the pot's mouth reads
+  // even before the hollow does.
+  const rim = new THREE.Mesh(new THREE.CylinderGeometry(0.235, 0.235, 0.04, 18), meshMat(0x54382a));
+  rim.position.set(0, 0.48, 0);
+  g.add(rim);
+  // Two lug handles at the shoulders.
+  const lugGeo = new THREE.BoxGeometry(0.05, 0.1, 0.04);
+  const lugMat = meshMat(0x54382a);
+  for (const sx of [-1, 1]) {
+    const lug = new THREE.Mesh(lugGeo, lugMat);
+    lug.position.set(sx * 0.27, 0.34, 0);
+    g.add(lug);
+  }
   return g;
 }
 

@@ -167,10 +167,15 @@ export const CRAFT_OWNERSHIP_LABELS: Record<
  * already-owned; small only → small already-owned +
  * large available; both (old saves) → small
  * superseded + large already-owned.
- * Singles (garments + apron + umbrella): held →
+ * Singles (garments + apron + umbrella + journal): held →
  * already-owned. Worn ⊆ carried (wear never removes),
  * and a dropped garment's worn flag grants nothing,
- * so inventory presence is the ownership source.
+ * so inventory presence is the ownership source. The
+ * journal is listed because the name-chain design
+ * implies ONE (names live in it; a second would split
+ * the record — DEV's call, 2026-10-30). The writing
+ * desk stays UNLISTED, on the grimoire precedent (a
+ * second camp legitimately wants a second desk).
  * Everything else (placed structures, consumables,
  * materials, unlisted singles like grimoire) →
  * available (multiples allowed or flagged for pin).
@@ -222,10 +227,11 @@ export function craftOwnershipStatus(
       : 'available';
   }
 
-  // Singles: garments + apron + umbrella.
+  // Singles: garments + apron + umbrella + journal.
   const isSingle =
     output === ITEMS.apron ||
     output === ITEMS.umbrella ||
+    output === ITEMS.journal ||
     GARMENTS.some((g) => g.item === output);
   if (isSingle) {
     return inventory.count(output) >= 1 ? 'already-owned' : 'available';

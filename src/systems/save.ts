@@ -79,6 +79,15 @@
  *   entity provides one. Order preserved; duplicate
  *   positions allowed (two altars at one spot are two
  *   entries).
+ * - placed desks (position, id optional — no game
+ *   import): same additive-field rule (old saves load
+ *   desks: []) and the same leniency as altars on read
+ *   (entries pass through, the placed-desk restore
+ *   validates + drops bad records). Placed desks carry
+ *   no grimoire state — the desk is the SITE; the
+ *   grimoire's workings come later, so no working
+ *   field is stored. Multiple desks are legitimate
+ *   (a second camp wants a second desk).
  * - placed tents (position, id optional — no game
  *   import): same additive-field rule (old saves load
  *   tents: []) and the same leniency as altars on read
@@ -327,6 +336,43 @@ export interface SavedAltar {
 }
 
 /**
+ * A placed writing desk, as saved. No grimoire state
+ * is stored — the desk is the SITE; the grimoire's
+ * workings come later. `id` is optional: Background's
+ * placed-desk entity owns the id scheme (altar
+ * precedent); the save carries position always and
+ * the id when the entity provides one. Order
+ * preserved; duplicate positions allowed.
+ */
+export interface SavedDesk {
+  x: number;
+  z: number;
+  id?: string;
+}
+
+/**
+ * A placed cauldron, as saved. KEYED TO ITS HEARTH:
+ * `hearthId` (Background's fire-entity id, verbatim)
+ * is the binding, and the position is carried always
+ * beside it — the desks shape plus the binding
+ * (coordinated with Background's cauldronState
+ * restore, 2026-10-30: position is the restore's
+ * fallback surface when an id cannot rebind). `id` is
+ * the placed-cauldron entity's own id, optional:
+ * present when the entity provides one; the restore
+ * mints when absent. No vessel state is stored — the
+ * cauldron is the SITE for the 'cauldron' station's
+ * workings, which carry their own state elsewhere.
+ * One cauldron per hearth.
+ */
+export interface SavedCauldron {
+  hearthId: string;
+  x: number;
+  z: number;
+  id?: string;
+}
+
+/**
  * A placed tent, as saved. No shelter state is stored —
  * the tent is the SITE; the shelter effect rides
  * Background's tent-aware shelterQuery branch when it
@@ -467,6 +513,10 @@ export interface SaveData {
   torches: SavedTorch[];
   /** Placed altars (sites, no ritual state); [] for old saves. */
   altars: SavedAltar[];
+  /** Placed desks (sites, no grimoire state); [] for old saves. */
+  desks: SavedDesk[];
+  /** Placed cauldrons (keyed to their hearths); [] for old saves. */
+  cauldrons: SavedCauldron[];
   /** Placed tents (portable shelters); [] for old saves. */
   tents: SavedTent[];
   /** Partial-true-name look counts; [] for old saves. */
@@ -583,6 +633,27 @@ export interface SaveDraft {
     id?: string;
   }>;
   /**
+   * Placed desks from the placed-desk source
+   * (Background's entity snapshot, once it lands).
+   * OPTIONAL, same trap-save pattern as altars.
+   */
+  desks?: ReadonlyArray<{
+    x: number;
+    z: number;
+    id?: string;
+  }>;
+  /**
+   * Placed cauldrons from the placed-cauldron source
+   * (Background's entity snapshot, once it lands).
+   * OPTIONAL, same trap-save pattern as desks.
+   */
+  cauldrons?: ReadonlyArray<{
+    hearthId: string;
+    x: number;
+    z: number;
+    id?: string;
+  }>;
+  /**
    * Placed tents from the placed-tent source
    * (Background's entity snapshot, once it lands).
    * OPTIONAL so existing saveNow call sites keep
@@ -639,11 +710,42 @@ export interface SaveDraft {
  * literal — systems does not import game modules. An entry with
  * any other type makes the whole document corrupt (see header:
  * partial restores risk contents landing on the wrong house).
+ * Retired types are the one exception — see RETIRED_FIRE_TYPES.
  */
 const SAVE_FIRE_TYPES: ReadonlySet<string> = new Set([
   'campfire',
   'hearth',
   'kiln',
+]);
+
+/**
+ * Fire types that once existed and were removed by design. A
+ * saved fire of a retired type is DROPPED on load — the
+ * smallest migration: only that fire is lost, the rest of the
+ * document restores normally, and the next save writes without
+ * it. Retired is not unknown: any other type outside
+ * SAVE_FIRE_TYPES still makes the whole document corrupt.
+ * - 'bloomery' — removed 2026-10-30 (Adam's no-iron ruling:
+ *   witches don't touch iron, the iron path is closed).
+ */
+const RETIRED_FIRE_TYPES: ReadonlySet<string> = new Set([
+  'bloomery',
+]);
+
+/**
+ * Item ids that once existed and were removed by design. A
+ * saved stack of a retired id is DROPPED on load — parseStacks
+ * (pack + house stores) skips it, and the piles restore drops
+ * retired kinds (a spot left with no kinds vanishes rather
+ * than restoring as an empty pile). Item ids have no refusal
+ * doctrine (any string loads), so this is not save safety: a
+ * surviving stack would render as a phantom — its registry
+ * rows are erased, so it would show its raw id as its name
+ * and weigh the 1 lb default. Only that stack is lost.
+ * - 'bloomery' — the item retired 2026-10-30 with its fire
+ *   type (Adam's no-iron ruling); see RETIRED_FIRE_TYPES.
+ */
+const RETIRED_ITEM_IDS: ReadonlySet<string> = new Set([
   'bloomery',
 ]);
 
@@ -799,6 +901,26 @@ export function serializeSave(draft: SaveDraft): SaveData {
       z: altar.z,
       ...(altar.id !== undefined ? { id: altar.id } : {}),
     })),
+    // Desks: written AS-IS, same as altars (positions
+    // verbatim, id when the entity provides one — no
+    // filtering, no normalization). Invalid entries
+    // are restore()'s problem, not serialize's. No
+    // grimoire state is written — the desk is the SITE.
+    desks: (draft.desks ?? []).map((desk) => ({
+      x: desk.x,
+      z: desk.z,
+      ...(desk.id !== undefined ? { id: desk.id } : {}),
+    })),
+    // Cauldrons: written AS-IS, same as desks (hearth
+    // id + positions verbatim, entity id when provided
+    // — no filtering, no normalization). No vessel
+    // state is written — the cauldron is the SITE.
+    cauldrons: (draft.cauldrons ?? []).map((cauldron) => ({
+      hearthId: cauldron.hearthId,
+      x: cauldron.x,
+      z: cauldron.z,
+      ...(cauldron.id !== undefined ? { id: cauldron.id } : {}),
+    })),
     // Tents: written AS-IS (positions verbatim, id when
     // the entity provides one — no filtering, no
     // normalization). Invalid entries are restore()'s
@@ -901,8 +1023,11 @@ function parseStacks(value: unknown): Record<string, number> | null {
   if (!isRecord(value)) return null;
   const out: Record<string, number> = {};
   for (const [item, quantity] of Object.entries(value)) {
-    if (!Number.isInteger(quantity) || (quantity as number) <= 0) return null;
     const id = normalizeItemId(item);
+    // Retired item ids drop on load (see RETIRED_ITEM_IDS) —
+    // only that stack is lost; the rest restore normally.
+    if (RETIRED_ITEM_IDS.has(id)) continue;
+    if (!Number.isInteger(quantity) || (quantity as number) <= 0) return null;
     out[id] = (out[id] ?? 0) + (quantity as number);
   }
   return out;
@@ -938,6 +1063,14 @@ export function deserializeSave(value: unknown): SaveData | null {
     const fires: SavedFire[] = [];
     for (const entry of value.fires) {
       if (!isRecord(entry)) return null;
+      // Retired fire types drop on load (see
+      // RETIRED_FIRE_TYPES) — only that fire is lost.
+      if (
+        typeof entry.type === 'string' &&
+        RETIRED_FIRE_TYPES.has(entry.type)
+      ) {
+        continue;
+      }
       if (
         typeof entry.type !== 'string' ||
         !SAVE_FIRE_TYPES.has(entry.type)
@@ -1062,12 +1195,19 @@ export function deserializeSave(value: unknown): SaveData | null {
         }
         const key = `${entry.x.toFixed(2)},${entry.z.toFixed(2)}`;
         let pile = pilesBySpot.get(key);
-        if (!pile) {
-          pile = { stacks: [], x: entry.x, z: entry.z };
-          pilesBySpot.set(key, pile);
-        }
         for (const kind of kinds) {
           const id = normalizeItemId(kind.item);
+          // Retired kinds drop on load (see
+          // RETIRED_ITEM_IDS). The pile is created lazily,
+          // on its first surviving kind, so a spot whose
+          // kinds all retired vanishes instead of restoring
+          // as an empty pile; a surviving pile's position is
+          // its first surviving entry's coords.
+          if (RETIRED_ITEM_IDS.has(id)) continue;
+          if (!pile) {
+            pile = { stacks: [], x: entry.x, z: entry.z };
+            pilesBySpot.set(key, pile);
+          }
           const existing = pile.stacks.find((s) => s.item === id);
           if (existing) {
             existing.quantity += kind.quantity;
@@ -1206,6 +1346,48 @@ export function deserializeSave(value: unknown): SaveData | null {
       for (const entry of value.altars) {
         if (!isRecord(entry)) continue;
         altars.push({
+          x: entry.x as number,
+          z: entry.z as number,
+          ...(typeof entry.id === 'string'
+            ? { id: entry.id as string }
+            : {}),
+        });
+      }
+    }
+    // Desks are optional on read, same leniency as
+    // altars: an old v1 save without them loads with
+    // desks: []. Entries pass through UNVALIDATED —
+    // the placed-desk restore validates (finite
+    // coords) and drops bad records, so a bad desk
+    // entry can never corrupt the whole document. A
+    // non-array desks field loads as [].
+    const desks: SavedDesk[] = [];
+    if (value.desks !== undefined && Array.isArray(value.desks)) {
+      for (const entry of value.desks) {
+        if (!isRecord(entry)) continue;
+        desks.push({
+          x: entry.x as number,
+          z: entry.z as number,
+          ...(typeof entry.id === 'string'
+            ? { id: entry.id as string }
+            : {}),
+        });
+      }
+    }
+    // Cauldrons are optional on read, same leniency as
+    // desks: an old v1 save without them loads with
+    // cauldrons: []. Entries pass through UNVALIDATED —
+    // the placed-cauldron restore binds by hearth id
+    // (position its fallback) and drops what it cannot
+    // bind, so a bad cauldron
+    // entry can never corrupt the whole document. A
+    // non-array cauldrons field loads as [].
+    const cauldrons: SavedCauldron[] = [];
+    if (value.cauldrons !== undefined && Array.isArray(value.cauldrons)) {
+      for (const entry of value.cauldrons) {
+        if (!isRecord(entry)) continue;
+        cauldrons.push({
+          hearthId: entry.hearthId as string,
           x: entry.x as number,
           z: entry.z as number,
           ...(typeof entry.id === 'string'
@@ -1367,6 +1549,8 @@ export function deserializeSave(value: unknown): SaveData | null {
       stumps,
       torches,
       altars,
+      desks,
+      cauldrons,
       tents,
       nameSight,
       stagings,

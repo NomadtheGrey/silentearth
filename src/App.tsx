@@ -117,7 +117,7 @@
  *   untouched.
  * - FIRE UI, LIVE (Adam, 2026-10-26): placement + lighting
  *   are wired to the engine's placed-fire machine. A carried
- *   fire item (campfire / hearth / kiln / bloomery, crafted
+ *   fire item (campfire / hearth / kiln, crafted
  *   through CraftingMenu) gains a Place button in the
  *   inventory panel; pressing it opens placement mode with
  *   the PlacementPreview ghost at her feet (free placement,
@@ -128,7 +128,7 @@
  *   it would duplicate the item). Campfire is the exception:
  *   single-tap (Adam, 2026-10-28) — its Place press places
  *   instantly at her feet, no mode, no ghost, no panel;
- *   hearth/kiln/bloomery keep the flow above. Every placed
+ *   hearth/kiln keep the flow above. Every placed
  *   fire gets an
  *   anchored FireState chip (unlit / lighting / lit, with
  *   click count or friction phase); tapping an unlit fire
@@ -581,6 +581,56 @@
  *   id→group map — no Systems file touch, no recipe field,
  *   canCraft/execution untouched. Unmapped recipes would
  *   trail under "Other" rather than vanish (none today).
+ * - CRAFTING FILTER + FACED-TARGET STATION FEED, LIVE
+ *   (Adam, 2026-10-30: "we need to filter our crafting
+ *   recipes based on station. Hand crafting would always
+ *   be available, but loom crafting would not be available
+ *   at a workstation or cauldron, and vice versa"): the
+ *   panel shows ONLY hand + unstated recipes and the
+ *   recipes of stations currently fed — absent-station
+ *   recipes do not appear at all (not greyed; gone), and
+ *   sections render only for visible sets. The ownership
+ *   sink partitions the VISIBLE set (filter first): a
+ *   superseded recipe at an absent station hides with
+ *   its station and stays out of the trailing 'Owned &
+ *   Superseded' block until its station returns. FEED
+ *   (final shape, Adam 2026-10-30): radius presence is
+ *   retired for EVERY station — availableStations
+ *   derives ENTIRELY from her FACED TARGET (the USE
+ *   winner, one target at a time; his reason: radius
+ *   "will simply cause gobs of action pills to appear"
+ *   at camps with clustered stations). Faced stump ->
+ *   'workstation' (stumps read in the winner as kind
+ *   'site', siteId 'stump:<x>,<z>'); faced lit fire ->
+ *   'fire' (any type — a faced lit kiln feeds
+ *   charcoal), faced lit kiln -> 'kiln' as well; nothing
+ *   faced -> hand only. 'Cauldron' keys on the placed-
+ *   cauldron target when it exists (Adam: "Cauldron
+ *   would go on the Hearth, not the kiln. And facing
+ *   the Cauldron is different from facing the Hearth")
+ *   in that build's UI half — the carried-pot
+ *   composition is dead and built nowhere; until then
+ *   cauldron recipes stay hidden. The LOOM joined the
+ *   winner race in the same landing (kind 'loom', the
+ *   placed-object idiom; its pill reads WEAVE (Adam,
+ *   2026-10-30: "What do we do at a loom? We weave,
+ *   right?") and its
+ *   press opens the Crafting panel — the pill is its
+ *   door), so 'loom' feeds from its faced target like
+ *   every other station: no station is dark.
+ *   executeCraft receives
+ *   the same list, so a recipe is craftable exactly
+ *   when it is visible. The
+ *   whole derivation sits BELOW the useWinner call in
+ *   the component body (relocated 2026-10-30 — it reads
+ *   the winner, and the winner's own dependency cluster
+ *   lives below the derivation's original home).
+ *   Grouping rider: the fire/cauldron recipes
+ *   (charcoal-stick, render-tallow, the two candles)
+ *   map to 'Fire & Workshop' — no "Other" tail for the
+ *   set. Descriptors ride the rows, so the candle /
+ *   charcoal blurbs read at the station where the
+ *   recipe lives.
  * - PAUSE UI HALF, LIVE (Adam, 2026-10-26 — core 54e525c, DEV
  *   brief): the shell gates its timers on 'game:pause-changed'
  *   via a pausedRef (intervals/rAF close over the ref, never
@@ -1164,6 +1214,31 @@
  *   next event). New AltarChip.tsx + App wiring.
  *   Parity: shared row button + label chip, touch +
  *   desktop. Placeable candles still later, distinct.
+ * - WRITING DESK PLACE + MARKER, LIVE (Adam's grimoire
+ *   design turn, 2026-10-30 — Systems 5e7bf06 +
+ *   Background bcddb2d): the altar pattern end to end.
+ *   The desk's inventory row gains Place (ITEMS.
+ *   writingDesk joins PLACEABLE_IDS for the BUTTON
+ *   only) placing INSTANTLY AT HER FEET. Grant FIRST
+ *   (Systems placeDesk consumes one carried desk;
+ *   failure touches nothing + shows the reason), then
+ *   the entity place (Background deskState.placeDesk,
+ *   emits desk:placed -> refreshDesks). Panel stays
+ *   open, count drops, deskNote carries the result
+ *   ('Placed a writing desk.'). One world-anchored
+ *   chip per placed desk — the AltarChip with label
+ *   'Writing Desk', LABEL-ONLY (no desk actions exist;
+ *   the grimoire's workings arrive with its own design
+ *   turn; no Pick-up — moving a placed desk is Adam's
+ *   word later). No hunger gate (a move, like drop/
+ *   pickup). Save: desks ride saveNow from the entity
+ *   snapshot + boot restore BEFORE construction
+ *   (Background pattern; the SavedDesk id is OPTIONAL
+ *   — id-less entries are kept and minted ids by
+ *   restore, never dropped). Crafting: writing-desk,
+ *   journal, and grimoire group together under
+ *   'Fire & Workshop' (the desk-and-books set, DEV
+ *   2026-10-30; Adam can re-split at the pin pass).
  * - RITUAL WAKING UI, LIVE (Adam, 2026-10-27 — DEV
  *   signal, Systems 939e9b3 + Background 58537ef):
  *   tier-1 Waking, altar sites only (see flags). The
@@ -1734,6 +1809,8 @@ import { torchState, type PlacedTorch as PlacedTorchEntity } from './game/torchS
 import { lightTorches, placeTorch as grantPlaceTorch, pickupTorch as grantPickupTorch } from './systems/torch';
 import { altarState, type PlacedAltar as PlacedAltarEntity } from './game/altarState';
 import { placeAltar as grantPlaceAltar } from './systems/altar';
+import { deskState, type PlacedDesk as PlacedDeskEntity } from './game/deskState';
+import { placeDesk as grantPlaceDesk } from './systems/desk';
 import { ritualSiteState, stumpSiteId } from './game/ritualSite';
 import { boneKindAt } from './game/boneKind';
 import {
@@ -1849,7 +1926,6 @@ const FIRE_ITEM_TO_TYPE: Record<string, FireType> = {
   [ITEMS.campfire]: 'campfire',
   [ITEMS.hearth]: 'hearth',
   [ITEMS.kiln]: 'kiln',
-  [ITEMS.bloomery]: 'bloomery',
 };
 
 /**
@@ -1866,16 +1942,18 @@ const HOUSE_ITEM_TO_TYPE: Record<string, HouseType> = {
 };
 
 /** Item ids the inventory panel offers a Place button for.
- * Lit torches, altars, and campfires ride this set for the
- * BUTTON only — their handlers branch to instant-at-feet
- * (see handlePlaceItem), never the preview-ghost flow the
- * other ids (hearth/kiln/bloomery/houses/looms) use. */
+ * Lit torches, altars, writing desks, and campfires ride
+ * this set for the BUTTON only — their handlers branch to
+ * instant-at-feet (see handlePlaceItem), never the
+ * preview-ghost flow the other ids (hearth/kiln/houses/
+ * looms) use. */
 const PLACEABLE_IDS: ReadonlySet<string> = new Set([
   ...Object.keys(FIRE_ITEM_TO_TYPE),
   ...Object.keys(HOUSE_ITEM_TO_TYPE),
   ITEMS.loom,
   ITEMS.litTorch,
   ITEMS.altar,
+  ITEMS.writingDesk,
   ITEMS.tent,
 ]);
 
@@ -1883,7 +1961,6 @@ const FIRE_NAME: Record<FireType, string> = {
   campfire: 'Campfire',
   hearth: 'Hearth',
   kiln: 'Kiln',
-  bloomery: 'Bloomery',
 };
 
 // QUEST HINTS (draft one-liners, Adam pins before merge):
@@ -1947,7 +2024,6 @@ const CRAFTING_GROUP_BY_RECIPE_ID: Record<string, string> = {
   campfire: 'Fire & Workshop',
   hearth: 'Fire & Workshop',
   kiln: 'Fire & Workshop',
-  bloomery: 'Fire & Workshop',
   'stumpy-workstation': 'Fire & Workshop',
   'crafted-workstation': 'Fire & Workshop',
   'potters-wheel': 'Fire & Workshop',
@@ -1955,6 +2031,14 @@ const CRAFTING_GROUP_BY_RECIPE_ID: Record<string, string> = {
   'dry-kindling': 'Fire & Workshop',
   torch: 'Fire & Workshop',
   altar: 'Fire & Workshop',
+  'writing-desk': 'Fire & Workshop',
+  journal: 'Fire & Workshop',
+  grimoire: 'Fire & Workshop',
+  'charcoal-stick': 'Fire & Workshop',
+  'render-tallow': 'Fire & Workshop',
+  'candle-from-beeswax': 'Fire & Workshop',
+  'candle-from-tallow': 'Fire & Workshop',
+  cauldron: 'Fire & Workshop',
   'hooded-cloak': 'Clothes',
   shawl: 'Clothes',
   'pointy-hat': 'Clothes',
@@ -1970,7 +2054,6 @@ const CRAFTING_GROUP_BY_RECIPE_ID: Record<string, string> = {
   'plant-pulp': 'Materials & Carrying',
   'pressed-sheets': 'Materials & Carrying',
   paper: 'Materials & Carrying',
-  grimoire: 'Materials & Carrying',
   snare: 'Traps',
   'fish-weir-trap': 'Traps',
   'pot-trap': 'Traps',
@@ -2394,6 +2477,7 @@ export default function App() {
   const [torchNote, setTorchNote] = useState<string | null>(null);
   const [tentNote, setTentNote] = useState<string | null>(null);
   const [altarNote, setAltarNote] = useState<string | null>(null);
+  const [deskNote, setDeskNote] = useState<string | null>(null);
   const [fireNote, setFireNote] = useState<string | null>(null);
   const [dropNote, setDropNote] = useState<string | null>(null);
   const [storageNote, setStorageNote] = useState<string | null>(null);
@@ -2597,6 +2681,16 @@ export default function App() {
   );
   const [altarAnchors, setAltarAnchors] = useState<
     { altar: PlacedAltarEntity; x: number; y: number }[]
+  >([]);
+  // Placed writing desks (Background singleton) and their
+  // projected anchors — the altar pattern minus both the
+  // menu and the placed-list state: the chip is label-only
+  // (no desk actions exist yet, no Pick-up invented), so
+  // there is no selected-desk state, and no consumer needs
+  // a placedDesks list — the anchors loop reads the
+  // singleton directly, like the altars loop does.
+  const [deskAnchors, setDeskAnchors] = useState<
+    { desk: PlacedDeskEntity; x: number; y: number }[]
   >([]);
   // Ritual staging (tier-1 Waking build): the shell owns
   // one StagingBook (site + kind keyed stagings) and one
@@ -3075,6 +3169,13 @@ export default function App() {
           // restore validates on load and drops id-less
           // entries). Placed altars survive refresh.
           altars: altarState.snapshot(),
+          // PLACED-DESK SAVE WIRING: the live placed-desk
+          // set rides every save as-is (positions verbatim;
+          // ids ride when the entity provides them — the
+          // SavedDesk id is optional, and restore keeps
+          // id-less entries and mints ids). Placed desks
+          // survive refresh.
+          desks: deskState.snapshot(),
           // RITUAL SAVE WIRING: stagings + awakenings ride
           // every save as-is (StagingBook / CharmState
           // snapshots; serialize writes them verbatim,
@@ -3654,6 +3755,13 @@ export default function App() {
       altars.push({ altar, x: anchor.x, y: anchor.y });
     }
     setAltarAnchors(altars);
+    const desks: { desk: PlacedDeskEntity; x: number; y: number }[] = [];
+    for (const desk of deskState.snapshot()) {
+      const anchor = projectAnchor(desk.x, desk.z, 'scatter');
+      if (!anchor) continue;
+      desks.push({ desk, x: anchor.x, y: anchor.y });
+    }
+    setDeskAnchors(desks);
     // Stump ritual anchors (bone build): stumps in
     // range at her feet (Background's stumpPositions —
     // felled + grown, deduped), projected 'scatter'
@@ -3891,6 +3999,28 @@ export default function App() {
               x: altar.x,
               z: altar.z,
             })),
+        );
+        // PLACED-DESK SAVE WIRING (same restore-before-
+        // first-build pattern): deskState.restore() is
+        // silent and the constructor's initial placed-group
+        // build picks restored desks up. SavedDesk.id is
+        // OPTIONAL (Systems' shape) while the entity's
+        // PlacedDesk.id is required — restore owns that
+        // gap: id-less entries are KEPT and minted ids,
+        // provided ids preserved, entries with non-finite
+        // positions dropped inside restore. The shell
+        // therefore passes entries through with only the
+        // id-when-present shaping (NOT the altar id filter
+        // — dropping id-less desks here would lose real
+        // desks the save deliberately kept).
+        deskState.restore(
+          (bootSaved.desks ?? []).map((desk) => ({
+            x: desk.x,
+            z: desk.z,
+            ...(typeof desk.id === 'string' && desk.id !== ''
+              ? { id: desk.id }
+              : {}),
+          })),
         );
         // RITUAL SAVE WIRING (same pre-construction pattern):
         // StagingBook + CharmState restore (pure systems,
@@ -4312,6 +4442,13 @@ export default function App() {
       setPlacedAltars(altarState.snapshot());
       recomputeAnchors();
     };
+    // Placed-desk subscriptions: anchors re-project from
+    // the Background singleton on every desk event, altar
+    // pattern (no placed-list state to re-read — see the
+    // deskAnchors declaration).
+    const refreshDesks = () => {
+      recomputeAnchors();
+    };
     // PAUSE SUBSCRIPTION (core 54e525c): the shell's half of the
     // flag. The ref gates the timers (below + the turn-stick and
     // FPS loops); the state drives the Paused indicator. Fires
@@ -4362,6 +4499,8 @@ export default function App() {
     const offTorchRemoved = bus.on('torch:removed', refreshTorches);
     const offAltarPlaced = bus.on('altar:placed', refreshAltars);
     const offAltarRemoved = bus.on('altar:removed', refreshAltars);
+    const offDeskPlaced = bus.on('desk:placed', refreshDesks);
+    const offDeskRemoved = bus.on('desk:removed', refreshDesks);
     // Ritual subscriptions: the panel re-renders on every
     // stage/unstage (the book + site state mutate without
     // rendering by themselves — ritualVersion is the
@@ -4598,6 +4737,8 @@ export default function App() {
       offTorchRemoved();
       offAltarPlaced();
       offAltarRemoved();
+      offDeskPlaced();
+      offDeskRemoved();
       offRitualStaged();
       offRitualUnstaged();
       offShelterPlaced();
@@ -4831,241 +4972,15 @@ export default function App() {
         hint: QUEST_HINTS[quest.id] ?? '',
       }))
     : undefined;
-  const availableStations: CraftingStation[] = [];
-  if (stationPresenceValue.workstation) {
-    availableStations.push('workstation');
-  }
-  if (stationPresenceValue.loom) {
-    availableStations.push('loom');
-  }
-  // Header display names (stump-header fix, Adam-approved
-  // 2026-10-28): ONLY the displayed string maps — the
-  // 'workstation' context keeps its id in availableStations
-  // for the canCraft checks below. Workstation presence
-  // comes solely from stumps today, so "tree stump" is
-  // truthful now; when presence learns kinds later, this
-  // mapping follows the kind per StationPanel's map.
-  const stationNote =
-    availableStations.length === 0
-      ? 'No station nearby'
-      : `Nearby station${availableStations.length > 1 ? 's' : ''}: ${availableStations
-          .map((station) =>
-            station === 'workstation' ? 'tree stump' : station,
-          )
-          .join(', ')}`;
+  // CRAFTING DERIVATION RELOCATED (2026-10-30): the
+  // availableStations -> craftingSections block lives
+  // BELOW the useWinner call in this component — the
+  // faced-target station feed reads the winner, whose
+  // own dependency cluster sits below this point. Pure
+  // derivations, unchanged inputs; its consumers (the
+  // CraftingMenu JSX, the craft handlers) all sit below
+  // the new home or read it at event time.
 
-  const craftingRecipes: CraftingRecipe[] = RECIPES.map((recipe) => {
-    // OR over every present station: a recipe is craftable
-    // when ANY present station satisfies it. When none does,
-    // prefer the check for a present station (ingredient /
-    // requirement detail) over a mismatch note, so a dual
-    // site never reports a present station as missing.
-    const checks =
-      availableStations.length > 0
-        ? availableStations.map((s) => canCraft(recipe, inventory, s))
-        : [canCraft(recipe, inventory, null)];
-    const check =
-      checks.find((c) => c.ok) ??
-      checks.find((c) => !c.stationMismatch) ??
-      checks[0];
-    let availabilityNote: string | undefined;
-    if (check.stationMismatch) {
-      // STUMP INDICATION (Adam, 2026-10-26): the starter
-      // workstation IS a tree stump, but the old note read
-      // "Needs a workstation station." — naming no stump at
-      // all. Workstation-gated recipes now say so outright.
-      // Presence is booleans only (workstation/loom), so the
-      // shell cannot tell a stump from a crafted workstation
-      // or a Stumpy upgrade — this names the starter case the
-      // player actually meets, and no presence-kind plumbing
-      // was added to game files to split the kinds. Other
-      // stations keep the old template unchanged.
-      availabilityNote =
-        check.requiredStation === 'workstation'
-          ? 'Needs a tree stump to work at.'
-          : `Needs a ${check.requiredStation} station.`;
-    } else if (check.missingIngredients.length > 0) {
-      const first = check.missingIngredients[0];
-      availabilityNote = `Missing ${first.item} (${first.held} / ${first.quantity}).`;
-    } else if (check.missingUpgradeFrom.length > 0) {
-      availabilityNote = `Needs one of ${check.missingUpgradeFrom.join(' or ')} to upgrade from.`;
-    } else if (check.missingRequirements.length > 0) {
-      const first = check.missingRequirements[0];
-      availabilityNote = `Requires ${first.item} present (${first.held} / ${first.quantity}).`;
-    }
-    // DEPENDENCIES DISPLAY (Adam, 2026-10-26): upgradeFrom and
-    // requires are dependencies, not ingredients, and they must
-    // NOT be folded into recipe.ingredients — execution removes
-    // ingredients AND upgradeFrom separately, so listing the
-    // predecessor there would consume it twice. They ride as
-    // extra display rows after the ingredient rows instead:
-    // upgradeFrom as "Upgrades from: {name} {held} / 1"
-    // (either/or: "Spade or Axe-Trowel", held 1 if either held
-    // else 0), requires as "Requires present: {name} {held} /
-    // {qty} (kept, not used up)". Station is NOT a row —
-    // context, not an ingredient; the header and mismatch
-    // notes already cover it.
-    const dependencyRows: { name: string; amountText: string }[] = [];
-    if (recipe.upgradeFrom) {
-      const predecessors = Array.isArray(recipe.upgradeFrom)
-        ? recipe.upgradeFrom
-        : [recipe.upgradeFrom];
-      if (predecessors.length === 1) {
-        dependencyRows.push({
-          name: `Upgrades from: ${displayNameFor(predecessors[0])}`,
-          amountText: `${inventory.count(predecessors[0])} / 1`,
-        });
-      } else {
-        const held = predecessors.some((item) => inventory.count(item) > 0)
-          ? 1
-          : 0;
-        dependencyRows.push({
-          name: `Upgrades from: ${predecessors.map(displayNameFor).join(' or ')}`,
-          amountText: `${held} / 1`,
-        });
-      }
-    }
-    for (const requirement of recipe.requires ?? []) {
-      dependencyRows.push({
-        name: `Requires present: ${displayNameFor(requirement.item)}`,
-        amountText: `${inventory.count(requirement.item)} / ${requirement.quantity} (kept, not used up)`,
-      });
-    }
-    // STUMPY DOUBLE-UPGRADE GUARD (shell-side, Adam
-    // 2026-10-28 — Systems cannot read anchor state):
-    // an upgradesStump recipe whose faced stump already
-    // carries the workstation addition disables + labels,
-    // overriding Systems' mapping. The label replaces
-    // the availability note via the no-recraft render
-    // (disabledLabel set → note not rendered). No stump
-    // in range → the station gate above already failed;
-    // the override needs a target, so it does not fire.
-    // Systems' canCraft is UNCHANGED — this is a shell
-    // mapping override only.
-    const stumpAlreadyWorkbench =
-      recipe.upgradesStump === true &&
-      nearestStump !== null &&
-      stumpState.isWorkbench(nearestStump.x, nearestStump.z);
-    // Row description (descriptor wiring, 2026-10-29):
-    // the output's authored descriptor replaces the
-    // generated 'Makes 1 × <raw id>' line; a multi-output
-    // recipe appends ' (×N)'. The fallback (no recipe
-    // output should miss the table) keeps the Makes shape
-    // but with the DISPLAY name — never the raw id.
-    const outputDescriptor = descriptionFor(recipe.output.item);
-    return {
-      id: recipe.id,
-      name: recipe.name,
-      description:
-        outputDescriptor !== undefined
-          ? recipe.output.quantity > 1
-            ? `${outputDescriptor} (×${recipe.output.quantity})`
-            : outputDescriptor
-          : `Makes ${recipe.output.quantity} × ${displayNameFor(recipe.output.item)}.`,
-      // Housing ladder line (2026-10-29): present only
-      // on the four house recipes (see the table beside
-      // itemNoteFor); display only — canCraft above is
-      // untouched by it.
-      ladderLine: housingLadderLineFor(recipe.output.item),
-      ingredients: [
-        ...recipe.ingredients.map((ingredient) => ({
-          name: ingredient.item,
-          amountText: `${inventory.count(ingredient.item)} / ${ingredient.quantity}`,
-          icon:
-            ingredient.item === UMBRELLA_ITEM_ID ? (
-              <UmbrellaIcon />
-            ) : undefined,
-        })),
-        ...dependencyRows,
-      ],
-      canCraft: stumpAlreadyWorkbench
-        ? false
-        : check.ok && check.ownership === 'available',
-      // NO-RECRAFT BINDING (Adam, 2026-10-28 — Systems owns
-      // the rule, the shell renders it): Systems' check.ok
-      // already folds ownership in (ok is false when
-      // ownership is not 'available'), so the && above is
-      // belt-and-braces, behavior-identical today — it
-      // makes the mapping literal: owned/superseded →
-      // canCraft false. The label is Systems' pinned word,
-      // rendered verbatim under the name; it replaces the
-      // availability note. The direct-upgrade exception
-      // lives in Systems' status (same-stage upgradeFrom
-      // stays available), so garden → sharp never lands
-      // here — if it ever did, the STATUS would be wrong,
-      // not this render.
-      disabledLabel: stumpAlreadyWorkbench
-        ? 'Already a Workbench'
-        : check.ownership === 'available'
-          ? undefined
-          : CRAFT_OWNERSHIP_LABELS[check.ownership],
-      availabilityNote,
-      icon:
-        recipe.output.item === UMBRELLA_ITEM_ID ? (
-          <UmbrellaIcon />
-        ) : undefined,
-    };
-  });
-
-  // NO-RECRAFT ORDER (Adam, 2026-10-28; STRENGTHENED
-  // 2026-10-29 — "should move to the bottom of the
-  // LIST if crafted and no longer craftable"): owned/
-  // superseded recipes leave their sections entirely
-  // and collect in ONE trailing block at the very
-  // bottom of the whole list, after every section (and
-  // after "Other" if it ever renders), keeping their
-  // relative order and their per-row labels. The sink
-  // keys on OWNERSHIP (the row's disabledLabel is one
-  // of Systems' two pinned labels) — never on canCraft:
-  // a merely unaffordable recipe (ownership available,
-  // ingredients missing) stays in its section, and the
-  // stump's "Already a Workbench" row is not an
-  // ownership row and never sinks. Sections are built
-  // from available recipes only; a section with no
-  // available recipes does not render. Header counts
-  // read the section's rows as before (canCraft among
-  // them), so they stay honest under the new shape.
-  // The flat menu prop rides the same global order:
-  // available in order, then the sunk block. (The
-  // 2026-10-28 within-section partition this replaces
-  // left the trowels at the bottom of Tools — the
-  // FIRST section, still high on screen.)
-  const isSunkRecipe = (recipe: (typeof craftingRecipes)[number]) =>
-    recipe.disabledLabel !== undefined &&
-    Object.values(CRAFT_OWNERSHIP_LABELS).includes(recipe.disabledLabel);
-  const orderedCraftingRecipes = [
-    ...craftingRecipes.filter((recipe) => !isSunkRecipe(recipe)),
-    ...craftingRecipes.filter(isSunkRecipe),
-  ];
-  const availableCraftingRecipes = orderedCraftingRecipes.filter(
-    (recipe) => !isSunkRecipe(recipe),
-  );
-  const sunkCraftingRecipes = orderedCraftingRecipes.filter(isSunkRecipe);
-
-  // CRAFTING GROUPS: sections in DEV's group order, each filtered
-  // from the AVAILABLE rows above (never re-sorted);
-  // empty groups dropped here, and the menu drops them again
-  // defensively. Unmapped recipes (none today — all 45 map,
-  // placements pinned by Adam 2026-10-29) trail under
-  // "Other" instead of vanishing; the sunk block closes
-  // the list after it.
-  const ungroupedRecipes = availableCraftingRecipes.filter(
-    (recipe) => CRAFTING_GROUP_BY_RECIPE_ID[recipe.id] === undefined,
-  );
-  const craftingSections = [
-    ...CRAFTING_GROUP_ORDER.map((title) => ({
-      title,
-      recipes: availableCraftingRecipes.filter(
-        (recipe) => CRAFTING_GROUP_BY_RECIPE_ID[recipe.id] === title,
-      ),
-    })).filter((section) => section.recipes.length > 0),
-    ...(ungroupedRecipes.length > 0
-      ? [{ title: 'Other', recipes: ungroupedRecipes }]
-      : []),
-    ...(sunkCraftingRecipes.length > 0
-      ? [{ title: 'Owned & Superseded', recipes: sunkCraftingRecipes }]
-      : []),
-  ];
 
   // Trap-craft confirm (Adam, 2026-10-26): a trap recipe's Craft
   // button asks FIRST, in the staged Popup dialog shell — the
@@ -5406,6 +5321,30 @@ export default function App() {
     setAltarNote('Placed an altar.');
   };
 
+  // Writing-desk placement (desk build, 2026-10-30): the
+  // altar twin — Systems' placeDesk grant consumes one
+  // carried desk (failure touches nothing and the reason
+  // shows), then Background's deskState.placeDesk places
+  // the entity at her feet (desk:placed -> refreshDesks
+  // re-projects the chip anchors). No preview flow, no
+  // hunger gate (a move, like drop/pickup).
+  const handlePlaceDesk = () => {
+    const player = playerRef.current;
+    if (!player) return;
+    const outcome = grantPlaceDesk(inventory, player.x, player.z);
+    // Equality check, not truthiness: non-strict tsc does
+    // not narrow this union's boolean discriminant on
+    // truthiness (same note as handlePlaceAltar).
+    if (outcome.placed === false) {
+      setDeskNote(outcome.reason);
+      return;
+    }
+    deskState.placeDesk(outcome.desk.x, outcome.desk.z);
+    refreshInventory();
+    saveNow();
+    setDeskNote('Placed a writing desk.');
+  };
+
   // RITUAL SKY FACTS (shell supplies, systems never imports
   // game): phase from cyclePhase at the world's fixed start
   // month (the renderer feeds the sky SEASON_START_MONTH,
@@ -5715,6 +5654,13 @@ export default function App() {
       handlePlaceAltar();
       return;
     }
+    // Placed writing desks never enter the preview flow
+    // either — the altar twin: one press places one desk
+    // at her feet via the grant + entity pair above.
+    if (itemId === ITEMS.writingDesk) {
+      handlePlaceDesk();
+      return;
+    }
     // Placed tents never enter the preview flow either —
     // the torch mirror: one press places one tent at her
     // feet (camping.ts: "one press places one tent").
@@ -5727,7 +5673,7 @@ export default function App() {
     }
     // Single-tap campfire (Adam, 2026-10-28): Place places at
     // her feet immediately — no placement mode, no ghost, no
-    // "Place here" panel. Hearth/kiln/bloomery keep the
+    // "Place here" panel. Hearth/kiln keep the
     // two-step flow below; this branch is campfire only.
     if (itemId === ITEMS.campfire) {
       // Clear any armed placement mode first so no stale ghost
@@ -8019,7 +7965,7 @@ export default function App() {
     | { kind: 'trap'; id: string; distance: number }
     | { kind: 'hive'; x: number; z: number; distance: number }
     | { kind: 'site'; siteId: string; distance: number }
-    | { kind: 'fire' | 'tent' | 'torch'; id: string; distance: number }
+    | { kind: 'fire' | 'tent' | 'torch' | 'loom'; id: string; distance: number }
     | { kind: 'home'; distance: number }
     | { kind: 'scry'; distance: number };
 
@@ -8147,7 +8093,7 @@ export default function App() {
     }
     if (siteBest !== null) challengers.push(siteBest);
     const considerPlaced = (
-      kind: 'fire' | 'tent' | 'torch',
+      kind: 'fire' | 'tent' | 'torch' | 'loom',
       id: string,
       x: number,
       z: number,
@@ -8166,6 +8112,16 @@ export default function App() {
     }
     for (const torch of placedTorches) {
       considerPlaced('torch', torch.id, torch.x, torch.z);
+    }
+    // Placed looms (loom fold-in, 2026-10-30): looms join
+    // the winner race in the same placed-object idiom —
+    // Adam's completed station law needs the loom to be
+    // a FACED target (it had no winner kind, so its
+    // station could never feed). Read from the singleton
+    // directly (no React mirror exists for looms; the
+    // anchors loop reads snapshots the same way).
+    for (const loom of loomState.snapshot()) {
+      considerPlaced('loom', loom.id, loom.x, loom.z);
     }
     if (homeHouse !== undefined) {
       const f = facingOf(homeHouse.x, homeHouse.z);
@@ -8259,6 +8215,14 @@ export default function App() {
         break;
       case 'torch':
         setSelectedTorchId(winner.id);
+        break;
+      case 'loom':
+        // The loom's door is its pill: facing it and
+        // pressing USE opens the Crafting panel, which
+        // the feed (same winner) has already filtered
+        // to loom + hand recipes. No selected-loom
+        // state — the panel is the whole interaction.
+        openCraftingPanel();
         break;
       case 'home':
         setHomeMenuOpen(true);
@@ -8838,6 +8802,301 @@ export default function App() {
   // and turns.
   const useWinner = computeUseWinner();
 
+  const availableStations: CraftingStation[] = [];
+  // FACED-TARGET STATION FEED (Adam, 2026-10-30, final
+  // shape — radius presence is retired as the station
+  // feed for EVERY station: "we want to be facing them
+  // as well. The 'radius' thing will simply cause gobs
+  // of action pills to appear when we're at a camp with
+  // clusters of stations nearby."). The feed derives
+  // ENTIRELY from her one faced target — the USE winner
+  // for this render, the same target that produces the
+  // Action pills:
+  // - a faced STUMP feeds 'workstation'. Stumps read in
+  //   the winner as kind 'site' with a 'stump:<x>,<z>'
+  //   siteId (altar sites share the kind and feed
+  //   nothing — an altar is not a station).
+  // - a faced placed fire feeds 'fire' when lit (any
+  //   type — a faced lit kiln is still a lit fire for
+  //   charcoal), and 'kiln' when that fire is a lit
+  //   kiln (both, for a kiln).
+  // - 'cauldron' keys on the placed-cauldron target
+  //   when that target exists (the placed-cauldron
+  //   build's UI half) — the cauldron goes on the
+  //   Hearth, and facing the Cauldron is different from
+  //   facing the Hearth. The carried-pot composition
+  //   is dead; do not rebuild it.
+  // - a faced LOOM feeds 'loom' (winner kind 'loom' —
+  //   looms joined the winner race in this landing; the
+  //   loom's pill opens the Crafting panel, so the door
+  //   and the feed are the same target).
+  // - nothing faced -> hand only.
+  // stationPresenceValue is no longer read by this
+  // feed at all (it still serves the station door and
+  // the stump derivations elsewhere in the shell).
+  if (
+    useWinner?.kind === 'site' &&
+    useWinner.siteId.startsWith('stump:')
+  ) {
+    availableStations.push('workstation');
+  }
+  if (useWinner?.kind === 'loom') {
+    availableStations.push('loom');
+  }
+  const facedFire =
+    useWinner?.kind === 'fire'
+      ? fireState.get(useWinner.id)
+      : undefined;
+  if (facedFire?.lit === true) {
+    availableStations.push('fire');
+    if (facedFire.type === 'kiln') {
+      availableStations.push('kiln');
+    }
+  }
+  // Header display names (stump-header fix, Adam-approved
+  // 2026-10-28): ONLY the displayed string maps — the
+  // 'workstation' context keeps its id in availableStations
+  // for the canCraft checks below. Workstation presence
+  // comes solely from stumps today, so "tree stump" is
+  // truthful now; when presence learns kinds later, this
+  // mapping follows the kind per StationPanel's map.
+  const stationNote =
+    availableStations.length === 0
+      ? 'No station nearby'
+      : `Nearby station${availableStations.length > 1 ? 's' : ''}: ${availableStations
+          .map((station) =>
+            station === 'workstation' ? 'tree stump' : station,
+          )
+          .join(', ')}`;
+
+  // FILTER BY STATION (Adam, 2026-10-30): only hand and
+  // unstated recipes (always available) and the recipes
+  // of fed stations reach the panel — absent-station
+  // recipes do not appear at all. Everything below
+  // (grouping, the ownership sink, the counts) derives
+  // from this visible set, so the sink partitions
+  // visible rows only: a superseded recipe at an absent
+  // station hides with its station and stays out of
+  // the 'Owned & Superseded' block until it returns.
+  const craftingRecipes: CraftingRecipe[] = RECIPES.filter(
+    (recipe) =>
+      recipe.station === undefined ||
+      recipe.station === 'hand' ||
+      availableStations.includes(recipe.station),
+  ).map((recipe) => {
+    // OR over every present station: a recipe is craftable
+    // when ANY present station satisfies it. When none does,
+    // prefer the check for a present station (ingredient /
+    // requirement detail) over a mismatch note, so a dual
+    // site never reports a present station as missing.
+    const checks =
+      availableStations.length > 0
+        ? availableStations.map((s) => canCraft(recipe, inventory, s))
+        : [canCraft(recipe, inventory, null)];
+    const check =
+      checks.find((c) => c.ok) ??
+      checks.find((c) => !c.stationMismatch) ??
+      checks[0];
+    let availabilityNote: string | undefined;
+    if (check.stationMismatch) {
+      // STUMP INDICATION (Adam, 2026-10-26): the starter
+      // workstation IS a tree stump, but the old note read
+      // "Needs a workstation station." — naming no stump at
+      // all. Workstation-gated recipes now say so outright.
+      // Presence is booleans only (workstation/loom), so the
+      // shell cannot tell a stump from a crafted workstation
+      // or a Stumpy upgrade — this names the starter case the
+      // player actually meets, and no presence-kind plumbing
+      // was added to game files to split the kinds. Other
+      // stations keep the old template unchanged.
+      availabilityNote =
+        check.requiredStation === 'workstation'
+          ? 'Needs a tree stump to work at.'
+          : `Needs a ${check.requiredStation} station.`;
+    } else if (check.missingIngredients.length > 0) {
+      const first = check.missingIngredients[0];
+      availabilityNote = `Missing ${first.item} (${first.held} / ${first.quantity}).`;
+    } else if (check.missingUpgradeFrom.length > 0) {
+      availabilityNote = `Needs one of ${check.missingUpgradeFrom.join(' or ')} to upgrade from.`;
+    } else if (check.missingRequirements.length > 0) {
+      const first = check.missingRequirements[0];
+      availabilityNote = `Requires ${first.item} present (${first.held} / ${first.quantity}).`;
+    }
+    // DEPENDENCIES DISPLAY (Adam, 2026-10-26): upgradeFrom and
+    // requires are dependencies, not ingredients, and they must
+    // NOT be folded into recipe.ingredients — execution removes
+    // ingredients AND upgradeFrom separately, so listing the
+    // predecessor there would consume it twice. They ride as
+    // extra display rows after the ingredient rows instead:
+    // upgradeFrom as "Upgrades from: {name} {held} / 1"
+    // (either/or: "Spade or Axe-Trowel", held 1 if either held
+    // else 0), requires as "Requires present: {name} {held} /
+    // {qty} (kept, not used up)". Station is NOT a row —
+    // context, not an ingredient; the header and mismatch
+    // notes already cover it.
+    const dependencyRows: { name: string; amountText: string }[] = [];
+    if (recipe.upgradeFrom) {
+      const predecessors = Array.isArray(recipe.upgradeFrom)
+        ? recipe.upgradeFrom
+        : [recipe.upgradeFrom];
+      if (predecessors.length === 1) {
+        dependencyRows.push({
+          name: `Upgrades from: ${displayNameFor(predecessors[0])}`,
+          amountText: `${inventory.count(predecessors[0])} / 1`,
+        });
+      } else {
+        const held = predecessors.some((item) => inventory.count(item) > 0)
+          ? 1
+          : 0;
+        dependencyRows.push({
+          name: `Upgrades from: ${predecessors.map(displayNameFor).join(' or ')}`,
+          amountText: `${held} / 1`,
+        });
+      }
+    }
+    for (const requirement of recipe.requires ?? []) {
+      dependencyRows.push({
+        name: `Requires present: ${displayNameFor(requirement.item)}`,
+        amountText: `${inventory.count(requirement.item)} / ${requirement.quantity} (kept, not used up)`,
+      });
+    }
+    // STUMPY DOUBLE-UPGRADE GUARD (shell-side, Adam
+    // 2026-10-28 — Systems cannot read anchor state):
+    // an upgradesStump recipe whose faced stump already
+    // carries the workstation addition disables + labels,
+    // overriding Systems' mapping. The label replaces
+    // the availability note via the no-recraft render
+    // (disabledLabel set → note not rendered). No stump
+    // in range → the station gate above already failed;
+    // the override needs a target, so it does not fire.
+    // Systems' canCraft is UNCHANGED — this is a shell
+    // mapping override only.
+    const stumpAlreadyWorkbench =
+      recipe.upgradesStump === true &&
+      nearestStump !== null &&
+      stumpState.isWorkbench(nearestStump.x, nearestStump.z);
+    // Row description (descriptor wiring, 2026-10-29):
+    // the output's authored descriptor replaces the
+    // generated 'Makes 1 × <raw id>' line; a multi-output
+    // recipe appends ' (×N)'. The fallback (no recipe
+    // output should miss the table) keeps the Makes shape
+    // but with the DISPLAY name — never the raw id.
+    const outputDescriptor = descriptionFor(recipe.output.item);
+    return {
+      id: recipe.id,
+      name: recipe.name,
+      description:
+        outputDescriptor !== undefined
+          ? recipe.output.quantity > 1
+            ? `${outputDescriptor} (×${recipe.output.quantity})`
+            : outputDescriptor
+          : `Makes ${recipe.output.quantity} × ${displayNameFor(recipe.output.item)}.`,
+      // Housing ladder line (2026-10-29): present only
+      // on the four house recipes (see the table beside
+      // itemNoteFor); display only — canCraft above is
+      // untouched by it.
+      ladderLine: housingLadderLineFor(recipe.output.item),
+      ingredients: [
+        ...recipe.ingredients.map((ingredient) => ({
+          name: ingredient.item,
+          amountText: `${inventory.count(ingredient.item)} / ${ingredient.quantity}`,
+          icon:
+            ingredient.item === UMBRELLA_ITEM_ID ? (
+              <UmbrellaIcon />
+            ) : undefined,
+        })),
+        ...dependencyRows,
+      ],
+      canCraft: stumpAlreadyWorkbench
+        ? false
+        : check.ok && check.ownership === 'available',
+      // NO-RECRAFT BINDING (Adam, 2026-10-28 — Systems owns
+      // the rule, the shell renders it): Systems' check.ok
+      // already folds ownership in (ok is false when
+      // ownership is not 'available'), so the && above is
+      // belt-and-braces, behavior-identical today — it
+      // makes the mapping literal: owned/superseded →
+      // canCraft false. The label is Systems' pinned word,
+      // rendered verbatim under the name; it replaces the
+      // availability note. The direct-upgrade exception
+      // lives in Systems' status (same-stage upgradeFrom
+      // stays available), so garden → sharp never lands
+      // here — if it ever did, the STATUS would be wrong,
+      // not this render.
+      disabledLabel: stumpAlreadyWorkbench
+        ? 'Already a Workbench'
+        : check.ownership === 'available'
+          ? undefined
+          : CRAFT_OWNERSHIP_LABELS[check.ownership],
+      availabilityNote,
+      icon:
+        recipe.output.item === UMBRELLA_ITEM_ID ? (
+          <UmbrellaIcon />
+        ) : undefined,
+    };
+  });
+
+  // NO-RECRAFT ORDER (Adam, 2026-10-28; STRENGTHENED
+  // 2026-10-29 — "should move to the bottom of the
+  // LIST if crafted and no longer craftable"): owned/
+  // superseded recipes leave their sections entirely
+  // and collect in ONE trailing block at the very
+  // bottom of the whole list, after every section (and
+  // after "Other" if it ever renders), keeping their
+  // relative order and their per-row labels. The sink
+  // keys on OWNERSHIP (the row's disabledLabel is one
+  // of Systems' two pinned labels) — never on canCraft:
+  // a merely unaffordable recipe (ownership available,
+  // ingredients missing) stays in its section, and the
+  // stump's "Already a Workbench" row is not an
+  // ownership row and never sinks. Sections are built
+  // from available recipes only; a section with no
+  // available recipes does not render. Header counts
+  // read the section's rows as before (canCraft among
+  // them), so they stay honest under the new shape.
+  // The flat menu prop rides the same global order:
+  // available in order, then the sunk block. (The
+  // 2026-10-28 within-section partition this replaces
+  // left the trowels at the bottom of Tools — the
+  // FIRST section, still high on screen.)
+  const isSunkRecipe = (recipe: (typeof craftingRecipes)[number]) =>
+    recipe.disabledLabel !== undefined &&
+    Object.values(CRAFT_OWNERSHIP_LABELS).includes(recipe.disabledLabel);
+  const orderedCraftingRecipes = [
+    ...craftingRecipes.filter((recipe) => !isSunkRecipe(recipe)),
+    ...craftingRecipes.filter(isSunkRecipe),
+  ];
+  const availableCraftingRecipes = orderedCraftingRecipes.filter(
+    (recipe) => !isSunkRecipe(recipe),
+  );
+  const sunkCraftingRecipes = orderedCraftingRecipes.filter(isSunkRecipe);
+
+  // CRAFTING GROUPS: sections in DEV's group order, each filtered
+  // from the AVAILABLE rows above (never re-sorted);
+  // empty groups dropped here, and the menu drops them again
+  // defensively. Unmapped recipes (none today — all 51
+  // map, measured 2026-10-30 after the cauldron recipe
+  // joined its family under 'Fire & Workshop') trail
+  // under "Other" instead of vanishing; the sunk block
+  // closes the list after it.
+  const ungroupedRecipes = availableCraftingRecipes.filter(
+    (recipe) => CRAFTING_GROUP_BY_RECIPE_ID[recipe.id] === undefined,
+  );
+  const craftingSections = [
+    ...CRAFTING_GROUP_ORDER.map((title) => ({
+      title,
+      recipes: availableCraftingRecipes.filter(
+        (recipe) => CRAFTING_GROUP_BY_RECIPE_ID[recipe.id] === title,
+      ),
+    })).filter((section) => section.recipes.length > 0),
+    ...(ungroupedRecipes.length > 0
+      ? [{ title: 'Other', recipes: ungroupedRecipes }]
+      : []),
+    ...(sunkCraftingRecipes.length > 0
+      ? [{ title: 'Owned & Superseded', recipes: sunkCraftingRecipes }]
+      : []),
+  ];
+
   // ONE TARGET AT A TIME (Adam, 2026-10-29, screenshot:
   // the column offered two scatter targets at once —
   // "Another case of Dual Selection. One target should
@@ -8876,6 +9135,31 @@ export default function App() {
   // (TouchControls interactLabel; undefined keeps the
   // plain "USE"). Scatter/ground stay unlabelled — plain
   // USE is the harvest read she already knows.
+  // FIRE-FAMILY VERBS (Adam, settled 2026-10-30): the pill
+  // names the act the faced fire affords NOW. Unlit, every
+  // type reads LIGHT (lighting is the only act its menu
+  // offers). A lit CAMPFIRE reads COOK (its chip menu cooks
+  // acorns, stick/buried). A lit KILN reads FIRE (firings
+  // are its act). A lit HEARTH carries no verb at all —
+  // the pill shows its name tag 'Hearth': in Adam's words
+  // it has no activities of its own yet; it is warm and
+  // heats the cauldron (its cooking rides the cauldron).
+  // No FEED exists — the game has no fuel/feeding
+  // mechanic. A fire the lookup cannot find keeps OPEN.
+  const winnerFire =
+    useWinner?.kind === 'fire'
+      ? placedFires.find((f) => f.id === useWinner.id)
+      : undefined;
+  const fireWinnerLabel =
+    winnerFire === undefined
+      ? 'OPEN'
+      : !winnerFire.lit
+        ? 'LIGHT'
+        : winnerFire.type === 'campfire'
+          ? 'COOK'
+          : winnerFire.type === 'kiln'
+            ? 'FIRE'
+            : 'Hearth';
   const useWinnerLabel =
     useWinner === null
       ? undefined
@@ -8885,12 +9169,18 @@ export default function App() {
           ? 'COLLECT'
           : useWinner.kind === 'hive'
             ? 'HARVEST'
-            : useWinner.kind === 'site' ||
-                useWinner.kind === 'fire' ||
-                useWinner.kind === 'tent' ||
-                useWinner.kind === 'torch' ||
-                useWinner.kind === 'home'
-              ? 'OPEN'
+            : useWinner.kind === 'loom'
+              ? 'WEAVE'
+              : useWinner.kind === 'site' &&
+                  useWinner.siteId.startsWith('stump:')
+                ? 'KRAFT'
+                : useWinner.kind === 'fire'
+                  ? fireWinnerLabel
+                  : useWinner.kind === 'site' ||
+                    useWinner.kind === 'tent' ||
+                  useWinner.kind === 'torch' ||
+                  useWinner.kind === 'home'
+                ? 'OPEN'
               : useWinner.kind === 'scry'
                 ? 'SCRY'
                 : undefined;
@@ -9010,6 +9300,13 @@ export default function App() {
           <Fragment key={altar.id}>
             <WorldAnchor x={x} y={y} interactive>
               <AltarChip onSelect={() => setSelectedSiteId(altar.id)} />
+            </WorldAnchor>
+          </Fragment>
+        ))}
+        {deskAnchors.map(({ desk, x, y }) => (
+          <Fragment key={desk.id}>
+            <WorldAnchor x={x} y={y} interactive>
+              <AltarChip label="Writing Desk" />
             </WorldAnchor>
           </Fragment>
         ))}
@@ -9729,6 +10026,11 @@ export default function App() {
         {altarNote ? (
           <p className="rounded bg-black/45 px-2 py-1 text-xs text-stone-200">
             {altarNote}
+          </p>
+        ) : null}
+        {deskNote ? (
+          <p className="rounded bg-black/45 px-2 py-1 text-xs text-stone-200">
+            {deskNote}
           </p>
         ) : null}
         {fireNote ? (

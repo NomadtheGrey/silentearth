@@ -5,20 +5,16 @@
  * FIRE ENTITIES (MVP build round, Adam 2026-10-26) — engine side.
  *
  * FIRE LADDER (Adam, 2026-10-25/26, PINNED): campfire → hearth →
- * kiln → bloomery. Roles:
+ * kiln. Roles:
  * - Campfire: open-fire cooking + light. Cooking is open-fire
  *   (on a stick, or chucked in the fire and dug out) — NOT pot
  *   cooking. Cooking mechanics themselves are SYSTEMS' (recipes
  *   + eating), not built here: this module is entities + light.
  * - Hearth: better cooking (Systems) + light.
  * - Kiln: firing clay — pottery, bricks (Systems recipes).
- * - Bloomery: smelting bog iron for the next tool upgrade.
- *   BOG IRON INPUT FLAGGED, NOT INVENTED: bog iron's source
- *   mechanic is TBD (Adam's brief), so no iron item id exists in
- *   the vocabulary yet and no smelt execution is built — the
- *   bloomery is a lit fire entity with a documented smelt role,
- *   and smelt execution waits on the iron item + Systems recipes.
- *   Nothing here invents where iron comes from.
+ * A fourth rung, the bloomery (bog-iron smelting), was REMOVED
+ * 2026-10-30 under Adam's no-iron ruling: there is no iron in
+ * this world and no smelting — the kiln is the ladder's top.
  *
  * LIGHTING (Adam, 2026-10-25/26, PINNED shapes): two paths, both
  * built — flint is FAST (click-click-click-WOOF), sticks/friction
@@ -67,7 +63,7 @@
  */
 
 /** Placeable fire entity types, in ladder order. */
-export type FireType = 'campfire' | 'hearth' | 'kiln' | 'bloomery';
+export type FireType = 'campfire' | 'hearth' | 'kiln';
 
 /** How a fire gets lit. Flint is fast; friction is slow. */
 export type LightingMethod = 'flint' | 'friction';
@@ -116,13 +112,6 @@ export const FIRE_DEFS: Record<FireType, FireDef> = {
     name: 'Kiln',
     description: 'A clay-firing kiln, domed and patient.',
     role: 'Firing clay — pottery, bricks (Systems recipes).',
-    flameWhenLit: true,
-  },
-  bloomery: {
-    id: 'bloomery',
-    name: 'Bloomery',
-    description: 'A tall smelting furnace for bog iron.',
-    role: 'Smelting bog iron for the next tool upgrade — INPUT FLAGGED: bog iron item id TBD, source mechanic TBD, no smelt execution yet (see header).',
     flameWhenLit: true,
   },
 };

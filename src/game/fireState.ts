@@ -104,6 +104,26 @@ class FireState {
   }
 
   /**
+   * Lit-fire presence (Background, 2026-10-30 — station
+   * presence for 'fire' / 'cauldron' work): true iff some
+   * placed fire with lit === true sits within range of
+   * (x, z). Mirrors loomState.loomsInRange. The lit flag
+   * is the honest test by construction: placeFire creates
+   * lit:false and the flag flips only at ignition (or via
+   * setLit on boot restore), so an UNLIT fire never counts
+   * and a fire mid-lighting does not count until it
+   * catches. Any lit fire type counts — bare-fire work
+   * does not care which rung of the ladder burns.
+   */
+  litFireInRange(x: number, z: number, range: number): boolean {
+    for (const fire of this.fires.values()) {
+      if (!fire.lit) continue;
+      if (Math.hypot(fire.x - x, fire.z - z) <= range) return true;
+    }
+    return false;
+  }
+
+  /**
    * Save-boot API (Adam 2026-10-27): mark a restored fire lit (or
    * unlit). Restored fires used to boot unlit because placeFire
    * always creates lit:false and no API marked them lit — the save
