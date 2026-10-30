@@ -1813,6 +1813,15 @@ import { torchState, type PlacedTorch as PlacedTorchEntity } from './game/torchS
 import { lightTorches, placeTorch as grantPlaceTorch, pickupTorch as grantPickupTorch } from './systems/torch';
 import { altarState, type PlacedAltar as PlacedAltarEntity } from './game/altarState';
 import { placeAltar as grantPlaceAltar } from './systems/altar';
+import {
+  altarProgressFrom,
+  drawGlyph,
+  isStumpyAltar,
+  linkJournal,
+  placeStones,
+  setCandle,
+  siteGrade,
+} from './systems/stumpy-altar';
 import { deskState, type PlacedDesk as PlacedDeskEntity } from './game/deskState';
 import { placeDesk as grantPlaceDesk } from './systems/desk';
 import {
@@ -2952,6 +2961,13 @@ export default function App() {
     );
   };
   const [ritualNote, setRitualNote] = useState<string | null>(null);
+  // JOURNAL LINK FLAG (altar transformation, 2026-10-30):
+  // the shell's one bit of the transformation story the
+  // stump records don't carry — set by the Linking act
+  // at altar-grade ground, saved + restored with the
+  // world (Systems' save shape, serialize defaults it
+  // false for old documents).
+  const [journalLinked, setJournalLinked] = useState(false);
   const [, setRitualVersion] = useState(0);
   const refreshRitual = () => {
     setRitualVersion((version) => version + 1);
@@ -3180,6 +3196,9 @@ export default function App() {
           // and stumpState.restore() validates on load).
           // Without this, upgrades vanish on reload.
           stumps: stumpState.snapshot(),
+          // JOURNAL LINK FLAG rides every save (Systems'
+          // shape; false until the Linking act sets it).
+          journalLinked,
           // PLACED-TORCH SAVE WIRING: the live placed-torch
           // set rides every save as-is (ids + positions
           // verbatim; serialize writes ids when present,
@@ -3979,6 +3998,10 @@ export default function App() {
             additions: stump.additions as StumpAddition[],
           })),
         );
+        // JOURNAL LINK FLAG restore (altar transformation,
+        // 2026-10-30): old saves carry no flag and read
+        // false — the Linking simply offers itself again.
+        setJournalLinked(bootSaved.journalLinked === true);
         // WORLD-STATE SAVE WIRING (fires + harvest, same
         // restore-before-first-build pattern): fireState.
         // restore() is silent and REPLACES the old placeFire
@@ -5684,6 +5707,87 @@ export default function App() {
     saveNow();
     refreshRitual();
     checkRitualCompletions();
+  };
+
+  // HER VOICE for the transformation grants (Systems:
+  // "refusal reasons name the missing fact plainly; the
+  // UI speaks them in her voice"). Keyed by the grants'
+  // pinned reason strings; an unmapped reason passes
+  // through plain rather than ever being swallowed.
+  // All lines DRAFT for Adam's pin pass.
+  const altarActVoice = (reason: string): string =>
+    ({
+      'Needs 4 river stone.': 'She needs four river stones for the ring.',
+      'The glyph comes after the stones.': 'The glyph wants the stones first.',
+      'Needs a charcoal stick to draw the glyph.':
+        'She needs a charcoal stick to draw with.',
+      'The candle comes after the glyph.': 'The candle wants the glyph first.',
+      'Needs a candle.': 'She has no candle to set.',
+      'No journal carried.': 'She carries no journal to link.',
+    })[reason] ?? reason;
+
+  // ALTAR TRANSFORMATION ACTS (claim as approved
+  // 2026-10-30): the three makings + the Linking, run
+  // against Systems' stumpy-altar grants. Grant first —
+  // a refusal consumes nothing and speaks in her voice;
+  // on success the outcome's additions apply through
+  // Background's applyAddition, one member per call in
+  // the one handler (act 3's candle + 'altar' pair
+  // lands in the same tick; restore keeps the record
+  // whole). The Linking sets the shell flag and saves.
+  const handleSiteAct = (siteId: string, actId: string) => {
+    const site = sitePositionFor(siteId);
+    if (!site) {
+      setRitualNote('No site there.');
+      return;
+    }
+    const additions: readonly string[] =
+      site.kind === 'stump'
+        ? (stumpState
+            .snapshot()
+            .find((record) => record.x === site.x && record.z === site.z)
+            ?.additions ?? [])
+        : [];
+    if (actId === 'link-journal') {
+      const outcome = linkJournal(
+        inventory,
+        siteGrade(site.kind, additions),
+        journalLinked,
+      );
+      if (outcome.linked === false) {
+        setRitualNote(altarActVoice(outcome.reason));
+        return;
+      }
+      setJournalLinked(true);
+      setRitualNote('The books are linked.');
+      saveNow();
+      refreshRitual();
+      return;
+    }
+    const grant =
+      actId === 'place-stones'
+        ? placeStones
+        : actId === 'draw-glyph'
+          ? drawGlyph
+          : setCandle;
+    const outcome = grant(inventory, altarProgressFrom(additions));
+    if (outcome.applied === false) {
+      setRitualNote(altarActVoice(outcome.reason));
+      return;
+    }
+    for (const addition of outcome.additions) {
+      stumpState.applyAddition(site.x, site.z, addition as StumpAddition);
+    }
+    setRitualNote(
+      actId === 'place-stones'
+        ? 'The stones ring the stump.'
+        : actId === 'draw-glyph'
+          ? 'The glyph darkens the bark.'
+          : 'The candle stands lit. This is an altar now.',
+    );
+    refreshInventory();
+    saveNow();
+    refreshRitual();
   };
 
   const handleGiveOffering = (
@@ -7450,11 +7554,37 @@ export default function App() {
   // through ritualVersion. Site-kind-agnostic: the
   // selection is a site id, the label follows its
   // prefix, and only the anchor source differs.
+  // SITE FACTS (altar transformation, 2026-10-30): the
+  // selected site's position, stump additions, making
+  // progress, and ritual grade — one derivation the
+  // label, the acts list, and the panel all read. The
+  // grade is Systems' siteGrade over the same additions
+  // the engine reads, so the label and the Linking's
+  // gate can never disagree with the world.
+  const selectedSitePosition =
+    selectedSiteId === null ? null : sitePositionFor(selectedSiteId);
+  const selectedSiteAdditions: readonly string[] =
+    selectedSitePosition?.kind === 'stump'
+      ? (stumpState
+          .snapshot()
+          .find(
+            (record) =>
+              record.x === selectedSitePosition.x &&
+              record.z === selectedSitePosition.z,
+          )?.additions ?? [])
+      : [];
+  const selectedSiteProgress = altarProgressFrom(selectedSiteAdditions);
+  const selectedSiteGrade =
+    selectedSitePosition === null
+      ? null
+      : siteGrade(selectedSitePosition.kind, selectedSiteAdditions);
   const selectedSiteLabel =
     selectedSiteId === null
       ? null
       : selectedSiteId.startsWith('stump:')
-        ? 'Stump'
+        ? isStumpyAltar(selectedSiteAdditions)
+          ? 'Stumpy Altar'
+          : 'Stump'
         : 'Altar';
   const selectedSiteAnchor =
     selectedSiteId === null
@@ -7530,6 +7660,37 @@ export default function App() {
             count,
           }));
         })();
+
+  // TRANSFORMATION ACTS for the selected site, hoisted
+  // like the option lists below's neighbours so the
+  // digit dispatch reads the SAME list the panel
+  // renders. At a stump: the three makings in order,
+  // each present until its step is done (none once the
+  // transformation completes). At altar-grade ground
+  // (grade 2 — a Stumpy Altar or a made Altar) while
+  // the books are unlinked: the Linking. Grade-1 sites
+  // (plain stumps) never show the Linking.
+  const selectedSiteActs: { id: string; label: string }[] = (() => {
+    if (selectedSiteId === null || selectedSitePosition === null) {
+      return [];
+    }
+    const acts: { id: string; label: string }[] = [];
+    if (selectedSitePosition.kind === 'stump') {
+      if (!selectedSiteProgress.stones) {
+        acts.push({ id: 'place-stones', label: 'Place the Stones' });
+      }
+      if (!selectedSiteProgress.glyph) {
+        acts.push({ id: 'draw-glyph', label: 'Draw the Glyph' });
+      }
+      if (!selectedSiteProgress.candle) {
+        acts.push({ id: 'set-candle', label: 'Set the Candle' });
+      }
+    }
+    if (selectedSiteGrade === 2 && !journalLinked) {
+      acts.push({ id: 'link-journal', label: 'Link the Journal' });
+    }
+    return acts;
+  })();
 
   // The pile whose menu is open, with its anchor.
   // Live menu pile: the menu renders from piles state, not a
@@ -8569,6 +8730,16 @@ export default function App() {
       // panel's own render order, from the hoisted
       // lists the panel renders.
       const siteId = selectedSiteId;
+      // TRANSFORMATION ACTS take the panel's first
+      // digits (their render order — the panel badges
+      // them first too); every later list shifts by the
+      // acts count, from this one hoisted list.
+      if (digit <= selectedSiteActs.length) {
+        const act = selectedSiteActs[digit - 1];
+        if (act) handleSiteAct(siteId, act.id);
+        return;
+      }
+      const panelDigit = digit - selectedSiteActs.length;
       if (selectedSiteStaged === null) {
         // Digits number the CARRIED rows only, in display
         // order — the panel badges by the same rule, so a
@@ -8577,7 +8748,7 @@ export default function App() {
         // 2026-10-29).
         const option = selectedSiteKindOptions.filter(
           (candidate) => candidate.carried > 0,
-        )[digit - 1];
+        )[panelDigit - 1];
         if (option) handleStageBone(siteId, option.kind);
         return;
       }
@@ -8600,7 +8771,7 @@ export default function App() {
         ) {
           steps.push(() => handleSpeakName(siteId, bone));
         }
-        const step = steps[digit - 1];
+        const step = steps[panelDigit - 1];
         if (step) step();
       }
       return;
@@ -9756,6 +9927,10 @@ export default function App() {
               kindOptions={selectedSiteKindOptions}
               foodOptions={selectedSiteFoodOptions}
               note={ritualNote}
+              siteActs={selectedSiteActs}
+              onSiteAct={(actId) =>
+                selectedSiteId !== null && handleSiteAct(selectedSiteId, actId)
+              }
               showKeyHints={!isTouch}
               onStageBone={(kind) =>
                 selectedSiteId !== null &&
