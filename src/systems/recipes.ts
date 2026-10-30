@@ -49,6 +49,7 @@ export const ITEMS = {
   riverStone: 'river-stone',
   luminousSpores: 'luminous-spores',
   dryKindling: 'dry-kindling',
+  charcoalStick: 'charcoal-stick',
   // New items (2026-10-25 design work).
   clay: 'clay',
   flint: 'flint',
@@ -409,6 +410,26 @@ const DRAFT_RECIPES: Recipe[] = [
       '(not unstated) so the UI shows "by hand" plainly. This is ' +
       'the friction-lighting fuel: slow lighting consumes 1 ' +
       'dry-kindling (fire.ts), not raw snap-wood.',
+  },
+  {
+    id: 'charcoal-stick',
+    name: 'Charcoal Stick',
+    status: 'draft',
+    output: { item: ITEMS.charcoalStick, quantity: 1 },
+    ingredients: [i(ITEMS.snapWood, 1)],
+    station: 'fire',
+    notes:
+      'DRAFT. Adam\'s shape (2026-10-30): "a simple easy to ' +
+      'fashion bit of charcoal — a stick burnt on the end." ' +
+      'One snap wood, its end charred at a lit fire: station ' +
+      '"fire" (the CraftingStation literal — any lit fire; ' +
+      'the shell\'s fire presence must mean LIT, wiring is ' +
+      'Background/App\'s step, so this recipe sits dormant ' +
+      'in-game until that lands). The glyph-drawer for the ' +
+      'Stumpy Altar working (stone + glyph + candle): the ' +
+      'stick draws the glyph; consumption per glyph rides ' +
+      'the transformation claim, not this recipe. ' +
+      'Quantities draft.',
   },
 
   // --- Torch: stick + binding + tinder, made by hand (Adam, 2026-10-27).

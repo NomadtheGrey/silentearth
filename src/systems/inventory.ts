@@ -84,7 +84,7 @@
  * pin pass — every weight divides 1 lb evenly, so 1/weight is
  * 1, 2, 4, 5, or 10):
  * - 0.1 lb: acorns, bog-berries, elderberries, luminous-spores.
- * - 0.25 lb: dry-kindling, twined-cordage, grass, salt-crystal,
+ * - 0.25 lb: dry-kindling, charcoal-stick, twined-cordage, grass, salt-crystal,
  *   edible-mushroom, poison-mushroom, apple, paper.
  * - 0.5 lb: tender-vines, peat-moss, bone, flint, pointy-hat,
  *   mossy-mittens, plant-pulp, pressed-sheets, journal.
@@ -231,6 +231,7 @@ export const ITEM_WEIGHT_LB: Readonly<Record<string, number>> = {
   [ITEMS.whiteWaterLily]: 0.1,
   // 0.25 lb
   [ITEMS.dryKindling]: 0.25,
+  [ITEMS.charcoalStick]: 0.25,
   [ITEMS.twinedCordage]: 0.25,
   grass: 0.25,
   'salt-crystal': 0.25,
@@ -441,6 +442,7 @@ export const ITEM_DISPLAY_NAMES: Readonly<Record<string, string>> = {
   'river-stone': 'River Stone',
   'luminous-spores': 'Luminous Spores',
   'dry-kindling': 'Dry Kindling',
+  'charcoal-stick': 'Charcoal Stick',
   clay: 'Clay',
   flint: 'Flint',
   'old-stump': 'Old Stump',
@@ -598,6 +600,7 @@ export const ITEM_DESCRIPTIONS: Readonly<Record<string, string>> = {
   'river-stone': 'The whetstone — sharpens the trowel, kept, not consumed — and building stone besides.',
   'luminous-spores': 'Pale glowing spores. An ingredient for the moss cradle.',
   'dry-kindling': 'Split snap-wood, dry and ready. One piece lights a fire by friction.',
+  'charcoal-stick': 'A stick with a burnt end. Draws a dark line on wood, stone, or hide.',
   clay: 'Clay. Pots, bricks, and daub — shaped, then fired.',
   flint: 'Strikes a fire fast. Kept, never consumed.',
   'old-stump': 'An old stump. A workstation where it stands, and an altar for the rites.',
