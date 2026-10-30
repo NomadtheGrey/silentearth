@@ -41,6 +41,7 @@ import {
   wrapGenWithState,
 } from './harvestState';
 import { terrainSpeedAt } from './movement';
+import { treeKindAt } from './treeKind';
 import { riverParamsFor, riverRibbonForChunk } from './river';
 import type { RiverParams } from './river';
 import { fireState } from './fireState';
@@ -1979,18 +1980,30 @@ export class WorldRenderer {
       .spawnedTreesSnapshot()
       .filter((sapling) => this.chunks.has(this.chunkKey(sapling.cx, sapling.cz)));
     if (saplings.length > 0) {
-      const treeRender = KIND_RENDER['tree'];
-      const mesh = new THREE.InstancedMesh(treeRender.geometry, treeRender.material, saplings.length);
-      saplings.forEach((sapling, i) => {
-        const s = 0.3 + 0.7 * harvestState.saplingGrowth(sapling, now);
-        dummy.position.set(sapling.x, treeRender.baseY * s, sapling.z);
-        dummy.rotation.set(0, 0, 0);
-        dummy.scale.setScalar(s);
-        dummy.updateMatrix();
-        mesh.setMatrixAt(i, dummy.matrix);
-      });
-      mesh.instanceMatrix.needsUpdate = true;
-      group.add(mesh);
+      // Saplings draw in their spot's kind (Adam, 2026-10-30 —
+      // kind belongs to the ground): oak-spot saplings grow up
+      // in the oak's broader shape, the rest in the common
+      // tree's, one instanced mesh per kind.
+      const byKind: { tree: typeof saplings; oakTree: typeof saplings } = { tree: [], oakTree: [] };
+      for (const sapling of saplings) {
+        byKind[treeKindAt(this.gen.seed, sapling.x, sapling.z) === 'oak' ? 'oakTree' : 'tree'].push(sapling);
+      }
+      for (const kind of ['tree', 'oakTree'] as const) {
+        const list = byKind[kind];
+        if (list.length === 0) continue;
+        const kindRender = KIND_RENDER[kind];
+        const mesh = new THREE.InstancedMesh(kindRender.geometry, kindRender.material, list.length);
+        list.forEach((sapling, i) => {
+          const s = 0.3 + 0.7 * harvestState.saplingGrowth(sapling, now);
+          dummy.position.set(sapling.x, kindRender.baseY * s, sapling.z);
+          dummy.rotation.set(0, 0, 0);
+          dummy.scale.setScalar(s);
+          dummy.updateMatrix();
+          mesh.setMatrixAt(i, dummy.matrix);
+        });
+        mesh.instanceMatrix.needsUpdate = true;
+        group.add(mesh);
+      }
       // No extra branch: the sapling canopy rides inside the merged
       // tree geometry (models.ts), scaled with the trunk.
     }

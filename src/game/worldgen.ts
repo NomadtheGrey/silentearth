@@ -18,6 +18,7 @@
 import { BIOMES, createFields, weightsAt, groundColorAt, marshWeight } from './biomes';
 import type { Fields } from './biomes';
 import { mulberry32, deriveSeed } from './seed';
+import { treeKindAt } from './treeKind';
 import { CHUNK_SIZE, BASE_SCATTER_PER_CHUNK, GROUND_SEGMENTS } from '../constants';
 import type { ChunkData, ScatterKind, ScatterObject } from '../types';
 
@@ -248,6 +249,21 @@ export function createWorldGen(seed: string): WorldGen {
         });
       }
       objects.splice(0, objects.length, ...hung);
+    }
+
+    // Tree kinds (Adam, 2026-10-30): a deterministic share of
+    // standing-tree slots are OAKS. Runs LAST among the passes,
+    // so every earlier derivation (the acorn scatter, the hive
+    // hosting above — hives host on 'tree') reads the original
+    // kinds. Pure relabel: treeKindAt is a position hash (no
+    // RNG consumed), and position/scale/rotY are untouched, so
+    // slot identity and counts are exactly today's — only the
+    // kind string changes, on oak spots only. 'oakTree' never
+    // enters the biome mixes; it exists only by this conversion.
+    for (const obj of objects) {
+      if (obj.kind === 'tree' && treeKindAt(seed, obj.x, obj.z) === 'oak') {
+        obj.kind = 'oakTree';
+      }
     }
 
     return { cx, cz, objects };

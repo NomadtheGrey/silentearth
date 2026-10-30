@@ -542,6 +542,21 @@ const SPORES_25: SecondaryYield = {
  * actually recover.
  */
 
+/**
+ * The oak's fell companion (Adam, 2026-10-30): a felled
+ * standing oak yields its snap-wood PLUS one Downed Oak
+ * — the structural piece the hut recipes already
+ * consume. Chance 1 = every fell (quantity DRAFT for
+ * the pin pass). The REMOVE action grants secondaries
+ * outright, so a removed oak yields it too, exactly as
+ * the common tree's def shape would.
+ */
+const DOWNED_OAK_ALWAYS: SecondaryYield = {
+  item: 'DOWNED_OAK',
+  chance: 1,
+  message: 'A sound oak length comes down with it — a Downed Oak piece.',
+};
+
 const BOG_BERRIES_50: SecondaryYield = {
   item: 'BOG_BERRIES',
   chance: 0.5,
@@ -656,6 +671,31 @@ export const SOURCES: HarvestSourceDef[] = [
     provenance: 'draft',
     biomes: ['mirewood', 'oldfieldRise', 'tanglewood'],
     mesh: { shape: 'tree', color: 0x4a2e18, extraColor: 0x2f4a26, baseY: 0.8, extraY: 2.4 },
+  },
+  {
+    id: 'standingOak',
+    kind: 'oakTree',
+    name: 'Standing Oak',
+    description:
+      'An oak among the standing trees (Adam, 2026-10-30 — tree ' +
+      'kinds: which trees are oaks is a fact of the spot they grow ' +
+      'on, read off the world seed). Broader in the canopy than ' +
+      'the common run, and heavier coming down: felled, it yields ' +
+      'its snap-wood plus a Downed Oak piece. Same lifecycle as ' +
+      'any standing tree otherwise — fell leaves a stump and a ' +
+      'sapling rises nearby; remove clears the ground for good. ' +
+      'No new log item comes from it; the Downed Oak is the ' +
+      'existing structural piece.',
+    harvestable: true,
+    permitTier: 'axeTrowel',
+    permitFamily: 'axe',
+    removable: true,
+    fellOnHarvest: true,
+    primaryYield: 'SNAP_WOOD',
+    secondaryYields: [DOWNED_OAK_ALWAYS],
+    provenance: 'draft',
+    biomes: ['mirewood', 'oldfieldRise', 'tanglewood'],
+    mesh: { shape: 'tree', color: 0x4a2e18, extraColor: 0x476b2a, baseY: 0.8, extraY: 2.4 },
   },
   {
     id: 'snapwoodThicket',

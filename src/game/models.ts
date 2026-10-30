@@ -183,6 +183,32 @@ export function buildKindGeometry(spec: MeshSpec, kind: ScatterKind): THREE.Buff
     }
     return merge([part(flatDisc(DISC_RADIUS[kind] ?? 1.0, 12), c), ...mounds]);
   }
+  // Kind override (oak tree shares the 'tree' shape slot with
+  // the common tree, but an oak must READ differently in the
+  // canopy — Adam, 2026-10-30): a stouter trunk and a broader,
+  // rounder crown — four blobs spread wide where the common
+  // tree's three sit close. Silhouette first, tint second (the
+  // oak source's fuller green rides the same parts).
+  if (kind === 'oakTree') {
+    const branches: THREE.BufferGeometry[] = [];
+    for (let i = 0; i < 4; i++) {
+      const a = (i / 4) * Math.PI * 2 + 0.4;
+      branches.push(
+        part(cyl(0.05, 0.08, 1.1, 4), c, {
+          p: [Math.cos(a) * 0.42, 0.6 + i * 0.1, Math.sin(a) * 0.42],
+          r: [Math.sin(a) * 0.75, 0, -Math.cos(a) * 0.75],
+        }),
+      );
+    }
+    return merge([
+      part(cyl(0.24, 0.36, 1.7, 7), c),
+      ...branches,
+      part(blob(1.3), e, { p: [0, extraDy + 0.1, 0] }),
+      part(blob(0.95), shade(e, 0.9), { p: [0.7, extraDy + 0.5, 0.25] }),
+      part(blob(0.8), shade(e, 1.05), { p: [-0.65, extraDy + 0.35, -0.3] }),
+      part(blob(0.6), shade(e, 1.1), { p: [0.1, extraDy + 0.85, -0.5] }),
+    ]);
+  }
   switch (spec.shape) {
     case 'tree': {
       const branches: THREE.BufferGeometry[] = [];
