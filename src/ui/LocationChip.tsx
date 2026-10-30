@@ -34,8 +34,10 @@ export interface LocationChipProps {
   z: number;
   /** Dominant biome name at her position. */
   biomeName: string;
-  /** Dominant biome weight as a whole percent (0–100). */
-  biomePercent: number;
+  /** Dominant biome weight as a whole percent (0–100).
+   *  Null = no weight to read (underground — the chip
+   *  names the place alone). */
+  biomePercent: number | null;
   /** Measured framerate, or null until the first sample lands. */
   fps: number | null;
   /**
@@ -85,10 +87,12 @@ export function LocationChip({
         'pointer-events-none rounded px-2 py-1 text-xs text-stone-100 ' +
         t.overlay
       }
-      aria-label={`Location: ${biomeName} ${biomePercent} percent, position ${x.toFixed(1)}, ${z.toFixed(1)}${zoneText !== null ? `, zone ${zoneText}` : ''}${fps !== null ? `, ${fps} frames per second` : ''}${timeDateMonth ? `, ${timeDateMonth}` : ''}`}
+      aria-label={`Location: ${biomeName}${biomePercent !== null ? ` ${biomePercent} percent` : ''}, position ${x.toFixed(1)}, ${z.toFixed(1)}${zoneText !== null ? `, zone ${zoneText}` : ''}${fps !== null ? `, ${fps} frames per second` : ''}${timeDateMonth ? `, ${timeDateMonth}` : ''}`}
     >
       <p className="whitespace-nowrap">
-        {biomeName} {biomePercent}% · ({x.toFixed(1)}, {z.toFixed(1)})
+        {biomeName}
+        {biomePercent !== null ? ` ${biomePercent}%` : ''} · ({x.toFixed(1)},{' '}
+        {z.toFixed(1)})
         {zoneText !== null ? ` · ${zoneText}` : ''}
         {fps !== null ? ` · ${fps} FPS` : ''}
       </p>

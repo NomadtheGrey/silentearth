@@ -1829,7 +1829,7 @@ import {
   type PlacedCauldron as PlacedCauldronEntity,
 } from './game/cauldronState';
 import { groveContains, groveSite } from './game/sites';
-import { caveLayoutFor, caveMouths } from './game/caves';
+import { caveLayoutFor, caveMouths, CAVE_DIMENSION_KEY } from './game/caves';
 import { dimensionState } from './game/dimensionState';
 import {
   ascend,
@@ -3208,6 +3208,17 @@ export default function App() {
           // JOURNAL LINK FLAG rides every save (Systems'
           // shape; false until the Linking act sets it).
           journalLinked,
+          // DIMENSION VISIT (cave close-out, 2026-10-30):
+          // the visit a save is written in, from
+          // dimensionState's snapshot — {key, mouthId}
+          // while underground, null on the surface
+          // (Systems' shape: null = a surface save). The
+          // boot consumer places her at the mouth.
+          dimensionVisit: (() => {
+            if (!dimensionState.isUnderground()) return null;
+            const snap = dimensionState.snapshot();
+            return { key: snap.key, mouthId: snap.mouthId };
+          })(),
           // PLACED-TORCH SAVE WIRING: the live placed-torch
           // set rides every save as-is (ids + positions
           // verbatim; serialize writes ids when present,
@@ -4244,15 +4255,44 @@ export default function App() {
             pileState.drop(stack.item, stack.quantity, pile.x, pile.z);
           }
         }
-        player.x = saved.position.x;
-        player.z = saved.position.z;
-        // WORLD-STATE SAVE WIRING (facing, after mode-set):
-        // yaw + pitch from the save; restoreFacing clamps
-        // pitch to ±1.45 and re-syncs facing = yaw + PI in
-        // behind mode (mode was set from the save before
-        // construction, above). Old saves carry the default
-        // look ({ yaw: 0, pitch: 0 }) from deserialize.
-        player.restoreFacing(saved.facing);
+        // BOOT-AT-THE-MOUTH (cave close-out, 2026-10-30):
+        // a save written underground carries its visit —
+        // boot always starts on the surface, so she wakes
+        // at the mouth she entered by: its spot, facing
+        // outward (the mouth's exitYaw). Resolution runs
+        // through the same caveMouths derivation the
+        // winner arms use. An unresolvable record
+        // (foreign key, unknown or null mouth) falls back
+        // to the saved position whole and the record dies
+        // with this save — the next save is a surface
+        // save and writes null. A bad visit can never
+        // strand a boot.
+        const visit = saved.dimensionVisit ?? null;
+        const visitMouth =
+          visit !== null &&
+          visit.key === CAVE_DIMENSION_KEY &&
+          visit.mouthId !== null
+            ? caveMouths(
+                String(gen.seed),
+                gen.findSpawn(),
+                (x, z) => gen.weightsAt(x, z),
+              ).find((m) => m.id === visit.mouthId)
+            : undefined;
+        if (visitMouth) {
+          player.x = visitMouth.spot.x;
+          player.z = visitMouth.spot.z;
+          player.restoreFacing({ yaw: visitMouth.exitYaw, pitch: 0 });
+        } else {
+          player.x = saved.position.x;
+          player.z = saved.position.z;
+          // WORLD-STATE SAVE WIRING (facing, after mode-set):
+          // yaw + pitch from the save; restoreFacing clamps
+          // pitch to ±1.45 and re-syncs facing = yaw + PI in
+          // behind mode (mode was set from the save before
+          // construction, above). Old saves carry the default
+          // look ({ yaw: 0, pitch: 0 }) from deserialize.
+          player.restoreFacing(saved.facing);
+        }
       }
     }
     // UMBRELLA DRIVING: initial visibility from the boot
@@ -9157,7 +9197,17 @@ export default function App() {
   // than re-deriving a maximum. It follows position state,
   // so it moves with player:moved (~10 Hz) and with
   // regenerate (seed in the deps).
-  const dominantBiome = useMemo(() => {
+  const dominantBiome = useMemo((): {
+    name: string;
+    percent: number | null;
+  } => {
+    // UNDERGROUND (cave close-out, 2026-10-30): the chip
+    // names the place — there is no surface weight to
+    // read at cave coordinates, so the percent is null
+    // and the chip renders the name alone. DRAFT copy.
+    if (dimensionState.isUnderground()) {
+      return { name: 'The Cave', percent: null };
+    }
     const at = genRef.current.weightsAt(position.x, position.z);
     const def = BIOME_BY_ID[at.dominant];
     return {
