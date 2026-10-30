@@ -57,7 +57,7 @@
  */
 
 import { deriveSeed, mulberry32 } from './seed';
-import type { BiomeId, ScatterKind, ScatterObject } from '../types';
+import type { BiomeId, BiomeWeights, ScatterKind, ScatterObject } from '../types';
 
 /** One axis-aligned collision box (a hedge unit's footprint). */
 export interface SiteWallBox {
@@ -503,6 +503,381 @@ export function deriveMazeLayout(
 
   return { entranceCell, heartCell, fragmentCell, features, walls };
 }
+// === The Schoolhouse (site #2) ============================================
+//
+// An OPEN-AIR ruin she walks into in the same world — no
+// zone-swap (Adam's shape, DEV framing 2026-10-30; locations
+// build #2, merge #31 beside the Grove). A roofless wall ring
+// with a door gap, a bell tower for the silhouette, rows of
+// desks inside, the blackboard on the teaching wall (scenery —
+// its fragment wiring stages with the marks system, like the
+// hoard's contents), a flagpole by the door.
+//
+// Siting: previously-occupied places sit FARTHER than groves
+// (Adam, 2026-10-30 — she hasn't met people yet; human traces
+// deepen with distance): band 250–450 m (DRAFT), its own bearing
+// stream, drier ground — oldfieldRise-dominant, or meadow-edge
+// (meadow weight at or over the threshold; the biome census
+// proved meadow cannot DOMINATE inside ~500 m under the
+// distance gate, so the weight threshold is the honest form of
+// meadow-edge character). SPACING vs the grove is a HARD filter
+// during the scan — no candidate inside the sum of both
+// clearings plus a margin is ever accepted.
+//
+// Collision: YES (Background's call, DEV-approved): the door
+// gap is the design — a ring she can walk through anywhere has
+// no door. The grove's stones MARK (she walks between them by
+// design); these walls ENCLOSE — opposite functions, opposite
+// calls. Walls, tower, desks, blackboard, and flagpole are
+// solid on the same push-out machinery as the hedges; rubble is
+// low and non-colliding (she steps over rubble).
+//
+// Orientation: quarter-turns only (build refinement, reported
+// with the landing) — a stream-chosen axis swap rather than
+// fine rotation snaps, so every collision box stays an EXACT
+// axis-aligned box; the ruin read rides on the broken segments,
+// rubble, and askew desks. All numbers DRAFT.
+
+/** Siting band for the schoolhouse, meters from spawn (DRAFT). */
+export const SCHOOL_MIN_DIST_M = 250;
+export const SCHOOL_MAX_DIST_M = 450;
+/** Clearing radius around the schoolhouse centre (DRAFT). */
+export const SCHOOL_CLEAR_RADIUS_M = 16;
+/** Extra spacing kept between the two sites' clearings (DRAFT). */
+export const SCHOOL_SPACING_MARGIN_M = 20;
+/** Meadow weight at/over which a candidate reads meadow-edge. */
+export const SCHOOL_MEADOW_EDGE_WEIGHT = 0.2;
+/** Wall ring dimensions, meters (DRAFT): 12 m long, 9 m deep,
+ *  built from 3 m segments. */
+export const SCHOOL_WALL_W_M = 12;
+export const SCHOOL_WALL_D_M = 9;
+export const SCHOOL_SEGMENT_M = 3;
+const SCHOOL_WALL_HALF_T = 0.24;
+
+/** The derived Schoolhouse: one per world seed. */
+export interface SchoolSite {
+  id: string;
+  seed: string;
+  center: { x: number; z: number };
+  /** Dominant biome at the chosen centre. */
+  biome: BiomeId;
+  /** Siting distance from spawn, meters. */
+  distance: number;
+  clearRadius: number;
+  /** Which side the door gap is on (the spawn-approach side). */
+  doorSide: 'north' | 'south' | 'east' | 'west';
+  features: ScatterObject[];
+  walls: SiteWallBox[];
+  bounds: { minX: number; maxX: number; minZ: number; maxZ: number };
+}
+
+const schoolCache = new Map<string, SchoolSite>();
+
+/**
+ * Derive the world's Schoolhouse. `weightsAtPos` returns the
+ * full weights + dominant at a position (acceptance reads the
+ * meadow weight, not just the dominant). Memoized by seed +
+ * instance id, like the grove.
+ */
+export function schoolhouseSite(
+  seed: string,
+  spawn: { x: number; z: number },
+  weightsAtPos: (x: number, z: number) => BiomeWeights,
+): SchoolSite {
+  const cached = schoolCache.get(`${seed}::schoolhouse`);
+  if (cached) return cached;
+
+  // Spacing is measured against the grove (memoized derivation).
+  const grove = groveSite(seed, spawn, (x, z) => weightsAtPos(x, z).dominant);
+  const spacing = grove.clearRadius + SCHOOL_CLEAR_RADIUS_M + SCHOOL_SPACING_MARGIN_M;
+
+  // Siting: its own bearing stream, scanned outward over the
+  // band. The fallback guarantees a world always has its
+  // schoolhouse: the first spacing-legal candidate, biome
+  // unchecked; should no candidate be spacing-legal at all
+  // (near-impossible — the rays would have to coincide), the
+  // band-end point stands regardless.
+  const bearing = mulberry32(deriveSeed(seed, 'site:schoolhouse'))() * Math.PI * 2;
+  const dirX = Math.cos(bearing);
+  const dirZ = Math.sin(bearing);
+  let center = {
+    x: spawn.x + dirX * SCHOOL_MAX_DIST_M,
+    z: spawn.z + dirZ * SCHOOL_MAX_DIST_M,
+  };
+  let biome = weightsAtPos(center.x, center.z).dominant;
+  let distance = SCHOOL_MAX_DIST_M;
+  let fallback: { x: number; z: number; biome: BiomeId; distance: number } | null = null;
+  for (let d = SCHOOL_MIN_DIST_M; d <= SCHOOL_MAX_DIST_M; d += GROVE_SCAN_STEP_M) {
+    const x = spawn.x + dirX * d;
+    const z = spawn.z + dirZ * d;
+    if (Math.hypot(x - grove.center.x, z - grove.center.z) < spacing) continue;
+    const w = weightsAtPos(x, z);
+    if (!fallback) fallback = { x, z, biome: w.dominant, distance: d };
+    if (w.dominant === 'oldfieldRise' || (w.weights.meadow ?? 0) >= SCHOOL_MEADOW_EDGE_WEIGHT) {
+      center = { x, z };
+      biome = w.dominant;
+      distance = d;
+      break;
+    }
+    if (d === SCHOOL_MAX_DIST_M && fallback) {
+      center = { x: fallback.x, z: fallback.z };
+      biome = fallback.biome;
+      distance = fallback.distance;
+    }
+  }
+
+  // --- Plan (streams under the 'schoolhouse' label) -------------------------
+  const planRand = mulberry32(deriveSeed(seed, 'schoolhouse:plan'));
+  // Axis swap: the 12 m axis runs world X (no swap) or world Z.
+  const swap = planRand() < 0.5;
+  const theta = swap ? Math.PI / 2 : 0;
+  // Local -> world: quarter-turn rotation + translation.
+  const toWorld = (lx: number, lz: number): { x: number; z: number } =>
+    swap
+      ? { x: center.x + lz, z: center.z - lx }
+      : { x: center.x + lx, z: center.z + lz };
+
+  // Door side: the side facing spawn (the grove-entrance
+  // pattern), computed in the LOCAL frame — the plan is built
+  // locally, so the approach direction is inverse-rotated into
+  // it (under the swap, world (dx, dz) is local (-dz, dx)). The
+  // site exports the WORLD side, re-rotated at assembly.
+  const toSpawnX = spawn.x - center.x;
+  const toSpawnZ = spawn.z - center.z;
+  const localSpawnX = swap ? -toSpawnZ : toSpawnX;
+  const localSpawnZ = swap ? toSpawnX : toSpawnZ;
+  const doorSide: SchoolSite['doorSide'] =
+    Math.abs(localSpawnX) > Math.abs(localSpawnZ)
+      ? localSpawnX > 0
+        ? 'east'
+        : 'west'
+      : localSpawnZ > 0
+        ? 'south'
+        : 'north';
+  // Local -> world side names under the swap (a local outward
+  // normal (nx, nz) maps to world (nz, -nx)): north -> west,
+  // west -> south, south -> east, east -> north.
+  const worldDoorSide: SchoolSite['doorSide'] = !swap
+    ? doorSide
+    : doorSide === 'north'
+      ? 'west'
+      : doorSide === 'west'
+        ? 'south'
+        : doorSide === 'south'
+          ? 'east'
+          : 'north';
+
+  const W = SCHOOL_WALL_W_M;
+  const D = SCHOOL_WALL_D_M;
+  const SEG = SCHOOL_SEGMENT_M;
+  interface Segment {
+    side: 'north' | 'south' | 'east' | 'west';
+    index: number;
+    lx: number;
+    lz: number;
+    running: 'x' | 'z';
+    cornerAdjacent: boolean;
+  }
+  const segments: Segment[] = [];
+  const perLong = Math.round(W / SEG); // 4 along the 12 m sides
+  const perShort = Math.round(D / SEG); // 3 along the 9 m sides
+  for (let i = 0; i < perLong; i++) {
+    const lx = -W / 2 + SEG / 2 + i * SEG;
+    const corner = i === 0 || i === perLong - 1;
+    segments.push({ side: 'north', index: i, lx, lz: -D / 2, running: 'x', cornerAdjacent: corner });
+    segments.push({ side: 'south', index: i, lx, lz: D / 2, running: 'x', cornerAdjacent: corner });
+  }
+  for (let i = 0; i < perShort; i++) {
+    const lz = -D / 2 + SEG / 2 + i * SEG;
+    const corner = i === 0 || i === perShort - 1;
+    segments.push({ side: 'west', index: i, lx: -W / 2, lz, running: 'z', cornerAdjacent: corner });
+    segments.push({ side: 'east', index: i, lx: W / 2, lz, running: 'z', cornerAdjacent: corner });
+  }
+
+  // The door: the middle segment of the door side (on a 4-segment
+  // side the plan stream picks which of the two middle segments).
+  const doorPool = segments.filter((s) => s.side === doorSide);
+  const door =
+    doorPool.length % 2 === 0
+      ? doorPool[doorPool.length / 2 - 1 + Math.floor(planRand() * 2)]
+      : doorPool[Math.floor(doorPool.length / 2)];
+
+  // Ruin: interior segments (never corner-adjacent, never the
+  // door) are shuffled by the plan stream; the first 1–2 go
+  // missing outright, the next 2–4 stand as broken stubs. The
+  // rest stand full. Corners always stand.
+  const candidates = segments.filter((s) => !s.cornerAdjacent && s !== door);
+  for (let i = candidates.length - 1; i > 0; i--) {
+    const j = Math.floor(planRand() * (i + 1));
+    [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
+  }
+  const missingCount = 1 + Math.floor(planRand() * 2);
+  const stubCount = 2 + Math.floor(planRand() * 3);
+  const missing = new Set(candidates.slice(0, missingCount));
+  const stubs = new Set(candidates.slice(missingCount, missingCount + stubCount));
+
+  const features: ScatterObject[] = [];
+  const walls: SiteWallBox[] = [];
+  const feat = (kind: ScatterKind, x: number, z: number, scale: number, rotY: number): void => {
+    features.push({ kind, x, z, y: 0, scale, rotY });
+  };
+  const box = (cx: number, cz: number, hx: number, hz: number): void => {
+    walls.push({ minX: cx - hx, maxX: cx + hx, minZ: cz - hz, maxZ: cz + hz });
+  };
+  /** Box for a local footprint (hx along local x, hz along local
+   *  z) at a world centre, quarter-turn aware. */
+  const localBox = (cx: number, cz: number, hx: number, hz: number): void => {
+    if (swap) box(cx, cz, hz, hx);
+    else box(cx, cz, hx, hz);
+  };
+
+  // Wall segments: feature + collision for every standing one
+  // (stubs collide too — a 1.3 m broken wall is still a wall to
+  // a witch whose hop is 0.6 m). Missing segments and the door
+  // leave real gaps: no feature, no box.
+  for (const s of segments) {
+    if (s === door || missing.has(s)) continue;
+    const w = toWorld(s.lx, s.lz);
+    const runsWorldX = (s.running === 'x') !== swap;
+    feat(stubs.has(s) ? 'ruinWallStub' : 'ruinWall', w.x, w.z, 1, (runsWorldX ? 0 : Math.PI / 2));
+    if (runsWorldX) box(w.x, w.z, SEG / 2, SCHOOL_WALL_HALF_T);
+    else box(w.x, w.z, SCHOOL_WALL_HALF_T, SEG / 2);
+  }
+
+  // Bell tower: at one of the door side's corners (plan stream
+  // picks which), inset toward the interior so its footprint
+  // sits on the corner.
+  {
+    const cornerX = (planRand() < 0.5 ? -1 : 1) * (W / 2 - 0.95);
+    const alongWall =
+      doorSide === 'north' || doorSide === 'south'
+        ? { lx: cornerX, lz: (doorSide === 'north' ? -1 : 1) * (D / 2 - 0.95) }
+        : { lx: (doorSide === 'west' ? -1 : 1) * (W / 2 - 0.95), lz: cornerX * (D / W) };
+    const w = toWorld(alongWall.lx, alongWall.lz);
+    feat('bellTower', w.x, w.z, 1, theta);
+    box(w.x, w.z, 0.95, 0.95);
+  }
+
+  // Desks: 3 rows x 3 in local space, plan-stream jitter, one
+  // desk turned square across its row (the askew read; its
+  // collision uses the same quarter turn, so box and shape agree).
+  {
+    const rand = mulberry32(deriveSeed(seed, 'schoolhouse:desks'));
+    const askew = Math.floor(rand() * 9);
+    let n = 0;
+    for (const lx of [-3.6, 0, 3.6]) {
+      for (const lz of [-2.3, 0, 2.3]) {
+        const jx = lx + (rand() - 0.5) * 0.5;
+        const jz = lz + (rand() - 0.5) * 0.5;
+        const turned = n === askew;
+        const w = toWorld(jx, jz);
+        feat('schoolDesk', w.x, w.z, 1, theta + (rand() - 0.5) * 0.14 + (turned ? Math.PI / 2 : 0));
+        // Collision snaps to the desk's quarter (jitter ignored):
+        // footprint 1.05 x 1.0 (top + bench).
+        const quarterOdd = (swap ? 1 : 0) + (turned ? 1 : 0);
+        if (quarterOdd % 2 === 0) box(w.x, w.z, 0.52, 0.5);
+        else box(w.x, w.z, 0.5, 0.52);
+        n++;
+      }
+    }
+  }
+
+  // Blackboard: centred on the wall OPPOSITE the door — the
+  // teaching wall — facing into the room.
+  {
+    const side = doorSide === 'north' ? 'south' : doorSide === 'south' ? 'north' : doorSide === 'east' ? 'west' : 'east';
+    const local =
+      side === 'north'
+        ? { lx: 0, lz: -D / 2 + 0.14, rot: 0 }
+        : side === 'south'
+          ? { lx: 0, lz: D / 2 - 0.14, rot: Math.PI }
+          : side === 'east'
+            ? { lx: W / 2 - 0.14, lz: 0, rot: -Math.PI / 2 }
+            : { lx: -W / 2 + 0.14, lz: 0, rot: Math.PI / 2 };
+    const w = toWorld(local.lx, local.lz);
+    feat('blackboard', w.x, w.z, 1, theta + local.rot);
+    localBox(w.x, w.z, side === 'north' || side === 'south' ? 1.7 : 0.12, side === 'north' || side === 'south' ? 0.12 : 1.7);
+  }
+
+  // Flagpole: BESIDE the door (Adam's framing) — outside the
+  // wall, offset along the wall from the door segment's centre,
+  // so the entry path through the doorway stays clear.
+  {
+    const beside = 1.9;
+    const out =
+      doorSide === 'north'
+        ? { lx: door.lx + beside, lz: -D / 2 - 2.3 }
+        : doorSide === 'south'
+          ? { lx: door.lx + beside, lz: D / 2 + 2.3 }
+          : doorSide === 'east'
+            ? { lx: W / 2 + 2.3, lz: door.lz + beside }
+            : { lx: -W / 2 - 2.3, lz: door.lz + beside };
+    const w = toWorld(out.lx, out.lz);
+    feat('flagpole', w.x, w.z, 1, theta);
+    box(w.x, w.z, 0.13, 0.13);
+  }
+
+  // Rubble: 4–6 low mounds just inside the walls (own stream).
+  // No collision — she steps over rubble.
+  {
+    const rand = mulberry32(deriveSeed(seed, 'schoolhouse:rubble'));
+    const count = 4 + Math.floor(rand() * 3);
+    for (let i = 0; i < count; i++) {
+      const sidePick = rand();
+      const along = (rand() * 2 - 1) * 0.8;
+      const inset = 0.7 + rand() * 0.5;
+      const local =
+        sidePick < 0.25
+          ? { lx: along * (W / 2), lz: -D / 2 + inset }
+          : sidePick < 0.5
+            ? { lx: along * (W / 2), lz: D / 2 - inset }
+            : sidePick < 0.75
+              ? { lx: -W / 2 + inset, lz: along * (D / 2) }
+              : { lx: W / 2 - inset, lz: along * (D / 2) };
+      const w = toWorld(local.lx, local.lz);
+      feat('rubble', w.x, w.z, 0.7 + rand() * 0.6, rand() * Math.PI);
+    }
+  }
+
+  const site: SchoolSite = {
+    id: 'schoolhouse',
+    seed,
+    center,
+    biome,
+    distance,
+    clearRadius: SCHOOL_CLEAR_RADIUS_M,
+    doorSide: worldDoorSide,
+    features,
+    walls,
+    bounds: {
+      minX: center.x - SCHOOL_CLEAR_RADIUS_M,
+      maxX: center.x + SCHOOL_CLEAR_RADIUS_M,
+      minZ: center.z - SCHOOL_CLEAR_RADIUS_M,
+      maxZ: center.z + SCHOOL_CLEAR_RADIUS_M,
+    },
+  };
+  schoolCache.set(`${seed}::schoolhouse`, site);
+  return site;
+}
+
+/** True when a world position lies inside the schoolhouse's
+ *  clearing (the footprint check, groveContains' twin). */
+export function schoolhouseContains(site: SchoolSite, x: number, z: number): boolean {
+  return Math.hypot(x - site.center.x, z - site.center.z) <= site.clearRadius;
+}
+
+/** The shared footprint shape both sites (and the worldgen
+ *  pass + the renderer's wall query) read: a clearing circle,
+ *  its features, its collision boxes, and its broad bounds.
+ *  GroveSite and SchoolSite both satisfy it structurally. */
+export interface SiteFootprint {
+  center: { x: number; z: number };
+  clearRadius: number;
+  features: ScatterObject[];
+  walls: SiteWallBox[];
+  bounds: { minX: number; maxX: number; minZ: number; maxZ: number };
+}
+
 /** True when a world position lies inside the grove's clearing —
  *  the footprint check (UI's 'Grove Tree' name-tag rule and
  *  harvest's protection backstop both read this fact). */
@@ -511,12 +886,13 @@ export function groveContains(site: GroveSite, x: number, z: number): boolean {
 }
 
 /**
- * The site's wall boxes when (x, z) is within the grove bounds +
- * margin, else null — the player query shape: one bounds test per
- * frame in open country, the box list only near the grove.
+ * A site's wall boxes when (x, z) is within its bounds + margin,
+ * else null — the player query shape: one bounds test per frame
+ * in open country, the box list only near the site. Reads the
+ * structural footprint, so it serves every registered site.
  */
 export function groveWallsNear(
-  site: GroveSite,
+  site: SiteFootprint,
   x: number,
   z: number,
   margin: number,
@@ -531,6 +907,25 @@ export function groveWallsNear(
     return null;
   }
   return site.walls;
+}
+
+/**
+ * The union of every registered site's walls near (x, z), or
+ * null when she is near none of them — the renderer's single
+ * query into the player controller.
+ */
+export function wallsNearSites(
+  sites: readonly SiteFootprint[],
+  x: number,
+  z: number,
+  margin: number,
+): SiteWallBox[] | null {
+  let out: SiteWallBox[] | null = null;
+  for (const s of sites) {
+    const w = groveWallsNear(s, x, z, margin);
+    if (w) out = out ? out.concat(w) : w.slice();
+  }
+  return out;
 }
 
 /**

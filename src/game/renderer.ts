@@ -43,7 +43,7 @@ import {
 import { terrainSpeedAt } from './movement';
 import { treeKindAt } from './treeKind';
 import { riverParamsFor, riverRibbonForChunk } from './river';
-import { groveSite, groveWallsNear, type GroveSite } from './sites';
+import { groveSite, schoolhouseSite, wallsNearSites, type SiteFootprint } from './sites';
 import type { RiverParams } from './river';
 import { fireState } from './fireState';
 import { torchState } from './torchState';
@@ -89,6 +89,20 @@ interface KindRender {
   material: THREE.Material;
   /** Base height of the instance above ground (before scatter y). */
   baseY: number;
+}
+
+/**
+ * The registered sites for a world generator (sites.ts): the
+ * Grove + the Schoolhouse. Both derivations are memoized pure
+ * functions of the seed, so this is cheap to recompute on world
+ * change; the renderer's wall query and nothing else reads it.
+ */
+function computeSites(gen: WorldGen): SiteFootprint[] {
+  const spawn = gen.findSpawn();
+  return [
+    groveSite(String(gen.seed), spawn, (x, z) => gen.weightsAt(x, z).dominant),
+    schoolhouseSite(String(gen.seed), spawn, (x, z) => gen.weightsAt(x, z)),
+  ];
 }
 
 function lambert(color: number, opacity = 1): THREE.MeshLambertMaterial {
@@ -394,9 +408,10 @@ export class WorldRenderer {
   private chunks = new Map<string, LoadedChunk>();
   /** River course for the current world (seed + spawn); null until set. */
   private riverParams: RiverParams | null = null;
-  /** The Grove for the current world (sites.ts — a pure function
-   *  of the seed, recomputed beside the river on world change). */
-  private grove: GroveSite | null = null;
+  /** The registered sites for the current world (sites.ts —
+   *  pure functions of the seed, recomputed beside the river on
+   *  world change): the Grove + the Schoolhouse today. */
+  private sites: SiteFootprint[] = [];
   private witch: THREE.Group;
   /** Carried umbrella graphic (models.ts), attached to the witch. */
   private umbrella: THREE.Group;
@@ -518,19 +533,16 @@ export class WorldRenderer {
     // generator delegates fieldsAt/weightsAt untouched, so the
     // slow reads true world data, not harvest state.
     this.player.setTerrainSpeedQuery((x, z) => terrainSpeedAt(this.gen, x, z));
-    // Site walls (sites landing, 2026-10-30): the renderer owns
-    // the generator and the player, so it wires the grove's hedge
+    // Site walls (sites landing, 2026-10-30; generalized to the
+    // registered sites with the Schoolhouse): the renderer owns
+    // the generator and the player, so it wires the sites'
     // collision itself, same as the terrain query. The closure
-    // reads this.grove dynamically, so world changes
-    // (setWorldGen recomputes it) flow through without
-    // re-wiring. Away from the grove the query returns null and
-    // movement pays one bounds test.
-    this.grove = groveSite(String(gen.seed), gen.findSpawn(), (x, z) =>
-      gen.weightsAt(x, z).dominant,
-    );
-    this.player.setSiteWallsQuery((x, z) =>
-      this.grove ? groveWallsNear(this.grove, x, z, 2) : null,
-    );
+    // reads this.sites dynamically, so world changes (setWorldGen
+    // recomputes it) flow through without re-wiring. Away from
+    // every site the query returns null and movement pays one
+    // bounds test per site.
+    this.sites = computeSites(gen);
+    this.player.setSiteWallsQuery((x, z) => wallsNearSites(this.sites, x, z, 2));
     this.proximity = new ProximityTracker(this.gen, true, () => this.tents);
     // Chunk reload on harvest completion: the harvested chunk is
     // rebuilt, so the object visibly shrinks (or leaves, on remove
@@ -942,11 +954,9 @@ export class WorldRenderer {
     this.rebuildTrapGroup();
     this.gen = wrapGenWithState(gen);
     this.riverParams = riverParamsFor(String(gen.seed), gen.findSpawn());
-    // The new world's grove (sites.ts) — the site-wall query the
+    // The new world's sites (sites.ts) — the site-wall query the
     // constructor wired reads this field dynamically.
-    this.grove = groveSite(String(gen.seed), gen.findSpawn(), (x, z) =>
-      gen.weightsAt(x, z).dominant,
-    );
+    this.sites = computeSites(gen);
     // A new world gets a new sky: fresh stars for the seed + the
     // cycle restarts at dawn. Skipped on the dispose path
     // (disposed is already true there) — dispose() removes the

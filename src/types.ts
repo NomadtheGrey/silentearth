@@ -97,7 +97,18 @@ export type ScatterKind =
   | 'standingStone'
   | 'carvedStone'
   | 'hedgeWall'
-  | 'hoardMound';
+  | 'hoardMound'
+  // Site-pass kinds (the Schoolhouse, sites.ts — same rule:
+  // emitted only by the site pass): the ruined wall ring
+  // (standing + broken-stub segments), the bell tower, the
+  // desks, the blackboard, the flagpole, rubble.
+  | 'ruinWall'
+  | 'ruinWallStub'
+  | 'bellTower'
+  | 'schoolDesk'
+  | 'blackboard'
+  | 'flagpole'
+  | 'rubble';
 
 /** One placed scatter object in a chunk. y is its base height above ground. */
 export interface ScatterObject {

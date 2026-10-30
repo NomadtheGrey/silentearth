@@ -47,7 +47,7 @@ import type { ScatterKind } from '../types';
 import type { MeshSpec } from './objects';
 import type { AnimalKind } from './animals';
 import { hashSeed, mulberry32 } from './seed';
-import { GROVE_CELL_M } from './sites';
+import { GROVE_CELL_M, SCHOOL_SEGMENT_M } from './sites';
 import { sunDirection, sunElevationAtCycle } from './sky';
 import { dayFraction } from './weather';
 
@@ -327,6 +327,82 @@ export function buildKindGeometry(spec: MeshSpec, kind: ScatterKind): THREE.Buff
       part(sphere(0.1, 6, 5), shade(e, 0.85), { p: [-0.3, -0.14, 0.4] }),
       part(box(0.34, 0.09, 0.22), shade(e, 1.05), { p: [-0.42, -0.12, -0.2], r: [0, 0.5, 0] }),
       part(lyingCyl(0.03, 0.035, 0.7), shade(c, 1.35), { p: [0.15, -0.1, -0.42], r: [0, 0.8, 0] }),
+    ]);
+  }
+  // Kind overrides (the Schoolhouse set, sites.ts): the ruin's
+  // fabric. Wall segments are built at SCHOOL_SEGMENT_M long so
+  // shape and collision box describe the same stretch of wall.
+  // Local ground is y = -baseY (see the grove overrides above).
+  if (kind === 'ruinWall') {
+    return merge([
+      part(box(SCHOOL_SEGMENT_M, 2.6, 0.48), c),
+      // Uneven remnants along the top — the broken skyline.
+      part(box(1.1, 0.5, 0.5), shade(c, 0.92), { p: [0.8, 1.42, 0], r: [0, 0, 0.06] }),
+      part(box(0.7, 0.34, 0.5), shade(e, 1.0), { p: [-1.0, 1.36, 0], r: [0, 0, -0.05] }),
+    ]);
+  }
+  if (kind === 'ruinWallStub') {
+    return merge([
+      part(box(SCHOOL_SEGMENT_M, 1.16, 0.48), c),
+      // A slumped chunk leaning off the break.
+      part(box(0.9, 0.5, 0.5), shade(c, 0.9), { p: [-0.85, 0.72, 0.04], r: [0.1, 0.15, 0.22] }),
+    ]);
+  }
+  if (kind === 'bellTower') {
+    // Stone body to 4.2 m, then an open belfry: four posts, the
+    // bell (extraColor bronze) hanging in the frame, and a
+    // four-sided cap — the silhouette she navigates by.
+    const posts: THREE.BufferGeometry[] = [];
+    for (const sx of [-0.72, 0.72]) {
+      for (const sz of [-0.72, 0.72]) {
+        posts.push(part(box(0.14, 1.15, 0.14), shade(c, 0.95), { p: [sx, 2.68, sz] }));
+      }
+    }
+    return merge([
+      part(box(1.8, 4.2, 1.8), c),
+      part(box(1.95, 0.18, 1.95), shade(c, 0.9), { p: [0, 2.12, 0] }),
+      ...posts,
+      part(box(1.7, 0.12, 0.16), shade(c, 0.9), { p: [0, 3.22, 0] }),
+      part(sphere(0.34, 8, 6), e, { p: [0, 2.82, 0], s: [1, 1.15, 1] }),
+      part(cone(1.45, 0.95, 4), shade(c, 0.7), { p: [0, 3.75, 0], r: [0, Math.PI / 4, 0] }),
+    ]);
+  }
+  if (kind === 'schoolDesk') {
+    // Top at local y 0 (= baseY in the world), two side panels,
+    // a bench behind, one dark inkwell dot.
+    return merge([
+      part(box(1.0, 0.06, 0.55), c),
+      part(box(0.05, 0.72, 0.5), shade(c, 0.8), { p: [-0.45, -0.36, 0] }),
+      part(box(0.05, 0.72, 0.5), shade(c, 0.8), { p: [0.45, -0.36, 0] }),
+      part(box(0.9, 0.05, 0.25), shade(c, 0.9), { p: [0, -0.27, 0.42] }),
+      part(box(0.09, 0.03, 0.09), e, { p: [0.32, 0.045, -0.12] }),
+    ]);
+  }
+  if (kind === 'blackboard') {
+    // Wood frame (c) around the dark board (e), a pale chalk
+    // smudge low on the board, two legs to the floor.
+    return merge([
+      part(box(3.4, 1.5, 0.08), c),
+      part(box(3.1, 1.24, 0.1), e, { p: [0, 0.02, 0.01] }),
+      part(box(1.6, 0.16, 0.11), 0xb9beb2, { p: [-0.4, -0.3, 0.01] }),
+      part(box(0.09, 0.78, 0.09), shade(c, 0.8), { p: [-1.5, -1.12, 0] }),
+      part(box(0.09, 0.78, 0.09), shade(c, 0.8), { p: [1.5, -1.12, 0] }),
+    ]);
+  }
+  if (kind === 'flagpole') {
+    // A 6 m pole (baseY 3.0), a finial ball, and the faded flag
+    // (extraColor) hanging near-limp from the top.
+    return merge([
+      part(cyl(0.045, 0.065, 6.0, 6), c),
+      part(sphere(0.09, 6, 5), shade(c, 1.2), { p: [0, 3.05, 0] }),
+      part(box(1.05, 0.62, 0.03), e, { p: [0.56, 2.62, 0], r: [0, 0, -0.1] }),
+    ]);
+  }
+  if (kind === 'rubble') {
+    return merge([
+      part(blob(0.55), c, { p: [0, -0.12, 0], s: [1, 0.55, 1] }),
+      part(blob(0.38), shade(c, 0.9), { p: [0.5, -0.15, 0.2], s: [1, 0.6, 1] }),
+      part(box(0.5, 0.3, 0.42), shade(e, 1.0), { p: [-0.45, -0.12, -0.15], r: [0.15, 0.4, 0.1] }),
     ]);
   }
   switch (spec.shape) {

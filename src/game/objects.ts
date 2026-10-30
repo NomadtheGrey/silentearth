@@ -783,6 +783,115 @@ export const SOURCES: HarvestSourceDef[] = [
     biomes: ['forest', 'tanglewood', 'oldfieldRise'],
     mesh: { shape: 'disc', color: 0x5a4632, extraColor: 0x8a8d90, baseY: 0.5 },
   },
+  // The Schoolhouse set (sites landing #2, 2026-10-30): the
+  // ruined school's standing fabric. ALL non-harvestable
+  // scenery, like the grove's stones — nobody mines a ruin for
+  // parts; these exist only as site features (sites.ts emits
+  // them; their `biomes` lists name the ground the schoolhouse
+  // sites on and never drive scatter). The schoolDesk shares
+  // its kind between the item-shaped desk rows only — the
+  // writing desk is a different, placed thing entirely.
+  {
+    id: 'ruinWall',
+    kind: 'ruinWall',
+    name: 'Ruined Wall',
+    description:
+      'A standing stretch of the schoolhouse wall (Adam, ' +
+      '2026-10-30). Roofless ruin scenery; solid — she enters ' +
+      'through the door gap.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['oldfieldRise', 'meadow'],
+    mesh: { shape: 'stone', color: 0x8a8578, extraColor: 0x6e6a5e, baseY: 1.3 },
+  },
+  {
+    id: 'ruinWallStub',
+    kind: 'ruinWallStub',
+    name: 'Broken Wall',
+    description:
+      'A schoolhouse wall segment broken down to a stub (Adam, ' +
+      '2026-10-30). Still solid — broken is not gone.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['oldfieldRise', 'meadow'],
+    mesh: { shape: 'stone', color: 0x8a8578, extraColor: 0x6e6a5e, baseY: 0.58 },
+  },
+  {
+    id: 'bellTower',
+    kind: 'bellTower',
+    name: 'Bell Tower',
+    description:
+      'The schoolhouse bell tower at the corner (Adam, ' +
+      '2026-10-30) — the place\u2019s landmark silhouette. The bell ' +
+      'still hangs in its frame.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['oldfieldRise', 'meadow'],
+    mesh: { shape: 'stone', color: 0x8a8578, extraColor: 0x5a4632, baseY: 2.1 },
+  },
+  {
+    id: 'schoolDesk',
+    kind: 'schoolDesk',
+    name: 'School Desk',
+    description:
+      'A pupil\u2019s desk, still in its row (Adam, 2026-10-30). ' +
+      'Scenery; solid — she walks the aisles.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['oldfieldRise', 'meadow'],
+    mesh: { shape: 'stone', color: 0x7a5c38, extraColor: 0x4a3826, baseY: 0.72 },
+  },
+  {
+    id: 'blackboard',
+    kind: 'blackboard',
+    name: 'Blackboard',
+    description:
+      'The blackboard on the teaching wall (Adam, 2026-10-30). ' +
+      'Scenery in this landing: what may one day be written on ' +
+      'it stages with the marks system.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['oldfieldRise', 'meadow'],
+    mesh: { shape: 'stone', color: 0x7a5c38, extraColor: 0x252b25, baseY: 1.5 },
+  },
+  {
+    id: 'flagpole',
+    kind: 'flagpole',
+    name: 'Flagpole',
+    description:
+      'The flagpole by the schoolhouse door (Adam, 2026-10-30), ' +
+      'its flag faded to a remnant. Scenery.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['oldfieldRise', 'meadow'],
+    mesh: { shape: 'stone', color: 0x9a9a92, extraColor: 0x9a4a42, baseY: 3.0 },
+  },
+  {
+    id: 'rubble',
+    kind: 'rubble',
+    name: 'Rubble',
+    description:
+      'Fallen stone and broken brick along the schoolhouse ' +
+      'walls (Adam, 2026-10-30). Low scenery — she steps over it.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['oldfieldRise', 'meadow'],
+    mesh: { shape: 'stone', color: 0x7d7668, extraColor: 0x665f52, baseY: 0.25 },
+  },
   {
     id: 'snapwoodThicket',
     kind: 'snapWood',
