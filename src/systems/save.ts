@@ -352,16 +352,24 @@ export interface SavedDesk {
 
 /**
  * A placed cauldron, as saved. KEYED TO ITS HEARTH:
- * the only fact stored is the hearth's id
- * (Background's fire-entity id, verbatim — the
- * restore binding rides on it; how a saved cauldron
- * rebinds after reload is Background's half). No
- * vessel state is stored — the cauldron is the SITE
- * for the 'cauldron' station's workings, which carry
- * their own state elsewhere. One cauldron per hearth.
+ * `hearthId` (Background's fire-entity id, verbatim)
+ * is the binding, and the position is carried always
+ * beside it — the desks shape plus the binding
+ * (coordinated with Background's cauldronState
+ * restore, 2026-10-30: position is the restore's
+ * fallback surface when an id cannot rebind). `id` is
+ * the placed-cauldron entity's own id, optional:
+ * present when the entity provides one; the restore
+ * mints when absent. No vessel state is stored — the
+ * cauldron is the SITE for the 'cauldron' station's
+ * workings, which carry their own state elsewhere.
+ * One cauldron per hearth.
  */
 export interface SavedCauldron {
   hearthId: string;
+  x: number;
+  z: number;
+  id?: string;
 }
 
 /**
@@ -641,6 +649,9 @@ export interface SaveDraft {
    */
   cauldrons?: ReadonlyArray<{
     hearthId: string;
+    x: number;
+    z: number;
+    id?: string;
   }>;
   /**
    * Placed tents from the placed-tent source
@@ -900,11 +911,15 @@ export function serializeSave(draft: SaveDraft): SaveData {
       z: desk.z,
       ...(desk.id !== undefined ? { id: desk.id } : {}),
     })),
-    // Cauldrons: written AS-IS (hearth ids verbatim —
-    // the restore binding rides on them). No vessel
+    // Cauldrons: written AS-IS, same as desks (hearth
+    // id + positions verbatim, entity id when provided
+    // — no filtering, no normalization). No vessel
     // state is written — the cauldron is the SITE.
     cauldrons: (draft.cauldrons ?? []).map((cauldron) => ({
       hearthId: cauldron.hearthId,
+      x: cauldron.x,
+      z: cauldron.z,
+      ...(cauldron.id !== undefined ? { id: cauldron.id } : {}),
     })),
     // Tents: written AS-IS (positions verbatim, id when
     // the entity provides one — no filtering, no
@@ -1363,7 +1378,8 @@ export function deserializeSave(value: unknown): SaveData | null {
     // desks: an old v1 save without them loads with
     // cauldrons: []. Entries pass through UNVALIDATED —
     // the placed-cauldron restore binds by hearth id
-    // and drops what it cannot bind, so a bad cauldron
+    // (position its fallback) and drops what it cannot
+    // bind, so a bad cauldron
     // entry can never corrupt the whole document. A
     // non-array cauldrons field loads as [].
     const cauldrons: SavedCauldron[] = [];
@@ -1372,6 +1388,11 @@ export function deserializeSave(value: unknown): SaveData | null {
         if (!isRecord(entry)) continue;
         cauldrons.push({
           hearthId: entry.hearthId as string,
+          x: entry.x as number,
+          z: entry.z as number,
+          ...(typeof entry.id === 'string'
+            ? { id: entry.id as string }
+            : {}),
         });
       }
     }
