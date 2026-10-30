@@ -117,7 +117,15 @@ export type ScatterKind =
   | 'villageRoof'
   | 'villageRoofFallen'
   | 'villageWell'
-  | 'ashPatch';
+  | 'ashPatch'
+  // Site-pass kinds (the Farmhouse, sites.ts — same rule):
+  // wall segments, the gable roof, the composed porch, and
+  // the hearth stone (hearth block + the Great Stone).
+  | 'farmWall'
+  | 'farmRoof'
+  | 'farmPorch'
+  | 'hearthStone'
+
 
 /** One placed scatter object in a chunk. y is its base height above ground. */
 export interface ScatterObject {

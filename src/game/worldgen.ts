@@ -19,7 +19,7 @@ import { BIOMES, createFields, weightsAt, groundColorAt, marshWeight } from './b
 import type { Fields } from './biomes';
 import { mulberry32, deriveSeed, hashSeed } from './seed';
 import { treeKindAt } from './treeKind';
-import { groveSite, schoolhouseSite, villageSite, type SiteFootprint } from './sites';
+import { farmhouseSite, groveSite, schoolhouseSite, villageSite, type SiteFootprint } from './sites';
 import { CHUNK_SIZE, BASE_SCATTER_PER_CHUNK, GROUND_SEGMENTS } from '../constants';
 import type { BiomeWeights, ChunkData, ScatterKind, ScatterObject } from '../types';
 
@@ -254,6 +254,7 @@ export function createWorldGen(seed: string): WorldGen {
         groveSite(seed, findSpawn(), (x, z) => weightsAtPos(x, z).dominant),
         schoolhouseSite(seed, findSpawn(), weightsAtPos),
         villageSite(seed, findSpawn(), weightsAtPos),
+        farmhouseSite(seed, findSpawn(), weightsAtPos),
       ];
     }
     return sitesCache;

@@ -982,6 +982,68 @@ export const SOURCES: HarvestSourceDef[] = [
     biomes: ['oldfieldRise', 'creekBottom'],
     mesh: { shape: 'disc', color: 0x9a958c, baseY: 0 },
   },
+  // The Farmhouse set (Adam, 2026-10-30 — the Home
+  // fragments' home ground; site-pass only, same rule as
+  // the sets above).
+  {
+    id: 'farmWall',
+    kind: 'farmWall',
+    name: 'Farmhouse Wall',
+    description:
+      'A standing stretch of the farmhouse wall (Adam, ' +
+      '2026-10-30). Weathered boards under a whole roof; ' +
+      'solid — she enters through the door, under the porch.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['oldfieldRise'],
+    mesh: { shape: 'stone', color: 0x7a6248, extraColor: 0x201812, baseY: 1.3 },
+  },
+  {
+    id: 'farmRoof',
+    kind: 'farmRoof',
+    name: 'Farmhouse Roof',
+    description:
+      'The farmhouse roof, whole (Adam, 2026-10-30) — the ' +
+      'house kept it, which is most of why the house stands.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['oldfieldRise'],
+    mesh: { shape: 'stone', color: 0x4f4630, extraColor: 0x7d7668, baseY: 0 },
+  },
+  {
+    id: 'farmPorch',
+    kind: 'farmPorch',
+    name: 'Farmhouse Porch',
+    description:
+      'The porch over the farmhouse door (Adam, 2026-10-30): ' +
+      'two posts, a flat roof, a step stone. Its posts are solid.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['oldfieldRise'],
+    mesh: { shape: 'stone', color: 0x6e5136, extraColor: 0x59422a, baseY: 1.15 },
+  },
+  {
+    id: 'hearthStone',
+    kind: 'hearthStone',
+    name: 'Hearth Stone',
+    description:
+      'A great hewn stone of the farmhouse hearth (Adam, ' +
+      '2026-10-30). Home fragments are carried on stones ' +
+      'like this one.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['oldfieldRise'],
+    mesh: { shape: 'stone', color: 0x8a8578, extraColor: 0x6e6a5e, baseY: 0.42 },
+  },
+
   {
     id: 'snapwoodThicket',
     kind: 'snapWood',

@@ -47,7 +47,7 @@ import type { ScatterKind } from '../types';
 import type { MeshSpec } from './objects';
 import type { AnimalKind } from './animals';
 import { hashSeed, mulberry32 } from './seed';
-import { GROVE_CELL_M, SCHOOL_SEGMENT_M, VILLAGE_SEGMENT_M } from './sites';
+import { FARM_SEGMENT_M, GROVE_CELL_M, SCHOOL_SEGMENT_M, VILLAGE_SEGMENT_M } from './sites';
 import { sunDirection, sunElevationAtCycle } from './sky';
 import { dayFraction } from './weather';
 
@@ -470,6 +470,55 @@ export function buildKindGeometry(spec: MeshSpec, kind: ScatterKind): THREE.Buff
       part(box(1.5, 0.07, 0.8), shade(e, 0.9), { p: [0.36, 0.78, 0], r: [0, 0, -0.5] }),
     ]);
   }
+  // Kind overrides (the Farmhouse set, sites.ts): a mostly
+  // intact house — boards, a whole mossy roof, the composed
+  // porch, and the hearth's hewn stone. Local ground is
+  // y = -baseY (walls 1.3, porch 1.15, stone 0.42; the roof
+  // carries its height in the feature's y).
+  if (kind === 'farmWall') {
+    return merge([
+      part(box(FARM_SEGMENT_M, 2.6, 0.3), c),
+      part(box(FARM_SEGMENT_M, 0.18, 0.36), shade(c, 1.1), { p: [0, 1.18, 0] }),
+      part(box(FARM_SEGMENT_M, 0.05, 0.33), shade(c, 0.85), { p: [0, -0.5, 0] }),
+      part(box(0.62, 0.85, 0.34), e, { p: [-0.6, 0.1, 0] }),
+    ]);
+  }
+  if (kind === 'farmRoof') {
+    // Gable roof, origin at the wall top: two mossy planes,
+    // a ridge beam, and the stone chimney (extraColor) over
+    // the hearth end (local -X, where sites.ts puts it).
+    const slope = 0.62;
+    return merge([
+      part(box(10.6, 0.09, 4.9), c, { p: [0, 1.42, -2.0], r: [slope, 0, 0] }),
+      part(box(10.6, 0.09, 4.9), c, { p: [0, 1.42, 2.0], r: [-slope, 0, 0] }),
+      part(box(10.7, 0.15, 0.22), shade(c, 1.12), { p: [0, 2.62, 0] }),
+      part(box(0.55, 1.25, 0.55), e, { p: [-3.6, 2.35, 0] }),
+      part(box(0.7, 0.12, 0.7), shade(e, 0.9), { p: [-3.6, 3.0, 0] }),
+    ]);
+  }
+  if (kind === 'farmPorch') {
+    // The composed porch, origin at the door's wall line,
+    // local +Z pointing OUT of the house: two front posts
+    // (their spots are the collision boxes sites.ts ships),
+    // a near-flat roof slab on a back beam, a step stone.
+    return merge([
+      part(box(0.14, 2.3, 0.14), c, { p: [-1.65, 0, 2.05] }),
+      part(box(0.14, 2.3, 0.14), c, { p: [1.65, 0, 2.05] }),
+      part(box(3.9, 0.16, 0.12), shade(c, 1.05), { p: [0, 1.05, 0.06] }),
+      part(box(3.9, 0.09, 2.5), shade(e, 1.0), { p: [0, 1.13, 1.12], r: [0.05, 0, 0] }),
+      part(box(1.6, 0.12, 0.7), 0x8a8578, { p: [0, -1.09, 0.95] }),
+    ]);
+  }
+  if (kind === 'hearthStone') {
+    // One great hewn block with a cap slab — the hearth
+    // block (scaled up by sites) and the Great Stone share
+    // the build; the stone is the carrier.
+    return merge([
+      part(box(0.95, 0.8, 0.65), c, { p: [0, -0.02, 0] }),
+      part(box(1.05, 0.12, 0.75), shade(e, 1.0), { p: [0, 0.44, 0] }),
+    ]);
+  }
+
   switch (spec.shape) {
     case 'tree': {
       const branches: THREE.BufferGeometry[] = [];

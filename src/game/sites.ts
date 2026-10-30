@@ -543,8 +543,6 @@ export const SCHOOL_MIN_DIST_M = 250;
 export const SCHOOL_MAX_DIST_M = 450;
 /** Clearing radius around the schoolhouse centre (DRAFT). */
 export const SCHOOL_CLEAR_RADIUS_M = 16;
-/** Extra spacing kept between the two sites' clearings (DRAFT). */
-export const SCHOOL_SPACING_MARGIN_M = 20;
 /** Meadow weight at/over which a candidate reads meadow-edge. */
 export const SCHOOL_MEADOW_EDGE_WEIGHT = 0.2;
 /** Wall ring dimensions, meters (DRAFT): 12 m long, 9 m deep,
@@ -589,7 +587,7 @@ export function schoolhouseSite(
 
   // Spacing is measured against the grove (memoized derivation).
   const grove = groveSite(seed, spawn, (x, z) => weightsAtPos(x, z).dominant);
-  const spacing = grove.clearRadius + SCHOOL_CLEAR_RADIUS_M + SCHOOL_SPACING_MARGIN_M;
+  const spacing = grove.clearRadius + SCHOOL_CLEAR_RADIUS_M + SITE_SPACING_MARGIN_M;
 
   // Siting: its own bearing stream, scanned outward over the
   // band. The fallback guarantees a world always has its
@@ -896,9 +894,6 @@ export const VILLAGE_MIN_DIST_M = 550;
 export const VILLAGE_MAX_DIST_M = 950;
 /** Clearing radius around the village centre (DRAFT). */
 export const VILLAGE_CLEAR_RADIUS_M = 58;
-/** Extra spacing kept between the village and the earlier
- *  sites' clearings (DRAFT; DEV-ruled formulation). */
-export const VILLAGE_SPACING_MARGIN_M = 60;
 /** Creek-bottom weight at/over which a candidate has water. */
 export const VILLAGE_CREEK_MIN_WEIGHT = 0.15;
 /** House wall segment length / wall height, meters (DRAFT):
@@ -973,7 +968,7 @@ export function villageSite(
   const grove = groveSite(seed, spawn, (x, z) => weightsAtPos(x, z).dominant);
   const school = schoolhouseSite(seed, spawn, weightsAtPos);
   const spacingVs = (other: SiteFootprint): number =>
-    other.clearRadius + VILLAGE_CLEAR_RADIUS_M + VILLAGE_SPACING_MARGIN_M;
+    other.clearRadius + VILLAGE_CLEAR_RADIUS_M + SITE_SPACING_MARGIN_M;
   const spacingLegal = (x: number, z: number): boolean =>
     Math.hypot(x - grove.center.x, z - grove.center.z) >= spacingVs(grove) &&
     Math.hypot(x - school.center.x, z - school.center.z) >= spacingVs(school);
@@ -1228,6 +1223,327 @@ export function villageSite(
 export function villageContains(site: VillageSite, x: number, z: number): boolean {
   return Math.hypot(x - site.center.x, z - site.center.z) <= site.clearRadius;
 }
+
+// ---------------------------------------------------------------------------
+// THE FARMHOUSE — site #4 (Adam, 2026-10-30; claim approved
+// by DEV with the spacing margin corrected to the standing
+// 60 m). The schoolhouse's opposite number: a domestic ruin
+// that is MOSTLY INTACT — roofed, walk-in, with a partition,
+// a porch, and the hearth whose great stone carries the
+// Home fragments. Domestic ground: it sites on farm country
+// (the old fields) in the 300–600 m band, with the spacing
+// filter (radii-sum + 60 against all three earlier sites)
+// doing real work where the bands overlap.
+// ---------------------------------------------------------------------------
+
+/** Siting band from spawn, meters (DRAFT). */
+export const FARM_MIN_DIST_M = 300;
+export const FARM_MAX_DIST_M = 600;
+/** Clearing radius around the farmhouse centre (DRAFT). */
+export const FARM_CLEAR_RADIUS_M = 20;
+/** Oldfield weight at/over which a candidate reads farm-edge. */
+export const FARM_OLDFIELD_EDGE_WEIGHT = 0.25;
+/** Wall segment length / house plan, meters (DRAFT): the
+ *  house is 10 × 7.5 m of 2.5 m segments. */
+export const FARM_SEGMENT_M = 2.5;
+export const FARM_WALL_W_M = 10;
+export const FARM_WALL_D_M = 7.5;
+export const FARM_WALL_H_M = 2.6;
+const FARM_WALL_HALF_T = 0.15;
+
+/** The derived Farmhouse: one per world seed. */
+export interface FarmSite {
+  id: string;
+  seed: string;
+  center: { x: number; z: number };
+  /** Dominant biome at the chosen centre. */
+  biome: BiomeId;
+  /** Siting distance from spawn, meters. */
+  distance: number;
+  clearRadius: number;
+  /** Which side the door (and porch) is on, world frame. */
+  doorSide: 'north' | 'south' | 'east' | 'west';
+  /** The hearth block's position (inside, at the chimney end). */
+  hearthSpot: { x: number; z: number };
+  /** THE GREAT STONE's position — the Home-fragment carrier. */
+  hearthStone: { x: number; z: number };
+  /** The cellar door's spot (anchor only — nothing below in v1). */
+  cellarDoor: { x: number; z: number };
+  features: ScatterObject[];
+  walls: SiteWallBox[];
+  bounds: { minX: number; maxX: number; minZ: number; maxZ: number };
+}
+
+const farmCache = new Map<string, FarmSite>();
+
+/**
+ * Derive the world's Farmhouse. `weightsAtPos` returns the
+ * full weights + dominant at a position. Memoized by seed.
+ */
+export function farmhouseSite(
+  seed: string,
+  spawn: { x: number; z: number },
+  weightsAtPos: (x: number, z: number) => BiomeWeights,
+): FarmSite {
+  const cached = farmCache.get(`${seed}::farmhouse`);
+  if (cached) return cached;
+
+  // Spacing against all three earlier sites (radii + 60).
+  const grove = groveSite(seed, spawn, (x, z) => weightsAtPos(x, z).dominant);
+  const school = schoolhouseSite(seed, spawn, weightsAtPos);
+  const village = villageSite(seed, spawn, weightsAtPos);
+  const spacingLegal = (x: number, z: number): boolean =>
+    [grove, school, village].every(
+      (s) =>
+        Math.hypot(x - s.center.x, z - s.center.z) >=
+        s.clearRadius + FARM_CLEAR_RADIUS_M + SITE_SPACING_MARGIN_M,
+    );
+
+  // Siting: own bearing stream over the band, the standing
+  // fallback shape.
+  const bearing = mulberry32(deriveSeed(seed, 'site:farmhouse'))() * Math.PI * 2;
+  const dirX = Math.cos(bearing);
+  const dirZ = Math.sin(bearing);
+  let center = {
+    x: spawn.x + dirX * FARM_MAX_DIST_M,
+    z: spawn.z + dirZ * FARM_MAX_DIST_M,
+  };
+  let biome = weightsAtPos(center.x, center.z).dominant;
+  let distance = FARM_MAX_DIST_M;
+  let fallback: { x: number; z: number; biome: BiomeId; distance: number } | null = null;
+  for (let d = FARM_MIN_DIST_M; d <= FARM_MAX_DIST_M; d += GROVE_SCAN_STEP_M) {
+    const x = spawn.x + dirX * d;
+    const z = spawn.z + dirZ * d;
+    if (!spacingLegal(x, z)) continue;
+    const w = weightsAtPos(x, z);
+    if (!fallback) fallback = { x, z, biome: w.dominant, distance: d };
+    if (w.dominant === 'oldfieldRise' || (w.weights.oldfieldRise ?? 0) >= FARM_OLDFIELD_EDGE_WEIGHT) {
+      center = { x, z };
+      biome = w.dominant;
+      distance = d;
+      break;
+    }
+    if (d === FARM_MAX_DIST_M && fallback) {
+      center = { x: fallback.x, z: fallback.z };
+      biome = fallback.biome;
+      distance = fallback.distance;
+    }
+  }
+
+  // --- Plan (streams under the 'farmhouse' label) ---------------------------
+  const planRand = mulberry32(deriveSeed(seed, 'farmhouse:plan'));
+  const swap = planRand() < 0.5;
+  const theta = swap ? Math.PI / 2 : 0;
+  const toWorld = (lx: number, lz: number): { x: number; z: number } =>
+    swap
+      ? { x: center.x + lz, z: center.z - lx }
+      : { x: center.x + lx, z: center.z + lz };
+
+  // Door side: the spawn-approach side, computed in the
+  // local frame (the schoolhouse pattern, verbatim shape).
+  const toSpawnX = spawn.x - center.x;
+  const toSpawnZ = spawn.z - center.z;
+  const localSpawnX = swap ? -toSpawnZ : toSpawnX;
+  const localSpawnZ = swap ? toSpawnX : toSpawnZ;
+  const doorSide: FarmSite['doorSide'] =
+    Math.abs(localSpawnX) > Math.abs(localSpawnZ)
+      ? localSpawnX > 0
+        ? 'east'
+        : 'west'
+      : localSpawnZ > 0
+        ? 'south'
+        : 'north';
+  const worldDoorSide: FarmSite['doorSide'] = !swap
+    ? doorSide
+    : doorSide === 'north'
+      ? 'west'
+      : doorSide === 'west'
+        ? 'south'
+        : doorSide === 'south'
+          ? 'east'
+          : 'north';
+
+  const W = FARM_WALL_W_M;
+  const D = FARM_WALL_D_M;
+  const SEG = FARM_SEGMENT_M;
+
+  const features: ScatterObject[] = [];
+  const walls: SiteWallBox[] = [];
+  const feat = (kind: ScatterKind, x: number, z: number, y: number, scale: number, rotY: number): void => {
+    features.push({ kind, x, z, y, scale, rotY });
+  };
+  const box = (cx: number, cz: number, hx: number, hz: number): void => {
+    walls.push({ minX: cx - hx, maxX: cx + hx, minZ: cz - hz, maxZ: cz + hz });
+  };
+
+  interface Segment {
+    side: 'north' | 'south' | 'east' | 'west';
+    lx: number;
+    lz: number;
+    running: 'x' | 'z';
+    cornerAdjacent: boolean;
+  }
+  const segments: Segment[] = [];
+  const perLong = Math.round(W / SEG); // 4
+  const perShort = Math.round(D / SEG); // 3
+  for (let i = 0; i < perLong; i++) {
+    const lx = -W / 2 + SEG / 2 + i * SEG;
+    const corner = i === 0 || i === perLong - 1;
+    segments.push({ side: 'north', lx, lz: -D / 2, running: 'x', cornerAdjacent: corner });
+    segments.push({ side: 'south', lx, lz: D / 2, running: 'x', cornerAdjacent: corner });
+  }
+  for (let i = 0; i < perShort; i++) {
+    const lz = -D / 2 + SEG / 2 + i * SEG;
+    const corner = i === 0 || i === perShort - 1;
+    segments.push({ side: 'west', lx: -W / 2, lz, running: 'z', cornerAdjacent: corner });
+    segments.push({ side: 'east', lx: W / 2, lz, running: 'z', cornerAdjacent: corner });
+  }
+
+  // The door: the middle segment of the door side.
+  const doorPool = segments.filter((s) => s.side === doorSide);
+  const door =
+    doorPool.length % 2 === 0
+      ? doorPool[doorPool.length / 2 - 1 + Math.floor(planRand() * 2)]
+      : doorPool[Math.floor(doorPool.length / 2)];
+
+  // Mostly intact: 0–2 interior (non-corner, non-door)
+  // segments are damaged — the plan stream splits them
+  // between missing and stub (a stub is a half-height wall:
+  // scale 0.45, box follows the scale, village precedent).
+  const candidates = segments.filter((s) => !s.cornerAdjacent && s !== door);
+  for (let i = candidates.length - 1; i > 0; i--) {
+    const j = Math.floor(planRand() * (i + 1));
+    [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
+  }
+  const damagedCount = Math.floor(planRand() * 3); // 0..2
+  const missing = new Set(candidates.slice(0, Math.ceil(damagedCount / 2)));
+  const stubs = new Set(candidates.slice(Math.ceil(damagedCount / 2), damagedCount));
+
+  const emitWall = (lx: number, lz: number, running: 'x' | 'z', scale: number): void => {
+    const w = toWorld(lx, lz);
+    const runsWorldX = (running === 'x') !== swap;
+    feat('farmWall', w.x, w.z, 0, scale, runsWorldX ? 0 : Math.PI / 2);
+    const halfLen = (SEG / 2) * scale;
+    if (runsWorldX) box(w.x, w.z, halfLen, FARM_WALL_HALF_T);
+    else box(w.x, w.z, FARM_WALL_HALF_T, halfLen);
+  };
+  for (const s of segments) {
+    if (s === door || missing.has(s)) continue;
+    emitWall(s.lx, s.lz, s.running, stubs.has(s) ? 0.45 : 1);
+  }
+
+  // The roof: whole, always (mostly intact is the point).
+  feat('farmRoof', center.x, center.z, FARM_WALL_H_M, 1, theta);
+
+  // The porch: one composed feature at the door, facing
+  // out; its two front posts collide.
+  {
+    const outRot =
+      doorSide === 'north' ? Math.PI : doorSide === 'south' ? 0 : doorSide === 'east' ? Math.PI / 2 : -Math.PI / 2;
+    const doorW = toWorld(door.lx, door.lz);
+    feat('farmPorch', doorW.x, doorW.z, 0, 1, theta + outRot);
+    // Post spots in the porch's local frame (front corners),
+    // rotated into the house frame then the world.
+    const rot = (lx: number, lz: number, r: number): { x: number; z: number } => {
+      const c = Math.cos(r);
+      const s = Math.sin(r);
+      return { x: lx * c + lz * s, z: -lx * s + lz * c };
+    };
+    for (const px of [-1.65, 1.65]) {
+      const inHouse = rot(px, 2.05, outRot);
+      const w = toWorld(door.lx + inHouse.x, door.lz + inHouse.z);
+      box(w.x, w.z, 0.13, 0.13);
+    }
+  }
+
+  // The partition: a wall line at local z +1.25 (dividing
+  // the house into the big north room — the hearth's room
+  // — and a south strip), four segments along x with one
+  // of the middle two open: the doorway between rooms. The
+  // line runs parallel to the long walls, so it can never
+  // cross a door's span the way a cross-line could (probe
+  // catch, first build: a z-running partition at x +1.67
+  // met the north wall inside a door segment's span).
+  {
+    const lz = 1.25;
+    const gapIndex = 1 + Math.floor(planRand() * 2); // a middle segment
+    [-3.75, -1.25, 1.25, 3.75].forEach((lx, i) => {
+      if (i !== gapIndex) emitWall(lx, lz, 'x', 1);
+    });
+  }
+
+  // The hearth: against the chimney end wall (local −X),
+  // centred; the great stone stands beside it along the
+  // same wall. The hearth block collides; the great stone
+  // (the carrier) is low and she steps to it — no box.
+  const hearthLocal = { lx: -W / 2 + 1.05, lz: 0 };
+  const hearthWorld = toWorld(hearthLocal.lx, hearthLocal.lz);
+  feat('hearthStone', hearthWorld.x, hearthWorld.z, 0, 1.5, theta);
+  // Hearth box in the house frame (0.55 along the wall's
+  // depth axis, 0.85 across), quarter-turn aware.
+  if (swap) box(hearthWorld.x, hearthWorld.z, 0.85, 0.55);
+  else box(hearthWorld.x, hearthWorld.z, 0.55, 0.85);
+  const stoneLocal = { lx: -W / 2 + 1.05, lz: -1.85 };
+  const stoneWorld = toWorld(stoneLocal.lx, stoneLocal.lz);
+  feat('hearthStone', stoneWorld.x, stoneWorld.z, 0, 1, theta + Math.PI / 5);
+
+  // The cellar door: an anchor only, at the back foundation
+  // (the side opposite the door) — a staged cave-mouth host.
+  const backSign = doorSide === 'north' || doorSide === 'west' ? 1 : -1;
+  const cellarLocal =
+    doorSide === 'north' || doorSide === 'south'
+      ? { lx: 2.0, lz: backSign * (D / 2 + 0.9) }
+      : { lx: backSign * (W / 2 + 0.9), lz: 2.0 };
+  const cellarWorld = toWorld(cellarLocal.lx, cellarLocal.lz);
+
+  // A little rubble where the years have nibbled.
+  {
+    const rand = mulberry32(deriveSeed(seed, 'farmhouse:rubble'));
+    const count = 2 + Math.floor(rand() * 3);
+    for (let i = 0; i < count; i++) {
+      const w = toWorld((rand() * 2 - 1) * (W / 2 + 1.5), (rand() < 0.5 ? -1 : 1) * (D / 2 + 0.6 + rand()));
+      feat('rubble', w.x, w.z, 0, 0.6 + rand() * 0.5, rand() * Math.PI);
+    }
+  }
+
+  const site: FarmSite = {
+    id: 'farmhouse',
+    seed,
+    center,
+    biome,
+    distance,
+    clearRadius: FARM_CLEAR_RADIUS_M,
+    doorSide: worldDoorSide,
+    hearthSpot: hearthWorld,
+    hearthStone: stoneWorld,
+    cellarDoor: cellarWorld,
+    features,
+    walls,
+    bounds: {
+      minX: center.x - FARM_CLEAR_RADIUS_M,
+      maxX: center.x + FARM_CLEAR_RADIUS_M,
+      minZ: center.z - FARM_CLEAR_RADIUS_M,
+      maxZ: center.z + FARM_CLEAR_RADIUS_M,
+    },
+  };
+  farmCache.set(`${seed}::farmhouse`, site);
+  return site;
+}
+
+/** True when a world position lies inside the farmhouse's
+ *  clearing (the footprint check). */
+export function farmhouseContains(site: FarmSite, x: number, z: number): boolean {
+  return Math.hypot(x - site.center.x, z - site.center.z) <= site.clearRadius;
+}
+
+/** The standing spacing rule (formalized by DEV,
+ *  2026-10-30): every site's siting scan keeps its centre
+ *  at least (the other site's clear radius + its own
+ *  clear radius + this margin) from every earlier site.
+ *  ONE number, one home — a place that ever needs a
+ *  different margin gets a named amendment, not a
+ *  per-site constant. */
+export const SITE_SPACING_MARGIN_M = 60;
 
 /** The shared footprint shape both sites (and the worldgen
  *  pass + the renderer's wall query) read: a clearing circle,
