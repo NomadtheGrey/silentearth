@@ -43,7 +43,7 @@ import {
 import { standingInWater, terrainSpeedAt, type WaterDisc } from './movement';
 import { treeKindAt } from './treeKind';
 import { riverParamsFor, riverRibbonForChunk } from './river';
-import { groveSite, schoolhouseSite, wallsNearSites, type SiteFootprint } from './sites';
+import { groveSite, schoolhouseSite, villageSite, wallsNearSites, type SiteFootprint } from './sites';
 import type { RiverParams } from './river';
 import { fireState } from './fireState';
 import { torchState } from './torchState';
@@ -93,16 +93,52 @@ interface KindRender {
 
 /**
  * The registered sites for a world generator (sites.ts): the
- * Grove + the Schoolhouse. Both derivations are memoized pure
- * functions of the seed, so this is cheap to recompute on world
- * change; the renderer's wall query and nothing else reads it.
+ * Grove + the Schoolhouse + the Burnt Village. All three
+ * derivations are memoized pure functions of the seed, so
+ * this is cheap to recompute on world change; the wall
+ * query reads the list, and the smoke system reads the
+ * village's anchor off the same derivation.
  */
 function computeSites(gen: WorldGen): SiteFootprint[] {
   const spawn = gen.findSpawn();
   return [
     groveSite(String(gen.seed), spawn, (x, z) => gen.weightsAt(x, z).dominant),
     schoolhouseSite(String(gen.seed), spawn, (x, z) => gen.weightsAt(x, z)),
+    villageSite(String(gen.seed), spawn, (x, z) => gen.weightsAt(x, z)),
   ];
+}
+
+/**
+ * THE SMOKE COLUMN (Adam's avenue — DEV-ruled option (a),
+ * 2026-10-30): the Burnt Village's pull is SEEING its smoke
+ * from a hefty distance, so the column is a stack of soft
+ * billboards on a fog-EXEMPT material (the camp-arrow
+ * precedent — FogExp2 at 0.008 would leave ~2% of a fogged
+ * material at 500 m). One shared radial-gradient texture,
+ * one material per sprite (their opacities differ), the
+ * rise looped in the render loop off flameTime so pause
+ * freezes it with the flames. All numbers DRAFT.
+ */
+const SMOKE_SPRITE_COUNT = 11;
+const SMOKE_HEIGHT_M = 45;
+const SMOKE_RISE_PERIOD_S = 26;
+const SMOKE_PEAK_OPACITY = 0.3;
+
+let smokeTextureCache: THREE.Texture | null = null;
+function smokeTexture(): THREE.Texture {
+  if (smokeTextureCache) return smokeTextureCache;
+  const canvas = document.createElement('canvas');
+  canvas.width = 128;
+  canvas.height = 128;
+  const ctx = canvas.getContext('2d')!;
+  const grad = ctx.createRadialGradient(64, 64, 4, 64, 64, 62);
+  grad.addColorStop(0, 'rgba(255,255,255,0.85)');
+  grad.addColorStop(0.55, 'rgba(255,255,255,0.38)');
+  grad.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, 128, 128);
+  smokeTextureCache = new THREE.CanvasTexture(canvas);
+  return smokeTextureCache;
 }
 
 /**
@@ -454,6 +490,9 @@ export class WorldRenderer {
   private torchLights: THREE.PointLight[] = [];
   /** Altar-candle point lights (scene-level, rebuilt with the placed group). */
   private altarCandleLights: THREE.PointLight[] = [];
+  /** The village smoke column (scene-level billboards, rebuilt on world change). */
+  private smokeGroup: THREE.Group | null = null;
+  private smokeSprites: THREE.Sprite[] = [];
   /** Camp-arrow world group (one downward arrow per placed house). */
   private campArrowGroup: THREE.Group | null = null;
   /** Camp-arrow screen-edge arrows (camera children, one per placed house). */
@@ -588,6 +627,7 @@ export class WorldRenderer {
     // every site the query returns null and movement pays one
     // bounds test per site.
     this.sites = computeSites(gen);
+    this.rebuildSmoke(gen);
     this.player.setSiteWallsQuery((x, z) => wallsNearSites(this.sites, x, z, 2));
     this.proximity = new ProximityTracker(this.gen, true, () => this.tents);
     // Chunk reload on harvest completion: the harvested chunk is
@@ -1004,6 +1044,7 @@ export class WorldRenderer {
     // The new world's sites (sites.ts) — the site-wall query the
     // constructor wired reads this field dynamically.
     this.sites = computeSites(gen);
+    if (!this.disposed) this.rebuildSmoke(gen);
     // A new world gets a new sky: fresh stars for the seed + the
     // cycle restarts at dawn. Skipped on the dispose path
     // (disposed is already true there) — dispose() removes the
@@ -1401,6 +1442,41 @@ export class WorldRenderer {
     light.userData.phase = flamePhase(x + ALTAR_CANDLE_X, z + ALTAR_CANDLE_Z);
     this.scene.add(light);
     this.altarCandleLights.push(light);
+  }
+
+  /**
+   * (Re)build the smoke column over the village's smoke
+   * anchor (the hearth house's chimney). Called wherever
+   * the sites are (re)derived. Sprites start invisible —
+   * the render loop's smoke update phases them in.
+   */
+  private rebuildSmoke(gen: WorldGen): void {
+    if (this.smokeGroup) {
+      this.scene.remove(this.smokeGroup);
+      for (const s of this.smokeSprites) (s.material as THREE.Material).dispose();
+      this.smokeGroup = null;
+      this.smokeSprites = [];
+    }
+    const village = villageSite(String(gen.seed), gen.findSpawn(), (x, z) => gen.weightsAt(x, z));
+    const anchor = village.hearthHouse.smokeAnchor;
+    const group = new THREE.Group();
+    group.position.set(anchor.x, anchor.y, anchor.z);
+    const map = smokeTexture();
+    for (let i = 0; i < SMOKE_SPRITE_COUNT; i++) {
+      const mat = new THREE.SpriteMaterial({
+        map,
+        color: 0x3d3d42,
+        transparent: true,
+        opacity: 0,
+        fog: false,
+        depthWrite: false,
+      });
+      const sprite = new THREE.Sprite(mat);
+      group.add(sprite);
+      this.smokeSprites.push(sprite);
+    }
+    this.scene.add(group);
+    this.smokeGroup = group;
   }
 
   /** Rebuild all player-placed meshes (fires + houses + looms). */
@@ -2192,6 +2268,22 @@ export class WorldRenderer {
     // metronome. Fire lights flicker with their flames (same
     // flameTime, so pause freezes both together).
     this.flameTime += dt;
+    // Smoke column: each billboard loops a slow rise off the
+    // same clock — swelling and fading as it climbs, leaning
+    // with a light wind. Eleven sprites, no allocation.
+    for (let i = 0; i < this.smokeSprites.length; i++) {
+      const sprite = this.smokeSprites[i];
+      const phase = (this.flameTime / SMOKE_RISE_PERIOD_S + i / SMOKE_SPRITE_COUNT) % 1;
+      const size = 7 + phase * 16;
+      sprite.scale.set(size, size, 1);
+      sprite.position.set(
+        Math.sin(phase * 4.5 + i * 1.7) * 1.2 + phase * 7,
+        phase * SMOKE_HEIGHT_M,
+        phase * 2.5,
+      );
+      (sprite.material as THREE.SpriteMaterial).opacity =
+        SMOKE_PEAK_OPACITY * Math.sin(Math.PI * phase);
+    }
     if (this.placedGroup) {
       this.placedGroup.traverse((obj) => {
         if (obj.userData.flame) {

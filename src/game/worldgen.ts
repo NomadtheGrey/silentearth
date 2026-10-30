@@ -19,7 +19,7 @@ import { BIOMES, createFields, weightsAt, groundColorAt, marshWeight } from './b
 import type { Fields } from './biomes';
 import { mulberry32, deriveSeed, hashSeed } from './seed';
 import { treeKindAt } from './treeKind';
-import { groveSite, schoolhouseSite, type SiteFootprint } from './sites';
+import { groveSite, schoolhouseSite, villageSite, type SiteFootprint } from './sites';
 import { CHUNK_SIZE, BASE_SCATTER_PER_CHUNK, GROUND_SEGMENTS } from '../constants';
 import type { BiomeWeights, ChunkData, ScatterKind, ScatterObject } from '../types';
 
@@ -253,6 +253,7 @@ export function createWorldGen(seed: string): WorldGen {
       sitesCache = [
         groveSite(seed, findSpawn(), (x, z) => weightsAtPos(x, z).dominant),
         schoolhouseSite(seed, findSpawn(), weightsAtPos),
+        villageSite(seed, findSpawn(), weightsAtPos),
       ];
     }
     return sitesCache;
@@ -451,7 +452,7 @@ export function createWorldGen(seed: string): WorldGen {
     }
 
     // The sites (Grove landing 2026-10-30; Schoolhouse landing
-    // #2, same day): the site pass runs LAST, after every other
+    // #2 and the Burnt Village #3, same day): the site pass runs LAST, after every other
     // pass has read the original scatter. Sites are pure
     // functions of the seed (sites.ts, memoized), so this pass
     // consumes NO rand from any stream: inside a site's clearing

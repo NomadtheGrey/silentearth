@@ -892,6 +892,96 @@ export const SOURCES: HarvestSourceDef[] = [
     biomes: ['oldfieldRise', 'meadow'],
     mesh: { shape: 'stone', color: 0x7d7668, extraColor: 0x665f52, baseY: 0.25 },
   },
+  // The Burnt Village set (Adam, 2026-10-30 — the smoke
+  // avenue's destination; site-pass only, exactly like the
+  // schoolhouse set: never in the scatter mix; their `biomes`
+  // lists name the village's siting country).
+  {
+    id: 'villageWall',
+    kind: 'villageWall',
+    name: 'House Wall',
+    description:
+      'A standing stretch of a village house wall (Adam, ' +
+      '2026-10-30). The houses that kept their walls; solid — ' +
+      'she enters through the gap where the door burned away.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['oldfieldRise', 'creekBottom'],
+    mesh: { shape: 'stone', color: 0x6e5136, extraColor: 0x241a12, baseY: 1.3 },
+  },
+  {
+    id: 'villageWallCharred',
+    kind: 'villageWallCharred',
+    name: 'Charred Wall',
+    description:
+      'A village house wall the fire took first (Adam, ' +
+      '2026-10-30). Charred through, still standing; solid.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['oldfieldRise', 'creekBottom'],
+    mesh: { shape: 'stone', color: 0x2e2622, extraColor: 0x17120e, baseY: 1.3 },
+  },
+  {
+    id: 'villageRoof',
+    kind: 'villageRoof',
+    name: 'House Roof',
+    description:
+      'A gable roof still on its walls (Adam, 2026-10-30). ' +
+      'Only the luckiest houses kept theirs.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['oldfieldRise', 'creekBottom'],
+    mesh: { shape: 'stone', color: 0x5a4632, extraColor: 0x4a3a28, baseY: 0 },
+  },
+  {
+    id: 'villageRoofFallen',
+    kind: 'villageRoofFallen',
+    name: 'Fallen Roof',
+    description:
+      'A roof that fell in when its house burned (Adam, ' +
+      '2026-10-30), lying tilted among the walls.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['oldfieldRise', 'creekBottom'],
+    mesh: { shape: 'stone', color: 0x33291f, extraColor: 0x1f1813, baseY: 0 },
+  },
+  {
+    id: 'villageWell',
+    kind: 'villageWell',
+    name: 'Village Well',
+    description:
+      'The well at the village street\u2019s edge (Adam, ' +
+      '2026-10-30). Stone ring, two posts, a little roof — ' +
+      'the one thing in the village nobody burned. Solid.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['oldfieldRise', 'creekBottom'],
+    mesh: { shape: 'stone', color: 0x7d7668, extraColor: 0x4a3826, baseY: 0.9 },
+  },
+  {
+    id: 'ashPatch',
+    kind: 'ashPatch',
+    name: 'Ash',
+    description:
+      'Ash and cinder ground where the fire passed (Adam, ' +
+      '2026-10-30). The street and the houses stand in it.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['oldfieldRise', 'creekBottom'],
+    mesh: { shape: 'disc', color: 0x9a958c, baseY: 0 },
+  },
   {
     id: 'snapwoodThicket',
     kind: 'snapWood',

@@ -47,7 +47,7 @@ import type { ScatterKind } from '../types';
 import type { MeshSpec } from './objects';
 import type { AnimalKind } from './animals';
 import { hashSeed, mulberry32 } from './seed';
-import { GROVE_CELL_M, SCHOOL_SEGMENT_M } from './sites';
+import { GROVE_CELL_M, SCHOOL_SEGMENT_M, VILLAGE_SEGMENT_M } from './sites';
 import { sunDirection, sunElevationAtCycle } from './sky';
 import { dayFraction } from './weather';
 
@@ -59,6 +59,7 @@ export const DISC_RADIUS: Partial<Record<ScatterKind, number>> = {
   pond: 4.5,
   peatMoss: 0.9,
   riverSilt: 1.0,
+  ashPatch: 1.6,
 };
 
 /** Fixed food accents (not source colors): bog berries, flower center, apples. */
@@ -403,6 +404,70 @@ export function buildKindGeometry(spec: MeshSpec, kind: ScatterKind): THREE.Buff
       part(blob(0.55), c, { p: [0, -0.12, 0], s: [1, 0.55, 1] }),
       part(blob(0.38), shade(c, 0.9), { p: [0.5, -0.15, 0.2], s: [1, 0.6, 1] }),
       part(box(0.5, 0.3, 0.42), shade(e, 1.0), { p: [-0.45, -0.12, -0.15], r: [0.15, 0.4, 0.1] }),
+    ]);
+  }
+  // Kind overrides (the Burnt Village set, sites.ts): house
+  // fabric built at VILLAGE_SEGMENT_M so shape and collision
+  // describe the same stretch of wall. Local ground is
+  // y = -baseY (walls: baseY 1.3; roofs and the well carry
+  // their height in the feature's y / their own baseY).
+  if (kind === 'villageWall') {
+    // Weathered plank wall: the run of boards, a top beam,
+    // and one dark window opening (extraColor) on the face.
+    return merge([
+      part(box(VILLAGE_SEGMENT_M, 2.6, 0.3), c),
+      part(box(VILLAGE_SEGMENT_M, 0.18, 0.36), shade(c, 1.12), { p: [0, 1.18, 0] }),
+      part(box(0.72, 0.95, 0.34), e, { p: [0.85, 0.12, 0] }),
+      part(box(0.14, 2.6, 0.34), shade(c, 0.88), { p: [-1.1, 0, 0] }),
+    ]);
+  }
+  if (kind === 'villageWallCharred') {
+    // The same wall, burned: a jagged top (two tilted
+    // remnants), a fallen brace leaning at the base.
+    return merge([
+      part(box(VILLAGE_SEGMENT_M, 2.6, 0.3), c),
+      part(box(1.0, 0.5, 0.32), shade(c, 1.15), { p: [0.9, 1.45, 0], r: [0, 0, 0.12] }),
+      part(box(0.7, 0.38, 0.32), shade(c, 0.9), { p: [-1.05, 1.4, 0], r: [0, 0, -0.16] }),
+      part(box(0.16, 1.9, 0.16), shade(e, 1.0), { p: [-0.5, -0.85, 0.3], r: [0.35, 0, 0.2] }),
+    ]);
+  }
+  if (kind === 'villageRoof') {
+    // Gable roof, origin at the wall top (the feature's y
+    // carries the height): two sloped planes meeting at a
+    // ridge beam that runs along local X, and a stone
+    // chimney at +2.3 x — the hearth house's chimney is the
+    // smoke anchor sites.ts names (every standing house
+    // has one; only the hearth house's smokes).
+    const slope = 0.68;
+    return merge([
+      part(box(7.6, 0.09, 4.3), c, { p: [0, 1.28, -1.78], r: [slope, 0, 0] }),
+      part(box(7.6, 0.09, 4.3), c, { p: [0, 1.28, 1.78], r: [-slope, 0, 0] }),
+      part(box(7.7, 0.15, 0.22), shade(c, 1.1), { p: [0, 2.42, 0] }),
+      part(box(0.55, 1.15, 0.55), 0x7d7668, { p: [2.3, 2.2, 0] }),
+      part(box(0.7, 0.12, 0.7), 0x6e6a5e, { p: [2.3, 2.8, 0] }),
+    ]);
+  }
+  if (kind === 'villageRoofFallen') {
+    // The roof, in: one plane tilted down into the house,
+    // a broken second piece across it, charred throughout.
+    return merge([
+      part(box(7.2, 0.09, 4.0), c, { p: [0, 0.78, 0.4], r: [0.5, 0, 0.04] }),
+      part(box(3.4, 0.09, 3.6), shade(c, 1.12), { p: [-1.2, 0.36, -0.8], r: [0.2, 0.4, 0.15] }),
+      part(box(2.2, 0.3, 0.3), shade(e, 1.0), { p: [0.8, 0.5, 0.2], r: [0, 0.2, 0.3] }),
+    ]);
+  }
+  if (kind === 'villageWell') {
+    // Stone ring (local ground -0.9), a dark water disc at
+    // the rim, two posts and a little gable cap (extraColor
+    // wood). The village's unburned landmark.
+    return merge([
+      part(cyl(0.78, 0.88, 0.9, 9), c, { p: [0, -0.45, 0] }),
+      part(flatDisc(0.68, 9), 0x14181c, { p: [0, 0.01, 0] }),
+      part(box(0.12, 1.5, 0.12), e, { p: [-0.95, -0.15, 0] }),
+      part(box(0.12, 1.5, 0.12), e, { p: [0.95, -0.15, 0] }),
+      part(box(2.05, 0.1, 0.14), shade(e, 1.1), { p: [0, 0.52, 0] }),
+      part(box(1.5, 0.07, 0.8), shade(e, 0.9), { p: [-0.36, 0.78, 0], r: [0, 0, 0.5] }),
+      part(box(1.5, 0.07, 0.8), shade(e, 0.9), { p: [0.36, 0.78, 0], r: [0, 0, -0.5] }),
     ]);
   }
   switch (spec.shape) {
