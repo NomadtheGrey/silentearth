@@ -2033,6 +2033,7 @@ const CRAFTING_GROUP_BY_RECIPE_ID: Record<string, string> = {
   'render-tallow': 'Fire & Workshop',
   'candle-from-beeswax': 'Fire & Workshop',
   'candle-from-tallow': 'Fire & Workshop',
+  cauldron: 'Fire & Workshop',
   'hooded-cloak': 'Clothes',
   shawl: 'Clothes',
   'pointy-hat': 'Clothes',
@@ -9048,10 +9049,11 @@ export default function App() {
   // CRAFTING GROUPS: sections in DEV's group order, each filtered
   // from the AVAILABLE rows above (never re-sorted);
   // empty groups dropped here, and the menu drops them again
-  // defensively. Unmapped recipes (the cauldron recipe
-  // alone today, measured 2026-10-30) trail under
-  // "Other" instead of vanishing; the sunk block closes
-  // the list after it.
+  // defensively. Unmapped recipes (none today — all 51
+  // map, measured 2026-10-30 after the cauldron recipe
+  // joined its family under 'Fire & Workshop') trail
+  // under "Other" instead of vanishing; the sunk block
+  // closes the list after it.
   const ungroupedRecipes = availableCraftingRecipes.filter(
     (recipe) => CRAFTING_GROUP_BY_RECIPE_ID[recipe.id] === undefined,
   );
