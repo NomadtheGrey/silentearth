@@ -9135,6 +9135,31 @@ export default function App() {
   // (TouchControls interactLabel; undefined keeps the
   // plain "USE"). Scatter/ground stay unlabelled — plain
   // USE is the harvest read she already knows.
+  // FIRE-FAMILY VERBS (Adam, settled 2026-10-30): the pill
+  // names the act the faced fire affords NOW. Unlit, every
+  // type reads LIGHT (lighting is the only act its menu
+  // offers). A lit CAMPFIRE reads COOK (its chip menu cooks
+  // acorns, stick/buried). A lit KILN reads FIRE (firings
+  // are its act). A lit HEARTH carries no verb at all —
+  // the pill shows its name tag 'Hearth': in Adam's words
+  // it has no activities of its own yet; it is warm and
+  // heats the cauldron (its cooking rides the cauldron).
+  // No FEED exists — the game has no fuel/feeding
+  // mechanic. A fire the lookup cannot find keeps OPEN.
+  const winnerFire =
+    useWinner?.kind === 'fire'
+      ? placedFires.find((f) => f.id === useWinner.id)
+      : undefined;
+  const fireWinnerLabel =
+    winnerFire === undefined
+      ? 'OPEN'
+      : !winnerFire.lit
+        ? 'LIGHT'
+        : winnerFire.type === 'campfire'
+          ? 'COOK'
+          : winnerFire.type === 'kiln'
+            ? 'FIRE'
+            : 'Hearth';
   const useWinnerLabel =
     useWinner === null
       ? undefined
@@ -9149,9 +9174,10 @@ export default function App() {
               : useWinner.kind === 'site' &&
                   useWinner.siteId.startsWith('stump:')
                 ? 'KRAFT'
-                : useWinner.kind === 'site' ||
-                  useWinner.kind === 'fire' ||
-                  useWinner.kind === 'tent' ||
+                : useWinner.kind === 'fire'
+                  ? fireWinnerLabel
+                  : useWinner.kind === 'site' ||
+                    useWinner.kind === 'tent' ||
                   useWinner.kind === 'torch' ||
                   useWinner.kind === 'home'
                 ? 'OPEN'
