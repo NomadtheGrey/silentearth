@@ -19,12 +19,17 @@ import { BIOMES, createFields, weightsAt, groundColorAt, marshWeight } from './b
 import type { Fields } from './biomes';
 import { mulberry32, deriveSeed, hashSeed } from './seed';
 import { treeKindAt } from './treeKind';
-import { chapelSite, farmhouseSite, groveSite, schoolhouseSite, villageSite, type SiteFootprint } from './sites';
+import { caveMouthSite, chapelSite, farmhouseSite, groveSite, schoolhouseSite, villageSite, type SiteFootprint } from './sites';
 import { CHUNK_SIZE, BASE_SCATTER_PER_CHUNK, GROUND_SEGMENTS } from '../constants';
 import type { BiomeWeights, ChunkData, ScatterKind, ScatterObject } from '../types';
 
 export interface WorldGen {
   seed: string;
+  /** Dimension key when this generator is a non-surface
+   *  dimension (dimensions, Adam 2026-10-30); undefined
+   *  for the overworld. The renderer branches on it
+   *  (sites, river, sky/fog gates). */
+  dimensionKey?: string;
   fieldsAt: (x: number, z: number) => Fields;
   weightsAt: (x: number, z: number) => ReturnType<typeof weightsAt>;
   groundColorAt: (x: number, z: number) => number;
@@ -256,6 +261,7 @@ export function createWorldGen(seed: string): WorldGen {
         villageSite(seed, findSpawn(), weightsAtPos),
         farmhouseSite(seed, findSpawn(), weightsAtPos),
         chapelSite(seed, findSpawn(), weightsAtPos),
+        caveMouthSite(seed, findSpawn(), weightsAtPos),
       ];
     }
     return sitesCache;

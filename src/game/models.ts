@@ -48,6 +48,7 @@ import type { MeshSpec } from './objects';
 import type { AnimalKind } from './animals';
 import { hashSeed, mulberry32 } from './seed';
 import { CHAPEL_SEGMENT_M, FARM_SEGMENT_M, GROVE_CELL_M, SCHOOL_SEGMENT_M, VILLAGE_SEGMENT_M } from './sites';
+import { CAVE_CELL_M } from './caves';
 import { sunDirection, sunElevationAtCycle } from './sky';
 import { dayFraction } from './weather';
 
@@ -60,6 +61,7 @@ export const DISC_RADIUS: Partial<Record<ScatterKind, number>> = {
   peatMoss: 0.9,
   riverSilt: 1.0,
   ashPatch: 1.6,
+  cavePool: 2.2,
 };
 
 /** Fixed food accents (not source colors): bog berries, flower center, apples. */
@@ -571,6 +573,60 @@ export function buildKindGeometry(spec: MeshSpec, kind: ScatterKind): THREE.Buff
       part(box(0.16, 1.0, 0.12), c, { p: [0, 0, 0] }),
       part(box(0.55, 0.14, 0.12), c, { p: [0, 0.22, 0] }),
       part(box(0.5, 0.18, 0.3), shade(e, 1.0), { p: [0, -0.41, 0] }),
+    ]);
+  }
+  // Kind overrides (the cave sets, caves.ts + sites.ts):
+  // the mouth facade, its boulders, and the dimension's
+  // rock — walls, ceiling, teeth, pools, and the entrance
+  // fungus. Local ground is y = -baseY.
+  if (kind === 'caveMouth') {
+    // Two side rocks, a lintel, and the black inset
+    // (extraColor) set into the face — the dark itself.
+    return merge([
+      part(box(0.9, 3.0, 0.8), c, { p: [-1.3, 0, 0] }),
+      part(box(0.9, 3.0, 0.8), c, { p: [1.3, 0, 0] }),
+      part(box(3.5, 1.0, 0.9), shade(c, 0.92), { p: [0, 1.7, 0] }),
+      part(box(1.9, 2.7, 0.3), e, { p: [0, -0.15, -0.25] }),
+      part(box(2.2, 0.25, 0.9), shade(c, 1.08), { p: [0, -1.42, 0.5] }),
+    ]);
+  }
+  if (kind === 'caveBoulder') {
+    return merge([
+      part(blob(0.85), c, { p: [0, -0.12, 0], s: [1, 0.78, 1] }),
+      part(blob(0.5), shade(e, 1.0), { p: [0.55, -0.3, 0.2], s: [1, 0.7, 1] }),
+    ]);
+  }
+  if (kind === 'caveRock') {
+    // A chamber wall segment: one cell long, ceiling
+    // height, with an irregular brow along the top.
+    return merge([
+      part(box(CAVE_CELL_M, 3.2, 0.55), c),
+      part(box(CAVE_CELL_M, 0.3, 0.72), shade(c, 0.9), { p: [0, 1.55, 0], r: [0, 0, 0.02] }),
+      part(box(0.5, 0.8, 0.62), shade(c, 1.06), { p: [-1.1, -1.2, 0] }),
+    ]);
+  }
+  if (kind === 'caveCeiling') {
+    return merge([
+      part(box(CAVE_CELL_M, 0.35, CAVE_CELL_M), c),
+      part(box(0.5, 0.3, 0.5), shade(c, 0.88), { p: [0.4, -0.3, -0.3] }),
+    ]);
+  }
+  if (kind === 'stalactite') {
+    return merge([
+      part(cone(0.34, 1.7, 6), c, { p: [0, 0.55, 0], r: [Math.PI, 0, 0] }),
+      part(cone(0.2, 0.9, 5), shade(c, 1.08), { p: [0.32, 0.95, 0.1], r: [Math.PI, 0, 0] }),
+    ]);
+  }
+  if (kind === 'twilightFungus') {
+    // A small cluster of pale caps on short stems — the
+    // bright color plus the renderer's dim light at these
+    // spots is the entrance glow.
+    return merge([
+      part(cyl(0.03, 0.04, 0.22, 5), e, { p: [-0.18, -0.14, 0.04] }),
+      part(sphere(0.16, 8, 6), c, { p: [-0.18, 0.0, 0.04], s: [1, 0.62, 1] }),
+      part(cyl(0.025, 0.035, 0.16, 5), e, { p: [0.14, -0.17, -0.08] }),
+      part(sphere(0.12, 8, 6), c, { p: [0.14, -0.05, -0.08], s: [1, 0.62, 1] }),
+      part(sphere(0.09, 8, 6), shade(c, 0.9), { p: [0.02, -0.16, 0.16], s: [1, 0.6, 1] }),
     ]);
   }
   switch (spec.shape) {

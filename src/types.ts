@@ -132,7 +132,20 @@ export type ScatterKind =
   | 'chapelRoof'
   | 'steeple'
   | 'gravestone'
-  | 'gravestoneCross';
+  | 'gravestoneCross'
+  // Site-pass kind (the Cave Mouth, sites.ts — same rule):
+  // the facade's dark opening, and its rock surround.
+  | 'caveMouth'
+  | 'caveBoulder'
+  // Dimension kinds (caves.ts — emitted by the cave
+  // generator only, never by the surface worldgen):
+  // chamber walls, ceiling slabs, stalactites, pools, and
+  // the entrance's twilight fungus.
+  | 'caveRock'
+  | 'caveCeiling'
+  | 'stalactite'
+  | 'cavePool'
+  | 'twilightFungus';
 
 /** One placed scatter object in a chunk. y is its base height above ground. */
 export interface ScatterObject {

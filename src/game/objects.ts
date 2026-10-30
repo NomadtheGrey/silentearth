@@ -1117,6 +1117,111 @@ export const SOURCES: HarvestSourceDef[] = [
     biomes: ['oldfieldRise', 'meadow'],
     mesh: { shape: 'stone', color: 0x8f8b80, extraColor: 0x77736a, baseY: 0.5 },
   },
+  // The Cave Mouth set (Adam, 2026-10-30 — site-pass only,
+  // same rule as the sets above).
+  {
+    id: 'caveMouth',
+    kind: 'caveMouth',
+    name: 'Cave Mouth',
+    description:
+      'A dark opening in a rock face (Adam, 2026-10-30). ' +
+      'True dark inside; what light she has down there, ' +
+      'she carries. Entering is a travel act at its threshold.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['tanglewood', 'forest'],
+    mesh: { shape: 'stone', color: 0x6b675e, extraColor: 0x050505, baseY: 1.5 },
+  },
+  {
+    id: 'caveBoulder',
+    kind: 'caveBoulder',
+    name: 'Cave Rock',
+    description:
+      'Fallen rock around the cave mouth — and rubble on ' +
+      'the cave floor inside (Adam, 2026-10-30).',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['tanglewood', 'forest'],
+    mesh: { shape: 'stone', color: 0x716d64, extraColor: 0x5b574f, baseY: 0.55 },
+  },
+  // The cave-dimension set (Adam, 2026-10-30 — emitted by
+  // the cave generator only; the surface world never
+  // spawns them).
+  {
+    id: 'caveRock',
+    kind: 'caveRock',
+    name: 'Cave Wall',
+    description:
+      'The living rock of the cave (Adam, 2026-10-30). ' +
+      'Solid; the chambers are cut through it.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['deepBog'],
+    mesh: { shape: 'stone', color: 0x4c463f, extraColor: 0x3a362f, baseY: 1.6 },
+  },
+  {
+    id: 'caveCeiling',
+    kind: 'caveCeiling',
+    name: 'Cave Ceiling',
+    description:
+      'The cave\u2019s roof of rock (Adam, 2026-10-30), ' +
+      'always overhead inside.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['deepBog'],
+    mesh: { shape: 'stone', color: 0x403b34, extraColor: 0x332f2a, baseY: 0 },
+  },
+  {
+    id: 'stalactite',
+    kind: 'stalactite',
+    name: 'Stalactite',
+    description:
+      'A stone tooth hanging from the cave ceiling (Adam, ' +
+      '2026-10-30).',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['deepBog'],
+    mesh: { shape: 'stone', color: 0x7a7264, extraColor: 0x655d50, baseY: 1.5 },
+  },
+  {
+    id: 'cavePool',
+    kind: 'cavePool',
+    name: 'Cave Pool',
+    description:
+      'Still black water pooled on the cave floor (Adam, ' +
+      '2026-10-30).',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['deepBog'],
+    mesh: { shape: 'disc', color: 0x10161c, baseY: 0 },
+  },
+  {
+    id: 'twilightFungus',
+    kind: 'twilightFungus',
+    name: 'Twilight Fungus',
+    description:
+      'A pale-glowing fungus that grows where the cave ' +
+      'still remembers the entrance (Adam, 2026-10-30). ' +
+      'Its light reaches a few steps, no farther.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['deepBog'],
+    mesh: { shape: 'stone', color: 0x9fd8c8, extraColor: 0x6fae9d, baseY: 0.25 },
+  },
   {
     id: 'snapwoodThicket',
     kind: 'snapWood',

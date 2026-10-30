@@ -439,6 +439,20 @@ export interface EventMap {
   'sleep:requested': { x: number; z: number };
   'sleep:completed': { x: number; z: number; cycleT: 0; houseId: string | null };
   'sleep:failed': { x: number; z: number; reason: SleepFailedReason };
+  /**
+   * Dimensions (Adam 2026-10-30 — the cave machinery):
+   * 'dimension:entered' fires after a validated travel swap
+   * into a non-surface dimension (key = the dimension's
+   * label key, mouthId = which surface mouth she entered
+   * by); 'dimension:exited' after the swap back to the
+   * surface (key = the dimension left); 'dimension:layer'
+   * when she changes layer inside a dimension (descend /
+   * ascend). Emitted by dimensionTravel only, after the
+   * swap has fully landed.
+   */
+  'dimension:entered': { key: string; mouthId: string };
+  'dimension:exited': { key: string };
+  'dimension:layer': { key: string; layer: number };
 }
 
 type Handler<E> = (payload: E) => void;

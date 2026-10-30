@@ -1843,6 +1843,206 @@ export function chapelContains(site: ChapelSite, x: number, z: number): boolean 
   return Math.hypot(x - site.center.x, z - site.center.z) <= site.clearRadius;
 }
 
+// ---------------------------------------------------------------------------
+// THE CAVE MOUTH — site #6 (Adam, 2026-10-30; machinery
+// claim approved by DEV). The surface door of the world's
+// one cave dimension (caves.ts): a rock facade with a dark
+// opening, snapped to a cardinal face like every other
+// site's plan. She does not walk in — the threshold is
+// solid; entering is a travel act (dimensionTravel) from
+// the approach spot. The dimension's SECOND mouth is the
+// farmhouse's cellar door (exported by the farm site;
+// caves.ts assembles the mouth list).
+// ---------------------------------------------------------------------------
+
+/** Siting band from spawn, meters (DRAFT). */
+export const CAVE_MOUTH_MIN_DIST_M = 400;
+export const CAVE_MOUTH_MAX_DIST_M = 800;
+/** Clearing radius around the mouth (DRAFT). */
+export const CAVE_MOUTH_CLEAR_RADIUS_M = 14;
+
+/** The derived Cave Mouth: one per world seed. */
+export interface CaveMouthSite {
+  id: string;
+  seed: string;
+  center: { x: number; z: number };
+  /** Dominant biome at the chosen centre. */
+  biome: BiomeId;
+  /** Siting distance from spawn, meters. */
+  distance: number;
+  clearRadius: number;
+  /** The cardinal the opening faces (toward the approach). */
+  faceSide: 'north' | 'south' | 'east' | 'west';
+  /** Where a traveller stands to enter / arrives on exit:
+   *  on the approach axis, clear of every wall box. */
+  mouthSpot: { x: number; z: number };
+  features: ScatterObject[];
+  walls: SiteWallBox[];
+  bounds: { minX: number; maxX: number; minZ: number; maxZ: number };
+}
+
+const caveMouthCache = new Map<string, CaveMouthSite>();
+
+/**
+ * Derive the world's Cave Mouth. `weightsAtPos` returns the
+ * full weights + dominant at a position. Memoized by seed.
+ */
+export function caveMouthSite(
+  seed: string,
+  spawn: { x: number; z: number },
+  weightsAtPos: (x: number, z: number) => BiomeWeights,
+): CaveMouthSite {
+  const cached = caveMouthCache.get(`${seed}::cavemouth`);
+  if (cached) return cached;
+
+  // Spacing against all five earlier sites (radii + 60).
+  const grove = groveSite(seed, spawn, (x, z) => weightsAtPos(x, z).dominant);
+  const school = schoolhouseSite(seed, spawn, weightsAtPos);
+  const village = villageSite(seed, spawn, weightsAtPos);
+  const farm = farmhouseSite(seed, spawn, weightsAtPos);
+  const chapel = chapelSite(seed, spawn, weightsAtPos);
+  const spacingLegal = (x: number, z: number): boolean =>
+    [grove, school, village, farm, chapel].every(
+      (s) =>
+        Math.hypot(x - s.center.x, z - s.center.z) >=
+        s.clearRadius + CAVE_MOUTH_CLEAR_RADIUS_M + SITE_SPACING_MARGIN_M,
+    );
+
+  // Siting: own bearing stream; broken, wooded ground —
+  // tanglewood or forest dominant.
+  const bearing = mulberry32(deriveSeed(seed, 'site:cavemouth'))() * Math.PI * 2;
+  const dirX = Math.cos(bearing);
+  const dirZ = Math.sin(bearing);
+  let center = {
+    x: spawn.x + dirX * CAVE_MOUTH_MAX_DIST_M,
+    z: spawn.z + dirZ * CAVE_MOUTH_MAX_DIST_M,
+  };
+  let biome = weightsAtPos(center.x, center.z).dominant;
+  let distance = CAVE_MOUTH_MAX_DIST_M;
+  let fallback: { x: number; z: number; biome: BiomeId; distance: number } | null = null;
+  for (let d = CAVE_MOUTH_MIN_DIST_M; d <= CAVE_MOUTH_MAX_DIST_M; d += GROVE_SCAN_STEP_M) {
+    const x = spawn.x + dirX * d;
+    const z = spawn.z + dirZ * d;
+    if (!spacingLegal(x, z)) continue;
+    const w = weightsAtPos(x, z);
+    if (!fallback) fallback = { x, z, biome: w.dominant, distance: d };
+    if (w.dominant === 'tanglewood' || w.dominant === 'forest') {
+      center = { x, z };
+      biome = w.dominant;
+      distance = d;
+      break;
+    }
+    if (d === CAVE_MOUTH_MAX_DIST_M && fallback) {
+      center = { x: fallback.x, z: fallback.z };
+      biome = fallback.biome;
+      distance = fallback.distance;
+    }
+  }
+
+  // The facade: snapped to the cardinal nearest the
+  // spawn-approach direction. Local frame: u along the
+  // face (tangent), v out of the rock toward the approach.
+  const toSpawnX = spawn.x - center.x;
+  const toSpawnZ = spawn.z - center.z;
+  const faceSide: CaveMouthSite['faceSide'] =
+    Math.abs(toSpawnX) > Math.abs(toSpawnZ)
+      ? toSpawnX > 0
+        ? 'east'
+        : 'west'
+      : toSpawnZ > 0
+        ? 'south'
+        : 'north';
+  // Local (u, v) -> world offset. v+ points out of the face.
+  const toWorld = (u: number, v: number): { x: number; z: number } =>
+    faceSide === 'south'
+      ? { x: center.x + u, z: center.z + v }
+      : faceSide === 'north'
+        ? { x: center.x - u, z: center.z - v }
+        : faceSide === 'east'
+          ? { x: center.x + v, z: center.z - u }
+          : { x: center.x - v, z: center.z + u };
+  const faceRotY =
+    faceSide === 'south' ? 0 : faceSide === 'north' ? Math.PI : faceSide === 'east' ? Math.PI / 2 : -Math.PI / 2;
+
+  const features: ScatterObject[] = [];
+  const walls: SiteWallBox[] = [];
+  const feat = (kind: ScatterKind, x: number, z: number, y: number, scale: number, rotY: number): void => {
+    features.push({ kind, x, z, y, scale, rotY });
+  };
+  const box = (cx: number, cz: number, hx: number, hz: number): void => {
+    walls.push({ minX: cx - hx, maxX: cx + hx, minZ: cz - hz, maxZ: cz + hz });
+  };
+
+  // The opening itself, facing the approach.
+  feat('caveMouth', center.x, center.z, 0, 1, faceRotY);
+
+  // Flanking rocks + the threshold: she stops at the
+  // opening, never inside the facade. Boxes in the face
+  // frame (u across, v out): flanks at u ±1.7, threshold
+  // spanning the opening at the face plane.
+  const alongX = faceSide === 'north' || faceSide === 'south';
+  const flank1 = toWorld(-1.7, 0);
+  const flank2 = toWorld(1.7, 0);
+  const threshold = toWorld(0, 0.15);
+  if (alongX) {
+    box(flank1.x, flank1.z, 0.75, 0.55);
+    box(flank2.x, flank2.z, 0.75, 0.55);
+    box(threshold.x, threshold.z, 1.05, 0.4);
+  } else {
+    box(flank1.x, flank1.z, 0.55, 0.75);
+    box(flank2.x, flank2.z, 0.55, 0.75);
+    box(threshold.x, threshold.z, 0.4, 1.05);
+  }
+
+  // The rock surround: boulders arcing behind and beside
+  // the facade (v negative = into the hill).
+  {
+    const rand = mulberry32(deriveSeed(seed, 'cavemouth:rocks'));
+    const spots: [number, number][] = [
+      [-2.9, -0.7],
+      [2.9, -0.7],
+      [-2.3, -2.1],
+      [2.3, -2.1],
+      [0, -3.0],
+      [-3.6, 0.6],
+      [3.6, 0.6],
+    ];
+    for (const [u, v] of spots) {
+      const w = toWorld(u + (rand() * 2 - 1) * 0.3, v + (rand() * 2 - 1) * 0.3);
+      feat('caveBoulder', w.x, w.z, 0, 0.8 + rand() * 0.9, rand() * Math.PI);
+    }
+  }
+
+  const mouthSpot = toWorld(0, 2.6);
+
+  const site: CaveMouthSite = {
+    id: 'cavemouth',
+    seed,
+    center,
+    biome,
+    distance,
+    clearRadius: CAVE_MOUTH_CLEAR_RADIUS_M,
+    faceSide,
+    mouthSpot,
+    features,
+    walls,
+    bounds: {
+      minX: center.x - CAVE_MOUTH_CLEAR_RADIUS_M,
+      maxX: center.x + CAVE_MOUTH_CLEAR_RADIUS_M,
+      minZ: center.z - CAVE_MOUTH_CLEAR_RADIUS_M,
+      maxZ: center.z + CAVE_MOUTH_CLEAR_RADIUS_M,
+    },
+  };
+  caveMouthCache.set(`${seed}::cavemouth`, site);
+  return site;
+}
+
+/** True when a world position lies inside the cave
+ *  mouth's clearing (the footprint check). */
+export function caveMouthContains(site: CaveMouthSite, x: number, z: number): boolean {
+  return Math.hypot(x - site.center.x, z - site.center.z) <= site.clearRadius;
+}
+
 /** The standing spacing rule (formalized by DEV,
  *  2026-10-30): every site's siting scan keeps its centre
  *  at least (the other site's clear radius + its own

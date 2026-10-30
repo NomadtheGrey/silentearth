@@ -43,7 +43,8 @@ import {
 import { standingInWater, terrainSpeedAt, type WaterDisc } from './movement';
 import { treeKindAt } from './treeKind';
 import { riverParamsFor, riverRibbonForChunk } from './river';
-import { chapelSite, farmhouseSite, groveSite, schoolhouseSite, villageSite, wallsNearSites, type SiteFootprint } from './sites';
+import { caveMouthSite, chapelSite, farmhouseSite, groveSite, schoolhouseSite, villageSite, wallsNearSites, type SiteFootprint } from './sites';
+import { caveFootprintFor, caveLayoutFor } from './caves';
 import type { RiverParams } from './river';
 import { fireState } from './fireState';
 import { torchState } from './torchState';
@@ -100,6 +101,10 @@ interface KindRender {
  * village's anchor off the same derivation.
  */
 function computeSites(gen: WorldGen): SiteFootprint[] {
+  // A non-surface dimension's only "site" is its own
+  // layout footprint (the cave's chambers); the surface
+  // registry never derives underground.
+  if (gen.dimensionKey) return [caveFootprintFor(String(gen.seed))];
   const spawn = gen.findSpawn();
   return [
     groveSite(String(gen.seed), spawn, (x, z) => gen.weightsAt(x, z).dominant),
@@ -107,6 +112,7 @@ function computeSites(gen: WorldGen): SiteFootprint[] {
     villageSite(String(gen.seed), spawn, (x, z) => gen.weightsAt(x, z)),
     farmhouseSite(String(gen.seed), spawn, (x, z) => gen.weightsAt(x, z)),
     chapelSite(String(gen.seed), spawn, (x, z) => gen.weightsAt(x, z)),
+    caveMouthSite(String(gen.seed), spawn, (x, z) => gen.weightsAt(x, z)),
   ];
 }
 
@@ -382,6 +388,15 @@ export const CAMP_ARROW_BOB = 0.5;
 export const CAMP_EDGE_DEPTH = 8;
 /** Base exponential fog density (the woods' murk, lane-decided). */
 export const FOG_DENSITY = 0.008;
+/** Cave fog (dimensions, 2026-10-30): thick and near, so
+ *  the dark closes in a few chambers out. */
+export const CAVE_FOG_DENSITY = 0.05;
+/** Twilight-fungus light profile (dimensions): a dim,
+ *  cool glow — intensity/distance/decay. */
+export const FUNGUS_LIGHT_COLOR = 0x9fd8c8;
+export const FUNGUS_LIGHT_INTENSITY = 12;
+export const FUNGUS_LIGHT_DISTANCE = 9;
+export const FUNGUS_LIGHT_DECAY = 2;
 /**
  * Bat wing bone — night way-finding (tier-1 charm, DRAFT
  * flagged): fog density factor at full night while carried
@@ -492,6 +507,10 @@ export class WorldRenderer {
   private torchLights: THREE.PointLight[] = [];
   /** Altar-candle point lights (scene-level, rebuilt with the placed group). */
   private altarCandleLights: THREE.PointLight[] = [];
+  /** Twilight-fungus point lights (scene-level; exist only
+   *  while the cave dimension is active — dimensions,
+   *  2026-10-30). */
+  private fungusLights: THREE.PointLight[] = [];
   /** The village smoke column (scene-level billboards, rebuilt on world change). */
   private smokeGroup: THREE.Group | null = null;
   private smokeSprites: THREE.Sprite[] = [];
@@ -1059,6 +1078,70 @@ export class WorldRenderer {
       this.chunks.delete(key);
     }
     this.rebuildSpawnedGroup();
+  }
+
+  /**
+   * Swap the generator for a DIMENSION change (Adam
+   * 2026-10-30 — the cave machinery). Unlike setWorldGen
+   * (a new world: state cleared), a dimension swap keeps
+   * every state module untouched: the surface world's
+   * placed things are simply not part of the dimension —
+   * their groups and lights hide while she is away and
+   * return as they were. The river, the sky, and the fog
+   * all gate off the generator's dimensionKey.
+   */
+  setDimensionGen(gen: WorldGen): void {
+    const underground = !!gen.dimensionKey;
+    this.gen = wrapGenWithState(gen);
+    this.riverParams = underground ? null : riverParamsFor(String(gen.seed), gen.findSpawn());
+    this.sites = computeSites(gen);
+    const showPlaced = !underground;
+    if (this.placedGroup) this.placedGroup.visible = showPlaced;
+    if (this.pileGroup) this.pileGroup.visible = showPlaced;
+    if (this.trapGroup) this.trapGroup.visible = showPlaced;
+    if (this.stagedBoneGroup) this.stagedBoneGroup.visible = showPlaced;
+    if (this.campArrowGroup) this.campArrowGroup.visible = showPlaced;
+    if (this.smokeGroup) this.smokeGroup.visible = showPlaced;
+    for (const light of [...this.fireLights, ...this.torchLights, ...this.altarCandleLights]) {
+      light.visible = showPlaced;
+    }
+    if (!this.disposed) this.sky?.setCaveMode(underground);
+    (this.scene.background as THREE.Color).set(underground ? 0x030303 : 0x1a2018);
+    if (this.scene.fog instanceof THREE.FogExp2) {
+      this.scene.fog.color.set(underground ? 0x030303 : 0x1a2018);
+    }
+    this.rebuildFungusLights(underground ? String(gen.seed) : null);
+    this.proximity.setGen(this.gen);
+    this.disposeGroundTextures();
+    for (const [key, loaded] of this.chunks) {
+      this.disposeLoaded(loaded);
+      this.chunks.delete(key);
+    }
+    this.rebuildSpawnedGroup();
+  }
+
+  /**
+   * (Re)build the twilight-fungus lights for the cave
+   * dimension (null seed = none, on the surface). Dim cool
+   * points at the layout's fungus spots — the entrance
+   * glow Adam allowed, and nothing deeper.
+   */
+  private rebuildFungusLights(seed: string | null): void {
+    for (const light of this.fungusLights) this.scene.remove(light);
+    this.fungusLights = [];
+    if (!seed) return;
+    for (const spot of caveLayoutFor(seed).fungusLights) {
+      const light = new THREE.PointLight(
+        FUNGUS_LIGHT_COLOR,
+        FUNGUS_LIGHT_INTENSITY,
+        FUNGUS_LIGHT_DISTANCE,
+        FUNGUS_LIGHT_DECAY,
+      );
+      light.position.set(spot.x, 0.6, spot.z);
+      light.userData.phase = flamePhase(spot.x, spot.z);
+      this.scene.add(light);
+      this.fungusLights.push(light);
+    }
   }
 
   get loadedChunkCount(): number {
@@ -2437,10 +2520,16 @@ export class WorldRenderer {
     // bat is fog.
     const fog = this.scene.fog;
     if (fog instanceof THREE.FogExp2) {
-      const night = this.sky?.nightFactor ?? 0;
-      fog.density = this.batNightWayfinding
-        ? FOG_DENSITY * (1 - (1 - BAT_FOG_FACTOR) * night)
-        : FOG_DENSITY;
+      if (this.gen.dimensionKey) {
+        // Underground: the cave's own thick fog, whatever
+        // the surface night is doing.
+        fog.density = CAVE_FOG_DENSITY;
+      } else {
+        const night = this.sky?.nightFactor ?? 0;
+        fog.density = this.batNightWayfinding
+          ? FOG_DENSITY * (1 - (1 - BAT_FOG_FACTOR) * night)
+          : FOG_DENSITY;
+      }
     }
 
     // Camp arrows, after this frame's camera transform is set:
