@@ -990,6 +990,207 @@ export function buildKindGeometry(spec: MeshSpec, kind: ScatterKind): THREE.Buff
 }
 
 // ---------------------------------------------------------------------------
+// Cave brick variants (MODELS lane, claim approved by DEV
+// 2026-10-30). ADDITIVE EXPORTS ONLY: buildKindGeometry and every
+// existing kind above are untouched (the golden-probe rule — the
+// landed cave kinds are the control set). These are brick FORMS
+// the cave generators adopt later under their own claims;
+// per-instance seasoning (position, rotY, scale) stays
+// generation's job, exactly as for every other kind. Each builder
+// is a pure function of its spec's colors, built from fixed part
+// tables — no RNG, per this module's determinism law. Origins:
+// - hanging forms (stalactites, drape): y = 0 is the ceiling /
+//   wall-top attach plane, geometry extends DOWN (-y). Adopt
+//   with baseY 0 and the feature y at the attach height.
+// - floor forms (stalagmites, crystal, pool): y = 0 is the
+//   floor, geometry rises (+y). Adopt with baseY 0.
+// - fungus shelf: y = 0 is the lowest shelf's attach line on a
+//   vertical face, shelves protrude toward +z; rotate the
+//   instance to face the room. Adopt with baseY 0.
+// ---------------------------------------------------------------------------
+
+/** Stalactite cluster, sparse: 3 teeth, staggered lengths. */
+export function buildStalactiteClusterSparseGeometry(spec: MeshSpec): THREE.BufferGeometry {
+  const c = spec.color;
+  const e = spec.extraColor ?? c;
+  return merge([
+    part(cone(0.3, 1.5, 6), c, { p: [0, -0.75, 0], r: [Math.PI, 0, 0] }),
+    part(cone(0.18, 0.9, 5), shade(e, 1.08), { p: [0.42, -0.45, 0.12], r: [Math.PI, 0, 0] }),
+    part(cone(0.14, 0.65, 5), shade(c, 0.92), { p: [-0.38, -0.33, -0.1], r: [Math.PI, 0, 0] }),
+  ]);
+}
+
+/** Stalactite cluster, dense: a 7-tooth curtain. */
+export function buildStalactiteClusterDenseGeometry(spec: MeshSpec): THREE.BufferGeometry {
+  const c = spec.color;
+  const e = spec.extraColor ?? c;
+  // [x, z, radius, length] — fixed table, staggered curtain.
+  const teeth: [number, number, number, number][] = [
+    [0, 0, 0.26, 1.8],
+    [0.35, 0.1, 0.18, 1.2],
+    [-0.33, 0.14, 0.16, 1.05],
+    [0.18, -0.28, 0.15, 0.9],
+    [-0.2, -0.25, 0.19, 1.35],
+    [0.52, -0.15, 0.12, 0.7],
+    [-0.52, -0.05, 0.11, 0.6],
+  ];
+  const shades = [1.0, 1.08, 0.92];
+  return merge(
+    teeth.map(([x, z, r, h], i) =>
+      part(cone(r, h, 5), shade(i % 2 === 0 ? c : e, shades[i % 3]), {
+        p: [x, -h / 2, z],
+        r: [Math.PI, 0, 0],
+      }),
+    ),
+  );
+}
+
+/** Stalactite, giant: one massive tooth with two shoulders. */
+export function buildStalactiteGiantGeometry(spec: MeshSpec): THREE.BufferGeometry {
+  const c = spec.color;
+  const e = spec.extraColor ?? c;
+  return merge([
+    part(cone(0.55, 2.6, 7), c, { p: [0, -1.3, 0], r: [Math.PI, 0, 0] }),
+    part(cone(0.28, 1.3, 6), shade(e, 1.06), { p: [0.62, -0.65, 0.15], r: [Math.PI, 0, 0] }),
+    part(cone(0.22, 1.0, 5), shade(c, 0.94), { p: [-0.58, -0.5, -0.12], r: [Math.PI, 0, 0] }),
+  ]);
+}
+
+/** Stalagmite cluster, sparse: 3 upright teeth on a shared base.
+ *  (NEW brick — no landed equivalent; the landed set has only the
+ *  hanging stalactite.) */
+export function buildStalagmiteClusterSparseGeometry(spec: MeshSpec): THREE.BufferGeometry {
+  const c = spec.color;
+  const e = spec.extraColor ?? c;
+  return merge([
+    part(blob(0.55), shade(e, 1.0), { p: [0, 0.02, 0], s: [1, 0.35, 1] }),
+    part(cone(0.32, 1.1, 6), c, { p: [0, 0.55, 0] }),
+    part(cone(0.2, 0.7, 5), shade(c, 1.08), { p: [0.45, 0.35, 0.1] }),
+    part(cone(0.15, 0.5, 5), shade(e, 0.92), { p: [-0.4, 0.25, -0.12] }),
+  ]);
+}
+
+/** Stalagmite cluster, dense: 6 upright teeth, varied heights. */
+export function buildStalagmiteClusterDenseGeometry(spec: MeshSpec): THREE.BufferGeometry {
+  const c = spec.color;
+  const e = spec.extraColor ?? c;
+  // [x, z, radius, height] — fixed table.
+  const teeth: [number, number, number, number][] = [
+    [0, 0, 0.3, 1.4],
+    [0.42, 0.12, 0.2, 0.85],
+    [-0.4, 0.16, 0.18, 0.7],
+    [0.22, -0.3, 0.16, 0.6],
+    [-0.24, -0.28, 0.21, 1.0],
+    [0.55, -0.2, 0.13, 0.45],
+  ];
+  const shades = [1.0, 1.08, 0.92];
+  return merge([
+    part(blob(0.8), shade(e, 1.0), { p: [0, 0.02, 0], s: [1, 0.3, 1] }),
+    ...teeth.map(([x, z, r, h], i) =>
+      part(cone(r, h, 5), shade(i % 2 === 0 ? c : e, shades[i % 3]), { p: [x, h / 2, z] }),
+    ),
+  ]);
+}
+
+/** Stalagmite pillar: one thick broken-top column on a rock base —
+ *  the floor tooth that nearly meets the ceiling. */
+export function buildStalagmitePillarGeometry(spec: MeshSpec): THREE.BufferGeometry {
+  const c = spec.color;
+  const e = spec.extraColor ?? c;
+  return merge([
+    part(blob(0.75), shade(e, 1.0), { p: [0, 0.05, 0], s: [1, 0.4, 1] }),
+    // Tapered cylinder, not a cone: the flat top is the break.
+    part(cyl(0.18, 0.48, 2.3, 7), c, { p: [0, 1.2, 0] }),
+    part(cone(0.2, 0.8, 5), shade(c, 1.08), { p: [0.62, 0.4, 0.2] }),
+  ]);
+}
+
+/** Flowstone drape: layered rounded sheets descending a wall
+ *  plane, each lower sheet stepping out (+z) and darkening. */
+export function buildFlowstoneDrapeGeometry(spec: MeshSpec): THREE.BufferGeometry {
+  const c = spec.color;
+  const e = spec.extraColor ?? c;
+  return merge([
+    part(blob(0.55), shade(c, 1.05), { p: [0, -0.3, 0.05], s: [1.2, 0.8, 0.35] }),
+    part(blob(0.5), shade(e, 1.0), { p: [0.05, -0.85, 0.12], s: [1.05, 0.75, 0.32] }),
+    part(blob(0.44), shade(c, 0.95), { p: [-0.04, -1.35, 0.18], s: [0.9, 0.7, 0.3] }),
+    part(blob(0.36), shade(e, 0.9), { p: [0.02, -1.8, 0.24], s: [0.75, 0.6, 0.28] }),
+  ]);
+}
+
+/** Fungus shelf: 3 bracket shelves stacked up a vertical face,
+ *  protruding +z — distinct from twilightFungus' ground spots;
+ *  the adopting generator places it against a wall and the
+ *  renderer's fungus light logic can key on it the same way. */
+export function buildFungusShelfGeometry(spec: MeshSpec): THREE.BufferGeometry {
+  const c = spec.color;
+  const e = spec.extraColor ?? c;
+  // [x, y, radius] shelf attach points, rising up the face.
+  const shelves: [number, number, number][] = [
+    [-0.15, 0.15, 0.34],
+    [0.12, 0.6, 0.27],
+    [-0.05, 1.05, 0.38],
+  ];
+  const parts: THREE.BufferGeometry[] = [];
+  for (const [x, y, r] of shelves) {
+    // Squashed blobs, not spheres: a faceted bracket cap at a
+    // third of the vert cost (spheres would triple this brick).
+    parts.push(
+      part(cyl(0.035, 0.05, 0.22, 5), e, { p: [x, y - 0.1, 0.08], r: [0.5, 0, 0] }),
+      part(blob(r), c, { p: [x, y, 0.28], s: [1, 0.28, 0.75] }),
+    );
+  }
+  return merge(parts);
+}
+
+/** Crystal cluster (quartz dressing): 5 tilted elongated prisms
+ *  rising from a shared rock base. */
+export function buildCrystalClusterGeometry(spec: MeshSpec): THREE.BufferGeometry {
+  const c = spec.color;
+  const e = spec.extraColor ?? c;
+  // [x, z, radius, y-scale, tiltX, tiltZ] — fixed table.
+  const prisms: [number, number, number, number, number, number][] = [
+    [0, 0, 0.22, 2.6, 0, 0],
+    [0.34, 0.1, 0.16, 1.9, 0.1, -0.35],
+    [-0.3, 0.14, 0.14, 1.6, 0.15, 0.3],
+    [0.14, -0.3, 0.13, 1.4, -0.3, -0.1],
+    [-0.18, -0.26, 0.11, 1.15, -0.22, 0.18],
+  ];
+  return merge([
+    part(blob(0.6), shade(e, 1.0), { p: [0, 0.05, 0], s: [1, 0.45, 1] }),
+    ...prisms.map(([x, z, r, sy, tx, tz], i) =>
+      part(new THREE.OctahedronGeometry(r, 0), shade(c, i === 0 ? 1.0 : 1.15), {
+        p: [x, 0.28 + (r * sy) / 2, z],
+        r: [tx, 0, tz],
+        s: [1, sy, 1],
+      }),
+    ),
+  ]);
+}
+
+/** Cave pool, rimmed: the landed pool's flat disc (same 2.2
+ *  radius) ringed by a broken circle of rim rocks. */
+export function buildCavePoolRimmedGeometry(spec: MeshSpec): THREE.BufferGeometry {
+  const c = spec.color;
+  const rim = shade(c, 1.7);
+  // Rim rocks at fixed angles (a gap at angle index 3 — the
+  // broken ring she can step through).
+  const rocks: THREE.BufferGeometry[] = [];
+  for (let i = 0; i < 8; i++) {
+    if (i === 3) continue;
+    const a = (i / 8) * Math.PI * 2;
+    const r = i % 2 === 0 ? 0.28 : 0.2;
+    rocks.push(
+      part(blob(r), shade(rim, i % 2 === 0 ? 1.0 : 0.85), {
+        p: [Math.cos(a) * 2.15, 0.02, Math.sin(a) * 2.15],
+        s: [1, 0.55, 1],
+      }),
+    );
+  }
+  return merge([part(flatDisc(2.2, 16), c), ...rocks]);
+}
+
+// ---------------------------------------------------------------------------
 // Tall sunflower head (Adam, 2026-10-29, pinned Option A): the stem
 // above is ordinary static scatter; the HEAD is a separate pivot
 // geometry, instanced per chunk by the renderer and re-aimed at the
