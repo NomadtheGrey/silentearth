@@ -116,33 +116,8 @@ class FireState {
    * does not care which rung of the ladder burns.
    */
   litFireInRange(x: number, z: number, range: number): boolean {
-    return this.litInRange(x, z, range);
-  }
-
-  /**
-   * Kiln presence (DEV amendment, 2026-10-30): the
-   * type-filtered variant of the lit query — true iff a
-   * placed fire of type 'kiln' with lit === true sits
-   * within range. A lit campfire does NOT set it; an
-   * unlit kiln does NOT set it. Feeds station 'kiln':
-   * the clay-pot, cauldron, and clay-brick recipes are
-   * kiln-fired, and under filter-by-station they vanish
-   * everywhere unless this fact reaches the shell.
-   */
-  litKilnInRange(x: number, z: number, range: number): boolean {
-    return this.litInRange(x, z, range, 'kiln');
-  }
-
-  /** Shared lit-presence scan, optionally type-filtered. */
-  private litInRange(
-    x: number,
-    z: number,
-    range: number,
-    type?: FireType,
-  ): boolean {
     for (const fire of this.fires.values()) {
       if (!fire.lit) continue;
-      if (type !== undefined && fire.type !== type) continue;
       if (Math.hypot(fire.x - x, fire.z - z) <= range) return true;
     }
     return false;
