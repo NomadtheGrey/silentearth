@@ -19,8 +19,9 @@ import { BIOMES, createFields, weightsAt, groundColorAt, marshWeight } from './b
 import type { Fields } from './biomes';
 import { mulberry32, deriveSeed, hashSeed } from './seed';
 import { treeKindAt } from './treeKind';
-import { barnSite, caveMouthSite, chapelSite, distToSegment, drownedMillSite, farmhouseSite, generalStoreSite, groveSite, railSidingSite, schoolhouseSite, sunkenRoadSite, villageSite, type SiteFootprint } from './sites';
+import { barnSite, caveMouthSite, chapelSite, distToSegment, drownedMillSite, farmhouseSite, generalStoreSite, groveSite, railSidingSite, schoolhouseSite, siloSite, sunkenRoadSite, villageSite, type SiteFootprint } from './sites';
 import { CHUNK_SIZE, BASE_SCATTER_PER_CHUNK, GROUND_SEGMENTS } from '../constants';
+import { caveInstancesInRect } from './caves';
 import type { BiomeWeights, ChunkData, ScatterKind, ScatterObject } from '../types';
 
 export interface WorldGen {
@@ -270,6 +271,16 @@ export function createWorldGen(seed: string): WorldGen {
   // clustering pass and the site pass consult them; findSpawn
   // is a full scan, so it runs once here, not once per chunk).
   let sitesCache: SiteFootprint[] | null = null;
+  // The distributed cave instances overlapping a world
+  // rect (the pluralization, 2026-10-30): recurring places
+  // join the singular sites in the passes that consult
+  // places — grove overlap in clustering, suppression +
+  // feature emission in the site pass.
+  let spawnMemo: { x: number; z: number } | null = null;
+  const spawnOnce = (): { x: number; z: number } => (spawnMemo ??= findSpawn());
+  const getInstancesNear = (rect: { minX: number; maxX: number; minZ: number; maxZ: number }): SiteFootprint[] =>
+    caveInstancesInRect(seed, spawnOnce(), weightsAtPos, rect);
+
   const getSites = (): SiteFootprint[] => {
     if (!sitesCache) {
       sitesCache = [
@@ -284,6 +295,7 @@ export function createWorldGen(seed: string): WorldGen {
         sunkenRoadSite(seed, findSpawn(), weightsAtPos).footprint,
         railSidingSite(seed, findSpawn(), weightsAtPos).footprint,
         barnSite(seed, findSpawn(), weightsAtPos),
+        siloSite(seed, findSpawn(), weightsAtPos),
       ];
     }
     return sitesCache;
@@ -366,6 +378,12 @@ export function createWorldGen(seed: string): WorldGen {
     // Clustering pass (Adam, 2026-10-30): groves and stands
     // form, lone trees thin — its own streams, so only the
     // tree set moves; every later pass reads the final trees.
+    // NOTE (pluralization, 2026-10-30): instances do NOT
+    // join the clustering consult — groves are scatter,
+    // not places, and a moved grove would break this
+    // pass's byte-identical-outside-footprints promise.
+    // A grove overlapping a mouth clearing simply loses
+    // its in-clearing trees to the site pass below.
     applyClustering(objects, seed, cx, cz, weightsAtPos, getSites());
 
     // Ground acorns (Adam, 2026-10-26): one cluster beside each
@@ -493,7 +511,10 @@ export function createWorldGen(seed: string): WorldGen {
     // world without sites — the site probes prove it against a
     // pre-change baseline.
     {
-      const sites = getSites();
+      const sites = [
+        ...getSites(),
+        ...getInstancesNear({ minX: originX, maxX: originX + CHUNK_SIZE, minZ: originZ, maxZ: originZ + CHUNK_SIZE }),
+      ];
       const chunkMinX = originX;
       const chunkMaxX = originX + CHUNK_SIZE;
       const chunkMinZ = originZ;

@@ -1829,7 +1829,13 @@ import {
   type PlacedCauldron as PlacedCauldronEntity,
 } from './game/cauldronState';
 import { groveContains, groveSite } from './game/sites';
-import { caveLayoutFor, caveMouths, CAVE_DIMENSION_KEY } from './game/caves';
+import {
+  caveInstanceForKey,
+  caveLayoutForKey,
+  caveMouths,
+  caveMouthsNear,
+  CAVE_DIMENSION_KEY,
+} from './game/caves';
 import { dimensionState } from './game/dimensionState';
 import {
   ascend,
@@ -4295,16 +4301,32 @@ export default function App() {
         // save and writes null. A bad visit can never
         // strand a boot.
         const visit = saved.dimensionVisit ?? null;
-        const visitMouth =
-          visit !== null &&
-          visit.key === CAVE_DIMENSION_KEY &&
-          visit.mouthId !== null
-            ? caveMouths(
-                String(gen.seed),
-                gen.findSpawn(),
-                (x, z) => gen.weightsAt(x, z),
-              ).find((m) => m.id === visit.mouthId)
+        // PLURAL CAVES (2026-10-30): the resolution is by
+        // the saved key + mouthId — the designated cave's
+        // key reads its two mouths as before; any other
+        // key names an instance, honored only when the
+        // instance's mouthId equals the saved one (for
+        // instances the mouth id IS the key).
+        const visitMouth = (() => {
+          if (visit === null || visit.mouthId === null) return undefined;
+          const weights = (x: number, z: number) => gen.weightsAt(x, z);
+          if (visit.key === CAVE_DIMENSION_KEY) {
+            return caveMouths(
+              String(gen.seed),
+              gen.findSpawn(),
+              weights,
+            ).find((m) => m.id === visit.mouthId);
+          }
+          const inst = caveInstanceForKey(
+            String(gen.seed),
+            gen.findSpawn(),
+            weights,
+            visit.key,
+          );
+          return inst !== null && inst.mouthId === visit.mouthId
+            ? { spot: inst.mouthSpot, exitYaw: inst.exitYaw }
             : undefined;
+        })();
         if (visitMouth) {
           player.x = visitMouth.spot.x;
           player.z = visitMouth.spot.z;
@@ -8591,16 +8613,26 @@ export default function App() {
     if (!dimensionState.isUnderground()) {
       const gen = genRef.current;
       if (gen) {
-        for (const mouth of caveMouths(
+        // PLURAL CAVES (2026-10-30): mouths arrive in ONE
+        // list — the designated cave's two plus every
+        // registered instance near her (instances keyed
+        // by their cave key as the winner id; travel
+        // routes by it).
+        for (const mouth of caveMouthsNear(
           String(gen.seed),
           gen.findSpawn(),
           (x, z) => gen.weightsAt(x, z),
+          player.x,
+          player.z,
+          HARVEST_RANGE,
         )) {
           considerCave('cave-enter', mouth.id, mouth.spot.x, mouth.spot.z);
         }
       }
     } else {
-      const layout = caveLayoutFor(seed);
+      // The anchors of the cave she's actually in
+      // (pluralization: the layout reads by active key).
+      const layout = caveLayoutForKey(seed, dimensionState.activeKey());
       if (dimensionState.currentLayer() === 1) {
         considerCave(
           'cave-exit',
@@ -8706,21 +8738,28 @@ export default function App() {
     let anchorPos: { x: number; z: number } | null = null;
     let outcome: TravelOutcome;
     if (winner.kind === 'cave-enter') {
-      const mouth = caveMouths(
+      const mouth = caveMouthsNear(
         String(gen.seed),
         gen.findSpawn(),
         (x, z) => gen.weightsAt(x, z),
+        player.x,
+        player.z,
+        HARVEST_RANGE,
       ).find((m) => m.id === winner.id);
       anchorPos = mouth?.spot ?? null;
       outcome = enterCave(renderer, player, gen, winner.id);
     } else if (winner.kind === 'cave-exit') {
-      anchorPos = caveLayoutFor(seed).entryAnchor;
+      anchorPos = caveLayoutForKey(seed, dimensionState.activeKey()).entryAnchor;
       outcome = exitCave(renderer, player);
     } else if (winner.kind === 'cave-descend') {
-      anchorPos = caveLayoutFor(seed).layers[0]?.shaftAnchor ?? null;
+      anchorPos =
+        caveLayoutForKey(seed, dimensionState.activeKey()).layers[0]
+          ?.shaftAnchor ?? null;
       outcome = descend(player);
     } else {
-      anchorPos = caveLayoutFor(seed).layers[1]?.entryAnchor ?? null;
+      anchorPos =
+        caveLayoutForKey(seed, dimensionState.activeKey()).layers[1]
+          ?.entryAnchor ?? null;
       outcome = ascend(player);
     }
     if (outcome.ok === false) {

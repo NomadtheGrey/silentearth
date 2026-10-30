@@ -42,6 +42,17 @@ export interface BuildRecord {
 }
 
 const ALL_RECORDS: BuildRecord[] = [
+  // Merge #36's sha is recorded by the correction merge
+  // that follows it (Adam's pre-authorized second merge,
+  // 2026-10-27): a merge sha cannot be known pre-merge.
+  {
+    merge: 'Merge #36',
+    pr: 73,
+    sha: 'pending',
+    date: '2026-10-30',
+    what: 'A new old place: the Grain Silo \u2014 a galvanized tower on a cracked pad in oldfield country. In some worlds it stands whole, ladder up its side; in others its seam has split and old grain lies spilled pale at its base; in others it is down on its side where it fell, pointing a compass point. A squat grain bin stands beside some of them. And the caves are no longer one: they recur across the whole country now, a mouth in broken wooded ground wherever she ranges \u2014 each its own dark, its own chambers, and in the deepest part of each a fragment anchor waits. She enters at any mouth she faces and comes out the way she went in; quitting inside a cave wakes her at its mouth. Small pack wording now says the cauldron sits at a lit hearth, which is where it sits.',
+    why: 'Adam asked why there was only one cave \u2014 there should be plenty, for exploring, however far she travels. So the world learned distribution: recurring places now derive cell by cell across the whole map instead of sitting on a single bearing from home, and lesser grove-mazes will follow caves onto the same layer. Underneath, the last five of the older siting scans took the fallback repair the barn\u2019s build had exposed: a census across twenty-four worlds proved no lawfully seated place moved \u2014 two rail sidings that had been seated too close to their neighbours were the only seats to change, and both are legal now.',
+  },
   {
     merge: 'Merge #35',
     pr: 71,
