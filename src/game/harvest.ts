@@ -319,15 +319,20 @@ export function clayBonusChanceFor(moleActive: boolean): number {
  *   and settles nothing about narrower composition
  *   rules (e.g. a hearth-specific cauldron), which stay
  *   open for Adam and would narrow shell-side.
- * No placeholder stations are invented here: presence
- * for the remaining station tags is not built, and no
- * fact is returned for them.
+ * - kiln: a placed KILN that is LIT within range
+ *   (fireState, type-filtered — a lit campfire does
+ *   not set it, an unlit kiln does not set it) ->
+ *   station 'kiln' (clay-pot, cauldron, and clay-brick
+ *   are kiln-fired).
+ * Every presence-fed station now has its fact here;
+ * 'hand' needs none (made anywhere). No placeholder
+ * stations are invented.
  */
 export function stationPresence(
   gen: WorldGen,
   x: number,
   z: number,
-): { workstation: boolean; loom: boolean; litFire: boolean } {
+): { workstation: boolean; loom: boolean; litFire: boolean; kiln: boolean } {
   // Felled stumps count too — and this check must read state, not
   // just the passed generator, because callers pass the RAW
   // generator (App passes genRef.current) while felled stumps live
@@ -361,7 +366,11 @@ export function stationPresence(
   // (station 'fire'; shell-side half of 'cauldron'). Reads
   // live fireState; unlit fires never count.
   const litFire = fireState.litFireInRange(x, z, HARVEST_RANGE);
-  return { workstation, loom, litFire };
+  // Kiln presence (DEV amendment, 2026-10-30): the
+  // type-filtered sibling — only a LIT KILN counts, at
+  // the same HARVEST_RANGE (station 'kiln').
+  const kiln = fireState.litKilnInRange(x, z, HARVEST_RANGE);
+  return { workstation, loom, litFire, kiln };
 }
 
 /**
