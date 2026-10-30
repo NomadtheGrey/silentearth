@@ -85,6 +85,8 @@ export const ITEMS = {
   loom: 'loom',
   // Receptacles.
   clayPot: 'clay-pot',
+  clayJar: 'clay-jar',
+  waterJar: 'water-jar',
   clayBrick: 'clay-brick',
   // Carrying containers.
   smallBasket: 'small-basket',
@@ -1006,6 +1008,29 @@ const DRAFT_RECIPES: Recipe[] = [
       'second station). Food storage + salves / medicine / ' +
       'restoratives / reagents. NOT cooking. Also the pot trap: sink ' +
       'a pot in the creek.',
+  },
+  {
+    id: 'clay-jar',
+    name: 'Clay Jar',
+    status: 'draft',
+    output: { item: ITEMS.clayJar, quantity: 1 },
+    ingredients: [i(ITEMS.clay, 2)],
+    station: 'kiln',
+    notes:
+      'DRAFT. The water carrier (Adam\'s carried-water ' +
+      'ruling, 2026-10-27): a small kiln-fired jar for ' +
+      'carrying water. Adam\'s pins: NO THIRST — water ' +
+      'is an INGREDIENT, never a need; the jar\'s first ' +
+      'named job is carrying water for SOUP, and brews ' +
+      'stand behind it. The filled state is a SECOND ' +
+      'item (water-jar), so it rides the inventory with ' +
+      'no save machinery; fillJar / emptyJar (clay-' +
+      'jar.ts) swap the ids. When soup / brew recipes ' +
+      'land, they consume water-jar and return the ' +
+      'empty jar among their outputs (the multi-output ' +
+      'idiom) — none in this landing. Listed single ' +
+      '(crafting.ts): one jar, in either form. ' +
+      'Quantities draft.',
   },
   {
     id: 'cauldron',
