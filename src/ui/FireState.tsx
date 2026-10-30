@@ -23,8 +23,8 @@
  * look-field tap, whatever the future DOM order (no
  * preventDefault — that would swallow the click itself).
  *
- * Kinds are the fire ladder as placed: campfire, hearth, kiln,
- * bloomery. The chip is a button when the caller passes
+ * Kinds are the fire ladder as placed: campfire, hearth, kiln.
+ * The chip is a button when the caller passes
  * onSelect (tap a fire to open its lighting menu); otherwise
  * it is a plain chip.
  *
@@ -52,7 +52,7 @@
  */
 
 /** Fire-ladder kinds, as placed. */
-export type FireKind = 'campfire' | 'hearth' | 'kiln' | 'bloomery';
+export type FireKind = 'campfire' | 'hearth' | 'kiln';
 
 /** Engine placed-fire status, as the chip shows it. */
 export type FireChipStatus = 'unlit' | 'lighting' | 'lit';
@@ -73,7 +73,6 @@ const KIND_WORD: Record<FireKind, string> = {
   campfire: 'Campfire',
   hearth: 'Hearth',
   kiln: 'Kiln',
-  bloomery: 'Bloomery',
 };
 
 function FlameGlyph() {

@@ -117,7 +117,7 @@
  *   untouched.
  * - FIRE UI, LIVE (Adam, 2026-10-26): placement + lighting
  *   are wired to the engine's placed-fire machine. A carried
- *   fire item (campfire / hearth / kiln / bloomery, crafted
+ *   fire item (campfire / hearth / kiln, crafted
  *   through CraftingMenu) gains a Place button in the
  *   inventory panel; pressing it opens placement mode with
  *   the PlacementPreview ghost at her feet (free placement,
@@ -128,7 +128,7 @@
  *   it would duplicate the item). Campfire is the exception:
  *   single-tap (Adam, 2026-10-28) — its Place press places
  *   instantly at her feet, no mode, no ghost, no panel;
- *   hearth/kiln/bloomery keep the flow above. Every placed
+ *   hearth/kiln keep the flow above. Every placed
  *   fire gets an
  *   anchored FireState chip (unlit / lighting / lit, with
  *   click count or friction phase); tapping an unlit fire
@@ -1849,7 +1849,6 @@ const FIRE_ITEM_TO_TYPE: Record<string, FireType> = {
   [ITEMS.campfire]: 'campfire',
   [ITEMS.hearth]: 'hearth',
   [ITEMS.kiln]: 'kiln',
-  [ITEMS.bloomery]: 'bloomery',
 };
 
 /**
@@ -1869,7 +1868,7 @@ const HOUSE_ITEM_TO_TYPE: Record<string, HouseType> = {
  * Lit torches, altars, and campfires ride this set for the
  * BUTTON only — their handlers branch to instant-at-feet
  * (see handlePlaceItem), never the preview-ghost flow the
- * other ids (hearth/kiln/bloomery/houses/looms) use. */
+ * other ids (hearth/kiln/houses/looms) use. */
 const PLACEABLE_IDS: ReadonlySet<string> = new Set([
   ...Object.keys(FIRE_ITEM_TO_TYPE),
   ...Object.keys(HOUSE_ITEM_TO_TYPE),
@@ -1883,7 +1882,6 @@ const FIRE_NAME: Record<FireType, string> = {
   campfire: 'Campfire',
   hearth: 'Hearth',
   kiln: 'Kiln',
-  bloomery: 'Bloomery',
 };
 
 // QUEST HINTS (draft one-liners, Adam pins before merge):
@@ -1947,7 +1945,6 @@ const CRAFTING_GROUP_BY_RECIPE_ID: Record<string, string> = {
   campfire: 'Fire & Workshop',
   hearth: 'Fire & Workshop',
   kiln: 'Fire & Workshop',
-  bloomery: 'Fire & Workshop',
   'stumpy-workstation': 'Fire & Workshop',
   'crafted-workstation': 'Fire & Workshop',
   'potters-wheel': 'Fire & Workshop',
@@ -5727,7 +5724,7 @@ export default function App() {
     }
     // Single-tap campfire (Adam, 2026-10-28): Place places at
     // her feet immediately — no placement mode, no ghost, no
-    // "Place here" panel. Hearth/kiln/bloomery keep the
+    // "Place here" panel. Hearth/kiln keep the
     // two-step flow below; this branch is campfire only.
     if (itemId === ITEMS.campfire) {
       // Clear any armed placement mode first so no stale ghost
