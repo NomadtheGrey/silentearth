@@ -3116,6 +3116,21 @@ export default function App() {
   // its own guard. Called after every meaningful change (harvest,
   // craft, eat, cook, place, wear/remove, deposit/withdraw) and on
   // pagehide — not on a timer, so a quiet session writes nothing.
+  // UNLOAD-SAVE SUPPRESSION (hotfix, 2026-10-30 — Adam
+  // hit it live: New Game resurrected the old save). The
+  // swap/clear-then-reload routes (bring-here, restore,
+  // New Game) deliberately write or clear the save key
+  // and then reload — and the boot effect's pagehide
+  // autosave fires DURING that unload and writes the
+  // live session straight back over the deliberate
+  // write. Each such route sets this mark immediately
+  // before its reload; the pagehide writer checks it
+  // and stands down. A ref, not state: the pagehide
+  // closure is first-render and must read the live mark,
+  // and no render should follow the mark anyway (the
+  // page is leaving). Gameplay saves never set it.
+  const unloadSaveSuppressedRef = useRef(false);
+
   const saveNow = () => {
     try {
       const meta = saveMetaRef.current;
@@ -3530,7 +3545,11 @@ export default function App() {
       // Install = write + fresh boot: the boot path is
       // the tested restore path; mid-session rehydration
       // is a far larger surface. Reload boots into the
-      // brought save.
+      // brought save. The pagehide autosave stands down
+      // (unloadSaveSuppressedRef) — it would overwrite
+      // the brought save with this session's state
+      // during the unload.
+      unloadSaveSuppressedRef.current = true;
       window.location.reload();
     } finally {
       setCloudBusy(false);
@@ -3625,6 +3644,8 @@ export default function App() {
     }
     saveGame(parked);
     // Same install shape as bring-down: write + fresh boot.
+    // The pagehide autosave stands down (see bring-down).
+    unloadSaveSuppressedRef.current = true;
     window.location.reload();
   };
 
@@ -3651,6 +3672,12 @@ export default function App() {
       return;
     }
     clearSave();
+    // The pagehide autosave stands down: without the
+    // mark it would write this session's save straight
+    // back into the cleared key during the unload, and
+    // the fresh boot would resurrect the old game
+    // (Adam's live sighting, 2026-10-30).
+    unloadSaveSuppressedRef.current = true;
     window.location.reload();
   };
 
@@ -4699,6 +4726,11 @@ export default function App() {
     // note), so this first-render closure stays correct for the
     // life of the mount.
     const onPageHide = () => {
+      // A deliberate swap/clear unload (bring / restore /
+      // New Game) sets the suppression mark before its
+      // reload — this writer must not overwrite the
+      // deliberate write with the leaving session's state.
+      if (unloadSaveSuppressedRef.current) return;
       saveNow();
     };
     window.addEventListener('pagehide', onPageHide);
