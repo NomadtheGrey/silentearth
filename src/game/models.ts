@@ -47,7 +47,7 @@ import type { ScatterKind } from '../types';
 import type { MeshSpec } from './objects';
 import type { AnimalKind } from './animals';
 import { hashSeed, mulberry32 } from './seed';
-import { CHAPEL_SEGMENT_M, FARM_SEGMENT_M, GROVE_CELL_M, MILL_SEGMENT_M, SCHOOL_SEGMENT_M, STORE_SEGMENT_M, VILLAGE_SEGMENT_M } from './sites';
+import { BARN_SEGMENT_M, CHAPEL_SEGMENT_M, FARM_SEGMENT_M, GROVE_CELL_M, MILL_SEGMENT_M, SCHOOL_SEGMENT_M, STORE_SEGMENT_M, VILLAGE_SEGMENT_M } from './sites';
 import { CAVE_CELL_M } from './caves';
 import { sunDirection, sunElevationAtCycle } from './sky';
 import { dayFraction } from './weather';
@@ -875,6 +875,94 @@ export function buildKindGeometry(spec: MeshSpec, kind: ScatterKind): THREE.Buff
       part(box(0.35, 0.5, 2.6), c, { p: [0, 0.35, 0] }),
       part(box(0.16, 1.5, 0.16), shade(e, 1.0), { p: [-0.5, -0.1, 1.1], r: [0, 0, 0.6] }),
       part(box(0.16, 1.5, 0.16), shade(e, 1.0), { p: [-0.5, -0.1, -1.1], r: [0, 0, 0.6] }),
+    ]);
+  }
+  // Kind overrides (the Barn set, sites.ts): segment
+  // walls (sound / patched / fallen), roof bays (the end
+  // bay carries the gable prism), the dropped slope, the
+  // big door, loft strips, the lean-to, hay bales.
+  // Local ground is y = -baseY; the roof kinds' local
+  // y = 0 is the wall top (sites emits them there).
+  if (kind === 'barnWall') {
+    return merge([
+      part(box(BARN_SEGMENT_M, 3.2, 0.14), c),
+      part(box(BARN_SEGMENT_M, 0.18, 0.18), e, { p: [0, 0.9, 0] }),
+      part(box(BARN_SEGMENT_M, 0.18, 0.18), e, { p: [0, -0.9, 0] }),
+      part(box(0.16, 3.2, 0.17), e, { p: [-0.8, 0, 0] }),
+      part(box(0.16, 3.2, 0.17), e, { p: [0.8, 0, 0] }),
+    ]);
+  }
+  if (kind === 'barnWallPatch') {
+    return merge([
+      part(box(BARN_SEGMENT_M, 0.98, 0.13), shade(c, 0.85), { p: [0, -1.05, 0] }),
+      part(box(BARN_SEGMENT_M, 0.98, 0.13), c, { p: [0, 0, 0] }),
+      part(box(BARN_SEGMENT_M, 0.98, 0.13), shade(c, 1.15), { p: [0, 1.05, 0] }),
+      part(box(BARN_SEGMENT_M, 0.16, 0.17), e, { p: [0, 0.52, 0] }),
+      part(box(BARN_SEGMENT_M, 0.16, 0.17), e, { p: [0, -0.52, 0] }),
+    ]);
+  }
+  if (kind === 'barnWallFallen') {
+    return merge([
+      part(box(BARN_SEGMENT_M, 0.3, 3.2), c),
+      part(box(BARN_SEGMENT_M, 0.32, 0.2), e, { p: [0, 0, 1.2] }),
+      part(box(BARN_SEGMENT_M, 0.32, 0.2), e, { p: [0, 0, -0.4] }),
+    ]);
+  }
+  if (kind === 'barnRoofBay' || kind === 'barnRoofEnd') {
+    const parts: THREE.BufferGeometry[] = [
+      part(box(BARN_SEGMENT_M, 0.09, 4.12), c, { p: [0, 1.0, -1.8], r: [-0.507, 0, 0] }),
+      part(box(BARN_SEGMENT_M, 0.09, 4.12), c, { p: [0, 1.0, 1.8], r: [0.507, 0, 0] }),
+      part(box(BARN_SEGMENT_M, 0.14, 0.2), e, { p: [0, 2.02, 0] }),
+    ];
+    if (kind === 'barnRoofEnd') {
+      // The gable: a triangular prism filling the end,
+      // authored on the bay's -X face (sites flips the
+      // far end bay so it faces outward).
+      const shape = new THREE.Shape();
+      shape.moveTo(-3.6, 0);
+      shape.lineTo(3.6, 0);
+      shape.lineTo(0, 2.0);
+      shape.closePath();
+      const gable = new THREE.ExtrudeGeometry(shape, { depth: 0.15, bevelEnabled: false });
+      gable.rotateY(Math.PI / 2);
+      gable.translate(-BARN_SEGMENT_M / 2, 0, 0);
+      parts.push(part(gable, shade(c, 0.95)));
+    }
+    return merge(parts);
+  }
+  if (kind === 'barnRoofFallen') {
+    return merge([
+      part(box(BARN_SEGMENT_M, 0.09, 4.12), c, { p: [0, -0.2, 0.6], r: [0.45, 0.15, 0] }),
+      part(box(BARN_SEGMENT_M, 0.14, 0.2), e, { p: [0, -0.7, -1.2], r: [0.2, 0, 0.3] }),
+    ]);
+  }
+  if (kind === 'barnDoor') {
+    return merge([
+      part(box(2.3, 2.6, 0.08), c),
+      part(box(2.3, 0.16, 0.1), e, { p: [0, 0.9, 0] }),
+      part(box(2.3, 0.16, 0.1), e, { p: [0, -0.9, 0] }),
+      part(box(2.9, 0.14, 0.1), e, { r: [0, 0, 0.72] }),
+    ]);
+  }
+  if (kind === 'barnLoft') {
+    return merge([
+      part(box(BARN_SEGMENT_M, 0.1, 3.6), c),
+      part(box(0.14, 2.2, 0.14), e, { p: [-1.05, -1.1, 1.65] }),
+      part(box(0.14, 2.2, 0.14), e, { p: [1.05, -1.1, 1.65] }),
+      part(box(BARN_SEGMENT_M, 0.16, 0.14), shade(c, 0.9), { p: [0, -0.14, 1.65] }),
+    ]);
+  }
+  if (kind === 'barnLeanTo') {
+    return merge([
+      part(box(4.8, 0.08, 2.6), c, { p: [0, 0.1, 0], r: [0.3, 0, 0] }),
+      part(box(0.13, 1.3, 0.13), e, { p: [-2.2, -0.65, 1.15] }),
+      part(box(0.13, 1.3, 0.13), e, { p: [2.2, -0.65, 1.15] }),
+    ]);
+  }
+  if (kind === 'hayBale') {
+    return merge([
+      part(cyl(0.45, 0.45, 0.9, 10), c, { r: [0, 0, Math.PI / 2] }),
+      part(cyl(0.46, 0.46, 0.1, 10), e, { r: [0, 0, Math.PI / 2] }),
     ]);
   }
   switch (spec.shape) {
