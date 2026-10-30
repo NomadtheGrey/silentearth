@@ -43,6 +43,17 @@ export interface BuildRecord {
 
 const ALL_RECORDS: BuildRecord[] = [
   {
+    merge: 'Merge #32',
+    pr: 65,
+    // sha pending: the merge sha is unknowable before the
+    // merge; the pre-authorized correction merge replaces
+    // this with the real one.
+    sha: 'pending',
+    date: '2026-10-30',
+    what: 'The woods gather. Trees no longer scatter evenly across the world \u2014 they stand in groves and stands with open country between, small copses in meadow and oldfield, full woods where the forest carries, none at all in salt flat or deep bog, and never close enough to swallow a place\u2019s clearing. A stump can become an altar: at a plain stump she can place four river stones, draw a glyph with a charcoal stick (held, never spent), and set a candle burning \u2014 each making shows on the stump itself, a ring of stones at its base, the dark glyph on its face, the lit candle on top \u2014 and a finished Stumpy Altar is altar-grade ground, where her carried journal can be linked to the one grimoire. And far out, the smoke has a source: the Burnt Village, a street of houses in ash \u2014 some standing with their roofs on, most charred or fallen \u2014 a well at the street\u2019s edge, one hearth house still whole, and its smoke column rising high enough to be seen from most of the way there.',
+    why: 'Three of Adam\u2019s threads land together: the landscape grammar he asked for (spread-out trees, yes, but also smaller groves and larger forests), the stump\u2019s second calling as the poor altar anyone can make, and the first avenue made real \u2014 the smoke she has wondered at finally has somewhere to lead her.',
+  },
+  {
     merge: 'Merge #31',
     pr: 63,
     sha: '175e0d3',
