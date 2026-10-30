@@ -593,25 +593,29 @@
  *   sink partitions the VISIBLE set (filter first): a
  *   superseded recipe at an absent station hides with
  *   its station and stays out of the trailing 'Owned &
- *   Superseded' block until its station returns. FEED:
- *   workstation/loom keep radius presence
- *   (stationPresence); the fire family keys on her
- *   FACED TARGET (Adam's law: targets activate when she
- *   is more or less looking at them — the USE winner,
- *   one target at a time): 'fire' when the winner is a
- *   placed fire and it is lit (any type — a faced lit
- *   kiln feeds charcoal), 'kiln' when that fire is a lit
- *   kiln. 'Cauldron' is NOT fed from a faced fire (Adam's
- *   amendment, 2026-10-30: "Cauldron would go on the
- *   Hearth, not the kiln. And facing the Cauldron is
- *   different from facing the Hearth") — the cauldron is
- *   a PLACED target of its own, and its feed line keys
- *   on that target (the cauldron sitting on a lit
- *   hearth) in the placed-cauldron build's UI half; the
- *   carried-pot composition it replaces is dead and
- *   built nowhere. Until that build, cauldron-station
- *   recipes stay hidden. executeCraft receives the same list, so a
- *   recipe is craftable exactly when it is visible. The
+ *   Superseded' block until its station returns. FEED
+ *   (final shape, Adam 2026-10-30): radius presence is
+ *   retired for EVERY station — availableStations
+ *   derives ENTIRELY from her FACED TARGET (the USE
+ *   winner, one target at a time; his reason: radius
+ *   "will simply cause gobs of action pills to appear"
+ *   at camps with clustered stations). Faced stump ->
+ *   'workstation' (stumps read in the winner as kind
+ *   'site', siteId 'stump:<x>,<z>'); faced lit fire ->
+ *   'fire' (any type — a faced lit kiln feeds
+ *   charcoal), faced lit kiln -> 'kiln' as well; nothing
+ *   faced -> hand only. 'Cauldron' keys on the placed-
+ *   cauldron target when it exists (Adam: "Cauldron
+ *   would go on the Hearth, not the kiln. And facing
+ *   the Cauldron is different from facing the Hearth")
+ *   in that build's UI half — the carried-pot
+ *   composition is dead and built nowhere; until then
+ *   cauldron recipes stay hidden. LOOM IS NOT FED:
+ *   looms have no winner kind today, so loom recipes
+ *   stay hidden until a loom target exists (this
+ *   landing's recorded caveat). executeCraft receives
+ *   the same list, so a recipe is craftable exactly
+ *   when it is visible. The
  *   whole derivation sits BELOW the useWinner call in
  *   the component body (relocated 2026-10-30 — it reads
  *   the winner, and the winner's own dependency cluster
@@ -8775,32 +8779,44 @@ export default function App() {
   const useWinner = computeUseWinner();
 
   const availableStations: CraftingStation[] = [];
-  if (stationPresenceValue.workstation) {
+  // FACED-TARGET STATION FEED (Adam, 2026-10-30, final
+  // shape — radius presence is retired as the station
+  // feed for EVERY station: "we want to be facing them
+  // as well. The 'radius' thing will simply cause gobs
+  // of action pills to appear when we're at a camp with
+  // clusters of stations nearby."). The feed derives
+  // ENTIRELY from her one faced target — the USE winner
+  // for this render, the same target that produces the
+  // Action pills:
+  // - a faced STUMP feeds 'workstation'. Stumps read in
+  //   the winner as kind 'site' with a 'stump:<x>,<z>'
+  //   siteId (altar sites share the kind and feed
+  //   nothing — an altar is not a station).
+  // - a faced placed fire feeds 'fire' when lit (any
+  //   type — a faced lit kiln is still a lit fire for
+  //   charcoal), and 'kiln' when that fire is a lit
+  //   kiln (both, for a kiln).
+  // - 'cauldron' keys on the placed-cauldron target
+  //   when that target exists (the placed-cauldron
+  //   build's UI half) — the cauldron goes on the
+  //   Hearth, and facing the Cauldron is different from
+  //   facing the Hearth. The carried-pot composition
+  //   is dead; do not rebuild it.
+  // - LOOM IS NOT FED: looms have no winner kind today
+  //   (they never enter computeUseWinner), so no faced
+  //   reading exists and loom recipes stay hidden until
+  //   a loom target kind lands — the recorded caveat of
+  //   this landing, flagged to DEV with it.
+  // - nothing faced -> hand only.
+  // stationPresenceValue is no longer read by this
+  // feed at all (it still serves the station door and
+  // the stump derivations elsewhere in the shell).
+  if (
+    useWinner?.kind === 'site' &&
+    useWinner.siteId.startsWith('stump:')
+  ) {
     availableStations.push('workstation');
   }
-  if (stationPresenceValue.loom) {
-    availableStations.push('loom');
-  }
-  // FACED-TARGET FIRE FEED (Adam, 2026-10-30 — fire-family
-  // stations key on her current target, NOT radius
-  // presence: his law is that targets activate when she
-  // is more or less looking at them, one target at a
-  // time, the same target that produces the Action
-  // pills). The winner here is the shell's one USE
-  // winner for this render; a placed fire feeds 'fire'
-  // when lit (any type — a faced lit kiln is still a
-  // lit fire for charcoal), and a lit kiln feeds 'kiln'.
-  // 'Cauldron' is deliberately NOT fed here (Adam's
-  // amendment, 2026-10-30): the cauldron goes on the
-  // Hearth, and facing the Cauldron is different from
-  // facing the Hearth — it is a placed target of its
-  // own, and its feed line keys on that target kind in
-  // the placed-cauldron build's UI half. The earlier
-  // carried-pot composition (faced lit fire + cauldron
-  // carried) is dead; do not rebuild it.
-  // Background's radius litFire presence is deliberately
-  // NOT this feed's source. Workstation/loom above stay
-  // radius presence, unchanged.
   const facedFire =
     useWinner?.kind === 'fire'
       ? fireState.get(useWinner.id)
