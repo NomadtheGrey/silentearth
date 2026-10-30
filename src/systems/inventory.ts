@@ -84,7 +84,7 @@
  * pin pass — every weight divides 1 lb evenly, so 1/weight is
  * 1, 2, 4, 5, or 10):
  * - 0.1 lb: acorns, bog-berries, elderberries, luminous-spores.
- * - 0.25 lb: dry-kindling, charcoal-stick, twined-cordage, grass, salt-crystal,
+ * - 0.25 lb: dry-kindling, charcoal-stick, beeswax, tallow, candle, twined-cordage, grass, salt-crystal,
  *   edible-mushroom, poison-mushroom, apple, paper.
  * - 0.5 lb: tender-vines, peat-moss, bone, flint, pointy-hat,
  *   mossy-mittens, plant-pulp, pressed-sheets, journal.
@@ -232,6 +232,9 @@ export const ITEM_WEIGHT_LB: Readonly<Record<string, number>> = {
   // 0.25 lb
   [ITEMS.dryKindling]: 0.25,
   [ITEMS.charcoalStick]: 0.25,
+  [ITEMS.candle]: 0.25,
+  [ITEMS.beeswax]: 0.25,
+  [ITEMS.tallow]: 0.25,
   [ITEMS.twinedCordage]: 0.25,
   grass: 0.25,
   'salt-crystal': 0.25,
@@ -443,6 +446,9 @@ export const ITEM_DISPLAY_NAMES: Readonly<Record<string, string>> = {
   'luminous-spores': 'Luminous Spores',
   'dry-kindling': 'Dry Kindling',
   'charcoal-stick': 'Charcoal Stick',
+  candle: 'Candle',
+  beeswax: 'Beeswax',
+  tallow: 'Tallow',
   clay: 'Clay',
   flint: 'Flint',
   'old-stump': 'Old Stump',
@@ -601,6 +607,9 @@ export const ITEM_DESCRIPTIONS: Readonly<Record<string, string>> = {
   'luminous-spores': 'Pale glowing spores. An ingredient for the moss cradle.',
   'dry-kindling': 'Split snap-wood, dry and ready. One piece lights a fire by friction.',
   'charcoal-stick': 'A stick with a burnt end. Draws a dark line on wood, stone, or hide.',
+  candle: 'A candle with a twined-cordage wick. One of the three things a Stumpy Altar asks for: stone, glyph, and flame.',
+  beeswax: 'Wax gathered from a wild hive, alongside the honey. Melts at a fire.',
+  tallow: 'Fat rendered from a trap carcass at a fire. Melts into a candle.',
   clay: 'Clay. Pots, bricks, and daub — shaped, then fired.',
   flint: 'Strikes a fire fast. Kept, never consumed.',
   'old-stump': 'An old stump. A workstation where it stands, and an altar for the rites.',
@@ -661,17 +670,17 @@ export const ITEM_DESCRIPTIONS: Readonly<Record<string, string>> = {
   'pot-trap': 'A clay pot sunk in the creek. Set where you craft it; it catches passing game.',
   pitfall: 'A dug pit under a moss cover. Set where you craft it — digging one takes a spade-tier tool.',
   deadfall: 'Oak and stone, weighted to fall. Set where you craft it; it catches passing game.',
-  // Trap catches (not food; no sink yet).
-  'rabbit-carcass': 'A caught rabbit. No use for it yet.',
-  'squirrel-carcass': 'A caught squirrel. No use for it yet.',
-  'muskrat-carcass': 'A caught muskrat. No use for it yet.',
-  'fish-carcass': 'A caught fish. No use for it yet.',
-  'eel-carcass': 'A caught eel. No use for it yet.',
-  'crayfish-carcass': 'A caught crayfish. No use for it yet.',
-  'frog-carcass': 'A caught frog. No use for it yet.',
-  'opossum-carcass': 'A caught opossum. No use for it yet.',
-  'groundhog-carcass': 'A caught groundhog. No use for it yet.',
-  'raccoon-carcass': 'A caught raccoon. No use for it yet.',
+  // Trap catches (not food; render into tallow at a fire).
+  'rabbit-carcass': 'A caught rabbit. Renders into tallow at a fire.',
+  'squirrel-carcass': 'A caught squirrel. Renders into tallow at a fire.',
+  'muskrat-carcass': 'A caught muskrat. Renders into tallow at a fire.',
+  'fish-carcass': 'A caught fish. Renders into tallow at a fire.',
+  'eel-carcass': 'A caught eel. Renders into tallow at a fire.',
+  'crayfish-carcass': 'A caught crayfish. Renders into tallow at a fire.',
+  'frog-carcass': 'A caught frog. Renders into tallow at a fire.',
+  'opossum-carcass': 'A caught opossum. Renders into tallow at a fire.',
+  'groundhog-carcass': 'A caught groundhog. Renders into tallow at a fire.',
+  'raccoon-carcass': 'A caught raccoon. Renders into tallow at a fire.',
   // Foods (qualitative — no nutrition numbers, per the brief).
   acorns: 'Raw acorns. Cook them at an open fire before eating.',
   'cooked-acorns': 'Acorns, cooked at the fire. Eat them to restore hunger.',

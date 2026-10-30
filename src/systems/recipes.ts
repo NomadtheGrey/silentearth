@@ -50,6 +50,9 @@ export const ITEMS = {
   luminousSpores: 'luminous-spores',
   dryKindling: 'dry-kindling',
   charcoalStick: 'charcoal-stick',
+  candle: 'candle',
+  beeswax: 'beeswax',
+  tallow: 'tallow',
   // New items (2026-10-25 design work).
   clay: 'clay',
   flint: 'flint',
@@ -430,6 +433,67 @@ const DRAFT_RECIPES: Recipe[] = [
       'stick draws the glyph; consumption per glyph rides ' +
       'the transformation claim, not this recipe. ' +
       'Quantities draft.',
+  },
+  {
+    id: 'render-tallow',
+    name: 'Render Tallow',
+    status: 'draft',
+    output: { item: ITEMS.tallow, quantity: 1 },
+    ingredients: [],
+    upgradeFrom: [
+      ITEMS.rabbitCarcass,
+      ITEMS.squirrelCarcass,
+      ITEMS.muskratCarcass,
+      ITEMS.fishCarcass,
+      ITEMS.eelCarcass,
+      ITEMS.crayfishCarcass,
+      ITEMS.frogCarcass,
+      ITEMS.opossumCarcass,
+      ITEMS.groundhogCarcass,
+      ITEMS.raccoonCarcass,
+    ],
+    station: 'fire',
+    notes:
+      'DRAFT. The carcasses\' first consuming recipe: any ' +
+      'trap carcass, rendered at a lit fire, yields tallow ' +
+      'x1. ONE recipe for all ten kinds via the either/or ' +
+      'predecessor (upgradeFrom array — the Spade-Axe ' +
+      'convergence path): the carcass is the input, ' +
+      'consumed whole. Adam\'s wording was "a trap ' +
+      'carcass", un-narrowed, so all ten render; the ' +
+      'mammal-only cut (fish / eel / crayfish / frog out) ' +
+      'stays available at his pin pass. Station "fire" — ' +
+      'dormant in-game until lit-fire presence wiring ' +
+      'lands (charcoal-stick note). Quantities draft.',
+  },
+  {
+    id: 'candle-from-beeswax',
+    name: 'Candle (Beeswax)',
+    status: 'draft',
+    output: { item: ITEMS.candle, quantity: 1 },
+    ingredients: [i(ITEMS.beeswax, 1), i(ITEMS.twinedCordage, 1)],
+    station: 'fire',
+    notes:
+      'DRAFT. One candle item, two roads (Adam, 2026-10-30: ' +
+      '"We could do either, both really"). Beeswax x1 + ' +
+      'twined cordage x1 for the wick, melted and poured ' +
+      'at a lit fire. Beeswax SOURCE is flagged, not ' +
+      'faked: hives yield it alongside honey via ' +
+      'Background\'s harvest rider (DEV commissions it). ' +
+      'Quantities draft.',
+  },
+  {
+    id: 'candle-from-tallow',
+    name: 'Candle (Tallow)',
+    status: 'draft',
+    output: { item: ITEMS.candle, quantity: 1 },
+    ingredients: [i(ITEMS.tallow, 1), i(ITEMS.twinedCordage, 1)],
+    station: 'fire',
+    notes:
+      'DRAFT. The tallow road to the same candle item: ' +
+      'tallow x1 + twined cordage x1 for the wick, at a ' +
+      'lit fire. Same output as the beeswax road — one ' +
+      'candle, two ways to feed it. Quantities draft.',
   },
 
   // --- Torch: stick + binding + tinder, made by hand (Adam, 2026-10-27).
