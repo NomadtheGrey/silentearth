@@ -86,7 +86,29 @@ export type ScatterKind =
   | 'appleTree'
   | 'flint'
   | 'pond'
-  | 'beehive';
+  | 'beehive'
+  // Sites landing (2026-10-30): the Grove's kinds — emitted ONLY
+  // by worldgen's site pass from sites.ts, never in biome mixes.
+  // groveOak is the protected old tree (its own older look);
+  // standingStone / carvedStone / hedgeWall / hoardMound are
+  // non-harvestable scenery (the ring, the fragment stone, the
+  // maze walls, the crow's hoard).
+  | 'groveOak'
+  | 'standingStone'
+  | 'carvedStone'
+  | 'hedgeWall'
+  | 'hoardMound'
+  // Site-pass kinds (the Schoolhouse, sites.ts — same rule:
+  // emitted only by the site pass): the ruined wall ring
+  // (standing + broken-stub segments), the bell tower, the
+  // desks, the blackboard, the flagpole, rubble.
+  | 'ruinWall'
+  | 'ruinWallStub'
+  | 'bellTower'
+  | 'schoolDesk'
+  | 'blackboard'
+  | 'flagpole'
+  | 'rubble';
 
 /** One placed scatter object in a chunk. y is its base height above ground. */
 export interface ScatterObject {

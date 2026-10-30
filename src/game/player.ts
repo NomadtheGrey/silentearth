@@ -65,9 +65,12 @@ import type { CameraMode } from '../types';
 import { HUNGRY_SPEED_MULTIPLIER, type HungerStageQuery } from './hunger';
 import {
   applyBogBoots,
+  applyWading,
   type BogBootsQuery,
   type TerrainSpeedQuery,
+  type WaterQuery,
 } from './movement';
+import { pushOutOfWalls, type SiteWallBox } from './sites';
 
 /** Mouse-look sensitivity (radians per pixel), shared by mouse + touch. */
 const LOOK_SENSITIVITY = 0.0025;
@@ -99,6 +102,20 @@ export interface UsePress {
 
 /** Shell-wired query: the nearest in-range harvest press, or null. */
 export type UseTargetQuery = () => UsePress | null;
+
+/**
+ * Site wall query (sites.ts): the wall boxes around a position,
+ * or null when the position is nowhere near a site's walls. The
+ * renderer wires the grove's; player.update resolves movement
+ * against whatever it returns.
+ */
+export type SiteWallsQuery = (
+  x: number,
+  z: number,
+) => readonly SiteWallBox[] | null;
+
+/** Her body radius against site walls, meters (DRAFT, 2026-10-30). */
+const PLAYER_WALL_RADIUS_M = 0.3;
 
 /** Saved looking direction: yaw + pitch (position saves separately). */
 export interface FacingSnapshot {
@@ -188,6 +205,37 @@ export class PlayerController {
   /** Renderer wiring for the terrain query (see above). */
   setTerrainSpeedQuery(query: TerrainSpeedQuery): void {
     this.terrainSpeedQuery = query;
+  }
+
+  /**
+   * Standing-in-water query (renderer-owned wiring, ground
+   * resistance 2026-10-30): true while she wades (river ribbon
+   * or a water disc under her feet). Separate from the terrain
+   * query BY DESIGN — the wading floor composes after the
+   * bog-boots step (movement.ts: boots mitigate bog only; folded
+   * into the terrain result, wading would be mitigated too).
+   * Defaults to dry ground when unwired.
+   */
+  private waterQuery: WaterQuery | null = null;
+
+  /** Renderer wiring for the water query (see above). */
+  setWaterQuery(query: WaterQuery): void {
+    this.waterQuery = query;
+  }
+
+  /**
+   * Site wall query (renderer-owned wiring, sites landing
+   * 2026-10-30): returns a registered site's wall boxes when she
+   * is near it (the grove's hedges, the schoolhouse's walls),
+   * null in open country — the game's only collision, kept
+   * site-local by design (sites.ts). Unwired (tests) = no walls
+   * anywhere.
+   */
+  private siteWallsQuery: SiteWallsQuery | null = null;
+
+  /** Renderer wiring for the site wall query (see above). */
+  setSiteWallsQuery(query: SiteWallsQuery): void {
+    this.siteWallsQuery = query;
   }
 
   /**
@@ -601,7 +649,13 @@ export class PlayerController {
     // full bog = BOGGY_SLOW_MIN), mitigated by boots when worn.
     const rawTerrain = this.terrainSpeedQuery?.(this.x, this.z) ?? 1;
     const bootsWorn = this.bogBootsQuery?.() ?? false;
-    const terrain = applyBogBoots(rawTerrain, bootsWorn);
+    const bootsTerrain = applyBogBoots(rawTerrain, bootsWorn);
+    // Wading (ground resistance, 2026-10-30): standing in water
+    // floors the terrain factor at WADING_FACTOR — AFTER the
+    // boots step, because boots mitigate the bog curve only and
+    // bog boots are not waders (movement.ts). MIN composition:
+    // one wetness is never charged twice.
+    const terrain = applyWading(bootsTerrain, this.waterQuery?.(this.x, this.z) ?? false);
     // Hunger slowdown (Adam, 2026-10-26 — weather + hunger build):
     // a hungry witch moves at HUNGRY_SPEED_MULTIPLIER of base
     // speed. Applies at 'hungry' AND 'too-hungry' (too-hungry is
@@ -634,6 +688,18 @@ export class PlayerController {
       this.x += fx * speed * dt;
       this.z += fz * speed * dt;
       this.facing = Math.atan2(fx, fz);
+    }
+
+    // Site walls (sites landing, 2026-10-30): the grove's
+    // hedges are the game's only colliders. The wired query
+    // returns null away from the site (one bounds test), so open
+    // country pays nothing; near the grove her step resolves
+    // out of the wall boxes, sliding along them.
+    const walls = this.siteWallsQuery?.(this.x, this.z) ?? null;
+    if (walls && walls.length > 0) {
+      const resolved = pushOutOfWalls(this.x, this.z, walls, PLAYER_WALL_RADIUS_M);
+      this.x = resolved.x;
+      this.z = resolved.z;
     }
 
     this.emitTimer += dt;

@@ -47,6 +47,7 @@ import type { ScatterKind } from '../types';
 import type { MeshSpec } from './objects';
 import type { AnimalKind } from './animals';
 import { hashSeed, mulberry32 } from './seed';
+import { GROVE_CELL_M, SCHOOL_SEGMENT_M } from './sites';
 import { sunDirection, sunElevationAtCycle } from './sky';
 import { dayFraction } from './weather';
 
@@ -207,6 +208,201 @@ export function buildKindGeometry(spec: MeshSpec, kind: ScatterKind): THREE.Buff
       part(blob(0.95), shade(e, 0.9), { p: [0.7, extraDy + 0.5, 0.25] }),
       part(blob(0.8), shade(e, 1.05), { p: [-0.65, extraDy + 0.35, -0.3] }),
       part(blob(0.6), shade(e, 1.1), { p: [0.1, extraDy + 0.85, -0.5] }),
+    ]);
+  }
+  // Kind override (the Grove's old trees share the 'tree' shape
+  // slot, but they must read VISIBLY OLDER than a standing oak —
+  // Adam, 2026-10-30, the age is the game's side of the pill
+  // rule; amended the same day: the difference must read BEFORE
+  // SHE'S CLOSE, at maze-approach distance). Distance carries
+  // on silhouette + palette, so: a much thicker, greyer trunk
+  // with a slight lean and a root flare gripping the ground;
+  // five heavy branches that droop instead of reaching, plus
+  // one pale DEAD limb standing out of the crown (bare wood
+  // reads old from far off); a broader, lower crown in a
+  // silvered moss-green (the def's extraColor — paler than any
+  // wild canopy, so the grove's trees lift out of the forest's
+  // deep greens); moss-dark masses hanging at the crown's edge
+  // with thin moss strands below them.
+  if (kind === 'groveOak') {
+    const branches: THREE.BufferGeometry[] = [];
+    for (let i = 0; i < 5; i++) {
+      const a = (i / 5) * Math.PI * 2 + 0.3;
+      branches.push(
+        part(cyl(0.07, 0.11, 1.3, 4), c, {
+          p: [Math.cos(a) * 0.5, 0.55 + i * 0.08, Math.sin(a) * 0.5],
+          r: [Math.sin(a) * 0.95, 0, -Math.cos(a) * 0.95],
+        }),
+      );
+    }
+    const flare: THREE.BufferGeometry[] = [];
+    for (let i = 0; i < 3; i++) {
+      const a = (i / 3) * Math.PI * 2 + 0.8;
+      flare.push(
+        part(blob(0.42), shade(c, 0.9), {
+          p: [Math.cos(a) * 0.36, -0.82, Math.sin(a) * 0.36],
+          s: [1, 0.45, 1],
+        }),
+      );
+    }
+    const moss: THREE.BufferGeometry[] = [];
+    for (let i = 0; i < 4; i++) {
+      const a = (i / 4) * Math.PI * 2 + 0.55;
+      moss.push(
+        part(cyl(0.02, 0.032, 0.9, 4), shade(e, 0.6), {
+          p: [Math.cos(a) * 1.12, extraDy - 0.35, Math.sin(a) * 1.12],
+        }),
+      );
+    }
+    return merge([
+      part(cyl(0.34, 0.55, 2.0, 7), c, { r: [0, 0, 0.05] }),
+      ...flare,
+      ...branches,
+      part(cyl(0.03, 0.05, 1.5, 4), shade(c, 1.55), {
+        p: [0.3, extraDy + 0.55, 0.15],
+        r: [0.25, 0, -0.35],
+      }),
+      part(blob(1.45), e, { p: [0, extraDy + 0.05, 0] }),
+      part(blob(1.05), shade(e, 0.9), { p: [0.85, extraDy + 0.35, 0.3] }),
+      part(blob(0.9), shade(e, 1.05), { p: [-0.8, extraDy + 0.2, -0.35] }),
+      part(blob(0.7), shade(e, 1.1), { p: [0.15, extraDy + 0.75, -0.55] }),
+      part(blob(0.65), shade(e, 0.75), { p: [1.05, extraDy - 0.45, -0.4] }),
+      ...moss,
+    ]);
+  }
+  // Kind override (standing stone, sites landing 2026-10-30): a
+  // tall weathered slab on a darker plinth, the cap stone set a
+  // touch askew — the ring reads as placed, not grown. The
+  // scatter scale (0.9-1.35 from sites.ts) varies the heights.
+  if (kind === 'standingStone') {
+    return merge([
+      part(box(1.1, 0.35, 0.68), shade(c, 0.72), { p: [0, -0.85, 0] }),
+      part(box(0.95, 2.0, 0.5), c, { p: [0, 0.1, 0] }),
+      part(box(0.8, 0.45, 0.44), shade(c, 1.08), { p: [0.05, 1.25, 0], r: [0, 0, 0.07] }),
+    ]);
+  }
+  // Kind override (carved stone, sites landing 2026-10-30): a
+  // shorter slab with a pale face plate proud of its +z face —
+  // the surface the fragment's carving will live on (the carving
+  // itself stages with the marks system). sites.ts rotates the
+  // instance so the face meets the maze path.
+  if (kind === 'carvedStone') {
+    return merge([
+      part(box(1.0, 0.3, 0.6), shade(c, 0.75), { p: [0, -0.62, 0] }),
+      part(box(0.85, 1.25, 0.45), c, { p: [0, 0.1, 0] }),
+      part(box(0.56, 0.82, 0.07), e, { p: [0, 0.12, 0.26] }),
+    ]);
+  }
+  // Kind override (hedge wall, sites landing 2026-10-30): one
+  // maze cell-edge of dense hedgerow — a woody core box with a
+  // leafy top of flattened blobs, 2.2 m tall all told (over her
+  // 1.7 eye: first-person reads a true maze). Length is the
+  // maze's cell width from sites.ts, so geometry and collision
+  // boxes can never drift apart. Instances rotate to their edge.
+  if (kind === 'hedgeWall') {
+    const top: THREE.BufferGeometry[] = [];
+    for (let i = 0; i < 4; i++) {
+      const x = -GROVE_CELL_M / 2 + (i + 0.5) * (GROVE_CELL_M / 4);
+      top.push(
+        part(blob(0.5), i % 2 === 0 ? e : shade(e, 0.9), {
+          p: [x, 0.62, 0],
+          s: [1.15, 0.85, 0.95],
+        }),
+      );
+    }
+    return merge([
+      part(box(GROVE_CELL_M, 1.5, 0.62), c, { p: [0, -0.35, 0] }),
+      ...top,
+    ]);
+  }
+  // Kind override (the crow's hoard, sites landing 2026-10-30):
+  // a low earthen mound scattered with gathered things — small
+  // stones, sticks, a shard — all muted (what SHINES in it
+  // stages with the contents systems; v1 is the mound itself).
+  if (kind === 'hoardMound') {
+    return merge([
+      part(flatDisc(1.05, 14), shade(c, 0.7), { p: [0, -0.47, 0] }),
+      part(sphere(0.85, 10, 7), c, { p: [0, -0.38, 0], s: [1, 0.38, 1] }),
+      part(sphere(0.13, 6, 5), e, { p: [0.4, -0.12, 0.25] }),
+      part(sphere(0.1, 6, 5), shade(e, 0.85), { p: [-0.3, -0.14, 0.4] }),
+      part(box(0.34, 0.09, 0.22), shade(e, 1.05), { p: [-0.42, -0.12, -0.2], r: [0, 0.5, 0] }),
+      part(lyingCyl(0.03, 0.035, 0.7), shade(c, 1.35), { p: [0.15, -0.1, -0.42], r: [0, 0.8, 0] }),
+    ]);
+  }
+  // Kind overrides (the Schoolhouse set, sites.ts): the ruin's
+  // fabric. Wall segments are built at SCHOOL_SEGMENT_M long so
+  // shape and collision box describe the same stretch of wall.
+  // Local ground is y = -baseY (see the grove overrides above).
+  if (kind === 'ruinWall') {
+    return merge([
+      part(box(SCHOOL_SEGMENT_M, 2.6, 0.48), c),
+      // Uneven remnants along the top — the broken skyline.
+      part(box(1.1, 0.5, 0.5), shade(c, 0.92), { p: [0.8, 1.42, 0], r: [0, 0, 0.06] }),
+      part(box(0.7, 0.34, 0.5), shade(e, 1.0), { p: [-1.0, 1.36, 0], r: [0, 0, -0.05] }),
+    ]);
+  }
+  if (kind === 'ruinWallStub') {
+    return merge([
+      part(box(SCHOOL_SEGMENT_M, 1.16, 0.48), c),
+      // A slumped chunk leaning off the break.
+      part(box(0.9, 0.5, 0.5), shade(c, 0.9), { p: [-0.85, 0.72, 0.04], r: [0.1, 0.15, 0.22] }),
+    ]);
+  }
+  if (kind === 'bellTower') {
+    // Stone body to 4.2 m, then an open belfry: four posts, the
+    // bell (extraColor bronze) hanging in the frame, and a
+    // four-sided cap — the silhouette she navigates by.
+    const posts: THREE.BufferGeometry[] = [];
+    for (const sx of [-0.72, 0.72]) {
+      for (const sz of [-0.72, 0.72]) {
+        posts.push(part(box(0.14, 1.15, 0.14), shade(c, 0.95), { p: [sx, 2.68, sz] }));
+      }
+    }
+    return merge([
+      part(box(1.8, 4.2, 1.8), c),
+      part(box(1.95, 0.18, 1.95), shade(c, 0.9), { p: [0, 2.12, 0] }),
+      ...posts,
+      part(box(1.7, 0.12, 0.16), shade(c, 0.9), { p: [0, 3.22, 0] }),
+      part(sphere(0.34, 8, 6), e, { p: [0, 2.82, 0], s: [1, 1.15, 1] }),
+      part(cone(1.45, 0.95, 4), shade(c, 0.7), { p: [0, 3.75, 0], r: [0, Math.PI / 4, 0] }),
+    ]);
+  }
+  if (kind === 'schoolDesk') {
+    // Top at local y 0 (= baseY in the world), two side panels,
+    // a bench behind, one dark inkwell dot.
+    return merge([
+      part(box(1.0, 0.06, 0.55), c),
+      part(box(0.05, 0.72, 0.5), shade(c, 0.8), { p: [-0.45, -0.36, 0] }),
+      part(box(0.05, 0.72, 0.5), shade(c, 0.8), { p: [0.45, -0.36, 0] }),
+      part(box(0.9, 0.05, 0.25), shade(c, 0.9), { p: [0, -0.27, 0.42] }),
+      part(box(0.09, 0.03, 0.09), e, { p: [0.32, 0.045, -0.12] }),
+    ]);
+  }
+  if (kind === 'blackboard') {
+    // Wood frame (c) around the dark board (e), a pale chalk
+    // smudge low on the board, two legs to the floor.
+    return merge([
+      part(box(3.4, 1.5, 0.08), c),
+      part(box(3.1, 1.24, 0.1), e, { p: [0, 0.02, 0.01] }),
+      part(box(1.6, 0.16, 0.11), 0xb9beb2, { p: [-0.4, -0.3, 0.01] }),
+      part(box(0.09, 0.78, 0.09), shade(c, 0.8), { p: [-1.5, -1.12, 0] }),
+      part(box(0.09, 0.78, 0.09), shade(c, 0.8), { p: [1.5, -1.12, 0] }),
+    ]);
+  }
+  if (kind === 'flagpole') {
+    // A 6 m pole (baseY 3.0), a finial ball, and the faded flag
+    // (extraColor) hanging near-limp from the top.
+    return merge([
+      part(cyl(0.045, 0.065, 6.0, 6), c),
+      part(sphere(0.09, 6, 5), shade(c, 1.2), { p: [0, 3.05, 0] }),
+      part(box(1.05, 0.62, 0.03), e, { p: [0.56, 2.62, 0], r: [0, 0, -0.1] }),
+    ]);
+  }
+  if (kind === 'rubble') {
+    return merge([
+      part(blob(0.55), c, { p: [0, -0.12, 0], s: [1, 0.55, 1] }),
+      part(blob(0.38), shade(c, 0.9), { p: [0.5, -0.15, 0.2], s: [1, 0.6, 1] }),
+      part(box(0.5, 0.3, 0.42), shade(e, 1.0), { p: [-0.45, -0.12, -0.15], r: [0.15, 0.4, 0.1] }),
     ]);
   }
   switch (spec.shape) {

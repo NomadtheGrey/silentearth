@@ -203,6 +203,7 @@ import {
 import type { WorldGen } from './worldgen';
 import { boneItemId, boneKindAt } from './boneKind';
 import { treeKindAt } from './treeKind';
+import { groveContains, groveSite, GROVE_REFUSAL_LINE } from './sites';
 import { TOO_HUNGRY_STAGE, type HungerStageQuery } from './hunger';
 import { loomState } from './loomState';
 import { pileState } from './pileState';
@@ -468,7 +469,8 @@ type FailedReason =
   | 'not-harvestable'
   | 'target-mismatch'
   | 'inventory-full'
-  | 'too-hungry';
+  | 'too-hungry'
+  | 'grove-protected';
 
 /**
  * Subscribe the outcome listener to 'harvest:requested' (+ track
@@ -509,6 +511,7 @@ export function createHarvestOutcomeListener(
     req: { targetId: string; sourceId: string; kind: 'scatter' | 'ground' },
     reason: FailedReason,
     yields: HarvestYield[] = [],
+    message?: string,
   ): void => {
     bus.emit('harvest:failed', {
       targetId: req.targetId,
@@ -516,6 +519,7 @@ export function createHarvestOutcomeListener(
       kind: req.kind,
       reason,
       yields,
+      ...(message ? { message } : {}),
     });
   };
 
@@ -806,6 +810,27 @@ export function createHarvestOutcomeListener(
     if (!source || (target && target.sourceId !== req.sourceId)) {
       fail(req, 'target-mismatch');
       return;
+    }
+    // Grove protection (Adam, 2026-10-30, PINNED): a tree inside
+    // the Grove's clearing is one of the grove's own — she will
+    // not cut it, whatever the tool or the action (this check
+    // precedes the permit and both action branches, so felling
+    // and clearing refuse alike). The refusal is HERS, in-fiction:
+    // the failure carries her line. This is the engine BACKSTOP
+    // only — the surface is UI's name tag ('Grove Tree', no
+    // pill), which reads the same footprint fact from sites.ts.
+    // Her own planted saplings never reach this branch (their
+    // targets ride the spawned-tree branch above), so a tree she
+    // grew stays hers to fell. The site derives from the seed
+    // (memoized in sites.ts), never from saved state.
+    if (source.fellOnHarvest) {
+      const tx = target ? target.x : req.x;
+      const tz = target ? target.z : req.z;
+      const grove = groveSite(gen.seed, gen.findSpawn(), (x, z) => gen.weightsAt(x, z).dominant);
+      if (groveContains(grove, tx, tz)) {
+        fail(req, 'grove-protected', [], GROVE_REFUSAL_LINE);
+        return;
+      }
     }
     const outcome = harvestYieldForTool(source, tool);
     if (isNotPermitted(outcome)) {
