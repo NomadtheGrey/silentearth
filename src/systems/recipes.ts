@@ -466,10 +466,10 @@ const DRAFT_RECIPES: Recipe[] = [
       'mammal-only cut (fish / eel / crayfish / frog out) ' +
       'stays available at his pin pass. Station ' +
       '"cauldron" (Adam\'s ruling, 2026-10-30): the ' +
-      'station context carries the vessel — a lit fire ' +
-      'near + the cauldron carried (Background supplies ' +
-      'the presence, UI feeds the station; dormant ' +
-      'in-game until those land). Yield stays x1 so the ' +
+      'context is the FACED cauldron, placed on its ' +
+      'hearth, with the hearth lit (Background + UI ' +
+      'supply the feed; dormant in-game until those ' +
+      'land). Yield stays x1 so the ' +
       'tallow road does not compound with the candle ' +
       'x3. Quantities draft.',
   },
@@ -1014,14 +1014,14 @@ const DRAFT_RECIPES: Recipe[] = [
       'DRAFT. The big vessel, founded here (Adam\'s ' +
       'no-iron ruling, 2026-10-30: the cauldron is CLAY — ' +
       'shaped and kiln-fired like the pot, at several ' +
-      'times its size). Set it on a fire and it works: ' +
-      'carcasses render in it, wax melts in it, and her ' +
-      'brews brew in it (the future potions / salves pot, ' +
-      'per Adam\'s hearth picture). The vessel gates its ' +
-      'recipes AS A STATION (Adam\'s ruling, 2026-10-30): ' +
-      'station "cauldron" — the context carries the ' +
-      'vessel (a lit fire near + the cauldron carried). ' +
-      'Quantities draft.',
+      'times its size). Set it on a hearth and it ' +
+      'works: carcasses render in it, wax melts in it, ' +
+      'and her brews brew in it (the future potions / ' +
+      'salves pot, per Adam\'s hearth picture). The ' +
+      'vessel gates its recipes AS A STATION (Adam\'s ' +
+      'ruling, 2026-10-30): station "cauldron" — the ' +
+      'context is the faced cauldron, placed on its ' +
+      'hearth, with the hearth lit. Quantities draft.',
   },
   {
     id: 'clay-brick',

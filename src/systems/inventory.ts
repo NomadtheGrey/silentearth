@@ -648,7 +648,7 @@ export const ITEM_DESCRIPTIONS: Readonly<Record<string, string>> = {
   // Crafted goods.
   'twined-cordage': 'Twined cord. It ties and binds half of everything you build.',
   'clay-pot': 'A fired clay pot. Stores food — and sunk in a creek, it is a pot trap. Not a cooking pot.',
-  cauldron: 'A broad clay cauldron. Set it on a fire — carcasses render, wax melts, and brews brew in it.',
+  cauldron: 'A broad clay cauldron. Set it on a hearth — carcasses render, wax melts, and brews brew in it.',
   'clay-brick': 'A kiln-fired brick. No use for it yet.',
   torch: 'A torch, unlit. Light it from a fire, or with flint and stone.',
   'lit-torch': 'A lit torch. Bright light, and it never burns out.',
