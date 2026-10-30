@@ -39,11 +39,32 @@ import type { BiomeId, BiomeWeights, ChunkData, ScatterKind, ScatterObject } fro
 import type { Fields } from './biomes';
 import type { WorldGen } from './worldgen';
 import {
+  barnSite,
+  buildCaveMouthFacade,
   caveMouthSite,
+  chapelSite,
+  distToSegment,
+  drownedMillSite,
   farmhouseSite,
+  generalStoreSite,
+  groveSite,
+  railSidingSite,
+  schoolhouseSite,
+  siloSite,
+  sunkenRoadSite,
+  villageSite,
+  CAVE_MOUTH_CLEAR_RADIUS_M,
+  ROAD_RIBBON_HALF_WIDTH_M,
+  SIDING_HALF_WIDTH_M,
+  SITE_SPACING_MARGIN_M,
   type SiteFootprint,
   type SiteWallBox,
 } from './sites';
+import {
+  DISTRIBUTION_CELL_M,
+  distributionCellStream,
+  distributionCellsOverlapping,
+} from './distribution';
 
 /** The one cave system's dimension key (dimension label). */
 export const CAVE_DIMENSION_KEY = 'cave:main';
@@ -96,6 +117,11 @@ export interface CaveLayout {
   entryAnchor: CaveAnchor;
   /** Twilight-fungus light spots (layer 1 entry only). */
   fungusLights: { x: number; z: number }[];
+  /** The fragment anchor (distributed instances only in
+   *  this round: a carved stone staged at the deepest
+   *  layer's far dead end; the designated cave keeps its
+   *  exact v1 layout and reports null). */
+  fragmentSpot: { x: number; z: number } | null;
   /** The footprint the wall query reads underground. */
   footprint: SiteFootprint;
 }
@@ -110,11 +136,12 @@ function yawFacing(dx: number, dz: number): number {
 
 function deriveLayer(
   worldSeed: string,
+  key: string,
   index: number,
   origin: { x: number; z: number },
   grid: number,
 ): CaveLayer {
-  const label = `dimension:${CAVE_DIMENSION_KEY}:layer${index}`;
+  const label = `dimension:${key}:layer${index}`;
   const mid = (grid - 1) / 2;
   const cellCenter = (col: number, row: number): { x: number; z: number } => ({
     x: origin.x + (col - mid) * CAVE_CELL_M,
@@ -274,19 +301,62 @@ function deriveLayer(
   return { index, origin, grid, entryAnchor, shaftAnchor, walls, features };
 }
 
-/** Derive the world's cave dimension layout. Memoized. */
-export function caveLayoutFor(worldSeed: string): CaveLayout {
-  const cached = layoutCache.get(worldSeed);
+/**
+ * Derive one cave dimension's layout by its key.
+ * Memoized per (seed, key). The designated cave
+ * ('cave:main') derives EXACTLY as it did in v1 — same
+ * streams, same grids, same depth roll; distributed
+ * instances draw their grid sizes and depth from their
+ * own 'draws' stream (DRAFT: layer 1 grid 7/9/11, layer
+ * 2 grid 5/7/9 — odd only, the entry row needs it —
+ * layer 2 on the standing chance) and stage a
+ * fragment stone at their deepest dead end.
+ */
+export function caveLayoutForKey(worldSeed: string, key: string): CaveLayout {
+  const cacheKey = `${worldSeed}::${key}`;
+  const cached = layoutCache.get(cacheKey);
   if (cached) return cached;
 
-  const layer1 = deriveLayer(worldSeed, 1, CAVE_ORIGIN, CAVE_LAYER1_GRID);
+  const isMain = key === CAVE_DIMENSION_KEY;
+  let grid1 = CAVE_LAYER1_GRID;
+  let grid2 = CAVE_LAYER2_GRID;
+  let hasLayer2: boolean;
+  if (isMain) {
+    hasLayer2 =
+      mulberry32(deriveSeed(worldSeed, `dimension:${key}:depth`))() < CAVE_LAYER2_CHANCE;
+  } else {
+    const draws = mulberry32(deriveSeed(worldSeed, `dimension:${key}:draws`));
+    // Odd grids only: the maze's entry row is (grid - 1) / 2,
+    // integral only for odd sizes (v1's 9 and 7 are odd).
+    grid1 = 7 + 2 * Math.floor(draws() * 3);
+    grid2 = 5 + 2 * Math.floor(draws() * 3);
+    hasLayer2 = draws() < CAVE_LAYER2_CHANCE;
+  }
+
+  const layer1 = deriveLayer(worldSeed, key, 1, CAVE_ORIGIN, grid1);
   const layers: CaveLayer[] = [layer1];
-  const hasLayer2 =
-    mulberry32(deriveSeed(worldSeed, `dimension:${CAVE_DIMENSION_KEY}:depth`))() < CAVE_LAYER2_CHANCE;
   if (hasLayer2) {
     layers.push(
-      deriveLayer(worldSeed, 2, { x: CAVE_ORIGIN.x + CAVE_LAYER2_OFFSET.x, z: CAVE_ORIGIN.z + CAVE_LAYER2_OFFSET.z }, CAVE_LAYER2_GRID),
+      deriveLayer(worldSeed, key, 2, { x: CAVE_ORIGIN.x + CAVE_LAYER2_OFFSET.x, z: CAVE_ORIGIN.z + CAVE_LAYER2_OFFSET.z }, grid2),
     );
+  }
+
+  // The fragment anchor (instances only this round —
+  // the designated cave's layout stays byte-stable).
+  let fragmentSpot: { x: number; z: number } | null = null;
+  if (!isMain) {
+    const deepest = layers[layers.length - 1];
+    if (deepest.shaftAnchor) {
+      fragmentSpot = { x: deepest.shaftAnchor.x, z: deepest.shaftAnchor.z };
+      deepest.features.push({
+        kind: 'carvedStone',
+        x: fragmentSpot.x,
+        z: fragmentSpot.z,
+        y: 0,
+        scale: 1,
+        rotY: 0,
+      });
+    }
   }
 
   const fungusLights = layer1.features
@@ -295,7 +365,7 @@ export function caveLayoutFor(worldSeed: string): CaveLayout {
     .map((f) => ({ x: f.x, z: f.z }));
 
   const allWalls = layers.flatMap((l) => l.walls);
-  const span = (CAVE_LAYER1_GRID * CAVE_CELL_M) / 2 + CAVE_CELL_M;
+  const span = (grid1 * CAVE_CELL_M) / 2 + CAVE_CELL_M;
   const footprint: SiteFootprint = {
     center: CAVE_ORIGIN,
     clearRadius: span,
@@ -310,21 +380,27 @@ export function caveLayoutFor(worldSeed: string): CaveLayout {
   };
 
   const layout: CaveLayout = {
-    key: CAVE_DIMENSION_KEY,
+    key,
     worldSeed,
     layers,
     entryAnchor: layer1.entryAnchor,
     fungusLights,
+    fragmentSpot,
     footprint,
   };
-  layoutCache.set(worldSeed, layout);
+  layoutCache.set(cacheKey, layout);
   return layout;
+}
+
+/** Derive the world's designated cave layout (v1). */
+export function caveLayoutFor(worldSeed: string): CaveLayout {
+  return caveLayoutForKey(worldSeed, CAVE_DIMENSION_KEY);
 }
 
 /** The footprint the renderer's wall query reads while
  *  the cave dimension is active. */
-export function caveFootprintFor(worldSeed: string): SiteFootprint {
-  return caveLayoutFor(worldSeed).footprint;
+export function caveFootprintFor(worldSeed: string, key: string = CAVE_DIMENSION_KEY): SiteFootprint {
+  return caveLayoutForKey(worldSeed, key).footprint;
 }
 
 const CAVE_FIELDS: Fields = { wetness: 0.35, elevation: 0, density: 0, mineral: 0.6, creek: 0, distance: 0 };
@@ -349,12 +425,12 @@ const CAVE_GROUND_COLOR = 0x35322c;
  * The cave dimension as a WorldGen: chunks emit only the
  * layout's features; the surface world is never consulted.
  */
-export function createCaveGen(worldSeed: string): WorldGen {
-  const layout = caveLayoutFor(worldSeed);
+export function createCaveGen(worldSeed: string, key: string = CAVE_DIMENSION_KEY): WorldGen {
+  const layout = caveLayoutForKey(worldSeed, key);
   const allFeatures = layout.layers.flatMap((l) => l.features);
   return {
     seed: worldSeed,
-    dimensionKey: CAVE_DIMENSION_KEY,
+    dimensionKey: key,
     fieldsAt: () => CAVE_FIELDS,
     weightsAt: () => CAVE_WEIGHTS,
     groundColorAt: () => CAVE_GROUND_COLOR,
@@ -417,4 +493,229 @@ export function caveMouths(
       walls: farm.walls,
     },
   ];
+}
+
+// ---------------------------------------------------------------------------
+// DISTRIBUTED CAVE INSTANCES (Adam + DEV, 2026-10-30 —
+// the pluralization: caves recur across the world, each
+// its own dimension). The distribution model's first
+// customer (distribution.ts): one candidate seat per
+// 512 m cell, drawn on the cell's own stream; a candidate
+// registers only where the ground suits a mouth
+// (tanglewood / forest dominant — the designated mouth's
+// taste) and the spacing law holds against every singular
+// site (ribbons by line) and against sibling instances.
+// Each registered instance is a full cave: its own stable
+// key ('cave:<cell>'), its own layout, its own fragment
+// anchor. The designated cave above is untouched by all
+// of this — instances are ADDITIVE.
+// ---------------------------------------------------------------------------
+
+/** Per-cell cave presence draw (DRAFT). */
+export const CAVE_CELL_PRESENCE = 0.5;
+
+/** A distributed cave instance: a mouth on the surface
+ *  (a full SiteFootprint) + the key of its dimension. */
+export interface CaveInstance {
+  key: string;
+  /** The mouth id travel routes by (the key itself). */
+  mouthId: string;
+  cellX: number;
+  cellZ: number;
+  center: { x: number; z: number };
+  biome: BiomeId;
+  faceSide: 'north' | 'south' | 'east' | 'west';
+  mouthSpot: { x: number; z: number };
+  exitYaw: number;
+  clearRadius: number;
+  features: ScatterObject[];
+  walls: SiteWallBox[];
+  bounds: { minX: number; maxX: number; minZ: number; maxZ: number };
+}
+
+const instanceCache = new Map<string, CaveInstance | null>();
+
+/** A cell's RAW candidate seat (before spacing): drawn
+ *  in a fixed order — presence, seat jitter x, seat
+ *  jitter z — then the biome taste test. */
+function caveCandidate(
+  worldSeed: string,
+  weightsAtPos: (x: number, z: number) => BiomeWeights,
+  cx: number,
+  cz: number,
+): { center: { x: number; z: number }; biome: BiomeId } | null {
+  const rand = distributionCellStream(worldSeed, 'distribution:cave', cx, cz);
+  if (rand() >= CAVE_CELL_PRESENCE) return null;
+  const x = (cx + 0.2 + 0.6 * rand()) * DISTRIBUTION_CELL_M;
+  const z = (cz + 0.2 + 0.6 * rand()) * DISTRIBUTION_CELL_M;
+  const w = weightsAtPos(x, z);
+  if (w.dominant !== 'tanglewood' && w.dominant !== 'forest') return null;
+  return { center: { x, z }, biome: w.dominant };
+}
+
+/** The accepted instance for one cell, or null. */
+function caveInstanceAt(
+  worldSeed: string,
+  spawn: { x: number; z: number },
+  weightsAtPos: (x: number, z: number) => BiomeWeights,
+  cx: number,
+  cz: number,
+): CaveInstance | null {
+  const cacheKey = `${worldSeed}::${cx},${cz}`;
+  if (instanceCache.has(cacheKey)) return instanceCache.get(cacheKey)!;
+  let result: CaveInstance | null = null;
+  const cand = caveCandidate(worldSeed, weightsAtPos, cx, cz);
+  if (cand) {
+    const { x, z } = cand.center;
+    // Spacing against the singular sites (the standing
+    // rule; ribbons measured to their lines).
+    const singulars = [
+      groveSite(worldSeed, spawn, (px, pz) => weightsAtPos(px, pz).dominant),
+      schoolhouseSite(worldSeed, spawn, weightsAtPos),
+      villageSite(worldSeed, spawn, weightsAtPos),
+      farmhouseSite(worldSeed, spawn, weightsAtPos),
+      chapelSite(worldSeed, spawn, weightsAtPos),
+      caveMouthSite(worldSeed, spawn, weightsAtPos),
+      generalStoreSite(worldSeed, spawn, weightsAtPos),
+      drownedMillSite(worldSeed, spawn, weightsAtPos),
+      barnSite(worldSeed, spawn, weightsAtPos),
+      siloSite(worldSeed, spawn, weightsAtPos),
+    ];
+    const road = sunkenRoadSite(worldSeed, spawn, weightsAtPos);
+    const siding = railSidingSite(worldSeed, spawn, weightsAtPos);
+    let legal = singulars.every(
+      (s) =>
+        Math.hypot(x - s.center.x, z - s.center.z) >=
+        s.clearRadius + CAVE_MOUTH_CLEAR_RADIUS_M + SITE_SPACING_MARGIN_M,
+    );
+    if (legal) {
+      legal =
+        distToSegment(x, z, road.a, road.b) >= ROAD_RIBBON_HALF_WIDTH_M + CAVE_MOUTH_CLEAR_RADIUS_M + SITE_SPACING_MARGIN_M &&
+        distToSegment(x, z, siding.a, siding.b) >= SIDING_HALF_WIDTH_M + CAVE_MOUTH_CLEAR_RADIUS_M + SITE_SPACING_MARGIN_M;
+    }
+    // Sibling precedence: within the sibling floor, the
+    // cell that reads first (row, then column) keeps its
+    // instance; the other cell goes empty. (The seat
+    // jitter band keeps siblings >= ~145 m apart by
+    // construction, so this binds rarely — it exists so
+    // the answer never depends on query order.)
+    if (legal) {
+      const floor = CAVE_MOUTH_CLEAR_RADIUS_M * 2 + SITE_SPACING_MARGIN_M;
+      outer: for (let ncz = cz - 1; ncz <= cz + 1; ncz++) {
+        for (let ncx = cx - 1; ncx <= cx + 1; ncx++) {
+          if (ncx === cx && ncz === cz) continue;
+          const sib = caveCandidate(worldSeed, weightsAtPos, ncx, ncz);
+          if (!sib) continue;
+          const d = Math.hypot(x - sib.center.x, z - sib.center.z);
+          if (d < floor && (ncz < cz || (ncz === cz && ncx < cx))) {
+            legal = false;
+            break outer;
+          }
+        }
+      }
+    }
+    if (legal) {
+      const key = `cave:${cx},${cz}`;
+      const toSpawnX = spawn.x - x;
+      const toSpawnZ = spawn.z - z;
+      const faceSide: CaveInstance['faceSide'] =
+        Math.abs(toSpawnX) > Math.abs(toSpawnZ)
+          ? toSpawnX > 0
+            ? 'east'
+            : 'west'
+          : toSpawnZ > 0
+            ? 'south'
+            : 'north';
+      const facade = buildCaveMouthFacade(worldSeed, `cavemouth:${key}`, cand.center, faceSide);
+      result = {
+        key,
+        mouthId: key,
+        cellX: cx,
+        cellZ: cz,
+        center: cand.center,
+        biome: cand.biome,
+        faceSide,
+        mouthSpot: facade.mouthSpot,
+        exitYaw: yawFacing(facade.mouthSpot.x - x, facade.mouthSpot.z - z),
+        clearRadius: CAVE_MOUTH_CLEAR_RADIUS_M,
+        features: facade.features,
+        walls: facade.walls,
+        bounds: {
+          minX: x - CAVE_MOUTH_CLEAR_RADIUS_M,
+          maxX: x + CAVE_MOUTH_CLEAR_RADIUS_M,
+          minZ: z - CAVE_MOUTH_CLEAR_RADIUS_M,
+          maxZ: z + CAVE_MOUTH_CLEAR_RADIUS_M,
+        },
+      };
+    }
+  }
+  instanceCache.set(cacheKey, result);
+  return result;
+}
+
+/**
+ * Every registered cave instance whose clearing bounds
+ * intersect a world rect — the region query worldgen,
+ * the renderer, and travel all read. Pure in (seed,
+ * rect): the same rect always answers the same list.
+ */
+export function caveInstancesInRect(
+  worldSeed: string,
+  spawn: { x: number; z: number },
+  weightsAtPos: (x: number, z: number) => BiomeWeights,
+  rect: { minX: number; maxX: number; minZ: number; maxZ: number },
+): CaveInstance[] {
+  const out: CaveInstance[] = [];
+  for (const { cx, cz } of distributionCellsOverlapping(rect.minX, rect.maxX, rect.minZ, rect.maxZ)) {
+    const inst = caveInstanceAt(worldSeed, spawn, weightsAtPos, cx, cz);
+    if (!inst) continue;
+    const b = inst.bounds;
+    if (b.maxX < rect.minX || b.minX > rect.maxX || b.maxZ < rect.minZ || b.minZ > rect.maxZ) continue;
+    out.push(inst);
+  }
+  return out;
+}
+
+/** One instance by its dimension key, or null when the
+ *  key names no registered instance (or the designated
+ *  cave — that key is caveLayoutForKey's, not an
+ *  instance's). */
+export function caveInstanceForKey(
+  worldSeed: string,
+  spawn: { x: number; z: number },
+  weightsAtPos: (x: number, z: number) => BiomeWeights,
+  key: string,
+): CaveInstance | null {
+  const m = /^cave:(-?\d+),(-?\d+)$/.exec(key);
+  if (!m) return null;
+  const inst = caveInstanceAt(worldSeed, spawn, weightsAtPos, Number(m[1]), Number(m[2]));
+  return inst && inst.key === key ? inst : null;
+}
+
+/**
+ * Every mouth within a radius of a point: the designated
+ * cave's two mouths plus registered instances — the list
+ * travel routing and the shell's faced-target arms read.
+ */
+export function caveMouthsNear(
+  worldSeed: string,
+  spawn: { x: number; z: number },
+  weightsAtPos: (x: number, z: number) => BiomeWeights,
+  x: number,
+  z: number,
+  radius: number,
+): CaveMouthRef[] {
+  const out: CaveMouthRef[] = caveMouths(worldSeed, spawn, weightsAtPos).filter(
+    (m) => Math.hypot(m.spot.x - x, m.spot.z - z) <= radius,
+  );
+  for (const inst of caveInstancesInRect(worldSeed, spawn, weightsAtPos, {
+    minX: x - radius,
+    maxX: x + radius,
+    minZ: z - radius,
+    maxZ: z + radius,
+  })) {
+    if (Math.hypot(inst.mouthSpot.x - x, inst.mouthSpot.z - z) > radius) continue;
+    out.push({ id: inst.key, spot: inst.mouthSpot, exitYaw: inst.exitYaw, walls: inst.walls });
+  }
+  return out;
 }

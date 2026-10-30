@@ -44,7 +44,7 @@ import { standingInWater, terrainSpeedAt, type WaterDisc } from './movement';
 import { treeKindAt } from './treeKind';
 import { riverParamsFor, riverRibbonForChunk } from './river';
 import { barnSite, caveMouthSite, chapelSite, drownedMillSite, farmhouseSite, generalStoreSite, groveSite, railSidingSite, schoolhouseSite, siloSite, sunkenRoadSite, villageSite, wallsNearSites, type SiteFootprint } from './sites';
-import { caveFootprintFor, caveLayoutFor } from './caves';
+import { caveFootprintFor, caveInstancesInRect, caveLayoutForKey } from './caves';
 import type { RiverParams } from './river';
 import { fireState } from './fireState';
 import { torchState } from './torchState';
@@ -104,7 +104,7 @@ function computeSites(gen: WorldGen): SiteFootprint[] {
   // A non-surface dimension's only "site" is its own
   // layout footprint (the cave's chambers); the surface
   // registry never derives underground.
-  if (gen.dimensionKey) return [caveFootprintFor(String(gen.seed))];
+  if (gen.dimensionKey) return [caveFootprintFor(String(gen.seed), gen.dimensionKey)];
   const spawn = gen.findSpawn();
   return [
     groveSite(String(gen.seed), spawn, (x, z) => gen.weightsAt(x, z).dominant),
@@ -655,7 +655,28 @@ export class WorldRenderer {
     // bounds test per site.
     this.sites = computeSites(gen);
     this.rebuildSmoke(gen);
-    this.player.setSiteWallsQuery((x, z) => wallsNearSites(this.sites, x, z, 2));
+    let wallsSpawn: { seed: string; spawn: { x: number; z: number } } | null = null;
+    this.player.setSiteWallsQuery((x, z) => {
+      let sites = this.sites;
+      if (!this.gen.dimensionKey) {
+        // Distributed cave mouths are places too: their
+        // facade boxes collide. Instances derive per cell
+        // (memoized in caves.ts), so the union costs a few
+        // map reads away from any mouth.
+        const seed = String(this.gen.seed);
+        if (!wallsSpawn || wallsSpawn.seed !== seed) {
+          wallsSpawn = { seed, spawn: this.gen.findSpawn() };
+        }
+        const near = caveInstancesInRect(seed, wallsSpawn.spawn, (wx, wz) => this.gen.weightsAt(wx, wz), {
+          minX: x - 64,
+          maxX: x + 64,
+          minZ: z - 64,
+          maxZ: z + 64,
+        });
+        if (near.length > 0) sites = [...sites, ...near];
+      }
+      return wallsNearSites(sites, x, z, 2);
+    });
     this.proximity = new ProximityTracker(this.gen, true, () => this.tents);
     // Chunk reload on harvest completion: the harvested chunk is
     // rebuilt, so the object visibly shrinks (or leaves, on remove
@@ -1116,7 +1137,7 @@ export class WorldRenderer {
     if (this.scene.fog instanceof THREE.FogExp2) {
       this.scene.fog.color.set(underground ? 0x030303 : 0x1a2018);
     }
-    this.rebuildFungusLights(underground ? String(gen.seed) : null);
+    this.rebuildFungusLights(underground ? String(gen.seed) : null, gen.dimensionKey);
     this.proximity.setGen(this.gen);
     this.disposeGroundTextures();
     for (const [key, loaded] of this.chunks) {
@@ -1132,11 +1153,11 @@ export class WorldRenderer {
    * points at the layout's fungus spots — the entrance
    * glow Adam allowed, and nothing deeper.
    */
-  private rebuildFungusLights(seed: string | null): void {
+  private rebuildFungusLights(seed: string | null, key?: string): void {
     for (const light of this.fungusLights) this.scene.remove(light);
     this.fungusLights = [];
     if (!seed) return;
-    for (const spot of caveLayoutFor(seed).fungusLights) {
+    for (const spot of caveLayoutForKey(seed, key ?? 'cave:main').fungusLights) {
       const light = new THREE.PointLight(
         FUNGUS_LIGHT_COLOR,
         FUNGUS_LIGHT_INTENSITY,

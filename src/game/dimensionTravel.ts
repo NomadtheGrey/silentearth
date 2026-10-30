@@ -31,9 +31,18 @@
  */
 
 import { pushOutOfWalls, type SiteWallBox } from './sites';
-import { caveLayoutFor, caveMouths, createCaveGen, CAVE_DIMENSION_KEY, type CaveAnchor } from './caves';
+import {
+  caveInstanceForKey,
+  caveLayoutForKey,
+  caveMouths,
+  createCaveGen,
+  CAVE_DIMENSION_KEY,
+  type CaveAnchor,
+  type CaveMouthRef,
+} from './caves';
 import { dimensionState } from './dimensionState';
 import type { WorldGen } from './worldgen';
+import type { BiomeWeights } from '../types';
 import type { WorldRenderer } from './renderer';
 import type { PlayerController } from './player';
 
@@ -64,10 +73,33 @@ function placeAt(player: PlayerController, anchor: CaveAnchor): void {
 }
 
 /**
- * Enter the cave dimension through a surface mouth
- * ('mouth' | 'cellar'). Refuses cleanly when the entry
- * anchor is blocked (it never should be — T1 probes it)
- * or the mouth id is unknown.
+ * Resolve a mouth id to its mouth + owning dimension
+ * key: the designated cave's mouths ('mouth' | 'cellar')
+ * own 'cave:main'; a distributed instance's mouth id IS
+ * its key ('cave:<cell>') and owns that cave.
+ */
+function resolveMouth(
+  seed: string,
+  spawn: { x: number; z: number },
+  weightsAtPos: (x: number, z: number) => BiomeWeights,
+  mouthId: string,
+): { mouth: CaveMouthRef; key: string } | null {
+  const v1 = caveMouths(seed, spawn, weightsAtPos).find((m) => m.id === mouthId);
+  if (v1) return { mouth: v1, key: CAVE_DIMENSION_KEY };
+  const inst = caveInstanceForKey(seed, spawn, weightsAtPos, mouthId);
+  if (!inst) return null;
+  return {
+    mouth: { id: inst.key, spot: inst.mouthSpot, exitYaw: inst.exitYaw, walls: inst.walls },
+    key: inst.key,
+  };
+}
+
+/**
+ * Enter a cave dimension through a surface mouth: the
+ * designated cave's 'mouth' | 'cellar', or a distributed
+ * instance's mouth id (its key). Refuses cleanly when
+ * the entry anchor is blocked (it never should be — the
+ * probes check it) or the mouth id is unknown.
  */
 export function enterCave(
   renderer: WorldRenderer,
@@ -77,17 +109,17 @@ export function enterCave(
 ): TravelOutcome {
   const seed = String(surfaceGen.seed);
   const spawn = surfaceGen.findSpawn();
-  const mouth = caveMouths(seed, spawn, (x, z) => surfaceGen.weightsAt(x, z)).find((m) => m.id === mouthId);
-  if (!mouth) return { ok: false, reason: 'unknown-mouth' };
-  const layout = caveLayoutFor(seed);
+  const resolved = resolveMouth(seed, spawn, (x, z) => surfaceGen.weightsAt(x, z), mouthId);
+  if (!resolved) return { ok: false, reason: 'unknown-mouth' };
+  const layout = caveLayoutForKey(seed, resolved.key);
   const anchor = layout.entryAnchor;
   if (!anchorClear(anchor, layout.footprint.walls)) {
     return { ok: false, reason: 'anchor-blocked' };
   }
   capturedSurfaceGen = surfaceGen;
-  renderer.setDimensionGen(createCaveGen(seed));
+  renderer.setDimensionGen(createCaveGen(seed, resolved.key));
   placeAt(player, anchor);
-  dimensionState.enter(CAVE_DIMENSION_KEY, mouthId);
+  dimensionState.enter(resolved.key, mouthId);
   return { ok: true };
 }
 
@@ -104,8 +136,11 @@ export function exitCave(renderer: WorldRenderer, player: PlayerController): Tra
   const seed = String(surfaceGen.seed);
   const spawn = surfaceGen.findSpawn();
   const mouthId = dimensionState.enteredBy();
-  const mouth = caveMouths(seed, spawn, (x, z) => surfaceGen.weightsAt(x, z)).find((m) => m.id === mouthId);
-  if (!mouth) return { ok: false, reason: 'unknown-mouth' };
+  const resolved = mouthId
+    ? resolveMouth(seed, spawn, (x, z) => surfaceGen.weightsAt(x, z), mouthId)
+    : null;
+  if (!resolved) return { ok: false, reason: 'unknown-mouth' };
+  const mouth = resolved.mouth;
   if (!anchorClear(mouth.spot, mouth.walls)) {
     return { ok: false, reason: 'anchor-blocked' };
   }
@@ -126,7 +161,7 @@ export function descend(player: PlayerController): TravelOutcome {
   if (dimensionState.currentLayer() !== 1) return { ok: false, reason: 'already-deepest' };
   const seed = dimensionStateSeed();
   if (seed === null) return { ok: false, reason: 'wrong-dimension' };
-  const layout = caveLayoutFor(seed);
+  const layout = caveLayoutForKey(seed, dimensionState.activeKey());
   const layer2 = layout.layers[1];
   if (!layer2) return { ok: false, reason: 'no-deeper-layer' };
   if (!anchorClear(layer2.entryAnchor, layout.footprint.walls)) {
@@ -143,7 +178,7 @@ export function ascend(player: PlayerController): TravelOutcome {
   if (dimensionState.currentLayer() !== 2) return { ok: false, reason: 'wrong-dimension' };
   const seed = dimensionStateSeed();
   if (seed === null) return { ok: false, reason: 'wrong-dimension' };
-  const layout = caveLayoutFor(seed);
+  const layout = caveLayoutForKey(seed, dimensionState.activeKey());
   const shaft = layout.layers[0].shaftAnchor;
   if (!shaft) return { ok: false, reason: 'anchor-blocked' };
   if (!anchorClear(shaft, layout.footprint.walls)) {

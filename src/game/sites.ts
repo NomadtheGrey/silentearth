@@ -1923,6 +1923,86 @@ export interface CaveMouthSite {
 const caveMouthCache = new Map<string, CaveMouthSite>();
 
 /**
+ * The cave mouth FACADE, shared by the world's designated
+ * mouth (caveMouthSite) and every distributed cave
+ * instance (caves.ts): the opening feature, its flanking
+ * + threshold boxes, the rock surround, and the approach
+ * spot — a pure function of (seed, rocks stream label,
+ * centre, face). The v1 mouth passes its historical
+ * label, so its rocks land exactly where they always did.
+ */
+export function buildCaveMouthFacade(
+  seed: string,
+  rocksLabel: string,
+  center: { x: number; z: number },
+  faceSide: 'north' | 'south' | 'east' | 'west',
+): { features: ScatterObject[]; walls: SiteWallBox[]; mouthSpot: { x: number; z: number } } {
+// Local (u, v) -> world offset. v+ points out of the face.
+const toWorld = (u: number, v: number): { x: number; z: number } =>
+  faceSide === 'south'
+    ? { x: center.x + u, z: center.z + v }
+    : faceSide === 'north'
+      ? { x: center.x - u, z: center.z - v }
+      : faceSide === 'east'
+        ? { x: center.x + v, z: center.z - u }
+        : { x: center.x - v, z: center.z + u };
+const faceRotY =
+  faceSide === 'south' ? 0 : faceSide === 'north' ? Math.PI : faceSide === 'east' ? Math.PI / 2 : -Math.PI / 2;
+
+const features: ScatterObject[] = [];
+const walls: SiteWallBox[] = [];
+const feat = (kind: ScatterKind, x: number, z: number, y: number, scale: number, rotY: number): void => {
+  features.push({ kind, x, z, y, scale, rotY });
+};
+const box = (cx: number, cz: number, hx: number, hz: number): void => {
+  walls.push({ minX: cx - hx, maxX: cx + hx, minZ: cz - hz, maxZ: cz + hz });
+};
+
+// The opening itself, facing the approach.
+feat('caveMouth', center.x, center.z, 0, 1, faceRotY);
+
+// Flanking rocks + the threshold: she stops at the
+// opening, never inside the facade. Boxes in the face
+// frame (u across, v out): flanks at u ±1.7, threshold
+// spanning the opening at the face plane.
+const alongX = faceSide === 'north' || faceSide === 'south';
+const flank1 = toWorld(-1.7, 0);
+const flank2 = toWorld(1.7, 0);
+const threshold = toWorld(0, 0.15);
+if (alongX) {
+  box(flank1.x, flank1.z, 0.75, 0.55);
+  box(flank2.x, flank2.z, 0.75, 0.55);
+  box(threshold.x, threshold.z, 1.05, 0.4);
+} else {
+  box(flank1.x, flank1.z, 0.55, 0.75);
+  box(flank2.x, flank2.z, 0.55, 0.75);
+  box(threshold.x, threshold.z, 0.4, 1.05);
+}
+
+// The rock surround: boulders arcing behind and beside
+// the facade (v negative = into the hill).
+{
+  const rand = mulberry32(deriveSeed(seed, rocksLabel));
+  const spots: [number, number][] = [
+    [-2.9, -0.7],
+    [2.9, -0.7],
+    [-2.3, -2.1],
+    [2.3, -2.1],
+    [0, -3.0],
+    [-3.6, 0.6],
+    [3.6, 0.6],
+  ];
+  for (const [u, v] of spots) {
+    const w = toWorld(u + (rand() * 2 - 1) * 0.3, v + (rand() * 2 - 1) * 0.3);
+    feat('caveBoulder', w.x, w.z, 0, 0.8 + rand() * 0.9, rand() * Math.PI);
+  }
+}
+
+const mouthSpot = toWorld(0, 2.6);
+  return { features, walls, mouthSpot };
+}
+
+/**
  * Derive the world's Cave Mouth. `weightsAtPos` returns the
  * full weights + dominant at a position. Memoized by seed.
  */
@@ -1991,68 +2071,7 @@ export function caveMouthSite(
       : toSpawnZ > 0
         ? 'south'
         : 'north';
-  // Local (u, v) -> world offset. v+ points out of the face.
-  const toWorld = (u: number, v: number): { x: number; z: number } =>
-    faceSide === 'south'
-      ? { x: center.x + u, z: center.z + v }
-      : faceSide === 'north'
-        ? { x: center.x - u, z: center.z - v }
-        : faceSide === 'east'
-          ? { x: center.x + v, z: center.z - u }
-          : { x: center.x - v, z: center.z + u };
-  const faceRotY =
-    faceSide === 'south' ? 0 : faceSide === 'north' ? Math.PI : faceSide === 'east' ? Math.PI / 2 : -Math.PI / 2;
-
-  const features: ScatterObject[] = [];
-  const walls: SiteWallBox[] = [];
-  const feat = (kind: ScatterKind, x: number, z: number, y: number, scale: number, rotY: number): void => {
-    features.push({ kind, x, z, y, scale, rotY });
-  };
-  const box = (cx: number, cz: number, hx: number, hz: number): void => {
-    walls.push({ minX: cx - hx, maxX: cx + hx, minZ: cz - hz, maxZ: cz + hz });
-  };
-
-  // The opening itself, facing the approach.
-  feat('caveMouth', center.x, center.z, 0, 1, faceRotY);
-
-  // Flanking rocks + the threshold: she stops at the
-  // opening, never inside the facade. Boxes in the face
-  // frame (u across, v out): flanks at u ±1.7, threshold
-  // spanning the opening at the face plane.
-  const alongX = faceSide === 'north' || faceSide === 'south';
-  const flank1 = toWorld(-1.7, 0);
-  const flank2 = toWorld(1.7, 0);
-  const threshold = toWorld(0, 0.15);
-  if (alongX) {
-    box(flank1.x, flank1.z, 0.75, 0.55);
-    box(flank2.x, flank2.z, 0.75, 0.55);
-    box(threshold.x, threshold.z, 1.05, 0.4);
-  } else {
-    box(flank1.x, flank1.z, 0.55, 0.75);
-    box(flank2.x, flank2.z, 0.55, 0.75);
-    box(threshold.x, threshold.z, 0.4, 1.05);
-  }
-
-  // The rock surround: boulders arcing behind and beside
-  // the facade (v negative = into the hill).
-  {
-    const rand = mulberry32(deriveSeed(seed, 'cavemouth:rocks'));
-    const spots: [number, number][] = [
-      [-2.9, -0.7],
-      [2.9, -0.7],
-      [-2.3, -2.1],
-      [2.3, -2.1],
-      [0, -3.0],
-      [-3.6, 0.6],
-      [3.6, 0.6],
-    ];
-    for (const [u, v] of spots) {
-      const w = toWorld(u + (rand() * 2 - 1) * 0.3, v + (rand() * 2 - 1) * 0.3);
-      feat('caveBoulder', w.x, w.z, 0, 0.8 + rand() * 0.9, rand() * Math.PI);
-    }
-  }
-
-  const mouthSpot = toWorld(0, 2.6);
+  const { features, walls, mouthSpot } = buildCaveMouthFacade(seed, 'cavemouth:rocks', center, faceSide);
 
   const site: CaveMouthSite = {
     id: 'cavemouth',
