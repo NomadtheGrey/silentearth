@@ -362,6 +362,18 @@ export interface EventMap {
    */
   'stump:upgraded': { siteId: string; x: number; z: number };
   /**
+   * A stump anchor gained an altar-transformation
+   * addition (stumpState.applyAddition — the machinery
+   * rider behind Systems' stumpy-altar acts, 2026-10-30:
+   * 'altar-stones' / 'altar-glyph' / 'altar-candle', and
+   * the completing 'altar' member the candle outcome
+   * carries). One emit per applied member. Renderer
+   * rebuilds the placed group (the dressing draws there);
+   * ritual-grade consumers read the member via
+   * stumpState, not this event.
+   */
+  'stump:altar-stepped': { siteId: string; x: number; z: number; addition: string };
+  /**
    * A bone was staged on a ritual site (ritualSiteState
    * .stageBone, Adam 2026-10-27 — tier-1 Waking, site
    * side). Site is the full site ref (kind + siteId + x/z);

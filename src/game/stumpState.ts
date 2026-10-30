@@ -25,9 +25,19 @@
  * altar (and later additions) coexist on one anchor —
  * never a single exclusive upgraded boolean that
  * forecloses the altar path. This primitive writes
- * the WORKSTATION addition only; the altar addition
- * rides the ritual system (same stumpSiteId, an
- * independent record — neither overwrites the other).
+ * the WORKSTATION addition via upgradeStump; the
+ * ALTAR TRANSFORMATION members (Systems' stumpy-altar
+ * landing, 2026-10-30) live in the SAME set — the
+ * three step members 'altar-stones' / 'altar-glyph' /
+ * 'altar-candle' plus the completing 'altar' member —
+ * and arrive via applyAddition, the writer the shell
+ * calls with Systems' act outcomes (one member per
+ * call, applied sequentially in one handler, so the
+ * candle step and 'altar' land in the same tick).
+ * Ritual grade reads the 'altar' MEMBER (Systems'
+ * isStumpyAltar / siteGrade; mirrored here by
+ * isAltar) — never derived from the steps, so the
+ * game side can never hold a second grade truth.
  *
  * CONTRACT (Systems' approved stumpy claim): on
  * upgrade the anchor is NOT consumed (transformation,
@@ -58,7 +68,8 @@
  * persistence for this landing.
  *
  * EMIT OWNERSHIP: upgradeStump OWNS 'stump:upgraded'
- * (fireState-style). The shell branch that calls it
+ * and applyAddition OWNS 'stump:altar-stepped'
+ * (fireState-style). The shell branch that calls them
  * is UI's follow-up; exactly ONE caller upgrades per
  * craft (the shell branch after executeCraft reports
  * upgradedStump), or one craft upgrades twice.
@@ -69,8 +80,18 @@
 import { bus } from './events';
 import { stumpSiteId } from './ritualSite';
 
-/** An addition on a stump anchor. Altar reserved — the ritual system writes it, not this module. */
-export type StumpAddition = 'workstation' | 'altar';
+/**
+ * An addition on a stump anchor. 'workstation' is the
+ * workbench upgrade; the altar transformation adds its
+ * three step members plus the completing 'altar' member
+ * (Systems' stumpy-altar constants mirror these strings).
+ */
+export type StumpAddition =
+  | 'workstation'
+  | 'altar'
+  | 'altar-stones'
+  | 'altar-glyph'
+  | 'altar-candle';
 
 /** One stump's additions, JSON-safe (arrays, not Sets) for the save seam. */
 export interface StumpAdditionRecord {
@@ -80,7 +101,26 @@ export interface StumpAdditionRecord {
   additions: StumpAddition[];
 }
 
-const ADDITIONS: ReadonlySet<string> = new Set(['workstation', 'altar']);
+const ADDITIONS: ReadonlySet<string> = new Set([
+  'workstation',
+  'altar',
+  'altar-stones',
+  'altar-glyph',
+  'altar-candle',
+]);
+
+/**
+ * The altar-transformation members applyAddition accepts —
+ * the step members plus the completing 'altar'. The
+ * workstation has its own writer (upgradeStump) and is
+ * refused here, so each writer owns exactly its acts.
+ */
+const ALTAR_ADDITIONS: ReadonlySet<string> = new Set([
+  'altar-stones',
+  'altar-glyph',
+  'altar-candle',
+  'altar',
+]);
 
 class StumpState {
   private records = new Map<string, { siteId: string; x: number; z: number; additions: Set<StumpAddition> }>();
@@ -106,6 +146,46 @@ class StumpState {
     }
     bus.emit('stump:upgraded', { siteId, x, z });
     return true;
+  }
+
+  /**
+   * Apply ONE altar-transformation addition to the stump
+   * at (x, z) — the writer the shell calls with Systems'
+   * stumpy-altar act outcomes (an outcome's members are
+   * applied sequentially in one handler; the candle
+   * outcome carries 'altar-candle' then 'altar', so the
+   * pair lands in the same tick). Returns true on a real
+   * change (emits 'stump:altar-stepped'); false — no
+   * emit, nothing mutates — when the member is already
+   * present, is not an altar member (the workstation
+   * refuses here; upgradeStump owns it), or the position
+   * is not finite. Trusts the shell's identity, same as
+   * upgradeStump.
+   */
+  applyAddition(x: number, z: number, addition: StumpAddition): boolean {
+    if (!Number.isFinite(x) || !Number.isFinite(z)) return false;
+    if (!ALTAR_ADDITIONS.has(addition)) return false;
+    const siteId = stumpSiteId(x, z);
+    const existing = this.records.get(siteId);
+    if (existing?.additions.has(addition)) return false;
+    if (existing) {
+      existing.additions.add(addition);
+    } else {
+      this.records.set(siteId, { siteId, x, z, additions: new Set([addition]) });
+    }
+    bus.emit('stump:altar-stepped', { siteId, x, z, addition });
+    return true;
+  }
+
+  /**
+   * Is this stump a completed Stumpy Altar? Reads the
+   * 'altar' MEMBER — the same fact Systems' isStumpyAltar
+   * / siteGrade read (the grade-read call, Background
+   * claim 2026-10-30: one grade truth, never derived
+   * from the step members).
+   */
+  isAltar(x: number, z: number): boolean {
+    return this.hasAddition(x, z, 'altar');
   }
 
   /** Per-addition query — UI's guard asks "is the WORKSTATION addition present?", not a single upgraded bit. */
