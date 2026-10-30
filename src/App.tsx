@@ -1819,6 +1819,7 @@ import {
   cauldronState,
   type PlacedCauldron as PlacedCauldronEntity,
 } from './game/cauldronState';
+import { groveContains, groveSite } from './game/sites';
 import {
   placeCauldron as grantPlaceCauldron,
   pickupCauldron as grantPickupCauldron,
@@ -8136,6 +8137,28 @@ export default function App() {
     | { kind: 'home'; distance: number }
     | { kind: 'scry'; distance: number };
 
+  // GROVE TREE FACT (Adam, 2026-10-30): a scatter target
+  // is one of the Grove's own trees when its source fells
+  // on harvest (the tree sources) and its position lies
+  // inside the grove's clearing — the SAME fact the
+  // engine's grove-protection backstop reads in
+  // harvest.ts, derived from the same sites.ts surface,
+  // so the name tag and the refusal can never disagree.
+  // The site derives from the seed (memoized in
+  // sites.ts), never from saved state. Her own planted
+  // saplings carry a different source and never read as
+  // grove trees here, matching the backstop.
+  const isGroveTreeTarget = (target: HarvestTarget): boolean => {
+    const source = SOURCE_BY_ID[target.sourceId];
+    if (!source?.fellOnHarvest) return false;
+    const gen = genRef.current;
+    if (!gen) return false;
+    const grove = groveSite(gen.seed, gen.findSpawn(), (x, z) =>
+      gen.weightsAt(x, z).dominant,
+    );
+    return groveContains(grove, target.worldX, target.worldZ);
+  };
+
   const computeUseWinner = (): UseWinner | null => {
     const player = playerRef.current;
     if (!player) return null;
@@ -8372,6 +8395,14 @@ export default function App() {
     switch (winner.kind) {
       case 'scatter':
       case 'ground':
+        // GROVE TREES: nothing to press (Adam, 2026-10-30)
+        // — the name tag is the whole surface; the press
+        // offers no harvest at one of the grove's own
+        // trees. (The Shift+E remove chord is not a
+        // presented pill and rides the engine's refusal.)
+        if (winner.kind === 'scatter' && isGroveTreeTarget(winner.target)) {
+          break;
+        }
         player.pressUse({
           targetId: winner.target.id,
           sourceId: winner.target.sourceId,
@@ -9336,7 +9367,9 @@ export default function App() {
   // TOUCH USE LABEL: names the winner's action family
   // (TouchControls interactLabel; undefined keeps the
   // plain "USE"). Scatter/ground stay unlabelled — plain
-  // USE is the harvest read she already knows.
+  // USE is the harvest read she already knows — with one
+  // exception: a grove tree's tag ('Grove Tree'), a name
+  // with no verb, the lit-hearth pattern.
   // FIRE-FAMILY VERBS (Adam, settled 2026-10-30): the pill
   // names the act the faced fire affords NOW. Unlit, every
   // type reads LIGHT (lighting is the only act its menu
@@ -9362,10 +9395,17 @@ export default function App() {
           : winnerFire.type === 'kiln'
             ? 'FIRE'
             : 'Hearth';
+  // GROVE TREE TAG (Adam, 2026-10-30): a grove-tree
+  // winner's pill is its name tag — no act, so no verb
+  // (the lit-hearth pattern).
+  const groveTreeWinner =
+    useWinner?.kind === 'scatter' && isGroveTreeTarget(useWinner.target);
   const useWinnerLabel =
     useWinner === null
       ? undefined
-      : useWinner.kind === 'pile'
+      : groveTreeWinner
+        ? 'Grove Tree'
+        : useWinner.kind === 'pile'
         ? 'OPEN'
         : useWinner.kind === 'trap'
           ? 'COLLECT'
