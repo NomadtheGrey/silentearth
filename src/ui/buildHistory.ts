@@ -45,10 +45,7 @@ const ALL_RECORDS: BuildRecord[] = [
   {
     merge: 'Merge #31',
     pr: 63,
-    // sha pending: the merge sha is unknowable before the
-    // merge; the pre-authorized correction merge replaces
-    // this with the real one.
-    sha: 'pending',
+    sha: '175e0d3',
     date: '2026-10-30',
     what: 'The world gains its first unique places. The Grove: a seeded place of old trees west of spawn, ringed by standing stones, its heart and a carved fragment stone hidden in a hedgerow maze whose hedges block and slide like walls — and the trees are hers and protected, wearing a plain Grove Tree name tag and no pill, their refusal spoken in the witch\u2019s own voice if a harvest is forced. The Schoolhouse: an open-air ruin farther out (occupied places sit deeper in the world — she has not met people yet), a roofless wall ring with a door gap she enters by, rows of desks, the blackboard on the teaching wall, a bell tower at the corner, and a flagpole beside the door; its walls and desks are solid, its rubble is not. And the ground itself now resists: marsh and swamp already slowed her on their curve, and standing in water — the river or a pond — floors her at wading pace, one wetness never charged twice; bog boots ease the bog and do nothing in water.',
     why: 'Adam\u2019s place-work: a world she can cross deserves places that are somewhere — seeded from the world itself, so every world has its grove and its school, always in the same spot. Resistance finishes the terrain story he asked for: marsh, more for swamp, much more for wading.',
