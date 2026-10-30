@@ -145,7 +145,16 @@ export type ScatterKind =
   | 'caveCeiling'
   | 'stalactite'
   | 'cavePool'
-  | 'twilightFungus';
+  | 'twilightFungus'
+  // Site-pass kinds (the General Store, sites.ts — same
+  // rule): walls, the false front, roof, boardwalk porch,
+  // and the interior fixtures (counter, shelves).
+  | 'storeWall'
+  | 'storeFront'
+  | 'storeRoof'
+  | 'storePorch'
+  | 'storeCounter'
+  | 'storeShelf';
 
 /** One placed scatter object in a chunk. y is its base height above ground. */
 export interface ScatterObject {

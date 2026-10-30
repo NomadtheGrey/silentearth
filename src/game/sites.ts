@@ -2043,6 +2043,392 @@ export function caveMouthContains(site: CaveMouthSite, x: number, z: number): bo
   return Math.hypot(x - site.center.x, z - site.center.z) <= site.clearRadius;
 }
 
+// ---------------------------------------------------------------------------
+// THE GENERAL STORE — site #7 (Adam, 2026-10-30; claim
+// approved by DEV). The locations doc's word: "salvage-
+// rich; the old world's goods on shelves" — a mostly-
+// intact candidate. A single building, so the interiors
+// rule makes it a WALK-IN shell (the farmhouse pattern):
+// walls, a whole roof, a boardwalk porch — and the piece
+// that makes it a store: a tall FALSE FRONT on the door
+// side, its silhouette. Inside: a long counter across
+// the room and shelf units along the walls (solid; their
+// dressing is silhouette geometry — the SALVAGE content,
+// what's actually takeable, is a later Systems claim
+// hanging off the exported shelfSpots).
+// ---------------------------------------------------------------------------
+
+/** Siting band from spawn, meters (DRAFT). */
+export const STORE_MIN_DIST_M = 500;
+export const STORE_MAX_DIST_M = 850;
+/** Clearing radius around the store (DRAFT). */
+export const STORE_CLEAR_RADIUS_M = 18;
+/** Meadow weight that also qualifies a scan point (DRAFT). */
+export const STORE_MEADOW_EDGE_WEIGHT = 0.2;
+/** Wall segment length, meters (the farm's measure). */
+export const STORE_SEGMENT_M = 2.5;
+/** Footprint: 12.5 x 7.5 m. */
+export const STORE_WALL_W_M = 12.5;
+export const STORE_WALL_D_M = 7.5;
+/** Wall height, meters (DRAFT). */
+export const STORE_WALL_H_M = 3.0;
+const STORE_WALL_HALF_T = 0.15;
+
+/** The derived General Store: one per world seed. */
+export interface StoreSite {
+  id: string;
+  seed: string;
+  center: { x: number; z: number };
+  /** Dominant biome at the chosen centre. */
+  biome: BiomeId;
+  /** Siting distance from spawn, meters. */
+  distance: number;
+  clearRadius: number;
+  /** The front (false-front + door) side, world frame. */
+  doorSide: 'north' | 'south' | 'east' | 'west';
+  /** Centre of the counter line (world). */
+  counterSpot: { x: number; z: number };
+  /** Shelf-unit anchors (world + facing): the salvage
+   *  pass's hooks for a later content claim. */
+  shelfSpots: { x: number; z: number; rotY: number }[];
+  /** The stove spot (world): the back shelf run leaves a
+   *  gap for it; an anchor only in this landing. */
+  stoveSpot: { x: number; z: number };
+  features: ScatterObject[];
+  walls: SiteWallBox[];
+  bounds: { minX: number; maxX: number; minZ: number; maxZ: number };
+}
+
+const storeCache = new Map<string, StoreSite>();
+
+/**
+ * Derive the world's General Store. `weightsAtPos` returns
+ * the full weights + dominant at a position. Memoized.
+ */
+export function generalStoreSite(
+  seed: string,
+  spawn: { x: number; z: number },
+  weightsAtPos: (x: number, z: number) => BiomeWeights,
+): StoreSite {
+  const cached = storeCache.get(`${seed}::store`);
+  if (cached) return cached;
+
+  // Spacing against all six earlier sites (radii + 60).
+  const grove = groveSite(seed, spawn, (x, z) => weightsAtPos(x, z).dominant);
+  const school = schoolhouseSite(seed, spawn, weightsAtPos);
+  const village = villageSite(seed, spawn, weightsAtPos);
+  const farm = farmhouseSite(seed, spawn, weightsAtPos);
+  const chapel = chapelSite(seed, spawn, weightsAtPos);
+  const mouth = caveMouthSite(seed, spawn, weightsAtPos);
+  const spacingLegal = (x: number, z: number): boolean =>
+    [grove, school, village, farm, chapel, mouth].every(
+      (s) =>
+        Math.hypot(x - s.center.x, z - s.center.z) >=
+        s.clearRadius + STORE_CLEAR_RADIUS_M + SITE_SPACING_MARGIN_M,
+    );
+
+  // Siting: own bearing stream; settled country —
+  // oldfieldRise dominant, or meadow at the edge weight.
+  const bearing = mulberry32(deriveSeed(seed, 'site:store'))() * Math.PI * 2;
+  const dirX = Math.cos(bearing);
+  const dirZ = Math.sin(bearing);
+  let center = {
+    x: spawn.x + dirX * STORE_MAX_DIST_M,
+    z: spawn.z + dirZ * STORE_MAX_DIST_M,
+  };
+  let biome = weightsAtPos(center.x, center.z).dominant;
+  let distance = STORE_MAX_DIST_M;
+  let fallback: { x: number; z: number; biome: BiomeId; distance: number } | null = null;
+  for (let d = STORE_MIN_DIST_M; d <= STORE_MAX_DIST_M; d += GROVE_SCAN_STEP_M) {
+    const x = spawn.x + dirX * d;
+    const z = spawn.z + dirZ * d;
+    if (!spacingLegal(x, z)) continue;
+    const w = weightsAtPos(x, z);
+    if (!fallback) fallback = { x, z, biome: w.dominant, distance: d };
+    if (w.dominant === 'oldfieldRise' || w.weights.meadow >= STORE_MEADOW_EDGE_WEIGHT) {
+      center = { x, z };
+      biome = w.dominant;
+      distance = d;
+      break;
+    }
+    if (d === STORE_MAX_DIST_M && fallback) {
+      center = { x: fallback.x, z: fallback.z };
+      biome = fallback.biome;
+      distance = fallback.distance;
+    }
+  }
+
+  // --- Plan (streams under the 'store' label; the
+  // farmhouse frame idiom: axis swap + local door side).
+  const planRand = mulberry32(deriveSeed(seed, 'store:plan'));
+  const swap = planRand() < 0.5;
+  const theta = swap ? Math.PI / 2 : 0;
+  const toWorld = (lx: number, lz: number): { x: number; z: number } =>
+    swap
+      ? { x: center.x + lz, z: center.z - lx }
+      : { x: center.x + lx, z: center.z + lz };
+  const toSpawnX = spawn.x - center.x;
+  const toSpawnZ = spawn.z - center.z;
+  const localSpawnX = swap ? -toSpawnZ : toSpawnX;
+  const localSpawnZ = swap ? toSpawnX : toSpawnZ;
+  const doorSide: StoreSite['doorSide'] =
+    Math.abs(localSpawnX) > Math.abs(localSpawnZ)
+      ? localSpawnX > 0
+        ? 'east'
+        : 'west'
+      : localSpawnZ > 0
+        ? 'south'
+        : 'north';
+  const worldDoorSide: StoreSite['doorSide'] = !swap
+    ? doorSide
+    : doorSide === 'north'
+      ? 'west'
+      : doorSide === 'west'
+        ? 'south'
+        : doorSide === 'south'
+          ? 'east'
+          : 'north';
+
+  const W = STORE_WALL_W_M;
+  const D = STORE_WALL_D_M;
+  const SEG = STORE_SEGMENT_M;
+
+  const features: ScatterObject[] = [];
+  const walls: SiteWallBox[] = [];
+  const feat = (kind: ScatterKind, x: number, z: number, y: number, scale: number, rotY: number): void => {
+    features.push({ kind, x, z, y, scale, rotY });
+  };
+  const box = (cx: number, cz: number, hx: number, hz: number): void => {
+    walls.push({ minX: cx - hx, maxX: cx + hx, minZ: cz - hz, maxZ: cz + hz });
+  };
+
+  interface Segment {
+    side: 'north' | 'south' | 'east' | 'west';
+    lx: number;
+    lz: number;
+    running: 'x' | 'z';
+    cornerAdjacent: boolean;
+  }
+  const segments: Segment[] = [];
+  const perLong = Math.round(W / SEG); // 5
+  const perShort = Math.round(D / SEG); // 3
+  for (let i = 0; i < perLong; i++) {
+    const lx = -W / 2 + SEG / 2 + i * SEG;
+    const corner = i === 0 || i === perLong - 1;
+    segments.push({ side: 'north', lx, lz: -D / 2, running: 'x', cornerAdjacent: corner });
+    segments.push({ side: 'south', lx, lz: D / 2, running: 'x', cornerAdjacent: corner });
+  }
+  for (let i = 0; i < perShort; i++) {
+    const lz = -D / 2 + SEG / 2 + i * SEG;
+    const corner = i === 0 || i === perShort - 1;
+    segments.push({ side: 'west', lx: -W / 2, lz, running: 'z', cornerAdjacent: corner });
+    segments.push({ side: 'east', lx: W / 2, lz, running: 'z', cornerAdjacent: corner });
+  }
+
+  const doorPool = segments.filter((s) => s.side === doorSide);
+  const door =
+    doorPool.length % 2 === 0
+      ? doorPool[doorPool.length / 2 - 1 + Math.floor(planRand() * 2)]
+      : doorPool[Math.floor(doorPool.length / 2)];
+
+  // Mostly intact (its candidacy): at most ONE interior
+  // segment damaged, missing or stub (the chapel shape).
+  const candidates = segments.filter((s) => !s.cornerAdjacent && s !== door);
+  for (let i = candidates.length - 1; i > 0; i--) {
+    const j = Math.floor(planRand() * (i + 1));
+    [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
+  }
+  const damagedCount = Math.floor(planRand() * 2); // 0..1
+  const missing = new Set<Segment>();
+  const stubs = new Set<Segment>();
+  if (damagedCount === 1 && candidates.length > 0) {
+    (planRand() < 0.5 ? missing : stubs).add(candidates[0]);
+  }
+
+  const emitWall = (kind: ScatterKind, lx: number, lz: number, running: 'x' | 'z', scale: number): void => {
+    const w = toWorld(lx, lz);
+    const runsWorldX = (running === 'x') !== swap;
+    feat(kind, w.x, w.z, 0, scale, runsWorldX ? 0 : Math.PI / 2);
+    const halfLen = (SEG / 2) * scale;
+    if (runsWorldX) box(w.x, w.z, halfLen, STORE_WALL_HALF_T);
+    else box(w.x, w.z, STORE_WALL_HALF_T, halfLen);
+  };
+  for (const s of segments) {
+    if (s === door || missing.has(s)) continue;
+    // The door side wears the FALSE FRONT; the rest plain wall.
+    emitWall(s.side === doorSide ? 'storeFront' : 'storeWall', s.lx, s.lz, s.running, stubs.has(s) ? 0.5 : 1);
+  }
+
+  // The roof: whole, behind the false front.
+  feat('storeRoof', center.x, center.z, STORE_WALL_H_M, 1, theta);
+
+  // The boardwalk porch: a slab per door-side segment,
+  // posts along its outer edge (boxes at the joints).
+  {
+    const outRot =
+      doorSide === 'north' ? Math.PI : doorSide === 'south' ? 0 : doorSide === 'east' ? Math.PI / 2 : -Math.PI / 2;
+    for (const s of doorPool) {
+      const out =
+        s.side === 'north'
+          ? { lx: s.lx, lz: s.lz - 0.95 }
+          : s.side === 'south'
+            ? { lx: s.lx, lz: s.lz + 0.95 }
+            : s.side === 'west'
+              ? { lx: s.lx - 0.95, lz: s.lz }
+              : { lx: s.lx + 0.95, lz: s.lz };
+      const w = toWorld(out.lx, out.lz);
+      feat('storePorch', w.x, w.z, 0, 1, theta + outRot);
+    }
+    const alongX = doorSide === 'north' || doorSide === 'south';
+    const runLen = alongX ? W : D;
+    const joints = Math.round(runLen / SEG);
+    for (let i = 0; i <= joints; i++) {
+      const along = -runLen / 2 + i * SEG;
+      const p =
+        doorSide === 'north'
+          ? { lx: along, lz: -D / 2 - 1.7 }
+          : doorSide === 'south'
+            ? { lx: along, lz: D / 2 + 1.7 }
+            : doorSide === 'west'
+              ? { lx: -W / 2 - 1.7, lz: along }
+              : { lx: W / 2 + 1.7, lz: along };
+      const w = toWorld(p.lx, p.lz);
+      box(w.x, w.z, 0.13, 0.13);
+    }
+  }
+
+  // Interior frame: front = the door wall; the counter
+  // runs parallel to it, 2.2 m into the room, with a
+  // keeper's gap at one plan-picked end.
+  const frontIsLong = doorSide === 'north' || doorSide === 'south';
+  const frontSign = doorSide === 'south' || doorSide === 'east' ? 1 : -1;
+  const counterLocal: { lx: number; lz: number } = frontIsLong
+    ? { lx: 0, lz: frontSign * (D / 2 - 2.2) }
+    : { lx: frontSign * (W / 2 - 2.2), lz: 0 };
+  const counterWorld = toWorld(counterLocal.lx, counterLocal.lz);
+  {
+    const runLen = (frontIsLong ? W : D) - 3; // counter length
+    const unit = 2.4;
+    const units = Math.floor(runLen / unit);
+    const gapAtStart = planRand() < 0.5;
+    for (let i = 0; i < units; i++) {
+      // The keeper's gap: skip the end unit on one side
+      // (only when a unit remains — a short counter IS
+      // the whole counter).
+      if (units >= 2 && ((gapAtStart && i === 0) || (!gapAtStart && i === units - 1))) continue;
+      const along = -runLen / 2 + unit / 2 + i * unit;
+      const p = frontIsLong
+        ? { lx: along, lz: counterLocal.lz }
+        : { lx: counterLocal.lx, lz: along };
+      const w = toWorld(p.lx, p.lz);
+      const runsWorldX = frontIsLong !== swap;
+      feat('storeCounter', w.x, w.z, 0, 1, runsWorldX ? 0 : Math.PI / 2);
+      if (runsWorldX) box(w.x, w.z, unit / 2, 0.35);
+      else box(w.x, w.z, 0.35, unit / 2);
+    }
+  }
+
+  // Shelves: every wall but the front, inset, corner-
+  // clear. One run skips its middle unit — the stove
+  // stands there (an anchor; the gap is its place): the
+  // back run when it is long enough, else a long side.
+  const shelfSpots: StoreSite['shelfSpots'] = [];
+  let stoveSpot = counterWorld;
+  {
+    const unit = 2.2;
+    const inset = 0.5;
+    const sides: ('north' | 'south' | 'east' | 'west')[] = ['north', 'south', 'east', 'west'];
+    const backSide = frontIsLong
+      ? doorSide === 'north'
+        ? 'south'
+        : 'north'
+      : doorSide === 'west'
+        ? 'east'
+        : 'west';
+    const gapSide =
+      backSide && Math.floor(((backSide === 'north' || backSide === 'south' ? W : D) - 1.4) / unit) >= 3
+        ? backSide
+        : sides.find((s) => s !== doorSide && (s === 'north' || s === 'south'));
+    for (const side of sides) {
+      if (side === doorSide) continue;
+      const isLong = side === 'north' || side === 'south';
+      const runLen = (isLong ? W : D) - 1.4; // corner clearance
+      const units = Math.floor(runLen / unit);
+      const isGap = side === gapSide;
+      for (let i = 0; i < units; i++) {
+        const along = -((units * unit) / 2) + unit / 2 + i * unit;
+        if (isGap && units >= 3 && i === Math.floor(units / 2)) {
+          // The stove gap.
+          const p =
+            side === 'north'
+              ? { lx: along, lz: -D / 2 + inset }
+              : side === 'south'
+                ? { lx: along, lz: D / 2 - inset }
+                : side === 'west'
+                  ? { lx: -W / 2 + inset, lz: along }
+                  : { lx: W / 2 - inset, lz: along };
+          stoveSpot = toWorld(p.lx, p.lz);
+          continue;
+        }
+        const p =
+          side === 'north'
+            ? { lx: along, lz: -D / 2 + inset }
+            : side === 'south'
+              ? { lx: along, lz: D / 2 - inset }
+              : side === 'west'
+                ? { lx: -W / 2 + inset, lz: along }
+                : { lx: W / 2 - inset, lz: along };
+        const w = toWorld(p.lx, p.lz);
+        const runsWorldX = isLong !== swap;
+        const rotY = runsWorldX ? 0 : Math.PI / 2;
+        feat('storeShelf', w.x, w.z, 0, 1, rotY);
+        if (runsWorldX) box(w.x, w.z, unit / 2, 0.32);
+        else box(w.x, w.z, 0.32, unit / 2);
+        shelfSpots.push({ x: w.x, z: w.z, rotY });
+      }
+    }
+  }
+
+  // A little rubble, as everywhere.
+  {
+    const rand = mulberry32(deriveSeed(seed, 'store:rubble'));
+    const count = 1 + Math.floor(rand() * 3);
+    for (let i = 0; i < count; i++) {
+      const w = toWorld((rand() * 2 - 1) * (W / 2 + 1.5), (rand() < 0.5 ? -1 : 1) * (D / 2 + 0.6 + rand()));
+      feat('rubble', w.x, w.z, 0, 0.6 + rand() * 0.5, rand() * Math.PI);
+    }
+  }
+
+  const site: StoreSite = {
+    id: 'store',
+    seed,
+    center,
+    biome,
+    distance,
+    clearRadius: STORE_CLEAR_RADIUS_M,
+    doorSide: worldDoorSide,
+    counterSpot: counterWorld,
+    shelfSpots,
+    stoveSpot,
+    features,
+    walls,
+    bounds: {
+      minX: center.x - STORE_CLEAR_RADIUS_M,
+      maxX: center.x + STORE_CLEAR_RADIUS_M,
+      minZ: center.z - STORE_CLEAR_RADIUS_M,
+      maxZ: center.z + STORE_CLEAR_RADIUS_M,
+    },
+  };
+  storeCache.set(`${seed}::store`, site);
+  return site;
+}
+
+/** True when a world position lies inside the store's
+ *  clearing (the footprint check). */
+export function generalStoreContains(site: StoreSite, x: number, z: number): boolean {
+  return Math.hypot(x - site.center.x, z - site.center.z) <= site.clearRadius;
+}
+
 /** The standing spacing rule (formalized by DEV,
  *  2026-10-30): every site's siting scan keeps its centre
  *  at least (the other site's clear radius + its own

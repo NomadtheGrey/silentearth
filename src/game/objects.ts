@@ -1222,6 +1222,97 @@ export const SOURCES: HarvestSourceDef[] = [
     biomes: ['deepBog'],
     mesh: { shape: 'stone', color: 0x9fd8c8, extraColor: 0x6fae9d, baseY: 0.25 },
   },
+  // The General Store set (Adam, 2026-10-30 — site-pass
+  // only, same rule as the sets above). The shelf dressing
+  // is silhouette geometry: nothing here is takeable until
+  // the salvage content claim lands.
+  {
+    id: 'storeWall',
+    kind: 'storeWall',
+    name: 'Store Wall',
+    description:
+      'A board wall of the old general store (Adam, ' +
+      '2026-10-30), still standing in settled country.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['oldfieldRise', 'meadow'],
+    mesh: { shape: 'stone', color: 0x6e5136, extraColor: 0x201812, baseY: 1.5 },
+  },
+  {
+    id: 'storeFront',
+    kind: 'storeFront',
+    name: 'Store Front',
+    description:
+      'The store\u2019s false front (Adam, 2026-10-30): a ' +
+      'tall board face built to look grander than the room ' +
+      'behind it, its shop window dark.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['oldfieldRise', 'meadow'],
+    mesh: { shape: 'stone', color: 0x77603f, extraColor: 0x1d1a14, baseY: 2.3 },
+  },
+  {
+    id: 'storeRoof',
+    kind: 'storeRoof',
+    name: 'Store Roof',
+    description:
+      'The general store\u2019s roof (Adam, 2026-10-30), ' +
+      'whole behind its tall front.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['oldfieldRise', 'meadow'],
+    mesh: { shape: 'stone', color: 0x54472e, extraColor: 0x6e5136, baseY: 0 },
+  },
+  {
+    id: 'storePorch',
+    kind: 'storePorch',
+    name: 'Boardwalk',
+    description:
+      'A stretch of the store\u2019s boardwalk porch (Adam, ' +
+      '2026-10-30), where the whole road once stopped.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['oldfieldRise', 'meadow'],
+    mesh: { shape: 'stone', color: 0x5d4630, extraColor: 0x6e5136, baseY: 0.55 },
+  },
+  {
+    id: 'storeCounter',
+    kind: 'storeCounter',
+    name: 'Counter',
+    description:
+      'The store\u2019s long counter (Adam, 2026-10-30). ' +
+      'Customers on one side, the keeper on the other; a ' +
+      'gap at one end where the keeper passed.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['oldfieldRise', 'meadow'],
+    mesh: { shape: 'stone', color: 0x7a6248, extraColor: 0x4a3b28, baseY: 0.55 },
+  },
+  {
+    id: 'storeShelf',
+    kind: 'storeShelf',
+    name: 'Shelf',
+    description:
+      'A store shelf (Adam, 2026-10-30), still holding the ' +
+      'shapes of the old world\u2019s goods. Shapes only — ' +
+      'what can be taken is a later reckoning.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['oldfieldRise', 'meadow'],
+    mesh: { shape: 'stone', color: 0x6b5638, extraColor: 0x8a7a5a, baseY: 1.1 },
+  },
   {
     id: 'snapwoodThicket',
     kind: 'snapWood',

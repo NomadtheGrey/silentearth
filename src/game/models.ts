@@ -47,7 +47,7 @@ import type { ScatterKind } from '../types';
 import type { MeshSpec } from './objects';
 import type { AnimalKind } from './animals';
 import { hashSeed, mulberry32 } from './seed';
-import { CHAPEL_SEGMENT_M, FARM_SEGMENT_M, GROVE_CELL_M, SCHOOL_SEGMENT_M, VILLAGE_SEGMENT_M } from './sites';
+import { CHAPEL_SEGMENT_M, FARM_SEGMENT_M, GROVE_CELL_M, SCHOOL_SEGMENT_M, STORE_SEGMENT_M, VILLAGE_SEGMENT_M } from './sites';
 import { CAVE_CELL_M } from './caves';
 import { sunDirection, sunElevationAtCycle } from './sky';
 import { dayFraction } from './weather';
@@ -627,6 +627,76 @@ export function buildKindGeometry(spec: MeshSpec, kind: ScatterKind): THREE.Buff
       part(cyl(0.025, 0.035, 0.16, 5), e, { p: [0.14, -0.17, -0.08] }),
       part(sphere(0.12, 8, 6), c, { p: [0.14, -0.05, -0.08], s: [1, 0.62, 1] }),
       part(sphere(0.09, 8, 6), shade(c, 0.9), { p: [0.02, -0.16, 0.16], s: [1, 0.6, 1] }),
+    ]);
+  }
+  // Kind overrides (the General Store set, sites.ts):
+  // walls, the false front, roof, boardwalk, and the
+  // interior fixtures. Local ground is y = -baseY.
+  if (kind === 'storeWall') {
+    return merge([
+      part(box(STORE_SEGMENT_M, 3.0, 0.3), c),
+      part(box(0.7, 0.9, 0.34), e, { p: [0.45, 0.35, 0] }),
+      part(box(STORE_SEGMENT_M, 0.18, 0.36), shade(c, 1.1), { p: [0, -1.42, 0] }),
+    ]);
+  }
+  if (kind === 'storeFront') {
+    // The false front: a 4.6 m board face — the wall body
+    // below, the parapet above the roofline, a broad dark
+    // shop window, and the blank sign board.
+    return merge([
+      part(box(STORE_SEGMENT_M, 4.6, 0.3), c),
+      part(box(1.5, 1.1, 0.34), e, { p: [0, -0.75, 0] }),
+      part(box(1.9, 0.5, 0.36), shade(e, 1.6), { p: [0, 1.15, 0] }),
+      part(box(STORE_SEGMENT_M + 0.1, 0.22, 0.44), shade(c, 0.9), { p: [0, 2.38, 0] }),
+    ]);
+  }
+  if (kind === 'storeRoof') {
+    // Gabled pair (the farm roof's shape, the store's
+    // span) + the stove's pipe toward the back.
+    return merge([
+      part(box(13.1, 0.09, 4.6), c, { p: [0, 1.35, -1.95], r: [0.6, 0, 0] }),
+      part(box(13.1, 0.09, 4.6), c, { p: [0, 1.35, 1.95], r: [-0.6, 0, 0] }),
+      part(cyl(0.09, 0.11, 0.9, 6), shade(e, 1.0), { p: [-1.5, 2.6, -0.9] }),
+    ]);
+  }
+  if (kind === 'storePorch') {
+    // One boardwalk segment: slab out from the wall line,
+    // a lean-to roof above, posts at the outer corners
+    // (inset 0.06 from the segment ends, so a run's joints
+    // read as paired posts, never coincident).
+    return merge([
+      part(box(STORE_SEGMENT_M, 0.14, 1.9), c, { p: [0, -0.45, 0.9] }),
+      part(box(STORE_SEGMENT_M, 0.08, 2.0), shade(c, 0.92), { p: [0, 1.55, 0.95], r: [0.08, 0, 0] }),
+      part(box(0.11, 2.0, 0.11), shade(e, 1.0), { p: [-1.19, 0.55, 1.75] }),
+      part(box(0.11, 2.0, 0.11), shade(e, 1.0), { p: [1.19, 0.55, 1.75] }),
+    ]);
+  }
+  if (kind === 'storeCounter') {
+    // A 2.4 m counter unit: slab top, front panel, end
+    // legs, and the silhouettes of goods left on top.
+    return merge([
+      part(box(2.4, 0.08, 0.75), c, { p: [0, 0.5, 0] }),
+      part(box(2.4, 1.0, 0.1), shade(c, 0.9), { p: [0, 0, 0.3] }),
+      part(box(0.1, 1.0, 0.65), shade(c, 0.85), { p: [-1.1, 0, 0] }),
+      part(box(0.1, 1.0, 0.65), shade(c, 0.85), { p: [1.1, 0, 0] }),
+      part(box(0.3, 0.25, 0.3), e, { p: [-0.7, 0.67, 0] }),
+      part(box(0.24, 0.2, 0.24), shade(e, 0.85), { p: [0.4, 0.64, -0.1] }),
+    ]);
+  }
+  if (kind === 'storeShelf') {
+    // A 2.2 m shelf unit: posts, three boards, and goods
+    // silhouettes (extraColor blocks and a jar — shapes
+    // only until the salvage claim).
+    return merge([
+      part(box(0.08, 2.2, 0.6), c, { p: [-1.06, 0, 0] }),
+      part(box(0.08, 2.2, 0.6), c, { p: [1.06, 0, 0] }),
+      part(box(2.2, 0.06, 0.55), shade(c, 1.08), { p: [0, -0.6, 0] }),
+      part(box(2.2, 0.06, 0.55), shade(c, 1.08), { p: [0, 0.1, 0] }),
+      part(box(2.2, 0.06, 0.55), shade(c, 1.08), { p: [0, 0.8, 0] }),
+      part(box(0.3, 0.35, 0.4), e, { p: [-0.7, -0.4, 0] }),
+      part(box(0.25, 0.5, 0.35), shade(e, 0.85), { p: [0.2, 0.38, 0] }),
+      part(cyl(0.09, 0.09, 0.28, 6), e, { p: [0.75, 0.97, 0] }),
+      part(box(0.4, 0.3, 0.4), shade(e, 1.15), { p: [-0.3, 0.98, 0] }),
     ]);
   }
   switch (spec.shape) {
