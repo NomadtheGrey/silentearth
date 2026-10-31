@@ -24,12 +24,12 @@
  *   anchoring to spawn would make zone coords shift
  *   per world. World origin is the only stable anchor.
  * - SIGNS: first = EAST = +x (Adam's example: 10 zones
- *   east → [+10, 0]); second = NORTH = +z — Cartesian
- *   (Adam's pin, REVERSED 2026-10-30: north is positive
- *   z; the earlier −z north was a three.js screen habit
- *   from the claim's drafting). A position and its zone
- *   carry the same signs on both axes: raw (623, −532)
- *   is zone (19, −17), south-east, honestly signed.
+ *   east → [+10, 0]); second = NORTH-positive per the
+ *   compass pin (East = +x, North = −z) — map
+ *   convention, north up: walking north increases the
+ *   second number, walking south decreases it. (Pin
+ *   pass could flip to south-positive raw z with one
+ *   sign change.)
  * - FLOOR, not trunc: zones tile correctly across
  *   origin (x = −1 → zone −1, not 0).
  */
@@ -45,5 +45,5 @@ export const ZONE_SIZE_METERS = CHUNK_SIZE;
  * display's call, not this helper's.
  */
 export function zoneCoords(x: number, z: number): [number, number] {
-  return [Math.floor(x / ZONE_SIZE_METERS), Math.floor(z / ZONE_SIZE_METERS)];
+  return [Math.floor(x / ZONE_SIZE_METERS), Math.floor(-z / ZONE_SIZE_METERS)];
 }
