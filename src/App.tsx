@@ -1820,7 +1820,11 @@ import {
   emptyQuestFlags,
   type QuestFlags,
 } from './systems/quests';
-import { canCraft, CRAFT_OWNERSHIP_LABELS } from './systems/crafting';
+import {
+  canCraft,
+  CRAFT_OWNERSHIP_LABELS,
+  craftingSection,
+} from './systems/crafting';
 import {
   ITEMS,
   RECIPES,
@@ -2044,79 +2048,27 @@ const QUEST_HINTS: Record<string, string> = {
 };
 
 /**
- * CRAFTING GROUPS (Adam, 2026-10-26 — "group the crafted items
- * on the crafting screen"): SECTIONS in one scroll, NOT tabs —
- * the phone sheet already scrolls, sections keep everything
- * visible, tabs would hide recipes behind extra taps. UI-side
- * id→group map (no Systems file touch, no recipe field added;
- * a recipe field later is trivial if Adam wants it). Keys are
- * recipe.id strings, verified against RECIPES at build time.
- * Order within a group is the current recipe order (the shell
- * filters, never re-sorts); a group with no recipes never
- * renders. A recipe with no mapping falls into a trailing
- * "Other" section rather than vanishing.
+ * CRAFTING SECTIONS — ONE SHELF SYSTEM (Adam, 2026-10-31):
+ * the crafting book files its recipes on the SAME shelves
+ * as the inventory panel, so the two panels can never
+ * drift apart. A recipe's section is Systems'
+ * craftingSection(recipe) — the category of its OUTPUT
+ * item in the inventory taxonomy — and the shelf order is
+ * ITEM_CATEGORY_ORDER, the inventory's own. The UI-side
+ * hand map that used to live here (Tools / Homes /
+ * Fire & Workshop / Clothes / Materials & Carrying /
+ * Traps) is DELETED: there is one shelf system now, and
+ * this file only reads it. Sections stay SECTIONS in one
+ * scroll, not tabs (Adam, 2026-10-26 — tabs would hide
+ * recipes behind extra taps); order within a shelf is
+ * recipe order (the shell filters, never re-sorts); an
+ * empty shelf never renders. A recipe whose output reads
+ * 'Other' (none measured — Systems counted every recipe
+ * onto a real shelf) trails under "Other" rather than
+ * vanishing, and "Owned & Superseded" stays the trailing
+ * STATE section (sunk rows are not shelved).
  */
-const CRAFTING_GROUP_ORDER = [
-  'Tools',
-  'Homes',
-  'Fire & Workshop',
-  'Clothes',
-  'Materials & Carrying',
-  'Traps',
-];
-const CRAFTING_GROUP_BY_RECIPE_ID: Record<string, string> = {
-  'garden-trowel': 'Tools',
-  'sharp-trowel': 'Tools',
-  spade: 'Tools',
-  'axe-trowel': 'Tools',
-  'spade-axe': 'Tools',
-  'trundle-tool': 'Tools',
-  'primitive-lean-to': 'Homes',
-  'thatch-hut': 'Homes',
-  'woven-cottage': 'Homes',
-  'small-wooden-hut': 'Homes',
-  'moss-cradle': 'Homes',
-  'sleeping-bag': 'Homes',
-  tent: 'Homes',
-  campfire: 'Fire & Workshop',
-  hearth: 'Fire & Workshop',
-  kiln: 'Fire & Workshop',
-  'stumpy-workstation': 'Fire & Workshop',
-  'crafted-workstation': 'Fire & Workshop',
-  'potters-wheel': 'Fire & Workshop',
-  loom: 'Fire & Workshop',
-  'dry-kindling': 'Fire & Workshop',
-  torch: 'Fire & Workshop',
-  altar: 'Fire & Workshop',
-  'writing-desk': 'Fire & Workshop',
-  journal: 'Fire & Workshop',
-  grimoire: 'Fire & Workshop',
-  'charcoal-stick': 'Fire & Workshop',
-  'render-tallow': 'Fire & Workshop',
-  'candle-from-beeswax': 'Fire & Workshop',
-  'candle-from-tallow': 'Fire & Workshop',
-  cauldron: 'Fire & Workshop',
-  'hooded-cloak': 'Clothes',
-  shawl: 'Clothes',
-  'pointy-hat': 'Clothes',
-  'mossy-mittens': 'Clothes',
-  'bog-boots': 'Clothes',
-  apron: 'Clothes',
-  umbrella: 'Clothes',
-  'twined-cordage': 'Materials & Carrying',
-  'clay-pot': 'Materials & Carrying',
-  'clay-brick': 'Materials & Carrying',
-  'small-basket': 'Materials & Carrying',
-  'large-basket': 'Materials & Carrying',
-  'plant-pulp': 'Materials & Carrying',
-  'pressed-sheets': 'Materials & Carrying',
-  paper: 'Materials & Carrying',
-  snare: 'Traps',
-  'fish-weir-trap': 'Traps',
-  'pot-trap': 'Traps',
-  pitfall: 'Traps',
-  deadfall: 'Traps',
-};
+const SYSTEMS_RECIPE_BY_ID = new Map(RECIPES.map((r) => [r.id, r]));
 
 /**
  * Type predicate for failed fire results. This repo's tsconfig
@@ -5400,7 +5352,12 @@ export default function App() {
   };
 
   const handleCraft = (recipeId: string) => {
-    if (CRAFTING_GROUP_BY_RECIPE_ID[recipeId] === 'Traps') {
+    // Trap crafts confirm first ("Place trap here?") —
+    // keyed on the recipe's own placesTrap fact now, not
+    // the deleted shelf map's 'Traps' group (the same
+    // five recipes: snare, fish-weir-trap, pot-trap,
+    // pitfall, deadfall — verified against recipes.ts).
+    if (SYSTEMS_RECIPE_BY_ID.get(recipeId)?.placesTrap) {
       setPendingTrapRecipeId(recipeId);
       return;
     }
@@ -10187,26 +10144,31 @@ export default function App() {
   );
   const sunkCraftingRecipes = orderedCraftingRecipes.filter(isSunkRecipe);
 
-  // CRAFTING GROUPS: sections in DEV's group order, each filtered
-  // from the AVAILABLE rows above (never re-sorted);
-  // empty groups dropped here, and the menu drops them again
-  // defensively. Unmapped recipes (none today — all 51
-  // map, measured 2026-10-30 after the cauldron recipe
-  // joined its family under 'Fire & Workshop') trail
+  // CRAFTING SECTIONS (one shelf system, 2026-10-31):
+  // shelves in ITEM_CATEGORY_ORDER, each filtered from
+  // the AVAILABLE rows above by Systems' craftingSection
+  // (never re-sorted); empty shelves dropped here, and
+  // the menu drops them again defensively. A recipe whose
+  // output shelves as 'Other' (none measured) trails
   // under "Other" instead of vanishing; the sunk block
+  // ("Owned & Superseded", a state section, not a shelf)
   // closes the list after it.
-  const ungroupedRecipes = availableCraftingRecipes.filter(
-    (recipe) => CRAFTING_GROUP_BY_RECIPE_ID[recipe.id] === undefined,
+  const sectionOfRecipe = (recipe: CraftingRecipe): string => {
+    const systems = SYSTEMS_RECIPE_BY_ID.get(recipe.id);
+    return systems ? craftingSection(systems) : 'Other';
+  };
+  const otherRecipes = availableCraftingRecipes.filter(
+    (recipe) => sectionOfRecipe(recipe) === 'Other',
   );
   const craftingSections = [
-    ...CRAFTING_GROUP_ORDER.map((title) => ({
+    ...ITEM_CATEGORY_ORDER.map((title) => ({
       title,
       recipes: availableCraftingRecipes.filter(
-        (recipe) => CRAFTING_GROUP_BY_RECIPE_ID[recipe.id] === title,
+        (recipe) => sectionOfRecipe(recipe) === title,
       ),
     })).filter((section) => section.recipes.length > 0),
-    ...(ungroupedRecipes.length > 0
-      ? [{ title: 'Other', recipes: ungroupedRecipes }]
+    ...(otherRecipes.length > 0
+      ? [{ title: 'Other', recipes: otherRecipes }]
       : []),
     ...(sunkCraftingRecipes.length > 0
       ? [{ title: 'Owned & Superseded', recipes: sunkCraftingRecipes }]
