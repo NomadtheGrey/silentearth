@@ -141,7 +141,13 @@ import {
   craftOwnershipStatus,
   CRAFT_OWNERSHIP_LABELS,
 } from './crafting';
-import { craftIntoInventory, PersonalInventory } from './inventory';
+import {
+  craftIntoInventory,
+  displayNameFor,
+  normalizeItemId,
+  PersonalInventory,
+} from './inventory';
+import { RECIPES } from './recipes';
 import type { HungerState } from './hunger';
 import {
   ownedStage,
@@ -419,3 +425,265 @@ export function executeCraft(
   };
 }
 
+
+// ---------------------------------------------------------------------------
+// Prerequisite chains (Adam, 2026-10-31)
+// ---------------------------------------------------------------------------
+//
+// Adam's words: "allow a button to craft these prerequisites
+// (and any of its prerequisites) without leaving that recipe,
+// if we have the ingredients." The button sits on an
+// ingredient row of the open recipe; this is the execution
+// behind it. The chain crafts the INGREDIENT — never the open
+// recipe itself; she presses Craft for that when its rows
+// read ready.
+//
+// PLAN BEFORE ANYTHING IS CONSUMED. The whole chain is first
+// walked against a CLONE of the pack (PersonalInventory
+// .clone()), through executeCraft itself, so every gate a
+// real craft obeys — ownership, hunger, station, tool stage,
+// creek, counts, capacity — is checked in planning, deepest
+// missing link first. If the walk throws, the refusal names
+// the blocker (a raw item with have/need, a step's station,
+// an owned single's label, the step that would overflow) and
+// the real pack is untouched: no half-chains. Execution then
+// replays the planned batches against the real inventory
+// through the same executeCraft — one validated craft path,
+// no second implementation. A step throwing at replay after
+// a clean plan is a can't-happen path; if it ever fired, the
+// earlier steps stand (real items, honestly hers) and the
+// error propagates.
+//
+// PRODUCERS. A producer of an item is a recipe whose output
+// it is — EXCLUDING placesTrap / upgradesStump recipes: their
+// outputs never enter the pack, so they can never satisfy an
+// ingredient. Producers are tried in recipe-book order; the
+// first whose sub-chain fully plans wins (the candle's two
+// waxes); if none plans, the FIRST producer's blocker is the
+// refusal — the book's canonical path speaks. `requires`
+// items are held gates, not ingredients: the chain never
+// crafts them, and a missing one refuses, naming it. A step's
+// upgradeFrom predecessor IS consumed by its craft, so the
+// walk ensures one (any listed option; a craftable option is
+// chained, otherwise it must be held). Batch surplus
+// (dry-kindling x2 against a need of 1) stays in the pack,
+// untrimmed.
+
+/** One step of an executed chain (consecutive batches merged). */
+export interface CraftChainStep {
+  recipeId: string;
+  name: string;
+  batches: number;
+  /** Total produced by this step (recipe output x batches). */
+  output: { item: ItemId; quantity: number };
+}
+
+/** Chain outcome: the steps run, and what the chain made. */
+export interface CraftChainResult {
+  steps: CraftChainStep[];
+  /** Total of the requested ingredient the chain produced. */
+  crafted: { item: ItemId; quantity: number };
+}
+
+/** Producer candidacy for chains (see the section header). */
+function chainProducersFor(item: ItemId): Recipe[] {
+  return RECIPES.filter(
+    (recipe) =>
+      recipe.output.item === item &&
+      !recipe.placesTrap &&
+      !recipe.upgradesStump,
+  );
+}
+
+/**
+ * True when some recipe can produce this item INTO the pack
+ * — the button's craftable half (UI pairs it with
+ * held < required for the row). Producer candidacy (incl.
+ * the trap/stump exclusion) lives here, in one place.
+ */
+export function hasChainProducer(item: ItemId): boolean {
+  return chainProducersFor(normalizeItemId(item)).length > 0;
+}
+
+interface ChainContext {
+  station: StationInput;
+  hunger: HungerState | null;
+  nearCreek: boolean | null;
+}
+
+interface PlanState {
+  sim: PersonalInventory;
+  batches: Recipe[];
+}
+
+/** Display name for messages, falling back to the raw id. */
+function chainItemName(item: ItemId): string {
+  return displayNameFor(item) ?? item;
+}
+
+/**
+ * Plan ONE batch of `producer` (plus everything the batch
+ * needs first) against the simulation. Returns the threaded
+ * state; throws the blocker's refusal.
+ */
+function planProducerBatch(
+  producer: Recipe,
+  state: PlanState,
+  ctx: ChainContext,
+  path: ItemId[],
+): PlanState {
+  let s = state;
+  // Held gates are not ingredients: never crafted, only read.
+  for (const req of producer.requires ?? []) {
+    if (s.sim.count(req.item) < req.quantity) {
+      throw new Error(
+        `Cannot craft ${producer.name}: requires ` +
+          `${chainItemName(req.item)} in hand (have ` +
+          `${s.sim.count(req.item)}, need ${req.quantity}).`,
+      );
+    }
+  }
+  for (const ingredient of producer.ingredients) {
+    s = planEnsure(ingredient.item, ingredient.quantity, s, ctx, path);
+  }
+  if (producer.upgradeFrom !== undefined) {
+    const options: ItemId[] = Array.isArray(producer.upgradeFrom)
+      ? producer.upgradeFrom
+      : [producer.upgradeFrom];
+    if (!options.some((option) => s.sim.count(option) >= 1)) {
+      const craftable = options.find(
+        (option) => chainProducersFor(option).length > 0,
+      );
+      if (craftable !== undefined) {
+        s = planEnsure(craftable, 1, s, ctx, path);
+      } else {
+        throw new Error(
+          `Cannot craft ${producer.name}: it upgrades from ` +
+            `${options.map(chainItemName).join(' or ')}, and ` +
+            `none is in the pack.`,
+        );
+      }
+    }
+  }
+  // The validated path itself: every remaining gate (station,
+  // hunger, ownership, tool stage, creek, capacity) speaks
+  // with executeCraft's own voice, against the simulation.
+  executeCraft(producer, s.sim, ctx.station, ctx.hunger, ctx.nearCreek);
+  return { sim: s.sim, batches: [...s.batches, producer] };
+}
+
+/**
+ * Ensure the simulation holds `need` of `item`, planning the
+ * producing chain deepest-first when it falls short. Producer
+ * fallback rolls the attempt's simulation back whole — a
+ * failed producer leaves no trace in the plan.
+ */
+function planEnsure(
+  item: ItemId,
+  need: number,
+  state: PlanState,
+  ctx: ChainContext,
+  path: ItemId[],
+): PlanState {
+  if (state.sim.count(item) >= need) return state;
+  if (path.includes(item)) {
+    throw new Error(
+      `Cannot craft prerequisites: a recipe cycle runs ` +
+        `through ${chainItemName(item)}.`,
+    );
+  }
+  const producers = chainProducersFor(item);
+  const have = state.sim.count(item);
+  if (producers.length === 0) {
+    throw new Error(
+      `Cannot craft prerequisites: no recipe makes ` +
+        `${chainItemName(item)}, and the pack holds ${have} ` +
+        `of the ${need} needed.`,
+    );
+  }
+  let firstError: Error | null = null;
+  for (const producer of producers) {
+    let attempt: PlanState = { sim: state.sim.clone(), batches: [] };
+    try {
+      const batches = Math.ceil((need - have) / producer.output.quantity);
+      for (let b = 0; b < batches; b++) {
+        attempt = planProducerBatch(producer, attempt, ctx, [
+          ...path,
+          item,
+        ]);
+      }
+      return {
+        sim: attempt.sim,
+        batches: [...state.batches, ...attempt.batches],
+      };
+    } catch (err) {
+      if (firstError === null) {
+        firstError = err instanceof Error ? err : new Error(String(err));
+      }
+    }
+  }
+  throw firstError ?? new Error('Cannot craft prerequisites.');
+}
+
+/**
+ * Craft the missing prerequisites of ONE ingredient of the
+ * open recipe (see the section header). `item` must be an
+ * ingredient of `recipe`; the amount crafted covers the
+ * recipe's stated need minus what the pack already holds.
+ * Returns the steps run (deepest first) and the total made;
+ * an already-satisfied ingredient returns empty steps.
+ * Throws — consuming nothing — when the chain cannot
+ * complete (the planning refusal names the blocker).
+ */
+export function executeCraftChain(
+  recipe: Recipe,
+  item: ItemId,
+  inventory: PersonalInventory,
+  station: StationInput = null,
+  hunger: HungerState | null = null,
+  nearCreek: boolean | null = null,
+): CraftChainResult {
+  const wanted = normalizeItemId(item);
+  const ingredient = recipe.ingredients.find((i) => i.item === wanted);
+  if (ingredient === undefined) {
+    throw new Error(
+      `Cannot craft prerequisites for ${recipe.name}: ` +
+        `${chainItemName(wanted)} is not one of its ingredients.`,
+    );
+  }
+  const before = inventory.count(wanted);
+  if (before >= ingredient.quantity) {
+    return { steps: [], crafted: { item: wanted, quantity: 0 } };
+  }
+  const ctx: ChainContext = { station, hunger, nearCreek };
+  const planned = planEnsure(
+    wanted,
+    ingredient.quantity,
+    { sim: inventory.clone(), batches: [] },
+    ctx,
+    [],
+  );
+  const steps: CraftChainStep[] = [];
+  for (const batchRecipe of planned.batches) {
+    executeCraft(batchRecipe, inventory, station, hunger, nearCreek);
+    const last = steps[steps.length - 1];
+    if (last !== undefined && last.recipeId === batchRecipe.id) {
+      last.batches += 1;
+      last.output.quantity += batchRecipe.output.quantity;
+    } else {
+      steps.push({
+        recipeId: batchRecipe.id,
+        name: batchRecipe.name,
+        batches: 1,
+        output: {
+          item: batchRecipe.output.item,
+          quantity: batchRecipe.output.quantity,
+        },
+      });
+    }
+  }
+  return {
+    steps,
+    crafted: { item: wanted, quantity: inventory.count(wanted) - before },
+  };
+}
