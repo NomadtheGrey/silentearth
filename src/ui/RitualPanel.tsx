@@ -43,6 +43,16 @@
  *   pattern. Acts take the panel's first digit badges
  *   (render order), ahead of the kind/offer rows — the
  *   shell's digit dispatch reads the same order.
+ * - THE FAMILIAR'S RITE (Build 2, 2026-10-31): an
+ *   optional acts section BELOW the staging content —
+ *   one guarded act per bonded animal (raise / step
+ *   down / raise-in-place), composed by the shell from
+ *   the companion records and passed only at
+ *   altar-grade sites. A press does not perform the
+ *   rite: the shell guards it with its confirm first
+ *   (the animal is named there). Rite buttons take no
+ *   digit badges in v1 — the dispatch order above is
+ *   unchanged.
  *
  * Touch + desktop share this panel exactly (parity); all
  * action buttons are 44 px tall, the touch minimum.
@@ -66,6 +76,18 @@ export interface RitualKindOption {
 
 /** One site act the shell offers at this site. */
 export interface RitualSiteAct {
+  id: string;
+  label: string;
+}
+
+/**
+ * One rite act the shell offers at an altar-grade site
+ * (Build 2): id is '<act>:<creatureId>' with act in
+ * elevate | relinquish | supersede; the label names
+ * the animal. The press is a REQUEST — the shell
+ * guards it with a confirm before anything is done.
+ */
+export interface RitualRiteAct {
   id: string;
   label: string;
 }
@@ -106,6 +128,11 @@ export interface RitualPanelProps {
    *  empty/absent = no acts section). */
   siteActs?: RitualSiteAct[];
   onSiteAct?: (id: string) => void;
+  /** The familiar's rite acts (shell-composed from the
+   *  companion records; passed only at altar-grade
+   *  sites; empty/absent = no rite section). */
+  riteActs?: RitualRiteAct[];
+  onRiteAct?: (id: string) => void;
   onStageBone: (kind: string) => void;
   onGiveOffering: (item: string) => void;
   onSpeakName: () => void;
@@ -131,6 +158,8 @@ export function RitualPanel({
   note,
   siteActs,
   onSiteAct,
+  riteActs,
+  onRiteAct,
   onStageBone,
   onGiveOffering,
   onSpeakName,
@@ -305,6 +334,28 @@ export function RitualPanel({
           ) : null}
         </div>
       )}
+      {riteActs && riteActs.length > 0 && onRiteAct ? (
+        <div className="mt-3 border-t border-moss-deep pt-2">
+          <p className={'text-xs font-semibold uppercase tracking-wide ' + t.muted}>
+            The familiar's rite
+          </p>
+          <div className="mt-1 flex flex-col gap-1">
+            {riteActs.map((act) => (
+              <button
+                key={act.id}
+                type="button"
+                onClick={() => onRiteAct(act.id)}
+                onTouchStart={(e) => {
+                  e.stopPropagation();
+                }}
+                className={'min-h-[44px] rounded px-3 py-2 text-left text-sm ' + t.button}
+              >
+                {act.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 }

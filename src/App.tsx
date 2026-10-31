@@ -1657,8 +1657,10 @@ import {
   comeHere as runtimeComeHere,
   makeCompanionInstance,
   restoreActor,
+  setMovementMode,
   setStance as runtimeSetStance,
 } from './game/companionRuntime';
+import { CAT_ID, setCatBond } from './game/catRuntime';
 import {
   collectTrapCatch,
   catchItemFor,
@@ -4726,6 +4728,13 @@ export default function App() {
         seatX,
         seatZ,
       );
+      // A saved familiar restores as 'trail' and is
+      // re-flipped from the record here (Build 2,
+      // Piece 1 — Background's restore contract: the
+      // record is the truth, the flip is only motion).
+      if (record.bond === 'familiar') {
+        setMovementMode(record.creatureId, 'settleDart');
+      }
     }
     // FIRST-CHARM BOOT GRANT (outright, tier 1,
     // GRANT-TO-LIST since Systems 9e9a9dd): runs
@@ -5583,6 +5592,16 @@ export default function App() {
   // yields while it is open (single Esc path).
   const [pendingRemoveTarget, setPendingRemoveTarget] =
     useState<HarvestTarget | null>(null);
+  // THE FAMILIAR'S RITE (Build 2, Piece 1): a rite act
+  // pressed at an altar-grade seat waits here for its
+  // confirm — the act, the animal, and the PRESS-TIME
+  // grade (the seat's grade when she asked; Systems
+  // re-checks it at execution). Null = no rite pending.
+  const [pendingRite, setPendingRite] = useState<{
+    act: 'elevate' | 'relinquish' | 'supersede';
+    creatureId: string;
+    grade: number;
+  } | null>(null);
 
   const executeCraftNow = (recipeId: string) => {
     const recipe = RECIPES.find((candidate) => candidate.id === recipeId);
@@ -6121,6 +6140,13 @@ export default function App() {
   const boneDisplayFor = (kind: string): string =>
     `Primal Bone - ${kind.replace(/-/g, ' ')}`;
 
+  // Companion kind label: the capitalized kind (the
+  // AnimalTag precedent — no name table invented). One
+  // helper: the panel rows and the rite's copy read the
+  // same spelling.
+  const companionKindLabel = (kind: string): string =>
+    kind.length > 0 ? kind.charAt(0).toUpperCase() + kind.slice(1) : kind;
+
   // Charm-list rows for the examination panel (charm-list
   // build, Systems 9e9a9dd): listCharms is the examination
   // contract — kind + tier + note in awakening order;
@@ -6137,10 +6163,7 @@ export default function App() {
   const hasBondedCompanion = bondedCompanions.length > 0;
   const companionRows = bondedCompanions.map((record) => ({
     creatureId: record.creatureId,
-    kindLabel:
-      record.kind.length > 0
-        ? record.kind.charAt(0).toUpperCase() + record.kind.slice(1)
-        : record.kind,
+    kindLabel: companionKindLabel(record.kind),
     bond: record.bond as 'companion' | 'familiar',
     stance: record.stance,
     isCat: record.kind === 'cat',
@@ -6794,6 +6817,141 @@ export default function App() {
     refreshInventory();
     saveNow();
     refreshRitual();
+  };
+
+  // THE FAMILIAR'S RITE — PRESS + CONFIRM (Build 2,
+  // Piece 1). A press only ASKS: the pending rite waits
+  // for the Popup confirm (which names the animal, and
+  // for supersede names the displacement too). No
+  // presence gate in v1 (DEV ruling, 2026-10-31): she
+  // is the celebrant — staging already works the same
+  // way from her pack; Adam's playtest rules it later.
+  const handleRiteAct = (actId: string, grade: number | null) => {
+    const split = actId.indexOf(':');
+    if (split < 0) return;
+    const act = actId.slice(0, split);
+    const creatureId = actId.slice(split + 1);
+    if (act !== 'elevate' && act !== 'relinquish' && act !== 'supersede') {
+      return;
+    }
+    if (grade === null || grade < 2) {
+      // The seats never pass rows below grade; this is
+      // the backstop voice if one somehow speaks.
+      setRitualNote(RITUAL_ALTAR_REFUSAL);
+      return;
+    }
+    setPendingRite({ act, creatureId, grade });
+  };
+
+  // The engine arms of a landed bond change: the cat
+  // rides its own runtime's bond level; every other
+  // animal rides the registry's movement model (the
+  // familiar's settle-and-dart cycle vs the companion's
+  // trail). The record is the truth; these are only
+  // its motion and light.
+  const applyBondEngineArms = (
+    creatureId: string,
+    level: 'familiar' | 'companion',
+  ) => {
+    const record = companionStateRef.current
+      .snapshot()
+      .find((r) => r.creatureId === creatureId);
+    if (!record) return;
+    if (record.kind === 'cat') {
+      setCatBond(level === 'familiar' ? 'familiar' : 'attending');
+    } else {
+      setMovementMode(
+        creatureId,
+        level === 'familiar' ? 'settleDart' : 'trail',
+      );
+    }
+  };
+
+  // Rite refusal voices (all DRAFT, Adam's pin pass):
+  // one honest line per code, spoken through the
+  // ritual note like every altar refusal.
+  const riteRefusalNote = (
+    code: string,
+    targetKind: string,
+    standingKind?: string,
+  ): string => {
+    switch (code) {
+      case 'ground':
+        return RITUAL_ALTAR_REFUSAL;
+      case 'one-standing':
+        return `${standingKind ?? 'Another'} stands as your familiar — let them step down, or raise the ${targetKind} in their place.`;
+      case 'already-familiar':
+        return `The ${targetKind} already stands as your familiar.`;
+      case 'not-familiar':
+        return `The ${targetKind} does not stand as your familiar.`;
+      case 'no-standing':
+        return `No familiar stands — the ${targetKind} can simply be raised.`;
+      default:
+        return 'The rite wants a companion.';
+    }
+  };
+
+  const confirmRite = () => {
+    const rite = pendingRite;
+    setPendingRite(null);
+    if (!rite) return;
+    const state = companionStateRef.current;
+    const kindOf = (id: string): string => {
+      const record = state.snapshot().find((r) => r.creatureId === id);
+      return record ? companionKindLabel(record.kind) : 'animal';
+    };
+    const targetKind = kindOf(rite.creatureId);
+    if (rite.act === 'elevate') {
+      const result = state.elevate(rite.creatureId, rite.grade);
+      if (result.ok === false) {
+        setRitualNote(
+          riteRefusalNote(
+            result.code,
+            targetKind,
+            result.code === 'one-standing' && result.standing
+              ? kindOf(result.standing)
+              : undefined,
+          ),
+        );
+        return;
+      }
+      applyBondEngineArms(rite.creatureId, 'familiar');
+      bus.emit('familiar:elevated', { id: rite.creatureId });
+      setRitualNote(`The ${targetKind} stands as your familiar now.`);
+    } else if (rite.act === 'relinquish') {
+      const result = state.relinquish(rite.creatureId, rite.grade);
+      if (result.ok === false) {
+        setRitualNote(riteRefusalNote(result.code, targetKind));
+        return;
+      }
+      applyBondEngineArms(rite.creatureId, 'companion');
+      bus.emit('familiar:relinquished', { id: rite.creatureId });
+      setRitualNote(
+        `The ${targetKind} steps down — still your companion, still your friend.`,
+      );
+    } else {
+      const standingBefore = state.familiar();
+      const result = state.supersede(rite.creatureId, rite.grade);
+      if (result.ok === false) {
+        setRitualNote(riteRefusalNote(result.code, targetKind));
+        return;
+      }
+      if (standingBefore) {
+        applyBondEngineArms(standingBefore.creatureId, 'companion');
+      }
+      applyBondEngineArms(rite.creatureId, 'familiar');
+      bus.emit('familiar:superseded', {
+        id: rite.creatureId,
+        displaced: standingBefore?.creatureId ?? '',
+      });
+      setRitualNote(
+        standingBefore
+          ? `The ${targetKind} rises; the ${kindOf(standingBefore.creatureId)} steps down.`
+          : `The ${targetKind} stands as your familiar now.`,
+      );
+    }
+    setCompanionRecords(state.snapshot());
+    saveNow();
   };
 
   const handleGiveOffering = (
@@ -8861,6 +9019,50 @@ export default function App() {
     return acts;
   })();
 
+  // THE FAMILIAR'S RITE ROWS (Build 2, Piece 1): one
+  // guarded act per bonded animal, derived from the
+  // records — the standing familiar offers its step
+  // down; a companion offers its raising, shaped by
+  // whether the familiar's place stands empty (raise)
+  // or filled (raise in their place). The seats pass
+  // these only at altar-grade ground (grade 2); the
+  // confirm + Systems' transitions re-check everything
+  // at execution, so a row gone stale refuses honestly
+  // through the note.
+  const standingFamiliarRecord = bondedCompanions.find(
+    (record) => record.bond === 'familiar',
+  );
+  // The pending rite's render facts (Piece 1): the
+  // confirm names the animal from its live record —
+  // and, for supersede, the standing familiar it would
+  // displace.
+  const pendingRiteRecord =
+    pendingRite === null
+      ? undefined
+      : companionRecords.find(
+          (record) => record.creatureId === pendingRite.creatureId,
+        );
+  const riteActs: { id: string; label: string }[] = bondedCompanions.map(
+    (record) => {
+      const label = companionKindLabel(record.kind);
+      if (record.bond === 'familiar') {
+        return {
+          id: `relinquish:${record.creatureId}`,
+          label: `Let the ${label} step down`,
+        };
+      }
+      return standingFamiliarRecord
+        ? {
+            id: `supersede:${record.creatureId}`,
+            label: `Raise the ${label} in the ${companionKindLabel(standingFamiliarRecord.kind)}'s place`,
+          }
+        : {
+            id: `elevate:${record.creatureId}`,
+            label: `Raise the ${label} as your familiar`,
+          };
+    },
+  );
+
   // The pile whose menu is open, with its anchor.
   // Live menu pile: the menu renders from piles state, not a
   // tap-time snapshot (see the state comment above).
@@ -8944,6 +9146,7 @@ export default function App() {
       introOpen ||
       pendingTrapRecipe ||
       pendingRemoveTarget !== null ||
+      pendingRite !== null ||
       paused
     ) {
       return null;
@@ -9013,6 +9216,7 @@ export default function App() {
       introOpen ||
       pendingTrapRecipe ||
       pendingRemoveTarget !== null ||
+      pendingRite !== null ||
       paused
     ) {
       return null;
@@ -9095,6 +9299,7 @@ export default function App() {
         introOpen ||
         pendingTrapRecipe ||
         pendingRemoveTarget !== null ||
+        pendingRite !== null ||
         leaveConfirmOpen
       ) {
         return;
@@ -9154,6 +9359,7 @@ export default function App() {
     introOpen,
     pendingTrapRecipe,
     pendingRemoveTarget,
+    pendingRite,
     placement,
     homeMenuOpen,
     selectedPileId,
@@ -9311,6 +9517,7 @@ export default function App() {
     const dialogUp =
       pendingTrapRecipeId !== null ||
       pendingRemoveTarget !== null ||
+      pendingRite !== null ||
       leaveConfirmOpen ||
       cloudPendingBring !== null ||
       cloudPendingRemove !== null ||
@@ -9373,6 +9580,7 @@ export default function App() {
     craftContextSiteId,
     pendingTrapRecipeId,
     pendingRemoveTarget,
+    pendingRite,
     leaveConfirmOpen,
     cloudPendingBring,
     cloudPendingRemove,
@@ -9425,6 +9633,7 @@ export default function App() {
     introOpen,
     pendingTrapRecipe,
     pendingRemoveTarget,
+    pendingRite,
     placement,
     homeMenuOpen,
     selectedPileId,
@@ -10315,6 +10524,7 @@ export default function App() {
       selectedFireId !== null ||
       selectedSiteId !== null ||
       pendingRemoveTarget !== null ||
+      pendingRite !== null ||
       pendingTrapRecipe !== null ||
       cloudPendingBring !== null ||
       cloudPendingRemove !== null ||
@@ -10338,6 +10548,7 @@ export default function App() {
     selectedFireId,
     selectedSiteId,
     pendingRemoveTarget,
+    pendingRite,
     pendingTrapRecipe,
     cloudPendingBring,
     cloudPendingRemove,
@@ -10384,6 +10595,7 @@ export default function App() {
         introOpen ||
         pendingTrapRecipe ||
         pendingRemoveTarget !== null ||
+        pendingRite !== null ||
         firstRunDialogOpen
       ) {
         return;
@@ -10496,6 +10708,7 @@ export default function App() {
     introOpen,
     pendingTrapRecipe,
     pendingRemoveTarget,
+    pendingRite,
     inventoryOpen,
     craftingOpen,
     charmsOpen,
@@ -10552,6 +10765,7 @@ export default function App() {
         introOpen ||
         pendingTrapRecipe ||
         pendingRemoveTarget !== null ||
+        pendingRite !== null ||
         craftingOpen ||
         charmsOpen ||
         companionsOpen
@@ -10581,6 +10795,7 @@ export default function App() {
     introOpen,
     pendingTrapRecipe,
     pendingRemoveTarget,
+    pendingRite,
     inventoryOpen,
     craftingOpen,
     charmsOpen,
@@ -11578,6 +11793,8 @@ export default function App() {
               onSiteAct={(actId) =>
                 selectedSiteId !== null && handleSiteAct(selectedSiteId, actId)
               }
+              riteActs={selectedSiteGrade === 2 ? riteActs : undefined}
+              onRiteAct={(actId) => handleRiteAct(actId, selectedSiteGrade)}
               showKeyHints={!isTouch}
               onStageBone={(kind) =>
                 selectedSiteId !== null &&
@@ -12270,6 +12487,8 @@ export default function App() {
                   foodOptions={selectedSiteFoodOptions}
                   note={ritualNote}
                   siteActs={undefined}
+                  riteActs={contextSiteGrade === 2 ? riteActs : undefined}
+                  onRiteAct={(actId) => handleRiteAct(actId, contextSiteGrade)}
                   showKeyHints={false}
                   onStageBone={(kind) =>
                     handleStageBone(craftContextSiteId, kind)
@@ -12504,6 +12723,66 @@ export default function App() {
             </button>
           </div>
         </div>
+      </Popup>
+
+      {/* The familiar's rite confirm (Build 2, Piece 1):
+        Popup, the one confirm shell — the guard the
+        rite's verbs carry. It names the animal;
+        supersede names the displacement too. Enter
+        confirms (the shell's onConfirm), Esc / backdrop
+        / Cancel perform nothing. Copy DRAFT. */}
+      <Popup theme={lookThemes.dialog}
+        open={pendingRite !== null}
+        title={
+          pendingRite === null || pendingRiteRecord === undefined
+            ? 'The rite'
+            : pendingRite.act === 'elevate'
+              ? `Raise the ${companionKindLabel(pendingRiteRecord.kind)}?`
+              : pendingRite.act === 'relinquish'
+                ? `Let the ${companionKindLabel(pendingRiteRecord.kind)} step down?`
+                : `Raise the ${companionKindLabel(pendingRiteRecord.kind)} in the ${standingFamiliarRecord ? companionKindLabel(standingFamiliarRecord.kind) : 'familiar'}'s place?`
+        }
+        onClose={() => setPendingRite(null)}
+        onConfirm={confirmRite}
+        comfortable={isTouch}
+      >
+        {pendingRite !== null && pendingRiteRecord !== undefined ? (
+          <div className="flex flex-col gap-3 text-sm">
+            <p>
+              {pendingRite.act === 'elevate'
+                ? `The rite binds the ${companionKindLabel(pendingRiteRecord.kind)} as your familiar — the one who stands closest. What the altar makes, only the altar can unmake.`
+                : pendingRite.act === 'relinquish'
+                  ? `The ${companionKindLabel(pendingRiteRecord.kind)} stays your companion and your friend — only the familiar's place empties, and the glow dies.`
+                  : `The ${standingFamiliarRecord ? companionKindLabel(standingFamiliarRecord.kind) : 'familiar'} steps down to companion, and the ${companionKindLabel(pendingRiteRecord.kind)} rises as your familiar — one act, both or neither.`}
+            </p>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                className={
+                  'rounded bg-moss-deep hover:bg-moss px-3 py-1 text-sm text-stone-100 ' +
+                  (isTouch ? 'min-h-[44px] px-3 py-2' : '')
+                }
+                onClick={confirmRite}
+              >
+                {pendingRite.act === 'elevate'
+                  ? 'Raise as familiar'
+                  : pendingRite.act === 'relinquish'
+                    ? 'Step down'
+                    : 'Raise in their place'}
+              </button>
+              <button
+                type="button"
+                className={
+                  'rounded bg-moss-deep hover:bg-moss px-3 py-1 text-sm text-stone-100 ' +
+                  (isTouch ? 'min-h-[44px] px-3 py-2' : '')
+                }
+                onClick={() => setPendingRite(null)}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : null}
       </Popup>
 
       {/* Leave confirm (back-button trap, 2026-10-29):

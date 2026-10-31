@@ -487,6 +487,16 @@ export interface EventMap {
   'companion:departed': { id: string };
   'companion:feral-snap': { id: string };
   'companion:stance': { id: string; stance: 'stay' | 'follow' };
+  /**
+   * The familiar's rite (Build 2; the SHELL emits on
+   * Systems' bond transitions, after the transition
+   * lands — the fact on the bus, not a grant channel).
+   * Supersede carries the displaced familiar's id: the
+   * step-down is half the act.
+   */
+  'familiar:elevated': { id: string };
+  'familiar:relinquished': { id: string };
+  'familiar:superseded': { id: string; displaced: string };
   'animal:snatch-caught': { id: string; kind: string; x: number; z: number };
   /**
    * The cat (Build 2; catRuntime emits, the shell
