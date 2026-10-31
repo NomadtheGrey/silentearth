@@ -142,6 +142,23 @@
  * renders even with zero harvest targets (a hive
  * nearby, no plants) — the empty-targets null return
  * yields only when there is no trap and no hive.
+ *
+ * LOOM ROW (Adam, 2026-10-31 — "the Loom doesn't have a
+ * Loom pill, or an action associated with it"): when the
+ * caller passes loom, one loom button renders LAST in
+ * the column (after the hive row), with the caller's
+ * label ('Weave') and no KindGlyph — plain text, same
+ * button look as its siblings. Null loom = no row (the
+ * caller passes null unless the loom IS the current
+ * target — the one-target rule its siblings live by).
+ * A press reports the loom id through onWeave; the act
+ * itself (open the crafting dialog with the loom as
+ * station — the very act E performs at a faced loom) is
+ * the caller's job. Before this row the loom had NO
+ * desktop presentation at all: the WEAVE verb existed
+ * only as the touch USE label, and the column would
+ * re-seat itself above a nearby loom (stationAnchor)
+ * and then say nothing about it.
  */
 
 import { Fragment, type ReactNode } from 'react';
@@ -222,8 +239,17 @@ export interface ProximityHarvestButtonsProps {
   /** Called with the hive coords for a hive-row press. */
   onHarvestHive?: (x: number, z: number) => void;
   /**
+   * The faced loom, caller-derived (null = no row).
+   * Renders LAST in the column (after the hive row),
+   * even with zero harvest targets. The id is the
+   * placed loom's identity.
+   */
+  loom?: { id: string; label: string } | null;
+  /** Called with the loom id for a loom-row press. */
+  onWeave?: (id: string) => void;
+  /**
    * Show PC key badges on the keyed rows (trap row "E",
-   * hive row "E" — USE dispatches to the faced target's
+   * hive row "E", loom row "E" — USE dispatches to the faced target's
    * common action, Adam 2026-10-29). Caller passes
    * !isTouch (the PausedIndicator showKeyHint
    * precedent): hint only, handlers and sizing
@@ -247,11 +273,13 @@ export function ProximityHarvestButtons({
   onCollectTrap,
   hive,
   onHarvestHive,
+  loom,
+  onWeave,
   showKeyHints = false,
   theme = 'mire',
 }: ProximityHarvestButtonsProps) {
   const t = UI_THEMES[theme];
-  if (targets.length === 0 && !trap && !hive) {
+  if (targets.length === 0 && !trap && !hive && !loom) {
     return null;
   }
   // Dirt-row suppression (Adam, 2026-10-28): the ground row
@@ -368,6 +396,27 @@ export function ProximityHarvestButtons({
           }
         >
           <span className="font-medium">{hive.label}</span>
+          {showKeyHints ? (
+            <span
+              aria-hidden="true"
+              className={KEY_BADGE_CLASS}
+            >
+              E
+            </span>
+          ) : null}
+        </button>
+      ) : null}
+      {loom && onWeave ? (
+        <button
+          type="button"
+          onClick={() => onWeave(loom.id)}
+          aria-label={loom.label}
+          className={
+            'flex min-h-[44px] items-center gap-2 rounded-full px-3 py-1.5 text-sm shadow-lg transition-transform hover:scale-105 ' +
+            t.panel
+          }
+        >
+          <span className="font-medium">{loom.label}</span>
           {showKeyHints ? (
             <span
               aria-hidden="true"

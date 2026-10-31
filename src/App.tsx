@@ -9250,10 +9250,14 @@ export default function App() {
         break;
       case 'loom':
         // The loom's door is its pill: facing it and
-        // pressing USE opens the Crafting panel, which
-        // the feed (same winner) has already filtered
-        // to loom + hand recipes. No selected-loom
-        // state — the panel is the whole interaction.
+        // pressing USE opens the Crafting panel, and the
+        // station feed (same winner) counts the loom, so
+        // its recipes read craftable here — since the
+        // station-rows landing nothing is filtered away;
+        // every recipe shows and the loom's stop saying
+        // 'Needs a loom.'. No selected-loom state — the
+        // panel is the whole interaction. The WEAVE row
+        // in the column fires this same act.
         openCraftingPanel();
         break;
       case 'cauldron':
@@ -10283,6 +10287,17 @@ export default function App() {
       : [];
   const presentedTrap = useWinner?.kind === 'trap' ? trapRowTrap : null;
   const presentedHive = useWinner?.kind === 'hive' ? hiveRowHive : null;
+  // THE LOOM'S PILL (Adam, 2026-10-31): the loom winner
+  // presents its WEAVE row — the trap/hive shape — so a
+  // faced loom finally shows its action on desktop too
+  // (before this, the verb lived only in the touch USE
+  // label and the path was folklore). The label is the
+  // verb alone; the column seats above the loom itself
+  // (stationAnchor), so the object is named by place.
+  const presentedLoom =
+    useWinner?.kind === 'loom'
+      ? { id: useWinner.id, label: 'Weave' }
+      : null;
 
   // DESKTOP PILE PICKUP (see the header): the mouse twin
   // of R's pile second — shown only when the faced
@@ -10763,6 +10778,8 @@ export default function App() {
           onCollectTrap={handleCollectTrap}
           hive={presentedHive}
           onHarvestHive={handleHarvestHive}
+          loom={presentedLoom}
+          onWeave={() => openCraftingPanel()}
           showKeyHints={!isTouch}
           lookNode={
             !LOOK_PARKED && lookTarget ? (
