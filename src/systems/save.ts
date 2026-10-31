@@ -176,6 +176,7 @@ import type { SavedNameLook } from './name-sight';
 import type { SavedRitualStaging } from './rituals';
 import type { SavedCompanion } from './companions';
 import type { SavedMarkProgress } from './fragments';
+import type { SavedDiscovery } from './discovery';
 import { FIRST_CHARM_ITEM, FIRST_CHARM_KIND } from './charms';
 import type { SavedAwakening } from './charms';
 import type { SavedQuestFlags } from './quests';
@@ -555,6 +556,9 @@ export interface SaveData {
   /** Fragment progress by mark (begun marks only);
    * [] for old saves. */
   fragments: SavedMarkProgress[];
+  /** Discovery facts (the Grove's finding day);
+   * undiscovered for old saves. */
+  discovery: SavedDiscovery;
   /** Placed tents (portable shelters); [] for old saves. */
   tents: SavedTent[];
   /** Partial-true-name look counts; [] for old saves. */
@@ -726,6 +730,12 @@ export interface SaveDraft {
    * (no mark has been begun).
    */
   fragments?: readonly SavedMarkProgress[];
+  /**
+   * Discovery facts, from DiscoveryState.snapshot()
+   * at save time. OPTIONAL, same pattern; absent =
+   * nothing discovered.
+   */
+  discovery?: SavedDiscovery;
   /**
    * Placed tents from the placed-tent source
    * (Background's entity snapshot, once it lands).
@@ -1020,6 +1030,10 @@ export function serializeSave(draft: SaveDraft): SaveData {
       ...progress,
       copies: progress.copies.map((copy) => ({ ...copy })),
     })),
+    // Discovery: written AS-IS (the day or null).
+    discovery: {
+      groveDiscoveredDay: draft.discovery?.groveDiscoveredDay ?? null,
+    },
     // Tents: written AS-IS (positions verbatim, id when
     // the entity provides one — no filtering, no
     // normalization). Invalid entries are restore()'s
@@ -1646,6 +1660,18 @@ export function deserializeSave(value: unknown): SaveData | null {
         });
       }
     }
+    // Discovery is optional on read: an old v1 save
+    // without it loads undiscovered. The record is a
+    // single day — a finite number floors, anything
+    // else reads null (not found).
+    const discovery: SavedDiscovery = {
+      groveDiscoveredDay:
+        isRecord(value.discovery) &&
+        typeof value.discovery.groveDiscoveredDay === 'number' &&
+        Number.isFinite(value.discovery.groveDiscoveredDay)
+          ? Math.floor(value.discovery.groveDiscoveredDay)
+          : null,
+    };
     // Tents are optional on read, same leniency as
     // altars: an old v1 save without them loads with
     // tents: []. Entries pass through UNVALIDATED —
@@ -1806,6 +1832,7 @@ export function deserializeSave(value: unknown): SaveData | null {
       acquisitionOrder,
       companions,
       fragments,
+      discovery,
       tents,
       nameSight,
       stagings,
