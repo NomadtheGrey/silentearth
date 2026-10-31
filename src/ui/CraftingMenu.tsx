@@ -30,6 +30,23 @@
  * without poking around. The header's 'Craftable here'
  * checkbox (shown only when some row is unmet) filters
  * those rows out on the player's word; default shows them.
+ *
+ * SEARCH (Adam, 2026-10-31): a filter-as-you-type field in
+ * the header narrows the rows by name — display-only: the
+ * sections, their counts, and every row's actions are the
+ * caller's, unchanged; the query only hides non-matches.
+ * While a query stands, sections render EXPANDED (search
+ * is a find-mode; a match never hides inside a collapsed
+ * section). The query is menu-local presentation state —
+ * the menu unmounts on close, so it clears itself. Typing
+ * is safe because every key listener in the game already
+ * yields to text entry (the seed-field precedent) — the
+ * field needs no guard of its own. Station-name matching
+ * ('loom' surfacing loom-made rows) is Adam's open call:
+ * the recipe carries no station-name field (its want is
+ * prose in availabilityNote), so if he approves it, the
+ * caller supplies a station name per recipe and the one
+ * match function below grows a second haystack.
  */
 
 import { useState } from 'react';
@@ -156,6 +173,15 @@ export function CraftingMenu({
     setStationFilterOnly(on);
     saveCraftStationFilter(on);
   };
+  // SEARCH state (see the header): the raw field text;
+  // `searching` is its trimmed, non-empty reading, and
+  // the needle is what rows match against. Menu-local —
+  // nothing persists, nothing is reported upward.
+  const [query, setQuery] = useState('');
+  const needle = query.trim().toLowerCase();
+  const searching = needle.length > 0;
+  const matchesQuery = (recipe: CraftingRecipe): boolean =>
+    !searching || recipe.name.toLowerCase().includes(needle);
   const closeBtn = comfortable
     ? 'rounded px-3 py-2 text-sm min-h-[44px] ' + t.button
     : 'rounded px-2 py-1 text-sm ' + t.button;
@@ -277,7 +303,7 @@ export function CraftingMenu({
       : recipes
   ).some((recipe) => recipe.stationUnmet);
   const keepRecipe = (recipe: CraftingRecipe) =>
-    !stationFilterOnly || !recipe.stationUnmet;
+    (!stationFilterOnly || !recipe.stationUnmet) && matchesQuery(recipe);
   const shownSections = (sections ?? [])
     .map((section) => ({
       ...section,
@@ -317,34 +343,61 @@ export function CraftingMenu({
         <p className={'mb-2 text-sm ' + t.muted}>{stationNote}</p>
       ) : null}
 
-      {anyStationUnmet ? (
-        <label
-          className={
-            'mb-2 flex cursor-pointer items-center gap-2 text-sm ' +
-            t.muted
-          }
-        >
-          <input
-            type="checkbox"
-            checked={stationFilterOnly}
-            onChange={(e) => handleStationFilterChange(e.target.checked)}
-            className="h-5 w-5 shrink-0"
-          />
-          Craftable here
-        </label>
+      {/* Search field + the 'Craftable here' filter share
+          one header row (search, 2026-10-31): the field
+          grows, the checkbox keeps its conditional seat at
+          the row's right. The field renders only when
+          there is anything to search. */}
+      {recipes.length > 0 || anyStationUnmet ? (
+        <div className="mb-2 flex flex-wrap items-center gap-2">
+          {recipes.length > 0 ? (
+            <input
+              type="text"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search recipes"
+              aria-label="Search recipes"
+              className={
+                'min-w-[10rem] flex-1 rounded bg-stone-800/60 px-2 py-1 text-sm text-stone-100 placeholder:text-stone-400 ' +
+                (comfortable ? 'min-h-[44px]' : '')
+              }
+            />
+          ) : null}
+          {anyStationUnmet ? (
+            <label
+              className={
+                'flex cursor-pointer items-center gap-2 text-sm ' + t.muted
+              }
+            >
+              <input
+                type="checkbox"
+                checked={stationFilterOnly}
+                onChange={(e) => handleStationFilterChange(e.target.checked)}
+                className="h-5 w-5 shrink-0"
+              />
+              Craftable here
+            </label>
+          ) : null}
+        </div>
       ) : null}
 
       <div className="min-h-0 overflow-y-scroll pr-1 [scrollbar-color:#78716c_#1c1917] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-stone-500 [&::-webkit-scrollbar-track]:bg-stone-900">
       {isEmpty ? (
         <p className={'italic ' + t.muted}>
-          {stationFilterOnly && anyStationUnmet
-            ? 'Nothing here is craftable at hand — every recipe wants a station elsewhere.'
-            : 'No recipes yet — recipes arrive from the Systems lane.'}
+          {searching
+            ? `Nothing matches "${query.trim()}".`
+            : stationFilterOnly && anyStationUnmet
+              ? 'Nothing here is craftable at hand — every recipe wants a station elsewhere.'
+              : 'No recipes yet — recipes arrive from the Systems lane.'}
         </p>
       ) : sections !== undefined ? (
         <div className="flex flex-col gap-4">
           {shownSections.map((section) => {
-            const open = openSection === section.title;
+            // SEARCH find-mode: a standing query opens every
+            // section — a match never hides inside a collapsed
+            // one. The accordion state itself is untouched and
+            // resumes when the query clears.
+            const open = searching || openSection === section.title;
             const craftable = section.recipes.filter(
               (recipe) => recipe.canCraft,
             ).length;
