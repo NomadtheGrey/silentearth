@@ -453,6 +453,34 @@ export interface EventMap {
   'dimension:entered': { key: string; mouthId: string };
   'dimension:exited': { key: string };
   'dimension:layer': { key: string; layer: number };
+  /**
+   * Companions (Adam 2026-10-31, Build 1 — the friendship
+   * build; the familiar's rite is Build 2). Ids are the
+   * stable animal ids animals.ts mints at spawn
+   * (`animal:<cx>,<cz>:<n>`) — the same key Systems'
+   * SaveData.companions records carry.
+   * 'companion:bonded' — Systems emits when trust completes
+   * into a bond; the companion runtime promotes the ambient
+   * individual into a persistent actor on hearing it.
+   * 'companion:released' — the guarded Release landed
+   * (Systems or the shell emits); the runtime starts the
+   * departure leg. 'companion:departed' — the runtime emits
+   * when a departing actor dissolves past streaming
+   * distance; the goodbye is complete and un-meetable.
+   * 'companion:feral-snap' — Systems emits when feed()
+   * refuses a feral individual (typed code 'feral'); the
+   * engine answers with the snap: a lunge-and-bolt that
+   * never softens. 'companion:stance' — the runtime emits
+   * when an actor's stance changes, so Systems can persist
+   * it. 'animal:snatch-caught' — her hand took a fish (the
+   * hand-snatch, 2026-10-31); the grant listens here.
+   */
+  'companion:bonded': { id: string; kind: string };
+  'companion:released': { id: string };
+  'companion:departed': { id: string };
+  'companion:feral-snap': { id: string };
+  'companion:stance': { id: string; stance: 'stay' | 'follow' };
+  'animal:snatch-caught': { id: string; kind: string; x: number; z: number };
 }
 
 type Handler<E> = (payload: E) => void;

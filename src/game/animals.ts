@@ -176,6 +176,19 @@ export const MAX_PER_CHUNK = 3;
 export const BIOME_WEIGHT_MIN = 0.15;
 export const PERCH_HEIGHT_M = 2.0;
 export const WATER_Y = 0.05;
+/** Hand-snatch (Adam 2026-10-31: no rod ever, the weir is law — this is her hand). All DRAFT. */
+export const SNATCH_RANGE_M = 2.5;
+export const SNATCH_CHANCE = 0.35;
+/** A missed snatch spooks the target and every fish within this radius of it. */
+export const SPOOK_RADIUS_M = 6;
+/** How long a spooked fish holds its dart (seconds). */
+export const SPOOK_DURATION_S = 1.2;
+/** Burst speed multiplier while a spook-dart runs. */
+export const SPOOK_BURST_FACTOR = 3;
+/** Feral snap (Companions Build 1, DRAFT): the lunge phase's length and reach. */
+export const SNAP_LUNGE_S = 0.28;
+export const SNAP_LUNGE_SPEED_MPS = 5;
+export const SNAP_STOP_SHORT_M = 0.8;
 
 export interface AnimalPoint {
   x: number;
@@ -185,6 +198,16 @@ export interface AnimalPoint {
 export type AnimalMode = 'wander' | 'idle' | 'flee' | 'perched' | 'fly';
 
 export interface AnimalInstance {
+  /**
+   * Stable per-individual id, minted at spawn as
+   * `animal:<cx>,<cz>:<spawnIndex>`. The spawn is
+   * deterministic, so the id names the same individual across
+   * chunk reloads and save/load — the key Systems'
+   * companions.ts records and isFeral() reads (Companions
+   * Build 1, 2026-10-31). Ambient instances carry it unused
+   * until one is touched; promotion keeps the id.
+   */
+  id: string;
   kind: AnimalKind;
   x: number;
   z: number;
@@ -208,6 +231,22 @@ export interface AnimalInstance {
   perchY: number;
   /** Zigzag side flag — toggled on each flee re-target (zigzag kinds only). */
   fleeTurn: boolean;
+  /**
+   * Seconds of spook-dart remaining (the hand-snatch's
+   * failure, 2026-10-31): while > 0 the animal holds the
+   * dart target attemptSnatch set (its far anchor point)
+   * at burst speed and the ordinary flee re-target stands
+   * down. Zero for every unspooked animal.
+   */
+  spookT: number;
+  /**
+   * Seconds of feral-snap lunge remaining (Companions
+   * Build 1): while > 0 the animal lunges toward the snap
+   * target triggerSnap set (a point just short of her hand)
+   * at lunge speed; when the timer lapses the bolt fires —
+   * the spook-dart away. Zero for every unprovoked animal.
+   */
+  snapT: number;
   /** Water points (water kinds) / perch points (flying kinds) in this chunk. */
   anchors: AnimalPoint[];
 }
@@ -320,6 +359,7 @@ export function spawnAnimalsForChunk(input: SpawnAnimalsInput): AnimalInstance[]
     const kind = eligible[i];
     const def = ANIMAL_DEFS[kind];
     const base: AnimalInstance = {
+      id: `animal:${cx},${cz}:${i}`,
       kind,
       x: 0,
       z: 0,
@@ -338,6 +378,8 @@ export function spawnAnimalsForChunk(input: SpawnAnimalsInput): AnimalInstance[]
       timer: 1 + rng() * 3,
       perchY: 0,
       fleeTurn: false,
+      spookT: 0,
+      snapT: 0,
       anchors: [],
     };
     if (def.movement === 'water') {
@@ -425,7 +467,18 @@ export function updateAnimal(a: AnimalInstance, dt: number, input: AnimalUpdateI
   const dxP = a.x - input.playerX;
   const dzP = a.z - input.playerZ;
   const distP = Math.hypot(dxP, dzP);
-  if (distP < fleeRadius) {
+  // Spook-dart (hand-snatch failure): the dart target stands
+  // while the timer runs — the ordinary flee re-target below
+  // would overwrite it every frame and scatter the dart.
+  if (a.spookT > 0) a.spookT = Math.max(0, a.spookT - dt);
+  // Feral snap: the lunge target stands while its timer
+  // runs; when the lunge lapses, the bolt fires (the
+  // spook-dart away, same machinery as a missed snatch).
+  if (a.snapT > 0) {
+    a.snapT = Math.max(0, a.snapT - dt);
+    if (a.snapT <= 0) spookFish(a, input.playerX, input.playerZ);
+  }
+  if (distP < fleeRadius && !(a.spookT > 0) && !(a.snapT > 0)) {
     // Per-kind flee style (DRAFT values — see ANIMAL_DEFS).
     // Temperament still sets WHEN (the radius above); style sets HOW.
     if (def.flee === 'freeze') {
@@ -489,7 +542,10 @@ export function updateAnimal(a: AnimalInstance, dt: number, input: AnimalUpdateI
     }
   }
   if (a.mode === 'wander' || a.mode === 'fly' || a.mode === 'flee') {
-    const speed = a.mode === 'flee' ? FLEE_SPEED_MPS : WANDER_SPEED_MPS;
+    const speed = a.snapT > 0
+      ? SNAP_LUNGE_SPEED_MPS
+      : (a.mode === 'flee' ? FLEE_SPEED_MPS : WANDER_SPEED_MPS)
+        * (a.spookT > 0 ? SPOOK_BURST_FACTOR : 1);
     const dx = a.targetX - a.x;
     const dz = a.targetZ - a.z;
     const dist = Math.hypot(dx, dz);
@@ -522,7 +578,18 @@ export function updateAnimal(a: AnimalInstance, dt: number, input: AnimalUpdateI
     // Settled: height is the perch / ground / water line.
     a.y = def.movement === 'fly' ? a.perchY : a.y;
   }
-  // Animation phase + vertical offset (oscillation only, no rigs).
+  stepAnimalAnimation(a, dt, moving);
+}
+
+/**
+ * Animation phase + vertical offset (oscillation only, no
+ * rigs) — extracted from updateAnimal's tail so the companion
+ * runtime steps the same poses for promoted actors, which
+ * updateAnimal never touches (a companion does not flee its
+ * own person).
+ */
+export function stepAnimalAnimation(a: AnimalInstance, dt: number, moving: boolean): void {
+  const def = ANIMAL_DEFS[a.kind];
   a.phase += dt * (moving ? 6 : 2);
   a.wingPhase += dt * (a.flying ? 18 : 2);
   if (def.anim === 'hop') {
@@ -532,4 +599,139 @@ export function updateAnimal(a: AnimalInstance, dt: number, input: AnimalUpdateI
   } else {
     a.bob = 0.05 * Math.sin(a.phase);
   }
+}
+
+/**
+ * THE FERAL SNAP (Companions Build 1; DEV-reconciled feral
+ * design, 2026-10-31): a feral individual's answer to an
+ * offering. Arms the lunge: a target point SNAP_STOP_SHORT_M
+ * short of her hand — the snap lands on the OFFERING, never
+ * on her body (costs land on goods, not her) — at lunge
+ * speed; when the lunge timer lapses inside updateAnimal,
+ * the bolt fires (the spook-dart away). It never softens:
+ * the trigger carries no trust input, first offering or
+ * fiftieth, the answer is the same animal.
+ */
+export function triggerSnap(a: AnimalInstance, playerX: number, playerZ: number): void {
+  const dx = playerX - a.x;
+  const dz = playerZ - a.z;
+  const d = Math.hypot(dx, dz);
+  const reach = Math.max(0, d - SNAP_STOP_SHORT_M);
+  const ux = d > 0.001 ? dx / d : 1;
+  const uz = d > 0.001 ? dz / d : 0;
+  a.targetX = a.x + ux * reach;
+  a.targetZ = a.z + uz * reach;
+  a.targetY = a.y;
+  a.mode = 'flee';
+  a.flying = false;
+  a.snapT = SNAP_LUNGE_S;
+}
+
+export interface SnatchInput {
+  playerX: number;
+  playerZ: number;
+  /** Success probability (default SNATCH_CHANCE). */
+  chance?: number;
+  /** Injectable roll in [0, 1) for probes; default Math.random(). */
+  roll?: number;
+}
+
+export interface SnatchOutcome {
+  outcome: 'caught' | 'missed';
+  instance: AnimalInstance;
+}
+
+/** Set one fish darting: its far anchor point from the player, spook timer armed. */
+function spookFish(f: AnimalInstance, playerX: number, playerZ: number): void {
+  let tx = f.x + (f.x - playerX) * 4;
+  let tz = f.z + (f.z - playerZ) * 4;
+  let best = -1;
+  for (const p of f.anchors) {
+    const d = Math.hypot(p.x - playerX, p.z - playerZ);
+    if (d > best) {
+      best = d;
+      tx = p.x;
+      tz = p.z;
+    }
+  }
+  f.targetX = tx;
+  f.targetZ = tz;
+  f.targetY = WATER_Y;
+  f.mode = 'flee';
+  f.flying = false;
+  f.spookT = SPOOK_DURATION_S;
+}
+
+/**
+ * The snatch's TARGET: the NEAREST 'fish' instance within
+ * SNATCH_RANGE_M of her, or null when no fish is in reach
+ * (the press was not a snatch at all). A fish in reach of
+ * a wading / bank-side stance is a shallow fish by
+ * construction — deep-centre river fish are simply never
+ * in reach.
+ */
+export function pickSnatchTarget(
+  candidates: readonly AnimalInstance[],
+  playerX: number,
+  playerZ: number,
+): AnimalInstance | null {
+  let target: AnimalInstance | null = null;
+  let bestDist = Infinity;
+  for (const c of candidates) {
+    if (c.kind !== 'fish') continue;
+    const d = Math.hypot(c.x - playerX, c.z - playerZ);
+    if (d <= SNATCH_RANGE_M && d < bestDist) {
+      target = c;
+      bestDist = d;
+    }
+  }
+  return target;
+}
+
+/**
+ * The snatch's FAILURE made visible: the target and every
+ * fish within SPOOK_RADIUS_M of it spook — a dart along
+ * their own water-point chains (spookFish). Position is
+ * the cooldown: a spooked reach holds no target until the
+ * fish drift back, no timer gates anything.
+ */
+export function applySnatchSpook(
+  candidates: readonly AnimalInstance[],
+  target: AnimalInstance,
+  playerX: number,
+  playerZ: number,
+): void {
+  for (const c of candidates) {
+    if (c.kind !== 'fish') continue;
+    if (Math.hypot(c.x - target.x, c.z - target.z) <= SPOOK_RADIUS_M) {
+      spookFish(c, playerX, playerZ);
+    }
+  }
+}
+
+/**
+ * HER HAND-SNATCH at a faced fish in the shallows (Adam
+ * 2026-10-31: E at a faced fish, chance-gated, spook on
+ * failure; no rod ever — the weir stays the law for traps).
+ * The composed convenience over pickSnatchTarget +
+ * applySnatchSpook with this module's own chance — the
+ * LIVE game path composes differently: Systems'
+ * snatchFish owns the roll, the hunger gate, and the
+ * grant (its SNATCH_CHANCE 0.25 is the dial the shell
+ * plays; this module's 0.35 stands only for standalone
+ * callers, and the pin pass settles the number). On
+ * 'caught' the caller consumes the instance (renderer
+ * despawn).
+ */
+export function attemptSnatch(
+  candidates: readonly AnimalInstance[],
+  input: SnatchInput,
+): SnatchOutcome | null {
+  const target = pickSnatchTarget(candidates, input.playerX, input.playerZ);
+  if (!target) return null;
+  const chance = input.chance ?? SNATCH_CHANCE;
+  const roll = input.roll ?? Math.random();
+  if (roll < chance) return { outcome: 'caught', instance: target };
+  applySnatchSpook(candidates, target, input.playerX, input.playerZ);
+  return { outcome: 'missed', instance: target };
 }
