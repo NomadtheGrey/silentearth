@@ -13,9 +13,13 @@
 // DATA SOURCE: the consult determination (~/workspace/
 // silent-earth/docs/ritual-recipes-2026-10-27.md, local
 // doc — all DRAFT for Adam's pin pass). The set below is
-// that determination as code: 17 Waking recipes (every
+// that determination as code: 20 Waking recipes (every
 // determined kind EXCEPT shrew skull — the first charm is
-// given OUTRIGHT, no ritual; see charms.ts).
+// given OUTRIGHT, no ritual; see charms.ts). Muskrat,
+// opossum, and vole joined 2026-10-31 (Adam: "let's put
+// the bones in for those creatures") so the awakening
+// road — and the companion name-gate that reads it —
+// covers every feedable kind but squirrel.
 //
 // NOT IN recipes.ts — DELIBERATELY: RECIPES has no status
 // filter, so ritual recipes there would become craftable
@@ -221,9 +225,11 @@ export const RITUAL_RECIPES: readonly RitualRecipe[] = [
   recipe('mouse-spine', 'night'),
   recipe('raccoon-tooth', 'night'),
   recipe('groundhog-tooth', 'night'),
+  recipe('opossum-crest', 'night'),
   // TWILIGHT.
   recipe('fox-femur', 'dusk'),
   recipe('deer-antler-tip', 'dawn'),
+  recipe('muskrat-tail', 'dusk'),
   // MOON PHASE.
   recipe('wolf-tooth', 'full-moon'),
   // SKY-INDEPENDENT (no time line on display).
@@ -232,6 +238,7 @@ export const RITUAL_RECIPES: readonly RitualRecipe[] = [
   recipe('bear-claw', 'none'),
   recipe('rabbit-jaw', 'none'),
   recipe('beaver-incisor', 'none'),
+  recipe('vole-skull', 'none'),
 ];
 
 /** Find a Waking recipe by bone kind (undefined when none — e.g. shrew). */
