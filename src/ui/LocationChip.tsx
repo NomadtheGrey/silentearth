@@ -81,6 +81,11 @@ export function LocationChip({
   // and spoken position round to whole numbers, display
   // and aria together so they agree. Display-only — the
   // shell's position state keeps full precision.
+  // The pair prints RAW (x, z): Adam's compass pin
+  // (2026-10-30, reversing the 2026-10-28 pin) is
+  // Cartesian — East = +x, North = +z — so the raw
+  // pair is already north-positive and the zone
+  // readout (zones.ts) carries the matching frame.
   const zoneText =
     zoneX === undefined || zoneZ === undefined
       ? null
