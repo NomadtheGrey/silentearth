@@ -43,6 +43,14 @@ export interface BuildRecord {
 
 const ALL_RECORDS: BuildRecord[] = [
   {
+    merge: 'Merge #38',
+    pr: 77,
+    sha: 'ff9cc28',
+    date: '2026-10-30',
+    what: 'The compass came home. For one build the labels were turned around \u2014 north written positive, the sun\u2019s arc flipped to match \u2014 and the written compass fought the sky she navigates by. It is all set right: north is raw \u2212z again, left of east; her position readout prints (x, \u2212z), so it agrees with her zone, whose second number was right all along; and the sun and moon culminate in the south, where a Great Lakes sun belongs. The sky is the world\u2019s compass; the labels serve it. A stale note in the sky\u2019s header \u2014 it claimed the moon\u2019s day count resets on load \u2014 is corrected in the same batch: the save carries the count, and the phase continues where it left off.',
+    why: 'Adam navigates by the sky: sunrise in the east, north to its left. When a rename made the written compass contradict the visible one, his word was plain \u2014 put it back. This merge restores the chip, the zone grid, and the sky to the frame the world was built in, in one batch, so the game is never left half-turned the other way.',
+  },
+  {
     merge: 'Merge #37',
     pr: 75,
     sha: '999c5a5',

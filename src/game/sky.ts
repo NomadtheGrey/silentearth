@@ -13,13 +13,11 @@
  *
  * ASTRONOMY (plausible for the Great Lakes + in-game season,
  * never random decoration):
- * - COMPASS (Adam's pin, REVERSED 2026-10-30 — north is
- *   POSITIVE): East = +x, North = +z, Cartesian. Yaw 0 faces
- *   −z (player.ts), so facing −z is facing SOUTH under this
- *   pin. The sun rises in the east (+x), crosses SOUTH (−z)
- *   at noon, sets in the west (−x); the moon rides the same
- *   arc at night. (The arc originally culminated at +z under
- *   the drafting's −z north; flipped with the pin.)
+ * - COMPASS (lane-decided — no compass existed in game code):
+ *   East = +x, North = −z. Yaw 0 faces −z (player.ts), so facing
+ *   −z IS facing north. The sun rises in the east (+x), crosses
+ *   SOUTH (+z) at noon, sets in the west (−x); the moon rides
+ *   the same arc at night.
  * - LATITUDE (lane-decided starting value, flagged for Adam's
  *   pin pass): 42° — central Great Lakes (Fort Wayne 41.1°,
  *   Chicago 41.9°, upper Michigan ~46°).
@@ -192,22 +190,22 @@ export function sunElevationRad(dayProgress: number, month: number): number {
 
 /**
  * Sun direction at day progress p ∈ [0,1] for a month: east (+x)
- * at p = 0, south (−z) at noon (p = 0.5), west (−x) at p = 1.
- * Returns a unit vector (x east, y up, z north).
+ * at p = 0, south (+z) at noon (p = 0.5), west (−x) at p = 1.
+ * Returns a unit vector (x east, y up, z south).
  */
 export function sunDirection(dayProgress: number, month: number): THREE.Vector3 {
   const phi = Math.PI * dayProgress;
   const elev = sunElevationRad(dayProgress, month);
   const cosElev = Math.cos(elev);
-  return new THREE.Vector3(Math.cos(phi) * cosElev, Math.sin(elev), -Math.sin(phi) * cosElev);
+  return new THREE.Vector3(Math.cos(phi) * cosElev, Math.sin(elev), Math.sin(phi) * cosElev);
 }
 
-/** Moon direction at night progress q ∈ [0,1]: same east→south(−z)→west arc. */
+/** Moon direction at night progress q ∈ [0,1]: same east→south→west arc. */
 export function moonDirection(nightProgress: number): THREE.Vector3 {
   const phi = Math.PI * nightProgress;
   const elev = Math.sin(Math.PI * nightProgress) * ((MOON_MAX_ALT_DEG * Math.PI) / 180);
   const cosElev = Math.cos(elev);
-  return new THREE.Vector3(Math.cos(phi) * cosElev, Math.sin(elev), -Math.sin(phi) * cosElev);
+  return new THREE.Vector3(Math.cos(phi) * cosElev, Math.sin(elev), Math.sin(phi) * cosElev);
 }
 
 /**
