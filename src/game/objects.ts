@@ -2007,7 +2007,7 @@ export const SOURCES: HarvestSourceDef[] = [
     provenance: 'draft',
     biomes: [],
     marsh: true,
-    mesh: { shape: 'grassTuft', color: 0x6a7048, baseY: 0.3 },
+    mesh: { shape: 'grassTuft', color: 0x4e7d32, baseY: 0.3 },
   },
   {
     id: 'bogGrowthTuft',

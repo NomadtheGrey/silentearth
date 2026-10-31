@@ -1233,15 +1233,25 @@ export function buildKindGeometry(spec: MeshSpec, kind: ScatterKind): THREE.Buff
       return merge([...stalks, ...heads]);
     }
     case 'grassTuft': {
+      // Blades, not mounds (Adam, 2026-10-31 — the old four
+      // cones were 0.5 m wide: a knee-high mound that read as
+      // anything but grass). Nine thin cones in the same
+      // family: narrow radii, varied heights and outward
+      // leans, bases buried below the local ground line.
       const blades: THREE.BufferGeometry[] = [];
-      const leans: [Vec3, Vec3, number][] = [
-        [[0, 0, 0], [0, 0, 0.15], 0.9],
-        [[0.2, 0, 0.1], [0, 0, -0.3], 0.7],
-        [[-0.2, 0, -0.05], [0.25, 0, 0.2], 0.7],
-        [[0.05, 0, -0.18], [-0.2, 0, -0.25], 0.6],
+      const leans: [Vec3, Vec3, number, number][] = [
+        [[0, 0, 0], [0.04, 0, 0.06], 1.0, 0.075],
+        [[0.14, 0, 0.08], [0.1, 0, -0.28], 0.85, 0.065],
+        [[-0.15, 0, 0.05], [0.22, 0, 0.18], 0.8, 0.07],
+        [[0.05, 0, -0.15], [-0.24, 0, -0.2], 0.9, 0.06],
+        [[-0.08, 0, -0.12], [-0.12, 0, 0.26], 0.7, 0.065],
+        [[0.2, 0, -0.06], [-0.06, 0, -0.34], 0.65, 0.055],
+        [[-0.2, 0, -0.02], [0.3, 0, -0.08], 0.6, 0.055],
+        [[0.02, 0, 0.17], [0.16, 0, 0.3], 0.75, 0.06],
+        [[-0.04, 0, -0.2], [-0.3, 0, -0.14], 0.55, 0.05],
       ];
-      for (const [p, r, h] of leans) {
-        blades.push(part(cone(0.5, 0.7, 5), shade(c, 0.95 + h * 0.1), { p, r, s: [1, h, 1] }));
+      for (const [p, r, h, w] of leans) {
+        blades.push(part(cone(w, 1.0, 4), shade(c, 0.92 + h * 0.12), { p, r, s: [1, h, 1] }));
       }
       return merge(blades);
     }
