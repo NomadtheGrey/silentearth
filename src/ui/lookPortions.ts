@@ -24,13 +24,18 @@
  * resolves the kind from the TARGET position and looks
  * under the KIND key, so these entries are keyed by kind
  * slug, not by 'bone'. The triple is IDENTICAL for all
- * 17 kinds by approval — a world LOOK gives family +
+ * 21 kinds by approval — a world LOOK gives family +
  * deeper generic bone, never the shape: shape arrives
  * via PICKUP identification (inventory note), and
  * speakName gates on looksAt(kind), which pickup also
  * satisfies (Adam's pickup-counts-as-a-look ruling).
  * Portions are DRAFT content, flagged for Adam's pin
- * pass like the rest of this table.
+ * pass like the rest of this table. The set grew with
+ * the bones-for-the-boneless landings (2026-10-31):
+ * muskrat-tail, opossum-crest, vole-skull, and
+ * squirrel-tail-bone joined at 21 kinds, same approved
+ * triple — without rows here the new bones identified
+ * but accrued no looks, and looks gate the Wakings.
  */
 
 /** DEV-authored DRAFT portions, 3 per kind (pin pass pending). */
@@ -72,6 +77,12 @@ export const LOOK_PORTIONS: Readonly<Record<string, readonly string[]>> = {
   'bear-claw': ['Bone', 'pale bone', 'long pale bone'],
   'rabbit-jaw': ['Bone', 'pale bone', 'long pale bone'],
   'beaver-incisor': ['Bone', 'pale bone', 'long pale bone'],
+  // Bones for the boneless (2026-10-31): the four kinds
+  // Systems' Waking set gained — same approved triple.
+  'opossum-crest': ['Bone', 'pale bone', 'long pale bone'],
+  'muskrat-tail': ['Bone', 'pale bone', 'long pale bone'],
+  'vole-skull': ['Bone', 'pale bone', 'long pale bone'],
+  'squirrel-tail-bone': ['Bone', 'pale bone', 'long pale bone'],
 };
 
 /** Portions for a kind, or null when the kind is unlisted. */
