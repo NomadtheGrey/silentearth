@@ -454,10 +454,16 @@ export function buildKindGeometry(spec: MeshSpec, kind: ScatterKind): THREE.Buff
     // chimney at +2.3 x — the hearth house's chimney is the
     // smoke anchor sites.ts names (every standing house
     // has one; only the hearth house's smokes).
+    // PITCH SIGNS (roof family fix, 2026-10-31): a slab over
+    // -Z takes r.x = -slope, over +Z takes +slope (the barn
+    // pairing) — the family's original pairing was inverted,
+    // so the ridge dipped to a valley and the eaves flew up
+    // ("buildings with wings"). Same fix in farmRoof,
+    // chapelRoof, storeRoof, millRoof below.
     const slope = 0.68;
     return merge([
-      part(box(7.6, 0.09, 4.3), c, { p: [0, 1.28, -1.78], r: [slope, 0, 0] }),
-      part(box(7.6, 0.09, 4.3), c, { p: [0, 1.28, 1.78], r: [-slope, 0, 0] }),
+      part(box(7.6, 0.09, 4.3), c, { p: [0, 1.28, -1.78], r: [-slope, 0, 0] }),
+      part(box(7.6, 0.09, 4.3), c, { p: [0, 1.28, 1.78], r: [slope, 0, 0] }),
       part(box(7.7, 0.15, 0.22), shade(c, 1.1), { p: [0, 2.42, 0] }),
       part(box(0.55, 1.15, 0.55), 0x7d7668, { p: [2.3, 2.2, 0] }),
       part(box(0.7, 0.12, 0.7), 0x6e6a5e, { p: [2.3, 2.8, 0] }),
@@ -505,8 +511,8 @@ export function buildKindGeometry(spec: MeshSpec, kind: ScatterKind): THREE.Buff
     // the hearth end (local -X, where sites.ts puts it).
     const slope = 0.62;
     return merge([
-      part(box(10.6, 0.09, 4.9), c, { p: [0, 1.42, -2.0], r: [slope, 0, 0] }),
-      part(box(10.6, 0.09, 4.9), c, { p: [0, 1.42, 2.0], r: [-slope, 0, 0] }),
+      part(box(10.6, 0.09, 4.9), c, { p: [0, 1.42, -2.0], r: [-slope, 0, 0] }),
+      part(box(10.6, 0.09, 4.9), c, { p: [0, 1.42, 2.0], r: [slope, 0, 0] }),
       part(box(10.7, 0.15, 0.22), shade(c, 1.12), { p: [0, 2.62, 0] }),
       part(box(0.55, 1.25, 0.55), e, { p: [-3.6, 2.35, 0] }),
       part(box(0.7, 0.12, 0.7), shade(e, 0.9), { p: [-3.6, 3.0, 0] }),
@@ -553,8 +559,8 @@ export function buildKindGeometry(spec: MeshSpec, kind: ScatterKind): THREE.Buff
     // stay open (the farm/village precedent).
     const slope = 0.98;
     return merge([
-      part(box(11.6, 0.09, 3.9), c, { p: [0, 1.55, -1.35], r: [slope, 0, 0] }),
-      part(box(11.6, 0.09, 3.9), c, { p: [0, 1.55, 1.35], r: [-slope, 0, 0] }),
+      part(box(11.6, 0.09, 3.9), c, { p: [0, 1.55, -1.35], r: [-slope, 0, 0] }),
+      part(box(11.6, 0.09, 3.9), c, { p: [0, 1.55, 1.35], r: [slope, 0, 0] }),
       part(box(11.7, 0.16, 0.2), shade(e, 1.0), { p: [0, 2.95, 0] }),
     ]);
   }
@@ -668,8 +674,8 @@ export function buildKindGeometry(spec: MeshSpec, kind: ScatterKind): THREE.Buff
     // Gabled pair (the farm roof's shape, the store's
     // span) + the stove's pipe toward the back.
     return merge([
-      part(box(13.1, 0.09, 4.6), c, { p: [0, 1.35, -1.95], r: [0.6, 0, 0] }),
-      part(box(13.1, 0.09, 4.6), c, { p: [0, 1.35, 1.95], r: [-0.6, 0, 0] }),
+      part(box(13.1, 0.09, 4.6), c, { p: [0, 1.35, -1.95], r: [-0.6, 0, 0] }),
+      part(box(13.1, 0.09, 4.6), c, { p: [0, 1.35, 1.95], r: [0.6, 0, 0] }),
       part(cyl(0.09, 0.11, 0.9, 6), shade(e, 1.0), { p: [-1.5, 2.6, -0.9] }),
     ]);
   }
@@ -737,8 +743,11 @@ export function buildKindGeometry(spec: MeshSpec, kind: ScatterKind): THREE.Buff
   if (kind === 'millRoof') {
     // ONE slope (over local +Z) + the ridge beam — the
     // water slope is gone; the open side is the ruin.
+    // Pitch sign flipped (roof family fix, 2026-10-31): a
+    // +Z slab takes +slope so it DESCENDS from the ridge
+    // beam outward; it rose outward before.
     return merge([
-      part(box(9.6, 0.09, 4.3), c, { p: [0, 1.32, 1.9], r: [-0.62, 0, 0] }),
+      part(box(9.6, 0.09, 4.3), c, { p: [0, 1.32, 1.9], r: [0.62, 0, 0] }),
       part(box(9.6, 0.16, 0.22), e, { p: [0, 2.4, 0] }),
     ]);
   }
@@ -1033,6 +1042,78 @@ export function buildKindGeometry(spec: MeshSpec, kind: ScatterKind): THREE.Buff
       part(cone(2.45, 0.9, 14), e, { p: [0, 1.15, 0] }),
       part(cyl(0.3, 0.3, 0.25, 8), e, { p: [0, 1.62, 0] }),
       part(box(0.7, 1.0, 0.06), shade(c, 0.8), { p: [0, -1.0, 2.21] }),
+    ]);
+  }
+  // Kind overrides (the Water Tower set, sites.ts):
+  // the standing legs (ladder on local +Z, riser pipe
+  // at the centre, X-braced faces, walk-under height),
+  // the tank (cone bottom, banded rim, cone roof), the
+  // same tank down on its side along local +Z, the
+  // splayed legs, and the pump shed. Local ground is
+  // y = -baseY.
+  if (kind === 'waterTowerLegs') {
+    const parts: THREE.BufferGeometry[] = [];
+    for (const sx of [-1, 1]) {
+      for (const sz of [-1, 1]) {
+        parts.push(part(box(0.34, 9.6, 0.34), c, { p: [sx * 2.2, 0, sz * 2.2] }));
+      }
+    }
+    for (const y of [-2.4, 2.4]) {
+      for (const sz of [-1, 1]) parts.push(part(box(4.75, 0.22, 0.18), shade(c, 0.9), { p: [0, y, sz * 2.2] }));
+      for (const sx of [-1, 1]) parts.push(part(box(0.18, 0.22, 4.75), shade(c, 0.9), { p: [sx * 2.2, y, 0] }));
+      for (const sz of [-1, 1]) {
+        parts.push(part(box(0.14, 6.4, 0.1), shade(c, 0.82), { p: [0, y * 0.5, sz * 2.2], r: [0, 0, 0.72] }));
+        parts.push(part(box(0.14, 6.4, 0.1), shade(c, 0.82), { p: [0, y * 0.5, sz * 2.2], r: [0, 0, -0.72] }));
+      }
+      for (const sx of [-1, 1]) {
+        parts.push(part(box(0.1, 6.4, 0.14), shade(c, 0.82), { p: [sx * 2.2, y * 0.5, 0], r: [0.72, 0, 0] }));
+        parts.push(part(box(0.1, 6.4, 0.14), shade(c, 0.82), { p: [sx * 2.2, y * 0.5, 0], r: [-0.72, 0, 0] }));
+      }
+    }
+    parts.push(part(cyl(0.22, 0.22, 9.6, 8), e));
+    parts.push(part(box(0.05, 9.2, 0.05), e, { p: [-0.26, -0.2, 2.52] }));
+    parts.push(part(box(0.05, 9.2, 0.05), e, { p: [0.26, -0.2, 2.52] }));
+    for (let i = 0; i < 10; i++) {
+      parts.push(part(box(0.56, 0.05, 0.05), e, { p: [0, -4.4 + i * 0.92, 2.52] }));
+    }
+    parts.push(part(box(5.0, 0.25, 5.0), shade(c, 0.95), { p: [0, 4.7, 0] }));
+    return merge(parts);
+  }
+  if (kind === 'waterTowerTank') {
+    return merge([
+      part(cyl(2.9, 2.9, 3.6, 16), c),
+      part(cone(2.9, 1.3, 16), shade(c, 0.92), { p: [0, -2.45, 0], r: [Math.PI, 0, 0] }),
+      part(cyl(2.96, 2.96, 0.28, 16), shade(c, 1.06), { p: [0, 1.66, 0] }),
+      part(cone(3.15, 1.5, 16), e, { p: [0, 2.55, 0] }),
+      part(cyl(0.32, 0.32, 0.3, 8), e, { p: [0, 3.35, 0] }),
+    ]);
+  }
+  if (kind === 'waterTowerTankDown') {
+    return merge([
+      part(cyl(2.9, 2.9, 3.6, 16), c, { r: [Math.PI / 2, 0, 0] }),
+      part(cone(2.9, 1.3, 16), shade(c, 0.92), { p: [0, 0, -2.45], r: [-Math.PI / 2, 0, 0] }),
+      part(cyl(2.96, 2.96, 0.28, 16), shade(c, 1.06), { p: [0, 0.06, 1.66], r: [Math.PI / 2, 0, 0] }),
+      part(cone(3.15, 1.5, 16), e, { p: [0, 0.25, 2.55], r: [Math.PI / 2, 0, 0] }),
+    ]);
+  }
+  if (kind === 'waterTowerLegsDown') {
+    return merge([
+      part(box(0.34, 0.34, 7.4), c, { p: [0.9, -0.55, 1.6], r: [0, 0.35, 0] }),
+      part(box(0.34, 0.34, 7.4), c, { p: [-1.8, -0.55, -0.6], r: [0, Math.PI / 2 - 0.3, 0] }),
+      part(box(0.34, 0.34, 4.2), shade(c, 0.94), { p: [-0.7, -0.55, -2.2], r: [0, -0.5, 0] }),
+      part(box(0.34, 0.34, 6.0), shade(c, 0.97), { p: [1.9, -0.55, -1.4], r: [0, 0.9, 0] }),
+      part(box(0.14, 0.1, 6.2), shade(c, 0.82), { p: [0, -0.15, 0], r: [0, 0.7, 0] }),
+      part(box(0.14, 0.1, 6.2), shade(c, 0.82), { p: [0, -0.15, 0], r: [0, -0.7, 0] }),
+      part(cyl(0.22, 0.22, 6.8, 8), e, { p: [0.2, -0.6, 2.6], r: [0, 0, Math.PI / 2] }),
+    ]);
+  }
+  if (kind === 'pumpShed') {
+    return merge([
+      part(box(2.6, 2.1, 2.0), c),
+      part(box(2.95, 0.12, 1.4), e, { p: [0, 1.32, -0.52], r: [0.62, 0, 0] }),
+      part(box(2.95, 0.12, 1.4), e, { p: [0, 1.32, 0.52], r: [-0.62, 0, 0] }),
+      part(box(0.72, 1.45, 0.06), shade(c, 0.7), { p: [0.4, -0.32, 1.01] }),
+      part(cyl(0.09, 0.09, 1.2, 6), e, { p: [-0.9, 0.4, -1.0] }),
     ]);
   }
   switch (spec.shape) {

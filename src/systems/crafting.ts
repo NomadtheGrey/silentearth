@@ -189,18 +189,22 @@ export function craftingSection(recipe: Recipe): ItemCategory {
  * already-owned; small only → small already-owned +
  * large available; both (old saves) → small
  * superseded + large already-owned.
- * Singles (garments + apron + umbrella + journal): held →
- * already-owned. Worn ⊆ carried (wear never removes),
- * and a dropped garment's worn flag grants nothing,
- * so inventory presence is the ownership source. The
- * journal is listed because the name-chain design
- * implies ONE (names live in it; a second would split
- * the record — DEV's call, 2026-10-30). The writing
- * desk stays UNLISTED, on the grimoire precedent (a
+ * Singles (garments + apron + umbrella + journal +
+ * clay jar + grimoire): held → already-owned. Worn ⊆
+ * carried (wear never removes), and a dropped
+ * garment's worn flag grants nothing, so inventory
+ * presence is the ownership source. The journal is
+ * listed because the name-chain design implies ONE
+ * (names live in it; a second would split the record
+ * — DEV's call, 2026-10-30). The GRIMOIRE is listed
+ * on the same ground (Adam, 2026-10-31): one book of
+ * workings, bound to its journal — a second would
+ * split that too; the founding-era unlisted precedent
+ * ends here. The writing desk stays UNLISTED (a
  * second camp legitimately wants a second desk).
  * Everything else (placed structures, consumables,
- * materials, unlisted singles like grimoire) →
- * available (multiples allowed or flagged for pin).
+ * materials, and the desk — the one unlisted single)
+ * → available (multiples allowed or flagged for pin).
  */
 export function craftOwnershipStatus(
   recipe: Recipe,
@@ -249,12 +253,13 @@ export function craftOwnershipStatus(
       : 'available';
   }
 
-  // Singles: garments + apron + umbrella + journal + clay jar.
+  // Singles: garments + apron + umbrella + journal + clay jar + grimoire.
   const isSingle =
     output === ITEMS.apron ||
     output === ITEMS.umbrella ||
     output === ITEMS.journal ||
     output === ITEMS.clayJar ||
+    output === ITEMS.grimoire ||
     GARMENTS.some((g) => g.item === output);
   if (isSingle) {
     // The clay jar has TWO forms (empty / filled with water):

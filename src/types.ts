@@ -199,7 +199,15 @@ export type ScatterKind =
   | 'siloBody'
   | 'siloBreached'
   | 'siloFallen'
-  | 'grainBin';
+  | 'grainBin'
+  // Site-pass kinds (the Water Tower, sites.ts):
+  // the standing legs and tank, the fallen tank and
+  // legs, and the pump shed companion.
+  | 'waterTowerLegs'
+  | 'waterTowerTank'
+  | 'waterTowerTankDown'
+  | 'waterTowerLegsDown'
+  | 'pumpShed';
 
 /** One placed scatter object in a chunk. y is its base height above ground. */
 export interface ScatterObject {

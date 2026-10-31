@@ -1915,8 +1915,8 @@ interface FeedbackItem {
   id: string;
   text: string;
   tone: FeedbackTone;
-  x: number;
-  y: number;
+  /** True in the line's last ~0.6 s: the row fades out. */
+  fading: boolean;
 }
 
 /**
@@ -2634,19 +2634,17 @@ export default function App() {
     null,
   );
   // Placed torches (Background singleton, read fresh on every
-  // event), their projected anchors, and the torch whose menu
-  // is open — the fire-chip pattern, one torch per chip. The
-  // menu is LIVE like the fire menu: selectedTorchId names
-  // the torch, and the menu renders from the live torch in
-  // placedTorches; a picked-up torch closes it (the find
-  // returns undefined, and the handler closes explicitly).
+  // event) and their projected anchors — the fire-chip
+  // pattern, one torch per chip. NO selected-torch state
+  // (Adam's torch completion, 2026-10-31): the chip tap IS
+  // the pickup now, so the torch's little window and its
+  // whole selection family retired — see handlePickupTorch.
   const [placedTorches, setPlacedTorches] = useState<PlacedTorchEntity[]>(
     () => torchState.snapshot(),
   );
   const [torchAnchors, setTorchAnchors] = useState<
     { torch: PlacedTorchEntity; x: number; y: number }[]
   >([]);
-  const [selectedTorchId, setSelectedTorchId] = useState<string | null>(null);
   // PLACED TENTS (tent shell, 2026-10-28 — interim
   // shell store, NOT Background's entity: Background's
   // placed-tent entity + renderer.setTents setter have
@@ -3080,9 +3078,23 @@ export default function App() {
   };
 
   const busTargetsRef = useRef<BusHarvestTarget[]>([]);
+  // THE ONE PICK (Adam's contract, 2026-10-31 — "we need
+  // the pill and the 'E' to match"): the render's winner,
+  // stored. The pill renders it; E, R, and the cauldron
+  // placement read THIS — no press path re-derives a
+  // winner of its own (the four derivations that used to
+  // agree by care are one derivation now). Written every
+  // render below, beside the useWinner computation; the
+  // events that can change the pick (move, look, camera,
+  // target-set, placed-state) all set state and so all
+  // render — the stored pick is exactly as fresh as the
+  // pill the player is looking at, by construction.
+  const useWinnerRef = useRef<UseWinner | null>(null);
   const transitionTimerRef = useRef<number | undefined>(undefined);
   const feedbackCounterRef = useRef(0);
-  const feedbackTimersRef = useRef<Map<string, number>>(new Map());
+  const feedbackTimersRef = useRef<
+    Map<string, { fade: number; remove: number }>
+  >(new Map());
 
   // PAUSE (Adam, 2026-10-26 — core 54e525c): the engine pause
   // flag, mirrored for the shell. The ref is what the timers
@@ -4036,30 +4048,66 @@ export default function App() {
   // would need remaining-time bookkeeping — out of scope for
   // this half; the gated clocks are hunger, lighting, and
   // friction above, plus the turn-stick and FPS loops.
-  const showFeedback = (text: string, tone: FeedbackTone, x: number, y: number) => {
-    const id = `fb-${feedbackCounterRef.current++}`;
-    setFeedbacks((current) => [...current, { id, text, tone, x, y }]);
-    const timer = window.setTimeout(() => {
-      setFeedbacks((current) => current.filter((item) => item.id !== id));
-      feedbackTimersRef.current.delete(id);
-    }, 4000);
-    feedbackTimersRef.current.set(id, timer);
-  };
-
-  // Anchor for an outcome event: the target's last known position
-  // when it is still in range, else her own position (e.g. a failed
-  // press on a target that already left range).
-  const anchorForOutcome = (
-    targetId: string,
-    kind: 'scatter' | 'ground',
-  ): { x: number; y: number } | null => {
-    const target = busTargetsRef.current.find((t) => t.id === targetId);
-    if (target) {
-      return projectAnchor(target.x, target.z, target.kind);
-    }
-    const player = playerRef.current;
-    if (!player) return null;
-    return projectAnchor(player.x, player.z, kind);
+  // THE MESSAGE FEED (Adam, 2026-10-31 — "make these
+  // messages not overlap... put them into a list and let
+  // them follow each other"): EVERY spoken line in the
+  // game joins ONE list in ONE reserved seat (rendered at
+  // the bottom-center stack below). Lines used to carry a
+  // projected world anchor each, so two lines at one
+  // target printed over each other and over the pill, and
+  // a line whose anchor projected off-screen (the hive at
+  // her feet) never rendered at all. Speech has no
+  // geometry now: a line is text + tone, in arrival order.
+  // Discipline: FIFO — arrival order is display order is
+  // expiry order; the newest line sits at the stack's
+  // bottom (the fixed seat) and older lines ride up; at
+  // most FEED_MAX lines show (FEED_MAX_TOUCH on phone),
+  // an arrival past the cap retires the oldest early; an
+  // identical line already in the feed refreshes its life
+  // and re-seats as newest instead of stacking a twin
+  // (multi-press struggle narration). Life is the tuned
+  // 4 s, the last ~0.6 s fading.
+  const FEED_MAX = 4;
+  const FEED_MAX_TOUCH = 3;
+  const showFeedback = (text: string, tone: FeedbackTone) => {
+    const cap = isTouch ? FEED_MAX_TOUCH : FEED_MAX;
+    setFeedbacks((current) => {
+      const twin = current.find(
+        (item) => item.text === text && item.tone === tone,
+      );
+      const id = twin ? twin.id : `fb-${feedbackCounterRef.current++}`;
+      const existing = feedbackTimersRef.current.get(id);
+      if (existing) {
+        window.clearTimeout(existing.fade);
+        window.clearTimeout(existing.remove);
+      }
+      const fade = window.setTimeout(() => {
+        setFeedbacks((list) =>
+          list.map((item) =>
+            item.id === id ? { ...item, fading: true } : item,
+          ),
+        );
+      }, 3400);
+      const remove = window.setTimeout(() => {
+        setFeedbacks((list) => list.filter((item) => item.id !== id));
+        feedbackTimersRef.current.delete(id);
+      }, 4000);
+      feedbackTimersRef.current.set(id, { fade, remove });
+      const rest = current.filter((item) => item.id !== id);
+      const next = [...rest, { id, text, tone, fading: false }];
+      while (next.length > cap) {
+        const dropped = next.shift();
+        if (dropped && dropped.id !== id) {
+          const timers = feedbackTimersRef.current.get(dropped.id);
+          if (timers) {
+            window.clearTimeout(timers.fade);
+            window.clearTimeout(timers.remove);
+            feedbackTimersRef.current.delete(dropped.id);
+          }
+        }
+      }
+      return next;
+    });
   };
 
   // Boot the world once. StrictMode double-mounts in dev only; the
@@ -4585,16 +4633,8 @@ export default function App() {
           inventory,
         );
         if (!outcome.found) return;
-        const anchor = projectAnchor(outcome.x, outcome.z, 'scatter');
         if (outcome.granted <= 0) {
-          if (anchor) {
-            showFeedback(
-              `Pack full — no room.`,
-              'blocked',
-              anchor.x,
-              anchor.y,
-            );
-          }
+          showFeedback(`Pack full — no room.`, 'blocked');
           return;
         }
         // PICKUP COUNTS AS A LOOK (same ruling):
@@ -4613,16 +4653,12 @@ export default function App() {
         }
         refreshInventory();
         saveNow();
-        if (anchor) {
-          showFeedback(
-            `Picked up ${outcome.taken
-              .map((t) => `${t.granted} ${displayNameFor(t.item)}`)
-              .join(', ')}.`,
-            'gain',
-            anchor.x,
-            anchor.y,
-          );
-        }
+        showFeedback(
+          `Picked up ${outcome.taken
+            .map((t) => `${t.granted} ${displayNameFor(t.item)}`)
+            .join(', ')}.`,
+          'gain',
+        );
       },
     );
     // The shell's one harvest outcome listener (see the header):
@@ -4911,47 +4947,41 @@ export default function App() {
       setHarvestProgress((current) =>
         current?.targetId === p.targetId ? null : current,
       );
-      const anchor = anchorForOutcome(p.targetId, p.kind);
-      if (anchor) {
-        // A multi-step finish carries the def's success
-        // line (Systems rider): it IS the finish chip —
-        // shown INSTEAD of the yields chip, because two
-        // chips at one anchor would print over each other
-        // (Adam's standing rule). The yields still land
-        // in inventory above; single-press completions
-        // (no successMessage) keep the yields chip.
-        if (p.successMessage) {
-          showFeedback(p.successMessage, 'info', anchor.x, anchor.y);
-        } else {
-          showFeedback(
-            p.yields.map((y) => `${y.item} × ${y.quantity}`).join(', '),
-            'gain',
-            anchor.x,
-            anchor.y,
-          );
-        }
+      // A multi-step finish carries the def's success
+      // line (Systems rider): it IS the finish line —
+      // shown INSTEAD of the yields line, because two
+      // lines for one event would print over each other
+      // in spirit even in the feed (Adam's standing
+      // rule). The yields still land in inventory above;
+      // single-press completions (no successMessage)
+      // keep the yields line.
+      if (p.successMessage) {
+        showFeedback(p.successMessage, 'info');
+      } else {
+        showFeedback(
+          p.yields.map((y) => `${y.item} × ${y.quantity}`).join(', '),
+          'gain',
+        );
       }
     });
     const offFailed = bus.on('harvest:failed', (p) => {
       setHarvestProgress((current) =>
         current?.targetId === p.targetId ? null : current,
       );
-      const anchor = anchorForOutcome(p.targetId, p.kind);
-      if (!anchor) return;
       const text =
         p.reason === 'inventory-full' && p.yields.length > 0
           ? `Pack full — ${p.yields.map((y) => `${y.item} × ${y.quantity}`).join(', ')} didn't fit.`
           : p.reason === 'below-permit'
             ? belowPermitText(p.sourceId)
             : `Harvest failed: ${p.reason}.`;
-      showFeedback(text, 'blocked', anchor.x, anchor.y);
+      showFeedback(text, 'blocked');
     });
     const offProgress = bus.on('harvest:progress', (p) => {
       // Pill-fill (Adam, 2026-10-29): the pill carries the
       // progress now — state from the payload verbatim
       // (fraction, press index/total, verb, all computed
-      // at the emit site). The struggle line rides the
-      // ordinary feedback chip at the target's anchor.
+      // at the emit site). The struggle line joins the
+      // message feed like every spoken line.
       setHarvestProgress({
         targetId: p.targetId,
         fraction: p.progress,
@@ -4959,10 +4989,7 @@ export default function App() {
         pressesTotal: p.pressesTotal,
         verb: p.verb,
       });
-      const anchor = anchorForOutcome(p.targetId, 'scatter');
-      if (anchor) {
-        showFeedback(p.struggleMessage, 'info', anchor.x, anchor.y);
-      }
+      showFeedback(p.struggleMessage, 'info');
     });
     const offLoaded = bus.on('world:chunkLoaded', () =>
       setChunkCount(renderer.loadedChunkCount),
@@ -4986,8 +5013,9 @@ export default function App() {
       window.clearInterval(hungerTimer);
       window.clearTimeout(warningFlashTimerRef.current);
       window.clearTimeout(transitionTimerRef.current);
-      for (const timeout of feedbackTimersRef.current.values()) {
-        window.clearTimeout(timeout);
+      for (const timers of feedbackTimersRef.current.values()) {
+        window.clearTimeout(timers.fade);
+        window.clearTimeout(timers.remove);
       }
       feedbackTimersRef.current.clear();
       window.removeEventListener('resize', onResize);
@@ -5451,10 +5479,7 @@ export default function App() {
   const handleCollectTrap = (trapId: string) => {
     const trap = trapState.get(trapId);
     if (!trap || trap.catch === null) {
-      sayAt(
-        trap?.x ?? playerRef.current?.x ?? 0,
-        trap?.z ?? playerRef.current?.z ?? 0,
-        'Nothing caught yet.',
+      showFeedback('Nothing caught yet.',
         'info',
       );
       return;
@@ -5463,10 +5488,7 @@ export default function App() {
     const outcome = collectTrapCatch(inventory, kind);
     if (outcome.collected === false) {
       const carcass = catchItemFor(kind);
-      sayAt(
-        trap.x,
-        trap.z,
-        outcome.reason === 'Pack full.'
+      showFeedback(outcome.reason === 'Pack full.'
           ? `Pack full — no room for ${carcass ? displayNameFor(carcass) : kind}.`
           : outcome.reason,
         'blocked',
@@ -5476,7 +5498,7 @@ export default function App() {
     trapState.setCatch(trapId, null);
     refreshTrapsFromState();
     refreshInventory();
-    sayAt(trap.x, trap.z, `Caught ${kind}!`, 'gain');
+    showFeedback(`Caught ${kind}!`, 'gain');
   };
 
   // HIVE HARVEST (Adam, 2026-10-28): ONE harvest per
@@ -5493,20 +5515,17 @@ export default function App() {
   // so a repeat press re-tries.
   const handleHarvestHive = (x: number, z: number) => {
     if (hungerStage === 'too-hungry') {
-      sayAt(x, z, 'Harvest failed: too-hungry.', 'blocked');
+      showFeedback('Harvest failed: too-hungry.', 'blocked');
       return;
     }
     const outcome = harvestHoney(inventory, placedTorchNearHive(x, z));
     if (outcome.granted === 1) {
       refreshInventory();
       saveNow();
-      sayAt(x, z, 'Harvested honey!', 'gain');
+      showFeedback('Harvested honey!', 'gain');
       return;
     }
-    sayAt(
-      x,
-      z,
-      outcome.reason === 'Pack full.'
+    showFeedback(outcome.reason === 'Pack full.'
         ? `Pack full — no room for ${displayNameFor(ITEMS.honey)}.`
         : (outcome.reason ?? 'Harvest failed.'),
       'blocked',
@@ -5542,32 +5561,63 @@ export default function App() {
   };
 
   /**
-   * Inventory Place press on a lit-torch row: INSTANT AT
-   * HER FEET (settled design — the preview ghost is the
+   * Placing a carried lit torch: INSTANT AT HER FEET
+   * (settled design — the preview ghost is the
    * house/fire pattern, heavy for a torch). Grant FIRST
    * (Systems placeTorch consumes one carried lit-torch;
    * failure touches nothing), then the entity place
    * (Background primitive, emits torch:placed →
-   * refreshTorches). Panel action, not a world action:
-   * the panel stays open, the count drops, the note
-   * carries the result — the Light button's shape, not
-   * the preview flow's.
+   * refreshTorches). ONE CORE, THREE HANDLES (Adam's
+   * torch completion, 2026-10-31): the inventory panel's
+   * Place button (its note carries the result — a panel
+   * action; the panel stays open, the count drops), the
+   * desktop right-click in the locked world, and the
+   * touch PLACE button (both speak through the message
+   * feed). The act is identical behind all three; only
+   * the result's surface differs, as the pickup's does.
    */
-  const handlePlaceLitTorch = () => {
+  const placeCarriedLitTorch = ():
+    | { placed: true }
+    | { placed: false; reason: string }
+    | null => {
     const player = playerRef.current;
-    if (!player) return;
+    if (!player) return null;
     const outcome = grantPlaceTorch(inventory, player.x, player.z);
     // Equality check, not truthiness: non-strict tsc does
     // not narrow this union's boolean discriminant on
     // truthiness (see the torch Light button handler).
     if (outcome.placed === false) {
-      setTorchNote(outcome.reason);
-      return;
+      return { placed: false, reason: outcome.reason };
     }
     torchState.placeTorch(outcome.torch.x, outcome.torch.z);
     refreshInventory();
     saveNow();
+    return { placed: true };
+  };
+
+  const handlePlaceLitTorch = () => {
+    const result = placeCarriedLitTorch();
+    if (!result) return;
+    // Equality check, not truthiness (non-strict tsc does
+    // not narrow the union on the ternary — house pattern).
+    if (result.placed === false) {
+      setTorchNote(result.reason);
+      return;
+    }
     setTorchNote('Placed a lit torch.');
+  };
+
+  // The world doors' press (right-click, touch PLACE):
+  // same core, the feed carries the result — a world
+  // press is never a silent no-op (the hive lesson).
+  const handleWorldPlaceTorch = () => {
+    const result = placeCarriedLitTorch();
+    if (!result) return;
+    if (result.placed === false) {
+      showFeedback(result.reason, 'blocked');
+      return;
+    }
+    showFeedback('Placed a lit torch.', 'gain');
   };
 
   // PLACED TENT (tent shell, 2026-10-28 — torch
@@ -5678,7 +5728,7 @@ export default function App() {
   // sets the pot before she lights the hearth. Panel
   // stays open, cauldronNote carries the result.
   const handlePlaceCauldron = () => {
-    const winner = computeUseWinner();
+    const winner = useWinnerRef.current;
     let hearthId = '';
     if (winner?.kind === 'fire') {
       const fire = fireState.get(winner.id);
@@ -5885,28 +5935,11 @@ export default function App() {
       syncCrowTier();
       syncCharmBonuses();
       syncDeerWarning();
-      // Anchor BEFORE unstaging: the staged site record
-      // carries the site's true position for BOTH kinds
-      // (altar + stump) — the old altarState-only lookup
-      // stranded stump completions at her feet.
-      const staged = ritualSiteState.getStaged(entry.siteKey);
+      // The awakening line joins the message feed (it
+      // used to anchor at the site — the feed is every
+      // line's seat now, so the site lookup is gone).
       ritualSiteState.unstageBone(entry.siteKey);
-      const anchor = staged
-        ? projectAnchor(staged.site.x, staged.site.z, 'scatter')
-        : null;
-      const player = playerRef.current;
-      const fallback = player
-        ? projectAnchor(player.x, player.z, 'ground')
-        : null;
-      const at = anchor ?? fallback;
-      if (at) {
-        showFeedback(
-          `The ${boneDisplayFor(result.kind)} awakens.`,
-          'gain',
-          at.x,
-          at.y,
-        );
-      }
+      showFeedback(`The ${boneDisplayFor(result.kind)} awakens.`, 'gain');
       changed = true;
     }
     if (changed) {
@@ -6733,9 +6766,8 @@ export default function App() {
   const handleFireAction = (fireId: string, actionId: string) => {
     const fire = fireState.get(fireId);
     if (!fire) return;
-    const anchor = fireAnchors.find((a) => a.fire.id === fireId) ?? null;
     const say = (text: string, tone: FeedbackTone) => {
-      if (anchor) showFeedback(text, tone, anchor.x, anchor.y);
+      showFeedback(text, tone);
     };
     if (actionId === 'close') {
       setSelectedFireId(null);
@@ -6863,46 +6895,32 @@ export default function App() {
     recomputeAnchors();
   };
 
-  // Placed-torch menu actions (chip menu, Adam's placed-
-  // torch order): one torch, one action — Pick up returns
-  // it lit. Close only closes; the menu stays open after
-  // a failed pickup (the torch is still there).
-  const torchMenuActions = (): ContextAction[] => [
-    { id: 'pick-up', label: 'Pick up' },
-    { id: 'close', label: 'Close' },
-  ];
-
-  const handleTorchAction = (torchId: string, actionId: string) => {
+  // TORCH PICKUP (Adam's torch completion, 2026-10-31):
+  // ONE act behind every door — E at a faced torch, R,
+  // and a tap on the torch's chip (touching the torch
+  // or its pill IS the pickup, Adam's ruling; the mouse
+  // unified — one verb, every pointer). The chip's old
+  // window held nothing but this act and Close, so the
+  // window and its selection state retired whole.
+  // Grant FIRST, then the entity removal — the
+  // pile-pickup rule (take granted only): a full pack
+  // grants 0 and the torch stays placed, the refusal
+  // spoken in the feed; a grant of 1 removes the entity
+  // (emits torch:removed → refreshTorches). Pickup
+  // returns 'lit-torch', lit not unlit; no hunger gate
+  // (a move, like drop/pickup, not a build).
+  const handlePickupTorch = (torchId: string) => {
     const torch = torchState.get(torchId);
     if (!torch) return;
-    const anchor = torchAnchors.find((a) => a.torch.id === torchId) ?? null;
-    const say = (text: string, tone: FeedbackTone) => {
-      if (anchor) showFeedback(text, tone, anchor.x, anchor.y);
-    };
-    if (actionId === 'close') {
-      setSelectedTorchId(null);
+    const grant = grantPickupTorch(inventory);
+    if (grant.granted === 0) {
+      showFeedback('Pack full — no room.', 'blocked');
       return;
     }
-    if (actionId === 'pick-up') {
-      // Grant FIRST, then the entity removal — the
-      // pile-pickup rule (take granted only): a full pack
-      // grants 0, the torch stays placed, the menu stays
-      // open; a grant of 1 removes the entity (emits
-      // torch:removed → refreshTorches) and the menu
-      // closes explicitly. Pickup returns 'lit-torch',
-      // lit not unlit; no hunger gate (a move, like
-      // drop/pickup, not a build).
-      const grant = grantPickupTorch(inventory);
-      if (grant.granted === 0) {
-        say('Pack full — no room.', 'blocked');
-        return;
-      }
-      torchState.removeTorch(torchId);
-      setSelectedTorchId(null);
-      say('Picked up a lit torch.', 'gain');
-      refreshInventory();
-      saveNow();
-    }
+    torchState.removeTorch(torchId);
+    showFeedback('Picked up a lit torch.', 'gain');
+    refreshInventory();
+    saveNow();
     setPlacedTorches(torchState.snapshot());
     recomputeAnchors();
   };
@@ -6917,9 +6935,8 @@ export default function App() {
   const handleTentAction = (tentId: string, actionId: string) => {
     const tent = placedTentsRef.current.find((t) => t.id === tentId);
     if (!tent) return;
-    const anchor = tentAnchors.find((a) => a.tent.id === tentId) ?? null;
     const say = (text: string, tone: FeedbackTone) => {
-      if (anchor) showFeedback(text, tone, anchor.x, anchor.y);
+      showFeedback(text, tone);
     };
     if (actionId === 'close') {
       setSelectedTentId(null);
@@ -6954,10 +6971,8 @@ export default function App() {
   ];
 
   const handleCauldronAction = (hearthId: string, actionId: string) => {
-    const anchor =
-      cauldronAnchors.find((a) => a.cauldron.hearthId === hearthId) ?? null;
     const say = (text: string, tone: FeedbackTone) => {
-      if (anchor) showFeedback(text, tone, anchor.x, anchor.y);
+      showFeedback(text, tone);
     };
     if (actionId === 'close') {
       setSelectedCauldronHearthId(null);
@@ -7300,14 +7315,6 @@ export default function App() {
   // never vanish silently. Hoisted from handlePileAction
   // so the home handler shares it verbatim (moved, not
   // re-authored — same body, same call sites).
-  const sayAt = (x: number, z: number, text: string, tone: FeedbackTone) => {
-    const player = playerRef.current;
-    const anchor =
-      projectAnchor(x, z, 'scatter') ??
-      (player ? projectAnchor(player.x, player.z, 'ground') : null);
-    if (anchor) showFeedback(text, tone, anchor.x, anchor.y);
-  };
-
   const handlePileAction = (pile: PileTarget, actionId: string) => {
     if (actionId === 'close') {
       selectedPileIdRef.current = null;
@@ -7331,10 +7338,7 @@ export default function App() {
       );
       if (!outcome.found) return;
       if (outcome.granted <= 0) {
-        sayAt(
-          outcome.x,
-          outcome.z,
-          `Pack full — no room for ${displayNameFor(outcome.item)}.`,
+        showFeedback(`Pack full — no room for ${displayNameFor(outcome.item)}.`,
           'blocked',
         );
         return;
@@ -7358,10 +7362,7 @@ export default function App() {
       refreshInventory();
       saveNow();
       refreshPilesFromState();
-      sayAt(
-        outcome.x,
-        outcome.z,
-        outcome.granted === outcome.requested
+      showFeedback(outcome.granted === outcome.requested
           ? `Picked up ${outcome.granted} ${displayNameFor(outcome.item)}.`
           : `Picked up ${outcome.granted} of ${outcome.requested} ${displayNameFor(outcome.item)}.`,
         'gain',
@@ -7383,17 +7384,11 @@ export default function App() {
         refreshInventory();
         saveNow();
         refreshPilesFromState();
-        sayAt(
-          record.x,
-          record.z,
-          `Deposited ${record.quantity} ${displayNameFor(record.item)}.`,
+        showFeedback(`Deposited ${record.quantity} ${displayNameFor(record.item)}.`,
           'gain',
         );
       } catch (error) {
-        sayAt(
-          pile.x,
-          pile.z,
-          error instanceof Error ? error.message : 'Could not deposit that.',
+        showFeedback(error instanceof Error ? error.message : 'Could not deposit that.',
           'blocked',
         );
       }
@@ -7405,9 +7400,8 @@ export default function App() {
   // handlePileAction (verb:kind); the menu STAYS OPEN
   // after every press except Close — entries re-render
   // from live inventory + store, so counts update in
-  // place. Notes go through sayAt at the house (the
-  // panel's storageNote is the panel's surface, not the
-  // menu's). Single transfers mirror the panel's
+  // place. Notes join the message feed (the panel's
+  // storageNote is the panel's surface, not the menu's). Single transfers mirror the panel's
   // add-first atomicity per unit; all-transfers loop
   // singles until the source is exhausted or the
   // destination throws, and partial results stand. One
@@ -7429,10 +7423,7 @@ export default function App() {
     const house = shelterState.snapshot().find((h) => h.id === shelterHouseId);
     const player = playerRef.current;
     const sayHouse = (text: string) =>
-      sayAt(
-        house?.x ?? player?.x ?? 0,
-        house?.z ?? player?.z ?? 0,
-        text,
+      showFeedback(text,
         'blocked',
       );
     if (!store) {
@@ -7881,21 +7872,6 @@ export default function App() {
           ) ?? null,
         );
 
-  // The torch whose menu is open, with its anchor — the
-  // fire pattern, live: the menu renders from placedTorches,
-  // so a picked-up torch leaves the menu with nothing.
-  const selectedTorch =
-    selectedTorchId === null
-      ? undefined
-      : placedTorches.find((t) => t.id === selectedTorchId);
-  const selectedTorchAnchor =
-    selectedTorch === undefined
-      ? null
-      : retainAnchor(
-          `torch:${selectedTorch.id}`,
-          torchAnchors.find((a) => a.torch.id === selectedTorch.id) ??
-            null,
-        );
   // The selected tent + its anchor — the torch pattern,
   // over the shell store (no entity yet).
   const selectedTent =
@@ -8226,6 +8202,27 @@ export default function App() {
     };
   })();
 
+  // HIVE RANGE (Adam, 2026-10-31 — the range rider):
+  // the hive kind's targetable leash runs one metre
+  // past the family HARVEST_RANGE. His night screenshot
+  // is the reason: the hive hangs at ~1.8 m and her eye
+  // sits at ~1.6, so the sightline to the hive is near
+  // level while the smoking torch stands at the base,
+  // ~1.6 m below eye height — at 2.5 m the downward
+  // angle to the torch is ~33 degrees and it falls out
+  // of frame while the hive is targeted; at 3.5 m it is
+  // ~25 degrees and both fit. 'Targetable from a tad
+  // farther away so we can see the torch on screen at
+  // least.' This producer is the hive's ONLY range
+  // gate (the winner race checks facing alone for the
+  // hive; the handler re-checks nothing), so the wider
+  // leash lives here whole: the positions scan and the
+  // distance filter both take it. DRAFT — Adam tunes
+  // at sighting. placedTorchNearHive keeps its own
+  // radius (the torch still has to be UNDER the hive;
+  // where she stands was never that rule's business).
+  const HIVE_RANGE = 3.5;
+
   // HIVE ROW (Adam, 2026-10-28 — honey end-to-end):
   // nearest wild hive in range, trap-row precedent —
   // the caller owns gating (panels/modals/paused pass
@@ -8254,9 +8251,9 @@ export default function App() {
     }
     let nearest: { x: number; z: number } | null = null;
     let nearestDistance = Infinity;
-    for (const hive of hivePositions(genRef.current, player.x, player.z)) {
+    for (const hive of hivePositions(genRef.current, player.x, player.z, HIVE_RANGE)) {
       const distance = Math.hypot(hive.x - player.x, hive.z - player.z);
-      if (distance <= HARVEST_RANGE && distance < nearestDistance) {
+      if (distance <= HIVE_RANGE && distance < nearestDistance) {
         nearest = hive;
         nearestDistance = distance;
       }
@@ -8347,10 +8344,6 @@ export default function App() {
         setSelectedPileId(null);
         return;
       }
-      if (selectedTorchId !== null) {
-        setSelectedTorchId(null);
-        return;
-      }
       if (selectedTentId !== null) {
         setSelectedTentId(null);
         return;
@@ -8392,7 +8385,6 @@ export default function App() {
     placement,
     homeMenuOpen,
     selectedPileId,
-    selectedTorchId,
     selectedTentId,
     selectedFireId,
     selectedCauldronHearthId,
@@ -8461,10 +8453,6 @@ export default function App() {
     if (selectedPileId !== null) {
       selectedPileIdRef.current = null;
       setSelectedPileId(null);
-      return true;
-    }
-    if (selectedTorchId !== null) {
-      setSelectedTorchId(null);
       return true;
     }
     if (selectedTentId !== null) {
@@ -8539,7 +8527,6 @@ export default function App() {
       selectedPileId !== null ||
       selectedFireId !== null ||
       selectedSiteId !== null ||
-      selectedTorchId !== null ||
       selectedTentId !== null ||
       homeMenuOpen ||
       (craftingOpen && craftContextSiteId !== null);
@@ -8575,12 +8562,6 @@ export default function App() {
           setRitualNote(null);
         }
       }
-      if (selectedTorchId !== null) {
-        const torch = torchState.get(selectedTorchId) ?? null;
-        if (walkAwayShouldClose(torch, p, WALK_AWAY_LEASH)) {
-          setSelectedTorchId(null);
-        }
-      }
       if (selectedTentId !== null) {
         const tent =
           placedTents.find((t) => t.id === selectedTentId) ?? null;
@@ -8609,7 +8590,6 @@ export default function App() {
     selectedPileId,
     selectedFireId,
     selectedSiteId,
-    selectedTorchId,
     selectedTentId,
     homeMenuOpen,
     craftingOpen,
@@ -8671,7 +8651,6 @@ export default function App() {
     placement,
     homeMenuOpen,
     selectedPileId,
-    selectedTorchId,
     selectedTentId,
     selectedFireId,
     selectedSiteId,
@@ -8826,9 +8805,11 @@ export default function App() {
   // nearest overall, facing-tested alone), and ground's
   // fallback is gated on NOTHING else being in range at
   // all (accidental mud/dirt scooping).
-  // ONE shared computeUseWinner() feeds the press, the
-  // R press, the touch USE label, and the desktop pile
-  // button, so the tell can never disagree with the act.
+  // ONE derivation of the winner exists (this function,
+  // called once per render); the press, the R press,
+  // the touch USE label, and the desktop pile button
+  // all consume the stored pick (useWinnerRef), so the
+  // tell can never disagree with the act.
   const pileWouldWin = (
     pile: PileTarget | undefined,
     scatter: HarvestTarget | undefined,
@@ -9176,10 +9157,8 @@ export default function App() {
   };
 
   // The travel press: compose Background's validated
-  // travel functions from the faced winner. The faced
-  // anchor's position is re-derived for the refusal's
-  // feedback chip (the winner union carries ids, not
-  // positions — the placed-kind pattern).
+  // travel functions from the faced winner. A refusal
+  // joins the message feed like every spoken line.
   const handleCaveTravel = (winner: {
     kind: 'cave-enter' | 'cave-exit' | 'cave-descend' | 'cave-climb';
     id: string;
@@ -9188,39 +9167,19 @@ export default function App() {
     const renderer = rendererRef.current;
     const gen = genRef.current;
     if (!player || !renderer || !gen) return;
-    let anchorPos: { x: number; z: number } | null = null;
     let outcome: TravelOutcome;
     if (winner.kind === 'cave-enter') {
-      const mouth = caveMouthsNear(
-        String(gen.seed),
-        gen.findSpawn(),
-        (x, z) => gen.weightsAt(x, z),
-        player.x,
-        player.z,
-        HARVEST_RANGE,
-      ).find((m) => m.id === winner.id);
-      anchorPos = mouth?.spot ?? null;
       outcome = enterCave(renderer, player, gen, winner.id);
     } else if (winner.kind === 'cave-exit') {
-      anchorPos = caveLayoutForKey(seed, dimensionState.activeKey()).entryAnchor;
       outcome = exitCave(renderer, player);
     } else if (winner.kind === 'cave-descend') {
-      anchorPos =
-        caveLayoutForKey(seed, dimensionState.activeKey()).layers[0]
-          ?.shaftAnchor ?? null;
       outcome = descend(player);
     } else {
-      anchorPos =
-        caveLayoutForKey(seed, dimensionState.activeKey()).layers[1]
-          ?.entryAnchor ?? null;
       outcome = ascend(player);
     }
     if (outcome.ok === false) {
       const line = CAVE_TRAVEL_REFUSALS[outcome.reason] ?? 'The way is blocked.';
-      if (anchorPos) {
-        const anchor = projectAnchor(anchorPos.x, anchorPos.z, 'scatter');
-        if (anchor) showFeedback(line, 'blocked', anchor.x, anchor.y);
-      }
+      showFeedback(line, 'blocked');
     }
   };
 
@@ -9234,7 +9193,7 @@ export default function App() {
   const handleUseInteract = (): void => {
     const player = playerRef.current;
     if (!player) return;
-    const winner = computeUseWinner();
+    const winner = useWinnerRef.current;
     if (winner === null) return;
     switch (winner.kind) {
       case 'scatter':
@@ -9282,14 +9241,27 @@ export default function App() {
         setSelectedTentId(winner.id);
         break;
       case 'torch':
-        setSelectedTorchId(winner.id);
+        // TORCH PICKUP ON E (Adam, 2026-10-31): E at a
+        // faced placed torch picks it up — the same
+        // pickup the torch window's Pick up act runs
+        // (grant-first; a full pack refuses at the torch
+        // and the torch stays). This DISPLACES E's old
+        // torch act (opening the window): the window
+        // stays as the second door, behind the torch's
+        // chip click. R already picked up and is
+        // unchanged — E and R agree now.
+        handlePickupTorch(winner.id);
         break;
       case 'loom':
         // The loom's door is its pill: facing it and
-        // pressing USE opens the Crafting panel, which
-        // the feed (same winner) has already filtered
-        // to loom + hand recipes. No selected-loom
-        // state — the panel is the whole interaction.
+        // pressing USE opens the Crafting panel, and the
+        // station feed (same winner) counts the loom, so
+        // its recipes read craftable here — since the
+        // station-rows landing nothing is filtered away;
+        // every recipe shows and the loom's stop saying
+        // 'Needs a loom.'. No selected-loom state — the
+        // panel is the whole interaction. The WEAVE row
+        // in the column fires this same act.
         openCraftingPanel();
         break;
       case 'cauldron':
@@ -9326,7 +9298,7 @@ export default function App() {
   // R is a no-op there (hive Relocate is an unbuilt
   // seed, named not built).
   const handleSecondInteract = (): void => {
-    const winner = computeUseWinner();
+    const winner = useWinnerRef.current;
     if (winner === null) return;
     switch (winner.kind) {
       case 'scatter':
@@ -9336,7 +9308,7 @@ export default function App() {
         bus.emit('pile:pickup-requested', { pileId: winner.pile.id });
         break;
       case 'torch':
-        handleTorchAction(winner.id, 'pick-up');
+        handlePickupTorch(winner.id);
         break;
       case 'tent':
         handleTentAction(winner.id, 'take-down');
@@ -9386,13 +9358,6 @@ export default function App() {
       ];
       if (target && !target.disabled) {
         handlePileAction(selectedPile, target.id);
-      }
-      return;
-    }
-    if (selectedTorch !== undefined) {
-      const target = flattenMenuTargets(torchMenuActions())[digit - 1];
-      if (target && !target.disabled) {
-        handleTorchAction(selectedTorch.id, target.id);
       }
       return;
     }
@@ -9523,7 +9488,6 @@ export default function App() {
       firstRunDialogOpen ||
       homeMenuOpen ||
       selectedPileId !== null ||
-      selectedTorchId !== null ||
       selectedTentId !== null ||
       selectedFireId !== null ||
       selectedSiteId !== null ||
@@ -9546,7 +9510,6 @@ export default function App() {
     firstRunDialogOpen,
     homeMenuOpen,
     selectedPileId,
-    selectedTorchId,
     selectedTentId,
     selectedFireId,
     selectedSiteId,
@@ -9617,8 +9580,7 @@ export default function App() {
       if (
         homeMenuOpen ||
         selectedPileId !== null ||
-        selectedTorchId !== null ||
-        selectedTentId !== null ||
+          selectedTentId !== null ||
         selectedFireId !== null ||
         selectedSiteId !== null
       ) {
@@ -9722,7 +9684,6 @@ export default function App() {
     handlePlaceConfirm,
     homeMenuOpen,
     selectedPileId,
-    selectedTorchId,
     selectedTentId,
     selectedFireId,
     selectedSiteId,
@@ -9739,9 +9700,24 @@ export default function App() {
   // conflict with player.onCanvasClick (unlocked →
   // requestPointerLock, locked → no-op there). Phone
   // unchanged (no pointer lock).
+  // RIGHT BUTTON (Adam's torch completion, 2026-10-31):
+  // in the same locked state, a right-click places a
+  // carried lit torch at her feet — the shared place
+  // core, the feed speaks the result. The gate set is
+  // the left button's, shared verbatim, PLUS one of its
+  // own: never while a placement preview is armed (no
+  // torch planted behind a ghost). Unlocked, the game
+  // claims nothing — the browser keeps its menu; the
+  // platform suppresses that menu while locked, so no
+  // contextmenu handling is needed or wanted. Event
+  // route: 'click' fires only for the primary button,
+  // so the right button arrives on 'auxclick' — one
+  // handler registered for both; auxclick never fires
+  // for button 0, so the left button can't double-fire,
+  // and the button guard inside drops the middle (1).
   useEffect(() => {
     const onClick = (e: MouseEvent): void => {
-      if (e.button !== 0) return;
+      if (e.button !== 0 && e.button !== 2) return;
       if (document.pointerLockElement === null) return;
       if (pausedRef.current) return;
       if (
@@ -9754,6 +9730,11 @@ export default function App() {
       ) {
         return;
       }
+      if (e.button === 2) {
+        if (placement !== null) return;
+        handleWorldPlaceTorch();
+        return;
+      }
       // Inventory is NOT a gate here (Adam, 2026-10-31):
       // the pack left the modal set for world interaction
       // (see the keydown's panel-family branch), and this
@@ -9762,7 +9743,11 @@ export default function App() {
       handleUseInteract();
     };
     window.addEventListener('click', onClick);
-    return () => window.removeEventListener('click', onClick);
+    window.addEventListener('auxclick', onClick);
+    return () => {
+      window.removeEventListener('click', onClick);
+      window.removeEventListener('auxclick', onClick);
+    };
   }, [
     optionsOpen,
     introOpen,
@@ -9771,7 +9756,9 @@ export default function App() {
     inventoryOpen,
     craftingOpen,
     charmsOpen,
+    placement,
     handleUseInteract,
+    handleWorldPlaceTorch,
   ]);
 
   // LOCATION CHIP (see the header): dominant biome from the
@@ -9956,8 +9943,13 @@ export default function App() {
   // it, so every tell agrees with what USE/R will do.
   // Position state (10 Hz tick) drives the re-renders,
   // so the tells appear and disappear as she moves
-  // and turns.
+  // and turns. THE ONE PICK (Adam's contract): the same
+  // object is stored to useWinnerRef — E, R, and the
+  // cauldron placement act on the stored pick, never a
+  // re-derivation, so the pill and the press cannot
+  // disagree.
   const useWinner = computeUseWinner();
+  useWinnerRef.current = useWinner;
 
   const availableStations: CraftingStation[] = [];
   // FACED-TARGET STATION FEED (Adam, 2026-10-30, final
@@ -10032,21 +10024,20 @@ export default function App() {
           )
           .join(', ')}`;
 
-  // FILTER BY STATION (Adam, 2026-10-30): only hand and
-  // unstated recipes (always available) and the recipes
-  // of fed stations reach the panel — absent-station
-  // recipes do not appear at all. Everything below
-  // (grouping, the ownership sink, the counts) derives
-  // from this visible set, so the sink partitions
-  // visible rows only: a superseded recipe at an absent
-  // station hides with its station and stays out of
-  // the 'Owned & Superseded' block until it returns.
-  const craftingRecipes: CraftingRecipe[] = RECIPES.filter(
-    (recipe) =>
-      recipe.station === undefined ||
-      recipe.station === 'hand' ||
-      availableStations.includes(recipe.station),
-  ).map((recipe) => {
+  // STATION ROWS SPEAK (Adam, 2026-10-31 — supersedes
+  // the 2026-10-30 FILTER BY STATION): absent-station
+  // recipes used to not appear at all, which made their
+  // station want invisible — "the player won't know he
+  // needs a loom unless he goes poking around for it."
+  // Now EVERY recipe maps: a station-gated row at an
+  // absent station shows with its want named in the row
+  // (the availabilityNote below) and a stationUnmet flag
+  // the menu's 'Craftable here' filter reads. Everything
+  // below (grouping, the ownership sink, the counts)
+  // derives from this full set, so the sink partitions
+  // all rows: a superseded recipe at an absent station
+  // sinks visibly instead of hiding with its station.
+  const craftingRecipes: CraftingRecipe[] = RECIPES.map((recipe) => {
     // OR over every present station: a recipe is craftable
     // when ANY present station satisfies it. When none does,
     // prefer the check for a present station (ingredient /
@@ -10075,7 +10066,7 @@ export default function App() {
       availabilityNote =
         check.requiredStation === 'workstation'
           ? 'Needs a tree stump to work at.'
-          : `Needs a ${check.requiredStation} station.`;
+          : `Needs a ${check.requiredStation}.`;
     } else if (check.missingIngredients.length > 0) {
       const first = check.missingIngredients[0];
       availabilityNote = `Missing ${first.item} (${first.held} / ${first.quantity}).`;
@@ -10129,9 +10120,9 @@ export default function App() {
     // carries the workstation addition disables + labels,
     // overriding Systems' mapping. The label replaces
     // the availability note via the no-recraft render
-    // (disabledLabel set → note not rendered). No stump
-    // in range → the station gate above already failed;
-    // the override needs a target, so it does not fire.
+    // (disabledLabel set → note not rendered). The
+    // override needs a faced stump target, so it does
+    // not fire without one.
     // Systems' canCraft is UNCHANGED — this is a shell
     // mapping override only.
     const stumpAlreadyWorkbench =
@@ -10190,6 +10181,18 @@ export default function App() {
       canCraft: stumpAlreadyWorkbench
         ? false
         : check.ok && check.ownership === 'available',
+      // STATION UNMET (Adam, 2026-10-31): the caller-
+      // decided flag the menu's 'Craftable here' filter
+      // reads — the recipe wants a station (stated, not
+      // hand) that is not among the stations at hand.
+      // The want itself is spoken by availabilityNote
+      // above; when the station IS present the row is
+      // silent about it (the header's station note
+      // already names what's nearby).
+      stationUnmet:
+        recipe.station !== undefined &&
+        recipe.station !== 'hand' &&
+        !availableStations.includes(recipe.station),
       // NO-RECRAFT BINDING (Adam, 2026-10-28 — Systems owns
       // the rule, the shell renders it): Systems' check.ok
       // already folds ownership in (ok is false when
@@ -10303,6 +10306,17 @@ export default function App() {
       : [];
   const presentedTrap = useWinner?.kind === 'trap' ? trapRowTrap : null;
   const presentedHive = useWinner?.kind === 'hive' ? hiveRowHive : null;
+  // THE LOOM'S PILL (Adam, 2026-10-31): the loom winner
+  // presents its WEAVE row — the trap/hive shape — so a
+  // faced loom finally shows its action on desktop too
+  // (before this, the verb lived only in the touch USE
+  // label and the path was folklore). The label is the
+  // verb alone; the column seats above the loom itself
+  // (stationAnchor), so the object is named by place.
+  const presentedLoom =
+    useWinner?.kind === 'loom'
+      ? { id: useWinner.id, label: 'Weave' }
+      : null;
 
   // DESKTOP PILE PICKUP (see the header): the mouse twin
   // of R's pile second — shown only when the faced
@@ -10372,9 +10386,10 @@ export default function App() {
                   ? 'RENDER'
                   : useWinner.kind === 'fire'
                     ? fireWinnerLabel
-                  : useWinner.kind === 'site' ||
+                  : useWinner.kind === 'torch'
+                ? 'PICK UP'
+                : useWinner.kind === 'site' ||
                     useWinner.kind === 'tent' ||
-                  useWinner.kind === 'torch' ||
                   useWinner.kind === 'home'
                 ? 'OPEN'
               : useWinner.kind === 'cave-enter'
@@ -10489,7 +10504,7 @@ export default function App() {
         {torchAnchors.map(({ torch, x, y }) => (
           <Fragment key={torch.id}>
             <WorldAnchor x={x} y={y} interactive>
-              <TorchChip onSelect={() => setSelectedTorchId(torch.id)} />
+              <TorchChip onSelect={() => handlePickupTorch(torch.id)} />
             </WorldAnchor>
           </Fragment>
         ))}
@@ -10573,21 +10588,6 @@ export default function App() {
               showKeyHints={!isTouch}
               onSelect={(id) => handleFireAction(selectedFire.id, id)}
               onClose={() => setSelectedFireId(null)}
-            />
-          </WorldAnchor>
-        ) : null}
-        {selectedTorch && selectedTorchAnchor ? (
-          <WorldAnchor
-            x={selectedTorchAnchor.x}
-            y={selectedTorchAnchor.y}
-            interactive
-          >
-            <ContextMenu theme={lookThemes.world}
-              objectName="Lit Torch"
-              actions={torchMenuActions()}
-              showKeyHints={!isTouch}
-              onSelect={(id) => handleTorchAction(selectedTorch.id, id)}
-              onClose={() => setSelectedTorchId(null)}
             />
           </WorldAnchor>
         ) : null}
@@ -10782,6 +10782,8 @@ export default function App() {
           onCollectTrap={handleCollectTrap}
           hive={presentedHive}
           onHarvestHive={handleHarvestHive}
+          loom={presentedLoom}
+          onWeave={() => openCraftingPanel()}
           showKeyHints={!isTouch}
           lookNode={
             !LOOK_PARKED && lookTarget ? (
@@ -10814,21 +10816,36 @@ export default function App() {
               : `Pick up ${displayNameFor(desktopPilePickup.item)} × ${desktopPilePickup.quantity}`}
           </button>
         ) : null}
-        {/* PILL FIX: pickup feedback lives HERE, last in the
-          z-40 overlay (after the buttons + pile button), so
-          it paints ABOVE the menu instead of under it (it
-          used to sit in the z-30 overlay, where the z-40
-          column painted over it near screen-middle).
-          Still below z-50 modals. WorldAnchor positions
-          by % in any absolute inset-0 parent, so the move
-          changes layering only, not placement. */}
-        {feedbacks.map((feedback) => (
-          <Fragment key={feedback.id}>
-            <WorldAnchor x={feedback.x} y={feedback.y}>
-              <ObjectFeedback text={feedback.text} tone={feedback.tone} />
-            </WorldAnchor>
-          </Fragment>
-        ))}
+        {/* THE MESSAGE FEED (Adam, 2026-10-31): the spoken
+          lines' ONE seat — a reserved stack in the same
+          z-40 overlay (above the world buttons, below z-50
+          modals), bottom-center, clear of the pill column
+          (upper-center), the HUD (left), the seed bar
+          (bottom-left) and the controls hint (bottom-right).
+          The stack is bottom-anchored, so it grows UPWARD:
+          the newest line (last in the list) sits at the
+          fixed bottom seat and older lines ride up, fading
+          in their last ~0.6 s before they expire from the
+          top. Pointer-events-none: speech never takes a
+          tap. */}
+        <div
+          aria-live="polite"
+          className="pointer-events-none absolute inset-x-0 bottom-28 flex flex-col items-center justify-end gap-1.5 px-2"
+        >
+          {feedbacks.map((feedback) => (
+            <Fragment key={feedback.id}>
+              <ObjectFeedback
+                text={feedback.text}
+                tone={feedback.tone}
+                className={
+                  feedback.fading
+                    ? 'opacity-0 transition-opacity duration-500'
+                    : 'transition-opacity duration-500'
+                }
+              />
+            </Fragment>
+          ))}
+        </div>
       </div>
 
       {/* HUD shell: needs row (awaiting survival systems) + HUD block. */}
@@ -11510,6 +11527,7 @@ export default function App() {
         <p>V / C to switch camera</p>
         <p>E — Interact</p>
         <p>R — 2nd Interact</p>
+        <p>RMB — Place lit torch</p>
         <p>Esc — Options</p>
         {cameraMode === 'first' && <p>Click the world to capture the mouse</p>}
       </div>
@@ -11526,6 +11544,11 @@ export default function App() {
           onLook={applyTouchLook}
           onInteract={handleUseInteract}
           interactLabel={useWinnerLabel}
+          onPlaceTorch={
+            inventoryItems.some((item) => item.id === ITEMS.litTorch)
+              ? handleWorldPlaceTorch
+              : undefined
+          }
           onJump={() => {
             playerRef.current?.pressJump();
           }}

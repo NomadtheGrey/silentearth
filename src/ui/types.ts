@@ -151,6 +151,15 @@ export interface CraftingRecipe {
   ladderLine?: string;
   ingredients: RecipeIngredient[];
   canCraft: boolean;
+  /**
+   * Station want unmet (caller-decided): the recipe wants
+   * a station that is not at hand, so the row shows but
+   * cannot craft here. The want itself is spoken through
+   * availabilityNote; this flag is what the menu's
+   * 'Craftable here' filter reads. Optional (absent =
+   * station met or none wanted).
+   */
+  stationUnmet?: boolean;
   /** Why crafting is or is not available, in the caller's words. Optional. */
   availabilityNote?: string;
   /**

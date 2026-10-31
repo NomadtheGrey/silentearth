@@ -4340,3 +4340,306 @@ export function pushOutOfWalls(
   }
   return { x: px, z: pz };
 }
+
+// =================================================================
+// THE WATER TOWER (site #13; Background lane; Adam asked
+// after it directly, 2026-10-31). A municipal water tower
+// standing over field country — the tallest structure in
+// the world and a landmark: she navigates by it. SINGULAR
+// by the landmark argument (DEV-approved at the claim):
+// a tower's work is being THE tower on the horizon; the
+// recurrence question stays Adam's, unopened — it is
+// distribution-eligible later like the barn and the silo
+// if he ever calls it.
+//
+// Siting (mirrors the Grain Silo's law, the nearest kin):
+// a ring 450–800 m from spawn (settlement country); the
+// biome at the seat must read oldfieldRise-dominant OR
+// meadow weight >= 0.2 — open field country a tower
+// serves. Resolution is legal-first like every settled
+// scan (taste, else the first spacing-legal seat on the
+// bearing, else the starved-bearing extension to
+// 1200 m). Spacing keeps the unified margin against all
+// twelve predecessors (ribbons measured to the line).
+// clearRadius 14 covers the legs, the fallen tank's
+// reach, and a walking margin.
+//
+// The dial sheet (every number DRAFT until Adam's pin
+// pass, consumed from its own streams in fixed order):
+//   SCALE ('tower:scale'): ONE uniform draw 0.90–1.15 —
+//     at 1.0 the tower stands 14.7 m (legs 9.6, tank 3.6,
+//     roof the rest), the tallest silhouette yet.
+//   STATE ('tower:state'): standing 60% / fallen 40%.
+//     A fallen tower lies toward a rolled CARDINAL (the
+//     silo's fall shape): legs splayed at the seat, the
+//     tank down in the grass beyond them.
+//   ARRANGEMENT ('tower:plan'): the ladder faces the
+//     spawn approach ±1 quarter-turn (the silo's rule);
+//     a PUMP SHED companion at ~30% (a small gabled shed
+//     ~7.5 m out on its own rolled quarter) — the little
+//     house the pump lived in.
+// No pad disc: where the silo stands on cracked silt, the
+// tower stands in grass. Scenery like the rest of the
+// old world's leavings — never harvested, never entered
+// this landing; the ladder and the tank crown are
+// staging hooks (ladderSpot / topSpot) the way the
+// silo's hatch and crown are.
+export const TOWER_MIN_DIST_M = 450;
+export const TOWER_MAX_DIST_M = 800;
+export const TOWER_CLEAR_RADIUS_M = 14;
+export const TOWER_MEADOW_EDGE_WEIGHT = 0.2;
+export const TOWER_LEG_HEIGHT_M = 9.6;
+export const TOWER_TANK_RADIUS_M = 2.9;
+export const TOWER_TANK_HEIGHT_M = 3.6;
+export const TOWER_TOTAL_HEIGHT_M = 14.7;
+
+export type WaterTowerState = 'standing' | 'fallen';
+
+export interface WaterTowerSite {
+  id: 'waterTower';
+  center: { x: number; z: number };
+  clearRadius: number;
+  biome: BiomeId;
+  distance: number;
+  state: WaterTowerState;
+  /** The uniform scale draw (0.90–1.15). */
+  scale: number;
+  /** World cardinal the tank fell toward (fallen only). */
+  fallSide: 'north' | 'south' | 'east' | 'west' | null;
+  /** At the ladder's foot, on the ladder side. */
+  ladderSpot: { x: number; z: number };
+  /** The standing tower's crown (a staging hook). */
+  topSpot: { x: number; z: number };
+  topHeightM: number;
+  shedSpot: { x: number; z: number } | null;
+  features: ScatterObject[];
+  walls: SiteWallBox[];
+  bounds: { minX: number; maxX: number; minZ: number; maxZ: number };
+}
+
+const towerCache = new Map<string, WaterTowerSite>();
+
+export function waterTowerSite(
+  seed: string,
+  spawn: { x: number; z: number },
+  weightsAtPos: (x: number, z: number) => BiomeWeights,
+): WaterTowerSite {
+  const key = `${seed}::waterTower`;
+  const cached = towerCache.get(key);
+  if (cached) return cached;
+
+  const grove = groveSite(seed, spawn, (x, z) => weightsAtPos(x, z).dominant);
+  const school = schoolhouseSite(seed, spawn, weightsAtPos);
+  const village = villageSite(seed, spawn, weightsAtPos);
+  const farm = farmhouseSite(seed, spawn, weightsAtPos);
+  const chapel = chapelSite(seed, spawn, weightsAtPos);
+  const mouth = caveMouthSite(seed, spawn, weightsAtPos);
+  const store = generalStoreSite(seed, spawn, weightsAtPos);
+  const mill = drownedMillSite(seed, spawn, weightsAtPos);
+  const barn = barnSite(seed, spawn, weightsAtPos);
+  const silo = siloSite(seed, spawn, weightsAtPos);
+  const road = sunkenRoadSite(seed, spawn, weightsAtPos);
+  const siding = railSidingSite(seed, spawn, weightsAtPos);
+  const circles = [grove, school, village, farm, chapel, mouth, store, mill, barn, silo];
+  const spacingLegal = (x: number, z: number): boolean =>
+    circles.every(
+      (s) =>
+        Math.hypot(x - s.center.x, z - s.center.z) >=
+        s.clearRadius + TOWER_CLEAR_RADIUS_M + SITE_SPACING_MARGIN_M,
+    ) &&
+    distToSegment(x, z, road.a, road.b) >= ROAD_RIBBON_HALF_WIDTH_M + TOWER_CLEAR_RADIUS_M + SITE_SPACING_MARGIN_M &&
+    distToSegment(x, z, siding.a, siding.b) >= SIDING_HALF_WIDTH_M + TOWER_CLEAR_RADIUS_M + SITE_SPACING_MARGIN_M;
+
+  const bearing = mulberry32(deriveSeed(seed, 'site:waterTower'))() * Math.PI * 2;
+  const dirX = Math.cos(bearing);
+  const dirZ = Math.sin(bearing);
+  let center = {
+    x: spawn.x + dirX * TOWER_MAX_DIST_M,
+    z: spawn.z + dirZ * TOWER_MAX_DIST_M,
+  };
+  let biome = weightsAtPos(center.x, center.z).dominant;
+  let distance = TOWER_MAX_DIST_M;
+  let fallback: { x: number; z: number; biome: BiomeId; distance: number } | null = null;
+  let accepted = false;
+  for (let d = TOWER_MIN_DIST_M; d <= TOWER_MAX_DIST_M; d += GROVE_SCAN_STEP_M) {
+    const x = spawn.x + dirX * d;
+    const z = spawn.z + dirZ * d;
+    if (!spacingLegal(x, z)) continue;
+    const w = weightsAtPos(x, z);
+    if (!fallback) fallback = { x, z, biome: w.dominant, distance: d };
+    if (w.dominant === 'oldfieldRise' || w.weights.meadow >= TOWER_MEADOW_EDGE_WEIGHT) {
+      center = { x, z };
+      biome = w.dominant;
+      distance = d;
+      accepted = true;
+      break;
+    }
+  }
+  if (!accepted && fallback) {
+    center = { x: fallback.x, z: fallback.z };
+    biome = fallback.biome;
+    distance = fallback.distance;
+  }
+  if (!accepted && !fallback) {
+    for (let d = TOWER_MAX_DIST_M + GROVE_SCAN_STEP_M; d <= 1200; d += GROVE_SCAN_STEP_M) {
+      const x = spawn.x + dirX * d;
+      const z = spawn.z + dirZ * d;
+      if (!spacingLegal(x, z)) continue;
+      center = { x, z };
+      biome = weightsAtPos(x, z).dominant;
+      distance = d;
+      break;
+    }
+  }
+
+  // --- The dial sheet (fixed consumption order) --------
+  const scale = 0.9 + mulberry32(deriveSeed(seed, 'tower:scale'))() * 0.25;
+  const state: WaterTowerState = mulberry32(deriveSeed(seed, 'tower:state'))() < 0.6 ? 'standing' : 'fallen';
+  const planRand = mulberry32(deriveSeed(seed, 'tower:plan'));
+  const ladderJitter = Math.floor(planRand() * 3) - 1;
+  const shedPresent = planRand() < 0.3;
+  const shedQuarter = Math.floor(planRand() * 4);
+  const fallQuarter = Math.floor(planRand() * 4);
+
+  // The approach cardinal: the compass quarter the
+  // spawn direction falls in, from the tower's seat.
+  const toSpawn = { x: spawn.x - center.x, z: spawn.z - center.z };
+  const approachQuarter =
+    Math.abs(toSpawn.x) > Math.abs(toSpawn.z)
+      ? toSpawn.x > 0
+        ? 1
+        : 3
+      : toSpawn.z > 0
+        ? 2
+        : 0;
+  const ladderDir = CARDINALS[(approachQuarter + ladderJitter + 4) % 4];
+  const rotYOf = (d: { x: number; z: number }): number => Math.atan2(d.x, d.z);
+
+  const s = scale;
+  const legHalf = 2.2 * s;
+  const features: ScatterObject[] = [];
+  const walls: SiteWallBox[] = [];
+  const wall = (cx: number, cz: number, hx: number, hz: number): void => {
+    walls.push({ minX: cx - hx, maxX: cx + hx, minZ: cz - hz, maxZ: cz + hz });
+  };
+
+  let fallSide: WaterTowerSite['fallSide'] = null;
+  let topHeightM = TOWER_TOTAL_HEIGHT_M * s;
+  if (state === 'fallen') {
+    const fall = CARDINALS[fallQuarter];
+    fallSide = fall.side;
+    features.push({
+      kind: 'waterTowerLegsDown',
+      x: center.x,
+      z: center.z,
+      y: 0,
+      scale: s,
+      rotY: rotYOf(fall),
+    });
+    features.push({
+      kind: 'waterTowerTankDown',
+      x: center.x + fall.x * TOWER_TANK_RADIUS_M * s * 0.9,
+      z: center.z + fall.z * TOWER_TANK_RADIUS_M * s * 0.9,
+      y: 0,
+      scale: s,
+      rotY: rotYOf(fall),
+    });
+    // The splayed frame underfoot.
+    wall(center.x, center.z, 2.7 * s, 2.7 * s);
+    // The downed tank: its length along the fall axis,
+    // its radius across it.
+    const tankC = TOWER_TANK_RADIUS_M * s * 0.9;
+    const tankLen = TOWER_TANK_HEIGHT_M * s;
+    const tankR = TOWER_TANK_RADIUS_M * s;
+    if (fall.x !== 0) {
+      walls.push({
+        minX: Math.min(center.x + fall.x * tankC - fall.x * tankLen / 2, center.x + fall.x * tankC + fall.x * tankLen / 2),
+        maxX: Math.max(center.x + fall.x * tankC - fall.x * tankLen / 2, center.x + fall.x * tankC + fall.x * tankLen / 2),
+        minZ: center.z - tankR,
+        maxZ: center.z + tankR,
+      });
+    } else {
+      walls.push({
+        minX: center.x - tankR,
+        maxX: center.x + tankR,
+        minZ: Math.min(center.z + fall.z * tankC - fall.z * tankLen / 2, center.z + fall.z * tankC + fall.z * tankLen / 2),
+        maxZ: Math.max(center.z + fall.z * tankC - fall.z * tankLen / 2, center.z + fall.z * tankC + fall.z * tankLen / 2),
+      });
+    }
+    topHeightM = TOWER_TANK_RADIUS_M * 2 * s;
+  } else {
+    features.push({
+      kind: 'waterTowerLegs',
+      x: center.x,
+      z: center.z,
+      y: 0,
+      scale: s,
+      rotY: rotYOf(ladderDir),
+    });
+    features.push({
+      kind: 'waterTowerTank',
+      x: center.x,
+      z: center.z,
+      y: 0,
+      scale: s,
+      rotY: rotYOf(ladderDir),
+    });
+    // Four legs + the centre riser pipe — she walks
+    // UNDER the tank, between the legs.
+    for (const sx of [-1, 1]) {
+      for (const sz of [-1, 1]) {
+        wall(center.x + sx * legHalf, center.z + sz * legHalf, 0.45 * s, 0.45 * s);
+      }
+    }
+    wall(center.x, center.z, 0.35 * s, 0.35 * s);
+  }
+
+  let shedSpot: { x: number; z: number } | null = null;
+  if (shedPresent) {
+    const shedDir = CARDINALS[shedQuarter];
+    shedSpot = { x: center.x + shedDir.x * 7.5, z: center.z + shedDir.z * 7.5 };
+    features.push({
+      kind: 'pumpShed',
+      x: shedSpot.x,
+      z: shedSpot.z,
+      y: 0,
+      scale: 1,
+      rotY: rotYOf({ x: -shedDir.x, z: -shedDir.z }),
+    });
+    wall(shedSpot.x, shedSpot.z, 1.4, 1.1);
+  }
+
+  const site: WaterTowerSite = {
+    id: 'waterTower',
+    center,
+    clearRadius: TOWER_CLEAR_RADIUS_M,
+    biome,
+    distance,
+    state,
+    scale,
+    fallSide,
+    ladderSpot: {
+      x: center.x + ladderDir.x * (3.1 * s + 0.6),
+      z: center.z + ladderDir.z * (3.1 * s + 0.6),
+    },
+    topSpot: { x: center.x, z: center.z },
+    topHeightM,
+    shedSpot,
+    features,
+    walls,
+    bounds: {
+      minX: center.x - TOWER_CLEAR_RADIUS_M,
+      maxX: center.x + TOWER_CLEAR_RADIUS_M,
+      minZ: center.z - TOWER_CLEAR_RADIUS_M,
+      maxZ: center.z + TOWER_CLEAR_RADIUS_M,
+    },
+  };
+  towerCache.set(key, site);
+  return site;
+}
+
+/** True when a world position lies inside the water
+ *  tower's clearing. */
+export function waterTowerContains(site: WaterTowerSite, x: number, z: number): boolean {
+  return Math.hypot(x - site.center.x, z - site.center.z) <= site.clearRadius;
+}
