@@ -63,7 +63,8 @@ export type AnimalKind =
   | 'fish'
   | 'eels'
   | 'opossum'
-  | 'shrew';
+  | 'shrew'
+  | 'cat';
 
 export const ANIMAL_KINDS: AnimalKind[] = [
   'owl', 'bat', 'pigeon', 'beaver', 'turtle', 'deer', 'fox', 'mole',
@@ -147,6 +148,16 @@ export const ANIMAL_DEFS: Record<AnimalKind, AnimalDef> = {
   eels: { biomes: ['creekBottom', 'mirewood'], temperament: 'skittish', movement: 'water', anim: 'swim', active: 'day', flee: 'straight', wanderRange: 8, nearestHop: true },
   opossum: { biomes: ['forest', 'oldfieldRise', 'tanglewood'], temperament: 'skittish', movement: 'ground', anim: 'bob', active: 'day', flee: 'freeze', wanderRange: 8 },
   shrew: { biomes: ['forest', 'meadow'], temperament: 'skittish', movement: 'ground', anim: 'hop', active: 'day', flee: 'zigzag', wanderRange: 3 },
+  // The cat is SINGULAR (Adam, 2026-10-31): the found
+  // familiar at the burnt village's hearthHouse, not an
+  // ambient population. This entry exists only because the
+  // Record is exhaustive over AnimalKind — it is NOT a
+  // roster entry: 'cat' is absent from ANIMAL_KINDS (the
+  // list every spawn/eligibility filter iterates) and its
+  // biomes are empty, so no filter can ever select it.
+  // Build 2 owns its spawn, record, and behavior; the
+  // values below are inert placeholders in its shape.
+  cat: { biomes: [], temperament: 'curious', movement: 'ground', anim: 'bob', active: 'day', flee: 'straight', wanderRange: 3 },
 };
 
 /** Draft tunables (all flagged for Adam's pin pass). */
@@ -165,6 +176,25 @@ export const MAX_PER_CHUNK = 3;
 export const BIOME_WEIGHT_MIN = 0.15;
 export const PERCH_HEIGHT_M = 2.0;
 export const WATER_Y = 0.05;
+/** Hand-snatch (Adam 2026-10-31: no rod ever, the weir is law — this is her hand). All DRAFT. */
+export const SNATCH_RANGE_M = 2.5;
+export const SNATCH_CHANCE = 0.35;
+/** A missed snatch spooks the target and every fish within this radius of it. */
+export const SPOOK_RADIUS_M = 6;
+/** How long a spooked fish holds its dart (seconds). */
+export const SPOOK_DURATION_S = 1.2;
+/** Burst speed multiplier while a spook-dart runs. */
+export const SPOOK_BURST_FACTOR = 3;
+/** Feral snap (Companions Build 1, DRAFT): the lunge phase's length and reach. */
+export const SNAP_LUNGE_S = 0.28;
+export const SNAP_LUNGE_SPEED_MPS = 5;
+export const SNAP_STOP_SHORT_M = 0.8;
+/** Squirrel climb (2026-10-31, all DRAFT): refuge reach, rise speed, perch height, coast-clear range + delay. */
+export const SQUIRREL_TREE_REACH_M = 12;
+export const SQUIRREL_CLIMB_SPEED_MPS = 1.4;
+export const SQUIRREL_PERCH_Y_M = 2.6;
+export const SQUIRREL_COAST_CLEAR_M = 10;
+export const SQUIRREL_DESCENT_DELAY_S = 3;
 
 export interface AnimalPoint {
   x: number;
@@ -173,7 +203,26 @@ export interface AnimalPoint {
 
 export type AnimalMode = 'wander' | 'idle' | 'flee' | 'perched' | 'fly';
 
+/**
+ * Squirrel climb states (2026-10-31 — squirrels climb
+ * trees): 'none' is every other kind, always, and a
+ * squirrel on the ground. The cycle: toTree (run for the
+ * trunk) → climbing (rise) → perched (canopy refuge) →
+ * descending (coast clear, come down) → none.
+ */
+export type ClimbState = 'none' | 'toTree' | 'climbing' | 'perched' | 'descending';
+
 export interface AnimalInstance {
+  /**
+   * Stable per-individual id, minted at spawn as
+   * `animal:<cx>,<cz>:<spawnIndex>`. The spawn is
+   * deterministic, so the id names the same individual across
+   * chunk reloads and save/load — the key Systems'
+   * companions.ts records and isFeral() reads (Companions
+   * Build 1, 2026-10-31). Ambient instances carry it unused
+   * until one is touched; promotion keeps the id.
+   */
+  id: string;
   kind: AnimalKind;
   x: number;
   z: number;
@@ -197,6 +246,26 @@ export interface AnimalInstance {
   perchY: number;
   /** Zigzag side flag — toggled on each flee re-target (zigzag kinds only). */
   fleeTurn: boolean;
+  /**
+   * Seconds of spook-dart remaining (the hand-snatch's
+   * failure, 2026-10-31): while > 0 the animal holds the
+   * dart target attemptSnatch set (its far anchor point)
+   * at burst speed and the ordinary flee re-target stands
+   * down. Zero for every unspooked animal.
+   */
+  spookT: number;
+  /**
+   * Seconds of feral-snap lunge remaining (Companions
+   * Build 1): while > 0 the animal lunges toward the snap
+   * target triggerSnap set (a point just short of her hand)
+   * at lunge speed; when the timer lapses the bolt fires —
+   * the spook-dart away. Zero for every unprovoked animal.
+   */
+  snapT: number;
+  /** Squirrel climb state (see ClimbState); 'none' for every other kind. */
+  climbState: ClimbState;
+  /** Seconds she has stayed beyond coast-clear range of a perched squirrel. */
+  clearT: number;
   /** Water points (water kinds) / perch points (flying kinds) in this chunk. */
   anchors: AnimalPoint[];
 }
@@ -309,6 +378,7 @@ export function spawnAnimalsForChunk(input: SpawnAnimalsInput): AnimalInstance[]
     const kind = eligible[i];
     const def = ANIMAL_DEFS[kind];
     const base: AnimalInstance = {
+      id: `animal:${cx},${cz}:${i}`,
       kind,
       x: 0,
       z: 0,
@@ -327,6 +397,10 @@ export function spawnAnimalsForChunk(input: SpawnAnimalsInput): AnimalInstance[]
       timer: 1 + rng() * 3,
       perchY: 0,
       fleeTurn: false,
+      spookT: 0,
+      snapT: 0,
+      climbState: 'none',
+      clearT: 0,
       anchors: [],
     };
     if (def.movement === 'water') {
@@ -360,6 +434,14 @@ export function spawnAnimalsForChunk(input: SpawnAnimalsInput): AnimalInstance[]
       base.y = 0;
       base.homeX = base.x;
       base.homeZ = base.z;
+      if (kind === 'squirrel') {
+        // Squirrels climb (2026-10-31): their refuge pool
+        // is the chunk's trees — the same anchor list the
+        // flyers perch from — and their perch height is the
+        // climb's ceiling.
+        base.anchors = input.treePoints;
+        base.perchY = SQUIRREL_PERCH_Y_M;
+      }
     }
     base.targetX = base.x;
     base.targetZ = base.z;
@@ -401,6 +483,116 @@ export interface AnimalUpdateInput {
 }
 
 /**
+ * THE SQUIRREL CLIMB (Adam 2026-10-31: "squirrels know how
+ * to climb trees"). Returns true when the climb machinery
+ * handled this step (the generic body stands down);
+ * false leaves the squirrel to ordinary ground life.
+ *
+ * The shape: startled (she inside the flee radius) with a
+ * tree within SQUIRREL_TREE_REACH_M, the flee becomes a
+ * climb — run to the trunk at flee speed, rise pinned to
+ * the bark at climb speed, perch at SQUIRREL_PERCH_Y_M
+ * while she stays within SQUIRREL_COAST_CLEAR_M, descend
+ * after SQUIRREL_DESCENT_DELAY_S of clear coast. No tree
+ * in reach: the ordinary zigzag flee, untouched. A
+ * startle mid-descent sends it back up from where it
+ * hangs. Canopy tree-to-tree travel ("the highway") is a
+ * named follow-up, deliberately not here — v1 is refuge.
+ *
+ * A PROMOTED squirrel never reaches this code (companions
+ * step in companionRuntime, not updateAnimal), and a
+ * perched squirrel is out of offer reach by height — the
+ * shell's feed reads y for that gate; this module only
+ * makes the height true.
+ */
+function stepSquirrelClimb(
+  a: AnimalInstance,
+  dt: number,
+  input: AnimalUpdateInput,
+  distP: number,
+): boolean {
+  if (a.climbState === 'none') {
+    if (distP >= FLEE_RADIUS_M) return false;
+    // Nearest tree in refuge reach of the squirrel.
+    let best: AnimalPoint | null = null;
+    let bestDist = Infinity;
+    for (const p of a.anchors) {
+      const d = Math.hypot(p.x - a.x, p.z - a.z);
+      if (d <= SQUIRREL_TREE_REACH_M && d < bestDist) {
+        best = p;
+        bestDist = d;
+      }
+    }
+    if (!best) return false;
+    a.targetX = best.x;
+    a.targetZ = best.z;
+    a.climbState = 'toTree';
+  }
+  let moving = false;
+  if (a.climbState === 'toTree') {
+    const dx = a.targetX - a.x;
+    const dz = a.targetZ - a.z;
+    const dist = Math.hypot(dx, dz);
+    const step = FLEE_SPEED_MPS * dt;
+    if (dist <= Math.max(step, 0.15)) {
+      // At the trunk: take the bark offset on the approach
+      // side and face outward, away from the trunk centre.
+      const ox = dist > 0.001 ? -dx / dist : 1;
+      const oz = dist > 0.001 ? -dz / dist : 0;
+      a.x = a.targetX + ox * 0.25;
+      a.z = a.targetZ + oz * 0.25;
+      a.heading = Math.atan2(ox, oz);
+      a.climbState = 'climbing';
+    } else {
+      a.x += (dx / dist) * step;
+      a.z += (dz / dist) * step;
+      a.heading = Math.atan2(dx, dz);
+      moving = true;
+    }
+    a.mode = 'flee';
+    a.flying = false;
+  } else if (a.climbState === 'climbing') {
+    a.y = Math.min(a.perchY, a.y + SQUIRREL_CLIMB_SPEED_MPS * dt);
+    moving = true;
+    a.mode = 'flee';
+    if (a.y >= a.perchY) {
+      a.climbState = 'perched';
+      a.clearT = 0;
+      a.mode = 'perched';
+      moving = false;
+    }
+  } else if (a.climbState === 'perched') {
+    a.y = a.perchY;
+    a.mode = 'perched';
+    if (distP <= SQUIRREL_COAST_CLEAR_M) {
+      a.clearT = 0;
+    } else {
+      a.clearT += dt;
+      if (a.clearT >= SQUIRREL_DESCENT_DELAY_S) a.climbState = 'descending';
+    }
+  } else if (a.climbState === 'descending') {
+    if (distP < FLEE_RADIUS_M) {
+      // Startled on the way down: back up from here.
+      a.climbState = 'climbing';
+      a.mode = 'flee';
+      moving = true;
+    } else {
+      a.y = Math.max(0, a.y - SQUIRREL_CLIMB_SPEED_MPS * dt);
+      a.mode = 'flee';
+      moving = true;
+      if (a.y <= 0) {
+        a.y = 0;
+        a.climbState = 'none';
+        a.mode = 'idle';
+        a.timer = 2 + Math.random() * 2;
+      }
+    }
+  }
+  stepAnimalAnimation(a, dt, moving);
+  return true;
+}
+
+/**
  * Gameplay-time behavior step (Math.random allowed here — this is
  * gameplay, not worldgen). Wander within the kind's range, idle/feed
  * pauses, per-kind flee styles from a close player, perch + short flights for
@@ -414,7 +606,28 @@ export function updateAnimal(a: AnimalInstance, dt: number, input: AnimalUpdateI
   const dxP = a.x - input.playerX;
   const dzP = a.z - input.playerZ;
   const distP = Math.hypot(dxP, dzP);
-  if (distP < fleeRadius) {
+  // Squirrels climb (2026-10-31): the climb machinery
+  // handles the whole step when it takes it (including a
+  // ground squirrel resting at night — 'none' + inactive
+  // falls through to the generic rest below).
+  if (a.kind === 'squirrel') {
+    if (a.climbState === undefined) a.climbState = 'none';
+    if (a.climbState !== 'none' || active) {
+      if (stepSquirrelClimb(a, dt, input, distP)) return;
+    }
+  }
+  // Spook-dart (hand-snatch failure): the dart target stands
+  // while the timer runs — the ordinary flee re-target below
+  // would overwrite it every frame and scatter the dart.
+  if (a.spookT > 0) a.spookT = Math.max(0, a.spookT - dt);
+  // Feral snap: the lunge target stands while its timer
+  // runs; when the lunge lapses, the bolt fires (the
+  // spook-dart away, same machinery as a missed snatch).
+  if (a.snapT > 0) {
+    a.snapT = Math.max(0, a.snapT - dt);
+    if (a.snapT <= 0) spookFish(a, input.playerX, input.playerZ);
+  }
+  if (distP < fleeRadius && !(a.spookT > 0) && !(a.snapT > 0)) {
     // Per-kind flee style (DRAFT values — see ANIMAL_DEFS).
     // Temperament still sets WHEN (the radius above); style sets HOW.
     if (def.flee === 'freeze') {
@@ -478,7 +691,10 @@ export function updateAnimal(a: AnimalInstance, dt: number, input: AnimalUpdateI
     }
   }
   if (a.mode === 'wander' || a.mode === 'fly' || a.mode === 'flee') {
-    const speed = a.mode === 'flee' ? FLEE_SPEED_MPS : WANDER_SPEED_MPS;
+    const speed = a.snapT > 0
+      ? SNAP_LUNGE_SPEED_MPS
+      : (a.mode === 'flee' ? FLEE_SPEED_MPS : WANDER_SPEED_MPS)
+        * (a.spookT > 0 ? SPOOK_BURST_FACTOR : 1);
     const dx = a.targetX - a.x;
     const dz = a.targetZ - a.z;
     const dist = Math.hypot(dx, dz);
@@ -511,7 +727,18 @@ export function updateAnimal(a: AnimalInstance, dt: number, input: AnimalUpdateI
     // Settled: height is the perch / ground / water line.
     a.y = def.movement === 'fly' ? a.perchY : a.y;
   }
-  // Animation phase + vertical offset (oscillation only, no rigs).
+  stepAnimalAnimation(a, dt, moving);
+}
+
+/**
+ * Animation phase + vertical offset (oscillation only, no
+ * rigs) — extracted from updateAnimal's tail so the companion
+ * runtime steps the same poses for promoted actors, which
+ * updateAnimal never touches (a companion does not flee its
+ * own person).
+ */
+export function stepAnimalAnimation(a: AnimalInstance, dt: number, moving: boolean): void {
+  const def = ANIMAL_DEFS[a.kind];
   a.phase += dt * (moving ? 6 : 2);
   a.wingPhase += dt * (a.flying ? 18 : 2);
   if (def.anim === 'hop') {
@@ -521,4 +748,139 @@ export function updateAnimal(a: AnimalInstance, dt: number, input: AnimalUpdateI
   } else {
     a.bob = 0.05 * Math.sin(a.phase);
   }
+}
+
+/**
+ * THE FERAL SNAP (Companions Build 1; DEV-reconciled feral
+ * design, 2026-10-31): a feral individual's answer to an
+ * offering. Arms the lunge: a target point SNAP_STOP_SHORT_M
+ * short of her hand — the snap lands on the OFFERING, never
+ * on her body (costs land on goods, not her) — at lunge
+ * speed; when the lunge timer lapses inside updateAnimal,
+ * the bolt fires (the spook-dart away). It never softens:
+ * the trigger carries no trust input, first offering or
+ * fiftieth, the answer is the same animal.
+ */
+export function triggerSnap(a: AnimalInstance, playerX: number, playerZ: number): void {
+  const dx = playerX - a.x;
+  const dz = playerZ - a.z;
+  const d = Math.hypot(dx, dz);
+  const reach = Math.max(0, d - SNAP_STOP_SHORT_M);
+  const ux = d > 0.001 ? dx / d : 1;
+  const uz = d > 0.001 ? dz / d : 0;
+  a.targetX = a.x + ux * reach;
+  a.targetZ = a.z + uz * reach;
+  a.targetY = a.y;
+  a.mode = 'flee';
+  a.flying = false;
+  a.snapT = SNAP_LUNGE_S;
+}
+
+export interface SnatchInput {
+  playerX: number;
+  playerZ: number;
+  /** Success probability (default SNATCH_CHANCE). */
+  chance?: number;
+  /** Injectable roll in [0, 1) for probes; default Math.random(). */
+  roll?: number;
+}
+
+export interface SnatchOutcome {
+  outcome: 'caught' | 'missed';
+  instance: AnimalInstance;
+}
+
+/** Set one fish darting: its far anchor point from the player, spook timer armed. */
+function spookFish(f: AnimalInstance, playerX: number, playerZ: number): void {
+  let tx = f.x + (f.x - playerX) * 4;
+  let tz = f.z + (f.z - playerZ) * 4;
+  let best = -1;
+  for (const p of f.anchors) {
+    const d = Math.hypot(p.x - playerX, p.z - playerZ);
+    if (d > best) {
+      best = d;
+      tx = p.x;
+      tz = p.z;
+    }
+  }
+  f.targetX = tx;
+  f.targetZ = tz;
+  f.targetY = WATER_Y;
+  f.mode = 'flee';
+  f.flying = false;
+  f.spookT = SPOOK_DURATION_S;
+}
+
+/**
+ * The snatch's TARGET: the NEAREST 'fish' instance within
+ * SNATCH_RANGE_M of her, or null when no fish is in reach
+ * (the press was not a snatch at all). A fish in reach of
+ * a wading / bank-side stance is a shallow fish by
+ * construction — deep-centre river fish are simply never
+ * in reach.
+ */
+export function pickSnatchTarget(
+  candidates: readonly AnimalInstance[],
+  playerX: number,
+  playerZ: number,
+): AnimalInstance | null {
+  let target: AnimalInstance | null = null;
+  let bestDist = Infinity;
+  for (const c of candidates) {
+    if (c.kind !== 'fish') continue;
+    const d = Math.hypot(c.x - playerX, c.z - playerZ);
+    if (d <= SNATCH_RANGE_M && d < bestDist) {
+      target = c;
+      bestDist = d;
+    }
+  }
+  return target;
+}
+
+/**
+ * The snatch's FAILURE made visible: the target and every
+ * fish within SPOOK_RADIUS_M of it spook — a dart along
+ * their own water-point chains (spookFish). Position is
+ * the cooldown: a spooked reach holds no target until the
+ * fish drift back, no timer gates anything.
+ */
+export function applySnatchSpook(
+  candidates: readonly AnimalInstance[],
+  target: AnimalInstance,
+  playerX: number,
+  playerZ: number,
+): void {
+  for (const c of candidates) {
+    if (c.kind !== 'fish') continue;
+    if (Math.hypot(c.x - target.x, c.z - target.z) <= SPOOK_RADIUS_M) {
+      spookFish(c, playerX, playerZ);
+    }
+  }
+}
+
+/**
+ * HER HAND-SNATCH at a faced fish in the shallows (Adam
+ * 2026-10-31: E at a faced fish, chance-gated, spook on
+ * failure; no rod ever — the weir stays the law for traps).
+ * The composed convenience over pickSnatchTarget +
+ * applySnatchSpook with this module's own chance — the
+ * LIVE game path composes differently: Systems'
+ * snatchFish owns the roll, the hunger gate, and the
+ * grant (its SNATCH_CHANCE 0.25 is the dial the shell
+ * plays; this module's 0.35 stands only for standalone
+ * callers, and the pin pass settles the number). On
+ * 'caught' the caller consumes the instance (renderer
+ * despawn).
+ */
+export function attemptSnatch(
+  candidates: readonly AnimalInstance[],
+  input: SnatchInput,
+): SnatchOutcome | null {
+  const target = pickSnatchTarget(candidates, input.playerX, input.playerZ);
+  if (!target) return null;
+  const chance = input.chance ?? SNATCH_CHANCE;
+  const roll = input.roll ?? Math.random();
+  if (roll < chance) return { outcome: 'caught', instance: target };
+  applySnatchSpook(candidates, target, input.playerX, input.playerZ);
+  return { outcome: 'missed', instance: target };
 }

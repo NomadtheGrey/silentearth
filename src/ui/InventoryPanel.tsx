@@ -26,9 +26,22 @@
  * a caller-owned prop. The preference persists per-device in
  * the shared settings key (the font/look pattern — never in
  * the world save): loadInventorySort / saveInventorySort below.
+ *
+ * SEARCH (Adam, 2026-10-31): a filter-as-you-type field above
+ * the personal list narrows it by name — display-only: the
+ * sort orders and Grouped headings derive over the narrowed
+ * set exactly as over the full one, and every row keeps its
+ * actions. The query is panel-local presentation state —
+ * the panel unmounts on close, so it clears itself; nothing
+ * persists. Typing is safe because every key listener in
+ * the game already yields to text entry (the seed-field
+ * precedent) — the field needs no guard of its own. The
+ * home-storage and nearby-pile lists are NOT searched:
+ * they are place-bound and short; the personal list is
+ * the one that grows.
  */
 
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import type { InventoryItem } from './types';
 import { UI_THEMES, type UiThemeName } from './themes';
 import { VineDivider } from './WitchyArt';
@@ -306,6 +319,16 @@ export function InventoryPanel({
   const sortBtn = comfortable
     ? 'rounded px-3 py-2 text-sm min-h-[44px] '
     : 'rounded px-2 py-1 text-sm ';
+  // SEARCH (see the header): the query narrows the
+  // personal list BEFORE any ordering — sort modes and
+  // Grouped headings read the narrowed set, so grouping
+  // ownership never moves. Panel-local state.
+  const [query, setQuery] = useState('');
+  const needle = query.trim().toLowerCase();
+  const searching = needle.length > 0;
+  const visibleItems = searching
+    ? items.filter((item) => item.name.toLowerCase().includes(needle))
+    : items;
   // SORTING (2026-10-31): order the personal list from the
   // caller-supplied facts. No sortMode = incoming order
   // (the pre-feature behavior), and Reverse only ever
@@ -313,8 +336,8 @@ export function InventoryPanel({
   // that reverses the groups and their contents together,
   // one honest definition with no special cases.
   const orderedItems = ((): InventoryItem[] => {
-    if (sortMode === undefined) return items;
-    const list = [...items];
+    if (sortMode === undefined) return visibleItems;
+    const list = [...visibleItems];
     if (sortMode === 'recent') {
       const rank = new Map(
         (recencyOrder ?? []).map((id, index) => [id, index] as const),
@@ -619,6 +642,23 @@ export function InventoryPanel({
         </p>
       ) : null}
 
+      {/* Search field (2026-10-31): directly above the
+          sort controls and the list they order together.
+          Rendered only when there is anything to search. */}
+      {items.length > 0 ? (
+        <input
+          type="text"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="Search items"
+          aria-label="Search items"
+          className={
+            'mb-2 w-full rounded bg-stone-800/60 px-2 py-1 text-sm text-stone-100 placeholder:text-stone-400 ' +
+            (comfortable ? 'min-h-[44px]' : '')
+          }
+        />
+      ) : null}
+
       {/* Sort controls (2026-10-31): a radio row + a
           Reverse checkbox, directly above the list they
           order. Rendered only when the caller wires the
@@ -666,6 +706,10 @@ export function InventoryPanel({
 
       {items.length === 0 ? (
         <p className={'italic ' + t.muted}>Nothing carried yet.</p>
+      ) : searching && visibleItems.length === 0 ? (
+        <p className={'italic ' + t.muted}>
+          {`Nothing matches "${query.trim()}".`}
+        </p>
       ) : (
         // Row layout (narrow-width fix, 2026-10-29 — Adam's
         // screenshot: descriptors wrapped one word per line

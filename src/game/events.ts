@@ -453,6 +453,41 @@ export interface EventMap {
   'dimension:entered': { key: string; mouthId: string };
   'dimension:exited': { key: string };
   'dimension:layer': { key: string; layer: number };
+  /**
+   * Companions (Adam 2026-10-31, Build 1 — the friendship
+   * build; the familiar's rite is Build 2). Ids are the
+   * stable animal ids animals.ts mints at spawn
+   * (`animal:<cx>,<cz>:<n>`) — the same key Systems'
+   * SaveData.companions records carry.
+   * Emitter layering (Systems' correction, 2026-10-31): no
+   * systems module emits on the bus — the SHELL emits on
+   * systems' return values, the standing pattern.
+   * 'companion:bonded' — the shell emits when Systems'
+   * bondWith returns ok; the companion runtime promotes
+   * the ambient individual into a persistent actor on
+   * hearing it. 'companion:released' — likewise, the shell
+   * emits on release()'s return; the runtime starts the
+   * departure leg. 'companion:departed' — the runtime
+   * emits when a departing actor dissolves past streaming
+   * distance; the shell answers by calling Systems'
+   * release(creatureId) as the record clear (idempotent —
+   * null when already gone), and the goodbye is complete
+   * and un-meetable. 'companion:feral-snap' — the shell
+   * emits when feed() returns its 'feral' refusal code;
+   * the engine answers with the snap: a lunge-and-bolt
+   * that never softens. 'companion:stance' — the runtime
+   * emits when an actor's stance changes, so Systems can
+   * persist it. 'animal:snatch-caught' — her hand took a
+   * fish (the hand-snatch, 2026-10-31); Systems' snatchFish
+   * grants internally, so this event is a feed-line door
+   * for the shell, not a grant channel.
+   */
+  'companion:bonded': { id: string; kind: string };
+  'companion:released': { id: string };
+  'companion:departed': { id: string };
+  'companion:feral-snap': { id: string };
+  'companion:stance': { id: string; stance: 'stay' | 'follow' };
+  'animal:snatch-caught': { id: string; kind: string; x: number; z: number };
 }
 
 type Handler<E> = (payload: E) => void;

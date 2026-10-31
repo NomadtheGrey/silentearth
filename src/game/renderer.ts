@@ -30,6 +30,12 @@ import { SOURCE_FOR_KIND } from './objects';
 import { buildAltarGroup, buildAnimal, buildCampArrow, buildCandle, buildCauldronGroup, buildDeskGroup, buildEdgeArrow, buildKindGeometry, buildStagedBone, buildStumpDressing, buildSunflowerHeadGeometry, buildTorch, buildUmbrella, buildWitch, ALTAR_CANDLE_X, ALTAR_CANDLE_Z, CANDLE_FLAME_Y, DISC_RADIUS, STUMP_TOP_Y, sunflowerHeadMatrix, sunflowerHeadOrientation, TORCH_FLAME_Y, vertexLambert } from './models';
 import { spawnAnimalsForChunk, updateAnimal } from './animals';
 import type { AnimalInstance, AnimalKind } from './animals';
+import {
+  actorById,
+  allActors,
+  installCompanionResolvers,
+  stepActors,
+} from './companionRuntime';
 import { crowGlowIntensity, CROW_GLOW_EMISSIVE } from './crow';
 import type { CrowTier } from './crow';
 import { ProximityTracker } from './proximity';
@@ -40,10 +46,10 @@ import {
   scatterTargetId,
   wrapGenWithState,
 } from './harvestState';
-import { standingInWater, terrainSpeedAt, type WaterDisc } from './movement';
+import { standingInWater, terrainSpeedAt, WADING_FACTOR, type WaterDisc } from './movement';
 import { treeKindAt } from './treeKind';
 import { riverParamsFor, riverRibbonForChunk } from './river';
-import { barnSite, caveMouthSite, chapelSite, drownedMillSite, farmhouseSite, generalStoreSite, groveSite, railSidingSite, schoolhouseSite, siloSite, sunkenRoadSite, villageSite, wallsNearSites, type SiteFootprint } from './sites';
+import { barnSite, caveMouthSite, chapelSite, drownedMillSite, farmhouseSite, generalStoreSite, groveSite, pushOutOfWalls, railSidingSite, schoolhouseSite, siloSite, sunkenRoadSite, villageSite, wallsNearSites, type SiteFootprint } from './sites';
 import { caveFootprintFor, caveInstancesInRect, caveLayoutForKey } from './caves';
 import type { RiverParams } from './river';
 import { fireState } from './fireState';
@@ -561,6 +567,18 @@ export class WorldRenderer {
   /** Unsubscribes for the placed-group rebuild events (below). */
   private unsubPlaced: (() => void)[] = [];
   /**
+   * Companion layer (Companions Build 1, 2026-10-31):
+   * promoted actors from companionRuntime — persistent,
+   * NOT chunk-filtered (a companion survives its home
+   * chunk unloading), hidden while a cave dimension is
+   * active (they wait at the mouth). Meshes reconcile
+   * against the runtime registry every frame.
+   */
+  private companionGroup: THREE.Group | null = null;
+  private companionMeshes = new Map<string, THREE.Group>();
+  /** Memo for the site-walls query's cave-instance spawn (see siteWallsAt). */
+  private wallsSpawnMemo: { seed: string; spawn: { x: number; z: number } } | null = null;
+  /**
    * Dropped-pile meshes (harvest overflow, Adam 2026-10-26): one
    * small heap + marker flag per pile, NOT chunk-filtered — piles
    * are few, and a pile must stay visible wherever it lies. Shares
@@ -655,27 +673,13 @@ export class WorldRenderer {
     // bounds test per site.
     this.sites = computeSites(gen);
     this.rebuildSmoke(gen);
-    let wallsSpawn: { seed: string; spawn: { x: number; z: number } } | null = null;
-    this.player.setSiteWallsQuery((x, z) => {
-      let sites = this.sites;
-      if (!this.gen.dimensionKey) {
-        // Distributed cave mouths are places too: their
-        // facade boxes collide. Instances derive per cell
-        // (memoized in caves.ts), so the union costs a few
-        // map reads away from any mouth.
-        const seed = String(this.gen.seed);
-        if (!wallsSpawn || wallsSpawn.seed !== seed) {
-          wallsSpawn = { seed, spawn: this.gen.findSpawn() };
-        }
-        const near = caveInstancesInRect(seed, wallsSpawn.spawn, (wx, wz) => this.gen.weightsAt(wx, wz), {
-          minX: x - 64,
-          maxX: x + 64,
-          minZ: z - 64,
-          maxZ: z + 64,
-        });
-        if (near.length > 0) sites = [...sites, ...near];
-      }
-      return wallsNearSites(sites, x, z, 2);
+    this.player.setSiteWallsQuery((x, z) => this.siteWallsAt(x, z));
+    // Companion resolvers (Companions Build 1): the runtime
+    // adopts promoted individuals out of their chunk records
+    // and peeks at ambient ones for the feral snap.
+    installCompanionResolvers({
+      adopt: (id) => this.adoptChunkAnimal(id),
+      peek: (id) => this.peekChunkAnimal(id),
     });
     this.proximity = new ProximityTracker(this.gen, true, () => this.tents);
     // Chunk reload on harvest completion: the harvested chunk is
@@ -999,18 +1003,119 @@ export class WorldRenderer {
    * ALL loaded-chunk animals, no cap, no nearest filter —
    * nearest-only + range cap are the tag's job, UI-side. Kind is
    * the AnimalKind id (UI capitalizes for display — no name
-   * field exists in ANIMAL_DEFS). No y: tags project x/z.
+   * field exists in ANIMAL_DEFS). Tags project x/z; y rides
+   * for the OFFER gate (squirrel climb, 2026-10-31): an
+   * animal overhead — a climbed squirrel at its perch —
+   * is out of offer reach, and height is the honest fact
+   * the candidacy derives that from.
    * No App.tsx touch: the shell polls this getter and renders
    * its own tag.
    */
-  getVisibleAnimals(): { kind: AnimalKind; x: number; z: number }[] {
-    const out: { kind: AnimalKind; x: number; z: number }[] = [];
+  getVisibleAnimals(): { kind: AnimalKind; x: number; z: number; y: number; id: string; companion?: boolean }[] {
+    const out: { kind: AnimalKind; x: number; z: number; y: number; id: string; companion?: boolean }[] = [];
     for (const loaded of this.chunks.values()) {
       for (const pair of loaded.animals) {
-        out.push({ kind: pair.instance.kind, x: pair.instance.x, z: pair.instance.z });
+        out.push({ kind: pair.instance.kind, x: pair.instance.x, z: pair.instance.z, y: pair.instance.y, id: pair.instance.id });
       }
     }
+    // Promoted companions (Companions Build 1): persistent
+    // actors, flagged so the shell can tell a friend from
+    // the ambient crowd (the companions panel and the faced
+    // resolution key on the id).
+    for (const actor of allActors()) {
+      const a = actor.instance;
+      out.push({ kind: a.kind, x: a.x, z: a.z, y: a.y, id: a.id, companion: true });
+    }
     return out;
+  }
+
+  /**
+   * The site walls near a point (the player's collision
+   * query and the companion step's pushout share this one
+   * truth): the registered sites plus, on the surface, the
+   * distributed cave mouths' facades. Extracted from the
+   * constructor's closure (Companions Build 1) so both
+   * consumers read the same walls.
+   */
+  private siteWallsAt(x: number, z: number) {
+    let sites = this.sites;
+    if (!this.gen.dimensionKey) {
+      // Distributed cave mouths are places too: their
+      // facade boxes collide. Instances derive per cell
+      // (memoized in caves.ts), so the union costs a few
+      // map reads away from any mouth.
+      const seed = String(this.gen.seed);
+      if (!this.wallsSpawnMemo || this.wallsSpawnMemo.seed !== seed) {
+        this.wallsSpawnMemo = { seed, spawn: this.gen.findSpawn() };
+      }
+      const near = caveInstancesInRect(seed, this.wallsSpawnMemo.spawn, (wx, wz) => this.gen.weightsAt(wx, wz), {
+        minX: x - 64,
+        maxX: x + 64,
+        minZ: z - 64,
+        maxZ: z + 64,
+      });
+      if (near.length > 0) sites = [...sites, ...near];
+    }
+    return wallsNearSites(sites, x, z, 2);
+  }
+
+  /** Memo for companionSpeedAt's water discs, keyed by chunk (the player's terrain memo pattern). */
+  private companionDiscMemo: { key: string; discs: WaterDisc[] } | null = null;
+
+  /** A companion's terrain speed at a point: the bog curve, composed by MIN with the wading factor (movement.ts composition). */
+  private companionSpeedAt(x: number, z: number): number {
+    const t = terrainSpeedAt(this.gen, x, z);
+    const key = `${Math.floor(x / CHUNK_SIZE)},${Math.floor(z / CHUNK_SIZE)}`;
+    if (!this.companionDiscMemo || this.companionDiscMemo.key !== key) {
+      this.companionDiscMemo = { key, discs: collectWaterDiscs(this.gen, x, z) };
+    }
+    return standingInWater(this.riverParams, this.companionDiscMemo.discs, x, z)
+      ? Math.min(t, WADING_FACTOR)
+      : t;
+  }
+
+  /** Live chunk-animal instances (the shell's snatch candidates — attemptSnatch reads positions off these). */
+  getLoadedAnimalInstances(): AnimalInstance[] {
+    const out: AnimalInstance[] = [];
+    for (const loaded of this.chunks.values()) {
+      for (const pair of loaded.animals) out.push(pair.instance);
+    }
+    return out;
+  }
+
+  /** Find a loaded chunk instance by its stable id, without removing it (the feral snap's peek). */
+  peekChunkAnimal(id: string): AnimalInstance | null {
+    for (const loaded of this.chunks.values()) {
+      for (const pair of loaded.animals) {
+        if (pair.instance.id === id) return pair.instance;
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Remove a chunk animal from the world and hand its
+   * instance over (promotion: the companion runtime takes
+   * the body). The mesh leaves with the pair, and the
+   * chunk-build spawn filter (actorById) keeps the slot
+   * consumed on later reloads for as long as the actor
+   * lives — no twin ever stands beside the friend.
+   */
+  adoptChunkAnimal(id: string): AnimalInstance | null {
+    for (const loaded of this.chunks.values()) {
+      const idx = loaded.animals.findIndex((p) => p.instance.id === id);
+      if (idx >= 0) {
+        const [pair] = loaded.animals.splice(idx, 1);
+        pair.group.parent?.remove(pair.group);
+        return pair.instance;
+      }
+    }
+    return null;
+  }
+
+  /** Remove a chunk animal outright (a caught fish — the hand-snatch's consumption). */
+  despawnChunkAnimal(id: string): boolean {
+    return this.adoptChunkAnimal(id) !== null;
   }
 
   restoreSky(snap: SkySnapshot | null | undefined): void {
@@ -1124,6 +1229,7 @@ export class WorldRenderer {
     this.sites = computeSites(gen);
     const showPlaced = !underground;
     if (this.placedGroup) this.placedGroup.visible = showPlaced;
+    if (this.companionGroup) this.companionGroup.visible = showPlaced;
     if (this.pileGroup) this.pileGroup.visible = showPlaced;
     if (this.trapGroup) this.trapGroup.visible = showPlaced;
     if (this.stagedBoneGroup) this.stagedBoneGroup.visible = showPlaced;
@@ -1352,6 +1458,10 @@ export class WorldRenderer {
       pondPoints,
       treePoints,
     })) {
+      // A promoted companion's ambient slot stays consumed
+      // (Companions Build 1): the deterministic spawn would
+      // otherwise twin the friend on every chunk reload.
+      if (actorById(instance.id)) continue;
       const animalGroup = buildAnimal(instance.kind);
       animalGroup.position.set(instance.x, instance.y, instance.z);
       animalGroup.rotation.set(0, instance.heading, 0);
@@ -2327,7 +2437,17 @@ export class WorldRenderer {
    */
   private poseAnimal(instance: AnimalInstance, group: THREE.Group): void {
     group.position.set(instance.x, instance.y + instance.bob, instance.z);
-    group.rotation.set(0, instance.heading, 0);
+    // Squirrel cling (2026-10-31): while a squirrel climbs
+    // or descends a trunk it pitches onto the bark — the
+    // tilt IS the read at distance (a shape on the trunk,
+    // then a silhouette in the canopy). Upright otherwise,
+    // perched included. A bespoke cling pose in models.ts
+    // is the named follow-up if this reads poorly.
+    const cling = instance.kind === 'squirrel'
+      && (instance.climbState === 'climbing' || instance.climbState === 'descending')
+      ? -1.2
+      : 0;
+    group.rotation.set(cling, instance.heading, 0);
     const wings = group.userData.wings as THREE.Mesh[] | undefined;
     if (wings && wings.length === 2) {
       const flutter = instance.flying ? 0.15 + 0.6 * Math.sin(instance.wingPhase) : 0;
@@ -2365,6 +2485,46 @@ export class WorldRenderer {
           night,
         });
         this.poseAnimal(pair.instance, pair.group);
+      }
+    }
+    // Companions (Build 1): persistent actors step after
+    // the chunk animals — while a cave dimension is active
+    // they WAIT at the surface (dimensionActive holds their
+    // positions; the layer hides below anyway). Meshes
+    // reconcile against the registry every frame: a
+    // promotion appears, a completed departure vanishes.
+    stepActors(dt, {
+      playerX: this.player.x,
+      playerZ: this.player.z,
+      playerHeading: this.player.facing,
+      night,
+      dimensionActive: !!this.gen.dimensionKey,
+      speedAt: (x, z) => this.companionSpeedAt(x, z),
+      pushWalls: (x, z) => pushOutOfWalls(x, z, this.siteWallsAt(x, z), 0.3),
+    });
+    if (!this.companionGroup) {
+      this.companionGroup = new THREE.Group();
+      this.companionGroup.visible = !this.gen.dimensionKey;
+      this.scene.add(this.companionGroup);
+    }
+    {
+      const seen = new Set<string>();
+      for (const actor of allActors()) {
+        const a = actor.instance;
+        seen.add(a.id);
+        let g = this.companionMeshes.get(a.id);
+        if (!g) {
+          g = buildAnimal(a.kind);
+          this.companionMeshes.set(a.id, g);
+          this.companionGroup.add(g);
+        }
+        this.poseAnimal(a, g);
+      }
+      for (const [id, g] of [...this.companionMeshes]) {
+        if (!seen.has(id)) {
+          this.companionGroup.remove(g);
+          this.companionMeshes.delete(id);
+        }
       }
     }
     this.stream();

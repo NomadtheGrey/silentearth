@@ -159,6 +159,20 @@
  * only as the touch USE label, and the column would
  * re-seat itself above a nearby loom (stationAnchor)
  * and then say nothing about it.
+ *
+ * CREATURE ROW (Companions build 1, Piece B,
+ * 2026-10-31): when the caller passes creature, one
+ * creature button renders LAST in the column (after
+ * the loom row), with the caller's label (the live
+ * verb: 'Offer <item>' / 'Speak' / 'Snatch') and no
+ * KindGlyph — plain text, same button look as its
+ * siblings. Null creature = no row (the caller passes
+ * null unless the creature IS the current target —
+ * the one-target rule its siblings live by, and the
+ * caller's candidacy is narrow: a verb must be live).
+ * A press reports the creature id through onCreature;
+ * the act itself (the very act E performs at the
+ * faced creature) is the caller's job.
  */
 
 import { Fragment, type ReactNode } from 'react';
@@ -248,8 +262,18 @@ export interface ProximityHarvestButtonsProps {
   /** Called with the loom id for a loom-row press. */
   onWeave?: (id: string) => void;
   /**
+   * The faced creature, caller-derived (null = no
+   * row). Renders LAST in the column (after the loom
+   * row), even with zero harvest targets. The id is
+   * the individual's stable spawn id; the label is
+   * the live verb (caller's wording).
+   */
+  creature?: { id: string; label: string } | null;
+  /** Called with the creature id for a creature-row press. */
+  onCreature?: (id: string) => void;
+  /**
    * Show PC key badges on the keyed rows (trap row "E",
-   * hive row "E", loom row "E" — USE dispatches to the faced target's
+   * hive row "E", loom row "E", creature row "E" — USE dispatches to the faced target's
    * common action, Adam 2026-10-29). Caller passes
    * !isTouch (the PausedIndicator showKeyHint
    * precedent): hint only, handlers and sizing
@@ -275,11 +299,13 @@ export function ProximityHarvestButtons({
   onHarvestHive,
   loom,
   onWeave,
+  creature,
+  onCreature,
   showKeyHints = false,
   theme = 'mire',
 }: ProximityHarvestButtonsProps) {
   const t = UI_THEMES[theme];
-  if (targets.length === 0 && !trap && !hive && !loom) {
+  if (targets.length === 0 && !trap && !hive && !loom && !creature) {
     return null;
   }
   // Dirt-row suppression (Adam, 2026-10-28): the ground row
@@ -417,6 +443,27 @@ export function ProximityHarvestButtons({
           }
         >
           <span className="font-medium">{loom.label}</span>
+          {showKeyHints ? (
+            <span
+              aria-hidden="true"
+              className={KEY_BADGE_CLASS}
+            >
+              E
+            </span>
+          ) : null}
+        </button>
+      ) : null}
+      {creature && onCreature ? (
+        <button
+          type="button"
+          onClick={() => onCreature(creature.id)}
+          aria-label={creature.label}
+          className={
+            'flex min-h-[44px] items-center gap-2 rounded-full px-3 py-1.5 text-sm shadow-lg transition-transform hover:scale-105 ' +
+            t.panel
+          }
+        >
+          <span className="font-medium">{creature.label}</span>
           {showKeyHints ? (
             <span
               aria-hidden="true"

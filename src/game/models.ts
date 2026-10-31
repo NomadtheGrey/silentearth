@@ -201,6 +201,68 @@ export function buildKindGeometry(spec: MeshSpec, kind: ScatterKind): THREE.Buff
     }
     return merge([part(flatDisc(DISC_RADIUS[kind] ?? 1.0, 12), c, { p: [0, DISC_GROUND_LIFT_M, 0] }), ...mounds]);
   }
+  // Kind override (the lady slipper shares the 'flowerPouch'
+  // shape slot, but the generic pouch — an upright ball with
+  // two discs behind — never reads as the orchid; Models,
+  // 2026-10-31): the bespoke build follows the real flower:
+  // TWO broad basal leaves at the ground (the species' pair),
+  // a leafless stem leaning into a NOD, the inflated pouch
+  // tilted forward with its dark opening and pale staminode
+  // on the top face, two TWISTED petals dangling at the
+  // sides, and a dorsal sepal arching over the top. The
+  // flowerPouch shape case stays in the switch below,
+  // riderless. Disposition untouched: scenery only, rarity
+  // preserved (the source def is not part of this landing).
+  if (kind === 'ladySlipper') {
+    return merge([
+      part(sphere(0.5, 8, 6), shade(STEM_GREEN, 0.9), { p: [0.11, 0.015, 0], s: [0.3, 0.04, 0.14], r: [0, -0.35, 0.1] }),
+      part(sphere(0.5, 8, 6), shade(STEM_GREEN, 0.9), { p: [-0.11, 0.015, 0], s: [0.3, 0.04, 0.14], r: [0, 0.35, -0.1] }),
+      part(cyl(0.014, 0.022, 0.34, 5), STEM_GREEN, { p: [0, 0.17, 0], r: [0.1, 0, 0] }),
+      part(box(0.045, 0.1, 0.016), shade(STEM_GREEN, 1.05), { p: [0, 0.375, -0.045], r: [-0.35, 0, 0] }),
+      part(sphere(0.09, 10, 8), c, { p: [0, 0.335, 0.05], s: [0.85, 0.98, 1.3], r: [0.5, 0, 0] }),
+      part(cyl(0.03, 0.03, 0.012, 8), shade(c, 0.35), { p: [0, 0.422, 0.093], r: [0.5, 0, 0] }),
+      part(sphere(0.016, 6, 5), 0xf2e6ee, { p: [0, 0.428, 0.096], r: [0.5, 0, 0] }),
+      part(box(0.02, 0.17, 0.034), shade(c, 0.5), { p: [0.062, 0.285, 0.015], r: [0.15, 0.55, 0.42] }),
+      part(box(0.02, 0.17, 0.034), shade(c, 0.5), { p: [-0.062, 0.285, 0.015], r: [0.15, -0.55, -0.42] }),
+      part(box(0.055, 0.15, 0.018), shade(c, 0.62), { p: [0, 0.445, -0.005], r: [-0.5, 0, 0] }),
+    ]);
+  }
+  // Kind override (human remains, pre-built for the village
+  // beats build — Models, 2026-10-31): weathered old bones
+  // in the primitive register, lying as they settled — a
+  // rib arc over a spine line, pelvis, long bones trailed
+  // out with their knee knobs, arm bones at the sides, two
+  // loose fragments. The skull is suggested by form: a
+  // cranium, a jaw, and the one detail that says skull, its
+  // sockets. Restraint is the brief — nothing stands,
+  // nothing is posed; the tallest point is a rib's arc.
+  // The fire-side bones (+X) and the pelvis carry the ash
+  // tone (extraColor): one set of remains, partially
+  // charred, the village's story. The nominal 'disc' shape
+  // slot is never reached.
+  if (kind === 'humanRemains') {
+    return merge([
+      part(cyl(0.014, 0.014, 0.3, 5), shade(c, 0.92), { p: [0, 0.028, 0.12], r: [Math.PI / 2, 0, 0] }),
+      part(new THREE.TorusGeometry(0.105, 0.0115, 5, 10, Math.PI), c, { p: [0, 0.004, 0.03] }),
+      part(new THREE.TorusGeometry(0.115, 0.0115, 5, 10, Math.PI), c, { p: [0, 0.004, 0.1] }),
+      part(new THREE.TorusGeometry(0.11, 0.0115, 5, 10, Math.PI), shade(c, 0.94), { p: [0, 0.004, 0.17] }),
+      part(new THREE.TorusGeometry(0.095, 0.0115, 5, 10, Math.PI), shade(c, 0.94), { p: [0, 0.004, 0.235] }),
+      part(sphere(0.085, 9, 7), c, { p: [0.02, 0.058, 0.42], s: [0.92, 0.82, 1.05] }),
+      part(sphere(0.016, 6, 5), shade(c, 0.3), { p: [0.05, 0.066, 0.493] }),
+      part(sphere(0.016, 6, 5), shade(c, 0.3), { p: [-0.01, 0.066, 0.493] }),
+      part(box(0.068, 0.028, 0.05), shade(c, 0.88), { p: [0.02, 0.018, 0.465] }),
+      part(sphere(0.5, 8, 6), e, { p: [0, 0.026, -0.055], s: [0.23, 0.085, 0.145] }),
+      part(cyl(0.016, 0.012, 0.36, 5), c, { p: [-0.055, 0.016, -0.27], r: [Math.PI / 2, 0, 0] }),
+      part(sphere(0.021, 6, 5), c, { p: [-0.055, 0.018, -0.45] }),
+      part(cyl(0.016, 0.012, 0.36, 5), e, { p: [0.075, 0.016, -0.29], r: [Math.PI / 2, 0, 0] }),
+      part(sphere(0.021, 6, 5), e, { p: [0.075, 0.018, -0.47] }),
+      part(cyl(0.011, 0.009, 0.27, 5), shade(c, 0.95), { p: [-0.155, 0.013, 0.13], r: [Math.PI / 2, 0, 0] }),
+      part(cyl(0.009, 0.008, 0.2, 5), shade(c, 0.95), { p: [-0.185, 0.012, -0.06], r: [Math.PI / 2, 0, 0] }),
+      part(cyl(0.011, 0.009, 0.27, 5), e, { p: [0.175, 0.013, 0.05], r: [Math.PI / 2, 0, 0] }),
+      part(cyl(0.01, 0.008, 0.11, 5), shade(c, 0.85), { p: [0.14, 0.012, -0.18], r: [0, 0.6, Math.PI / 2] }),
+      part(sphere(0.02, 6, 5), shade(c, 0.8), { p: [-0.13, 0.014, -0.33] }),
+    ]);
+  }
   // Kind override (oak tree shares the 'tree' shape slot with
   // the common tree, but an oak must READ differently in the
   // canopy — Adam, 2026-10-30): a stouter trunk and a broader,
@@ -2372,6 +2434,11 @@ const ANIMAL_MODEL_PARAMS: Record<AnimalKind, AnimalModelParams> = {
   eels: { length: 0.6, height: 0.12, color: 0x4a4a3a, long: true, head: true },
   opossum: { length: 0.6, height: 0.35, color: 0x9a9a9a, head: true, tail: true },
   shrew: { length: 0.15, height: 0.09, color: 0x5a4a3a, head: true, tail: true },
+  // The cat (singular, build 2's found familiar): the
+  // generic parts never read as a cat, so buildAnimal
+  // branches to catDetail for every pose; these params
+  // carry only its size class and coat for that builder.
+  cat: { length: 0.5, height: 0.3, color: 0x45454e, head: true, tail: true },
 };
 
 interface AnimalModelParts {
@@ -2590,8 +2657,152 @@ function eelRidge(p: AnimalModelParams): THREE.BufferGeometry {
   return eelRidgeCache;
 }
 
-export function buildAnimal(kind: AnimalKind): THREE.Group {
+/**
+ * The cat (Adam 2026-10-31 — the found familiar; pre-built
+ * for build 2 so the rite build isn't gated on it). The
+ * generic animal parts (box body, ball head, box tail) never
+ * read as a cat, so every pose is a bespoke detail build in
+ * the raccoon/opossum idiom: ellipsoids for the body masses,
+ * cone ears, a torus-arc tail — the ears and tail do the
+ * reading at phone distance. THREE POSES: 'stand' (the
+ * travelling shape), 'sit' (the hearth staging; tail wrapped
+ * around the base), 'curl' (asleep in a round loaf, head
+ * resting at the rim). All offsets are baked into the
+ * geometries (the fish idiom), so assembly places every mesh
+ * at the group origin, which the renderer sets on the
+ * ground. The cat is SINGULAR — no ANIMAL_KINDS roster
+ * entry, no ambient population; build 2 owns its spawn and
+ * asks for poses by name.
+ *
+ * Palette (DRAFT for Adam's eye): a dark blue-grey coat
+ * 0x45454e (ANIMAL_MODEL_PARAMS) — witchy against the fungus
+ * register — with a pale bib/muzzle 0x9a9aa2 and amber eyes
+ * 0xc89038 as the one warm note.
+ */
+export type CatPose = 'stand' | 'sit' | 'curl';
+
+const CAT_PALE = 0x9a9aa2;
+const CAT_EYE = 0xc89038;
+
+interface CatDetail {
+  parts: { geo: THREE.BufferGeometry; mat: THREE.MeshLambertMaterial }[];
+}
+
+const catDetailCache = new Map<CatPose, CatDetail>();
+
+function catEllipsoid(
+  rx: number, ry: number, rz: number, x: number, y: number, z: number,
+): THREE.BufferGeometry {
+  const g = new THREE.SphereGeometry(1, 12, 9);
+  g.scale(rx, ry, rz);
+  g.translate(x, y, z);
+  return g;
+}
+
+function catHeadParts(
+  r: number,
+  coat: THREE.MeshLambertMaterial,
+  pale: THREE.MeshLambertMaterial,
+  eye: THREE.MeshLambertMaterial,
+): { geo: THREE.BufferGeometry; mat: THREE.MeshLambertMaterial }[] {
+  const parts: { geo: THREE.BufferGeometry; mat: THREE.MeshLambertMaterial }[] = [];
+  const skull = new THREE.SphereGeometry(r, 10, 8);
+  parts.push({ geo: skull, mat: coat });
+  parts.push({ geo: catEllipsoid(r * 0.46, r * 0.36, r * 0.42, 0, -r * 0.27, r * 0.8), mat: pale });
+  for (const s of [-1, 1]) {
+    const ear = new THREE.ConeGeometry(r * 0.4, r * 0.87, 6);
+    ear.rotateZ(-s * 0.14);
+    ear.translate(s * r * 0.56, r * 0.92, -r * 0.05);
+    parts.push({ geo: ear, mat: coat });
+    const eyeBall = new THREE.BoxGeometry(r * 0.17, r * 0.2, r * 0.08);
+    eyeBall.translate(s * r * 0.38, r * 0.16, r * 0.88);
+    parts.push({ geo: eyeBall, mat: eye });
+  }
+  return parts;
+}
+
+function catDetail(p: AnimalModelParams, pose: CatPose): CatDetail {
+  const cached = catDetailCache.get(pose);
+  if (cached) return cached;
+  const coat = meshMat(p.color);
+  const dark = meshMat(shade(p.color, 0.78));
+  const pale = meshMat(CAT_PALE);
+  const eye = meshMat(CAT_EYE);
+  const parts: { geo: THREE.BufferGeometry; mat: THREE.MeshLambertMaterial }[] = [];
+  const add = (geo: THREE.BufferGeometry, mat: THREE.MeshLambertMaterial): void => {
+    parts.push({ geo, mat });
+  };
+  const head = (r: number, x: number, y: number, z: number, yaw = 0): void => {
+    for (const hp of catHeadParts(r, coat, pale, eye)) {
+      if (yaw !== 0) hp.geo.rotateY(yaw);
+      hp.geo.translate(x, y, z);
+      parts.push(hp);
+    }
+  };
+  if (pose === 'stand') {
+    for (const sx of [-1, 1]) {
+      for (const sz of [-1, 1]) {
+        const leg = new THREE.CylinderGeometry(0.018, 0.015, 0.17, 6);
+        leg.translate(sx * 0.065, 0.085, sz * 0.15);
+        add(leg, dark);
+      }
+    }
+    add(catEllipsoid(0.105, 0.088, 0.235, 0, 0.245, -0.01), coat);
+    add(catEllipsoid(0.086, 0.092, 0.088, 0, 0.252, 0.135), coat);
+    add(catEllipsoid(0.058, 0.07, 0.045, 0, 0.232, 0.185), pale);
+    // Tail: a torus arc in the YZ plane, rooted at the rear,
+    // rising behind the body, tip curling forward at the top.
+    const tail = new THREE.TorusGeometry(0.13, 0.016, 6, 14, 2.6);
+    tail.rotateY(Math.PI / 2);
+    tail.rotateX(-1.27);
+    tail.translate(0, 0.38, -0.19);
+    add(tail, coat);
+    head(0.075, 0, 0.362, 0.24);
+  } else if (pose === 'sit') {
+    add(catEllipsoid(0.105, 0.095, 0.115, 0, 0.093, -0.04), coat);
+    add(catEllipsoid(0.08, 0.13, 0.072, 0, 0.21, 0.01), coat);
+    add(catEllipsoid(0.05, 0.085, 0.04, 0, 0.2, 0.062), pale);
+    for (const sx of [-1, 1]) {
+      const leg = new THREE.CylinderGeometry(0.015, 0.014, 0.165, 6);
+      leg.translate(sx * 0.04, 0.0825, 0.068);
+      add(leg, dark);
+      add(catEllipsoid(0.024, 0.014, 0.038, sx * 0.04, 0.014, 0.095), dark);
+    }
+    // Tail wrapped around the base: a flat torus arc.
+    const tail = new THREE.TorusGeometry(0.115, 0.015, 6, 16, 4.1);
+    tail.rotateX(Math.PI / 2);
+    tail.rotateY(0.5);
+    tail.translate(0, 0.016, 0.005);
+    add(tail, coat);
+    head(0.075, 0, 0.395, 0.025);
+  } else {
+    // curl: a round loaf, tail arc over the top, head
+    // resting at the rim with its face turned outward.
+    add(catEllipsoid(0.15, 0.048, 0.14, 0, 0.048, 0), coat);
+    add(catEllipsoid(0.125, 0.05, 0.115, 0, 0.06, -0.015), coat);
+    const tail = new THREE.TorusGeometry(0.125, 0.014, 6, 12, 3.2);
+    tail.rotateX(Math.PI / 2);
+    tail.rotateY(0.8);
+    tail.translate(0, 0.085, 0);
+    add(tail, dark);
+    head(0.068, 0.095, 0.068, 0.085, 0.5);
+  }
+  const detail: CatDetail = { parts };
+  catDetailCache.set(pose, detail);
+  return detail;
+}
+
+export function buildAnimal(kind: AnimalKind, pose: CatPose = 'stand'): THREE.Group {
   const p = ANIMAL_MODEL_PARAMS[kind];
+  if (kind === 'cat') {
+    // Bespoke poses (see catDetail): every offset baked,
+    // every mesh at the group origin.
+    const g = new THREE.Group();
+    for (const part of catDetail(p, pose).parts) {
+      g.add(new THREE.Mesh(part.geo, part.mat));
+    }
+    return g;
+  }
   let parts = animalPartsCache.get(kind);
   if (!parts) {
     const width = p.length * 0.55;

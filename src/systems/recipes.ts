@@ -128,15 +128,18 @@ export const ITEMS = {
   primalBoneSnakeVertebra: 'primal-bone-snake-vertebra',
   primalBoneTurtleShellFragment: 'primal-bone-turtle-shell-fragment',
   primalBoneCrowBeak: 'primal-bone-crow-beak',
+  primalBoneSquirrelTailBone: 'primal-bone-squirrel-tail-bone',
   // NIGHT.
   primalBoneOwlTalon: 'primal-bone-owl-talon',
   primalBoneBatWingBone: 'primal-bone-bat-wing-bone',
   primalBoneMouseSpine: 'primal-bone-mouse-spine',
   primalBoneRaccoonTooth: 'primal-bone-raccoon-tooth',
   primalBoneGroundhogTooth: 'primal-bone-groundhog-tooth',
+  primalBoneOpossumCrest: 'primal-bone-opossum-crest',
   // TWILIGHT.
   primalBoneFoxFemur: 'primal-bone-fox-femur',
   primalBoneDeerAntlerTip: 'primal-bone-deer-antler-tip',
+  primalBoneMuskratTail: 'primal-bone-muskrat-tail',
   // MOON PHASE.
   primalBoneWolfTooth: 'primal-bone-wolf-tooth',
   // SKY-INDEPENDENT.
@@ -145,6 +148,7 @@ export const ITEMS = {
   primalBoneBearClaw: 'primal-bone-bear-claw',
   primalBoneRabbitJaw: 'primal-bone-rabbit-jaw',
   primalBoneBeaverIncisor: 'primal-bone-beaver-incisor',
+  primalBoneVoleSkull: 'primal-bone-vole-skull',
   // Traps (brainstorm only — nothing picked; see their notes).
   snare: 'snare',
   fishWeirTrap: 'fish-weir-trap',

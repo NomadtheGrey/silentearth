@@ -114,19 +114,23 @@ export const BONE_EFFECT_NOTES: Readonly<Record<string, string>> = {
   'snake-vertebra': 'Needing less',
   'turtle-shell-fragment': 'Shell protection',
   'crow-beak': 'Remembers where things lie',
+  'squirrel-tail-bone': 'A leaper’s spring',
   'owl-talon': 'Night sight',
   'bat-wing-bone': 'Night way-finding',
   'mouse-spine': 'A hoarder’s store',
   'raccoon-tooth': 'A scavenger’s nose',
   'groundhog-tooth': 'Deep sleep',
+  'opossum-crest': 'Stillness, overlooked',
   'fox-femur': 'A swift step',
   'deer-antler-tip': 'A sense of coming weather',
+  'muskrat-tail': 'Easy wading',
   'wolf-tooth': 'Tracking',
   'frog-pelvis': 'A sense of water',
   'mole-paw': 'Earth sense',
   'bear-claw': 'Strength',
   'rabbit-jaw': 'Calm',
   'beaver-incisor': 'Shelter warmth',
+  'vole-skull': 'An eye for small finds',
 };
 
 /**

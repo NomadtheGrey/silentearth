@@ -936,7 +936,11 @@
  *   row-button pattern as house/fire Place + Eat + Light)
  *   and places INSTANTLY AT HER FEET — the settled lean,
  *   decided at build (the preview ghost is the house/fire
- *   pattern, heavy for a torch); the panel stays open,
+ *   pattern, heavy for a torch) [AMENDED 2026-10-31:
+ *   Adam's crosshair ruling moved the landing to the
+ *   screen-center aim — see placeCarriedLitTorch; the
+ *   panel press still carries its result on the note];
+ *   the panel stays open,
  *   the count drops, the note carries the result. Grant
  *   FIRST (Systems placeTorch consumes one lit-torch;
  *   failure touches nothing), then the entity place
@@ -1195,8 +1199,10 @@
  *   DEV signal, Systems 508fcb7 + Background 8302cdc):
  *   the altar's inventory row gains Place (ITEMS.altar
  *   joins PLACEABLE_IDS for the BUTTON only) placing
- *   INSTANTLY AT HER FEET — torch precedent, not the
- *   house/fire preview flow. Grant FIRST (Systems
+ *   INSTANTLY AT HER FEET — the then-torch precedent,
+ *   not the house/fire preview flow (the torch itself
+ *   moved to the crosshair 2026-10-31; the altar keeps
+ *   its feet until its own word). Grant FIRST (Systems
  *   placeAltar consumes one carried altar; failure
  *   touches nothing + shows the reason), then the
  *   entity place (Background primitive, emits
@@ -1629,7 +1635,18 @@ import { HARVEST_RANGE } from './game/proximity';
 import { trapState, type PlacedTrap } from './game/trapState';
 import { stumpState, type StumpAddition } from './game/stumpState';
 import { TRAP_DEFS } from './game/traps';
-import { biomePresentKinds } from './game/animals';
+import {
+  applySnatchSpook,
+  biomePresentKinds,
+  pickSnatchTarget,
+  type AnimalKind,
+} from './game/animals';
+import {
+  comeHere as runtimeComeHere,
+  makeCompanionInstance,
+  restoreActor,
+  setStance as runtimeSetStance,
+} from './game/companionRuntime';
 import {
   collectTrapCatch,
   catchItemFor,
@@ -1728,7 +1745,10 @@ import { WorldAnchor } from './ui/WorldAnchor';
 import { KEY_BADGE_CLASS, LOOK_THEMES, UI_THEMES } from './ui/themes';
 import { CameraTransition } from './ui/CameraTransition';
 import { CAMERA_TRANSITION } from './ui/cameraPresentation';
-import { projectWorldToScreen } from './ui/worldProjection';
+import {
+  projectWorldToScreen,
+  screenCenterGroundPoint,
+} from './ui/worldProjection';
 import type { HarvestTarget, HarvestRequest } from './ui/proximityHarvest';
 import { removeRequestFor } from './ui/proximityHarvest';
 import type {
@@ -1881,6 +1901,15 @@ import {
   type SkyFacts,
 } from './systems/rituals';
 import {
+  CompanionState,
+  TRUST_FOR_BOND,
+  dietFor,
+  isFeedable,
+  snatchFish,
+  type CompanionStance,
+  type SavedCompanion,
+} from './systems/companions';
+import {
   CharmState,
   GroundhogRest,
   WeatherWarning,
@@ -1905,6 +1934,7 @@ import { CrowArrows } from './ui/CrowArrows';
 import { RitualPanel } from './ui/RitualPanel';
 import { walkAwayShouldClose } from './ui/walkAway';
 import { CharmsPanel } from './ui/CharmsPanel';
+import { CompanionsPanel } from './ui/CompanionsPanel';
 import { StormWarning } from './ui/StormWarning';
 import { WakeNotice } from './ui/WakeNotice';
 
@@ -2002,11 +2032,15 @@ const HOUSE_ITEM_TO_TYPE: Record<string, HouseType> = {
 };
 
 /** Item ids the inventory panel offers a Place button for.
- * Lit torches, altars, writing desks, and campfires ride
- * this set for the BUTTON only — their handlers branch to
- * instant-at-feet (see handlePlaceItem), never the
- * preview-ghost flow the other ids (hearth/kiln/houses/
- * looms) use. */
+ * Lit torches, altars, writing desks, campfires, and
+ * tents ride this set for the BUTTON only — their
+ * handlers branch to instant placement (see
+ * handlePlaceItem), never the preview-ghost flow the
+ * other ids (hearth/kiln/houses/looms) use. Since the
+ * crosshair fold-in (2026-10-31) the instant family
+ * splits by landing: torch / campfire / tent land at
+ * the crosshair aim; altar / desk still land at her
+ * feet, each awaiting its own word. */
 const PLACEABLE_IDS: ReadonlySet<string> = new Set([
   ...Object.keys(FIRE_ITEM_TO_TYPE),
   ...Object.keys(HOUSE_ITEM_TO_TYPE),
@@ -2559,6 +2593,26 @@ export default function App() {
   const [inventoryOpen, setInventoryOpen] = useState(false);
   const [craftingOpen, setCraftingOpen] = useState(false);
   const [charmsOpen, setCharmsOpen] = useState(false);
+  // COMPANIONS (build 1, 2026-10-31): the fourth panel —
+  // a radio-family member like its siblings, with one
+  // difference: its DOOR exists only while she has a
+  // companion (see the button rows + hasBondedCompanion).
+  const [companionsOpen, setCompanionsOpen] = useState(false);
+  // The panel's mirror of CompanionState (records are
+  // ref-state; the mirror is what renders). Refreshed at
+  // boot and after every companion act.
+  const [companionRecords, setCompanionRecords] = useState<
+    SavedCompanion[]
+  >([]);
+  // Per-row note lines keyed by creatureId — the cat's
+  // theater lands here (CompanionsPanel renders them
+  // under the row). The All-row's note is its own state.
+  const [companionNotes, setCompanionNotes] = useState<
+    Record<string, string>
+  >({});
+  const [companionAllNote, setCompanionAllNote] = useState<string | null>(
+    null,
+  );
   const [selectedCharmKind, setSelectedCharmKind] = useState<string | null>(
     null,
   );
@@ -2728,6 +2782,18 @@ export default function App() {
   // the book (the steps), never from a snapshot.
   const stagingBookRef = useRef(new StagingBook());
   const charmStateRef = useRef(new CharmState());
+  // COMPANION STATE (build 1, 2026-10-31): the shell owns
+  // the one CompanionState (Systems' module), constructed
+  // from the boot save's records — the ref-lazy pattern of
+  // the inventory/hunger blocks. Mutations ride
+  // companionRecords (the mirror) to the panel, and
+  // snapshot() rides every saveNow.
+  const companionStateRef = useRef<CompanionState | null>(null);
+  if (companionStateRef.current === null) {
+    companionStateRef.current = new CompanionState(
+      bootSave?.companions ?? [],
+    );
+  }
   // The ritual site whose panel is open, by SITE ID
   // ('altar:<n>' or 'stump:x,z' — one selection for
   // both site kinds since the bone build; the panel +
@@ -3315,6 +3381,12 @@ export default function App() {
           // refresh.
           stagings: stagingBookRef.current.snapshot(),
           awakenings: charmStateRef.current.snapshot(),
+          // COMPANIONS SAVE WIRING (build 1, 2026-10-31):
+          // the touched individuals' records ride every
+          // save as-is (Systems' SavedCompanion shape;
+          // serialize writes them verbatim, load validates
+          // and defaults []). Bonds survive refresh.
+          companions: companionStateRef.current.snapshot(),
           // QUEST SAVE WIRING: the live quest flags ride every
           // save (all-false serializes as all-false; absent on
           // old saves reads as all-false on load). Flags are
@@ -3888,6 +3960,37 @@ export default function App() {
       return null;
     }
     return point;
+  };
+
+  // The crosshair's ground point (Adam's crosshair ruling,
+  // 2026-10-31): where the screen-center ray meets the
+  // ground, through the same camera model projectAnchor
+  // projects with — aim and anchors can never disagree.
+  // Null when the gaze never meets the ground (level/up).
+  const crosshairAimPoint = (): { x: number; z: number } | null => {
+    const player = playerRef.current;
+    const container = containerRef.current;
+    if (!player || !container) return null;
+    const width = container.clientWidth;
+    const height = container.clientHeight;
+    if (width === 0 || height === 0) return null;
+    return screenCenterGroundPoint({
+      playerX: player.x,
+      playerZ: player.z,
+      pitch: player.pitch,
+      yaw: player.yaw,
+      mode: player.mode,
+      facing: player.facing,
+      aspect: width / height,
+      eyeHeight: PLAYER_EYE_HEIGHT,
+      thirdOffset: THIRD_PERSON_OFFSET,
+      behindCamera: {
+        distance: BEHIND_CAMERA_DISTANCE,
+        height: BEHIND_CAMERA_HEIGHT,
+        lookAhead: BEHIND_LOOK_AHEAD,
+        lookHeight: BEHIND_LOOK_HEIGHT,
+      },
+    });
   };
 
   // Re-project the last in-range targets from current player state.
@@ -4502,6 +4605,36 @@ export default function App() {
     setPlacedFires(fireState.snapshot());
     setPlacedTorches(torchState.snapshot());
     setPlacedAltars(altarState.snapshot());
+    // COMPANIONS boot re-read: the panel's mirror starts
+    // from the constructed state's records.
+    setCompanionRecords(companionStateRef.current.snapshot());
+    // COMPANION RESTORE (Piece B, 2026-10-31): bonded
+    // records get their living bodies back — Background's
+    // restoreActor over a fresh instance, seated beside
+    // her. This runs AFTER the seedSet emit above (the
+    // runtime clears its registry on seedSet; restoring
+    // before it would wipe the actors). Records carry no
+    // position, so the seat — and a stayed companion's
+    // anchor — is beside her on load in v1 (the anchor
+    // simplification the claim flagged). The cat is
+    // skipped: the registry never holds one (build 2's
+    // machinery is its own).
+    for (const record of companionStateRef.current.snapshot()) {
+      if (record.bond === 'none' || record.kind === 'cat') continue;
+      const seatX = player.x + 1;
+      const seatZ = player.z;
+      restoreActor(
+        makeCompanionInstance(
+          record.creatureId,
+          record.kind as AnimalKind,
+          seatX,
+          seatZ,
+        ),
+        record.stance ?? 'follow',
+        seatX,
+        seatZ,
+      );
+    }
     // FIRST-CHARM BOOT GRANT (outright, tier 1,
     // GRANT-TO-LIST since Systems 9e9a9dd): runs
     // AFTER the CharmState restore above, so a loaded
@@ -4763,6 +4896,29 @@ export default function App() {
     });
     const offFirePlaced = bus.on('fire:placed', refreshFires);
     const offFireLighting = bus.on('fire:lighting', refreshFires);
+    // COMPANION ANSWERS (Piece B, 2026-10-31): the
+    // runtime speaks, the shell persists. 'companion:
+    // stance' — an actor's stance changed (a completed
+    // come resolves to 'follow' there): persist through
+    // Systems, mirror, save. 'companion:departed' — a
+    // released actor dissolved past streaming distance:
+    // Systems' release as the idempotent record clear
+    // (the press already cleared it; null is expected).
+    const offCompanionStance = bus.on(
+      'companion:stance',
+      ({ id, stance }) => {
+        const result = companionStateRef.current.setStance(id, stance);
+        if (result.ok === true) {
+          setCompanionRecords(companionStateRef.current.snapshot());
+          saveNow();
+        }
+      },
+    );
+    const offCompanionDeparted = bus.on('companion:departed', ({ id }) => {
+      companionStateRef.current.release(id);
+      setCompanionRecords(companionStateRef.current.snapshot());
+      saveNow();
+    });
     // TRAP ROW (Adam, 2026-10-28): the shell owns trap
     // rolls + row refresh. 'trap:catch' (emitted by
     // setCatch, the shell's only catch writer) re-reads
@@ -5032,6 +5188,8 @@ export default function App() {
       offProgress();
       offFirePlaced();
       offFireLighting();
+      offCompanionStance();
+      offCompanionDeparted();
       offTrapCatch();
       offTrapPlaced();
       offTrapHour();
@@ -5560,21 +5718,63 @@ export default function App() {
     saveNow();
   };
 
+  // PLACE REACH (Adam's crosshair ruling, 2026-10-31):
+  // how far from her the crosshair may set a thing down.
+  // A gaze landing past it CLAMPS to the circle along
+  // the ray — the press is never wasted. DRAFT: 6 m,
+  // the torch light's own plenty-bright distance; Adam's
+  // pin pass settles it. One reach for the whole instant
+  // family (torch, campfire, tent — the fold-in ruling,
+  // 2026-10-31).
+  const PLACE_REACH = 6;
+
+  // The aimed placement point: the crosshair's ground
+  // point, clamped to PLACE_REACH along the ray. Null
+  // when the gaze never meets the ground — each act
+  // voices its own refusal on its own surface, in the
+  // family's one line ('Nowhere to set it down.').
+  const aimedPlacementPoint = (): { x: number; z: number } | null => {
+    const player = playerRef.current;
+    if (!player) return null;
+    const aim = crosshairAimPoint();
+    if (aim === null) return null;
+    const dx = aim.x - player.x;
+    const dz = aim.z - player.z;
+    const distance = Math.hypot(dx, dz);
+    if (distance > PLACE_REACH) {
+      return {
+        x: player.x + (dx / distance) * PLACE_REACH,
+        z: player.z + (dz / distance) * PLACE_REACH,
+      };
+    }
+    return aim;
+  };
+
   /**
-   * Placing a carried lit torch: INSTANT AT HER FEET
-   * (settled design — the preview ghost is the
-   * house/fire pattern, heavy for a torch). Grant FIRST
-   * (Systems placeTorch consumes one carried lit-torch;
-   * failure touches nothing), then the entity place
-   * (Background primitive, emits torch:placed →
-   * refreshTorches). ONE CORE, THREE HANDLES (Adam's
-   * torch completion, 2026-10-31): the inventory panel's
-   * Place button (its note carries the result — a panel
-   * action; the panel stays open, the count drops), the
-   * desktop right-click in the locked world, and the
-   * touch PLACE button (both speak through the message
-   * feed). The act is identical behind all three; only
-   * the result's surface differs, as the pickup's does.
+   * Placing a carried lit torch: INSTANT AT THE CROSSHAIR
+   * (Adam, 2026-10-31: "the torch lands where she aims,
+   * if it's not too far away" — nobody places anything
+   * between their feet; this supersedes the at-feet
+   * landing the torch completion shipped with). The aim
+   * is the screen-center ray's ground point (the same
+   * camera model the anchors project with). A ray that
+   * never meets the ground refuses ('Nowhere to set it
+   * down.', DRAFT) — but only when she actually carries a
+   * torch; empty-handed, the grant's own refusal speaks
+   * (the aim is not the truer refusal then). A landing
+   * past PLACE_REACH clamps to the reach circle
+   * along the ray. Grant FIRST (Systems placeTorch
+   * consumes one carried lit-torch; failure touches
+   * nothing), then the entity place (Background
+   * primitive, emits torch:placed → refreshTorches).
+   * ONE CORE, THREE HANDLES (Adam's torch completion,
+   * 2026-10-31): the inventory panel's Place button (its
+   * note carries the result — a panel action; she aims
+   * before opening the pack), the desktop right-click in
+   * the locked world, and the touch PLACE button (both
+   * speak through the message feed). The act is identical
+   * behind all three; only the result's surface differs,
+   * as the pickup's does.
    */
   const placeCarriedLitTorch = ():
     | { placed: true }
@@ -5582,7 +5782,18 @@ export default function App() {
     | null => {
     const player = playerRef.current;
     if (!player) return null;
-    const outcome = grantPlaceTorch(inventory, player.x, player.z);
+    const target = aimedPlacementPoint();
+    if (target === null && inventory.count(ITEMS.litTorch) > 0) {
+      return { placed: false, reason: 'Nowhere to set it down.' };
+    }
+    // Aim null + empty-handed falls back to her feet as
+    // the target — the grant refuses below and nothing
+    // is consumed, so the fallback never lands.
+    const outcome = grantPlaceTorch(
+      inventory,
+      target?.x ?? player.x,
+      target?.z ?? player.z,
+    );
     // Equality check, not truthiness: non-strict tsc does
     // not narrow this union's boolean discriminant on
     // truthiness (see the torch Light button handler).
@@ -5621,8 +5832,13 @@ export default function App() {
   };
 
   // PLACED TENT (tent shell, 2026-10-28 — torch
-  // mirror: one press places one tent at her feet,
-  // no placement mode, no ghost). Grant FIRST
+  // mirror: one press places one tent, no placement
+  // mode, no ghost). AT THE CROSSHAIR since Adam's
+  // fold-in ruling (2026-10-31) — the aim point serves
+  // tent as it serves the torch: a groundless gaze
+  // refuses on the note when a tent is carried (the
+  // grant's own refusal speaks when none is), a far
+  // gaze clamps to the reach. Grant FIRST
   // (Systems placeTent consumes one carried tent;
   // failure touches nothing), then the shell record
   // (Background's placed-tent entity has not landed
@@ -5636,7 +5852,16 @@ export default function App() {
   const handlePlaceTent = () => {
     const player = playerRef.current;
     if (!player) return;
-    const outcome = placeTent(inventory, player.x, player.z);
+    const target = aimedPlacementPoint();
+    if (target === null && inventory.count(ITEMS.tent) > 0) {
+      setTentNote('Nowhere to set it down.');
+      return;
+    }
+    const outcome = placeTent(
+      inventory,
+      target?.x ?? player.x,
+      target?.z ?? player.z,
+    );
     // Equality check, not truthiness: non-strict tsc does
     // not narrow this union's boolean discriminant on
     // truthiness (see the torch Light button handler).
@@ -5780,6 +6005,25 @@ export default function App() {
   // contract — kind + tier + note in awakening order;
   // App maps kind to its display name. Derived live each
   // render, so the panel always opens on the current list.
+  // COMPANIONS DOOR RULE (build 1, 2026-10-31): the door
+  // exists only while a bonded companion stands. The
+  // panel's rows are the bonded records, shaped for the
+  // component (kind label = the capitalized kind, the
+  // AnimalTag precedent — no name table invented).
+  const bondedCompanions = companionRecords.filter(
+    (record) => record.bond !== 'none',
+  );
+  const hasBondedCompanion = bondedCompanions.length > 0;
+  const companionRows = bondedCompanions.map((record) => ({
+    creatureId: record.creatureId,
+    kindLabel:
+      record.kind.length > 0
+        ? record.kind.charAt(0).toUpperCase() + record.kind.slice(1)
+        : record.kind,
+    bond: record.bond as 'companion' | 'familiar',
+    stance: record.stance,
+    isCat: record.kind === 'cat',
+  }));
   const charmEntries = listCharms(charmStateRef.current).map((charm) => ({
     ...charm,
     display: boneDisplayFor(charm.kind),
@@ -5799,6 +6043,7 @@ export default function App() {
     setInventoryOpen(true);
     setCraftingOpen(false);
     setCharmsOpen(false);
+    setCompanionsOpen(false);
   };
   const openCraftingPanel = () => {
     // THE FOLD: opening the dialog while a stump (plain
@@ -5817,6 +6062,7 @@ export default function App() {
     setCraftingOpen(true);
     setInventoryOpen(false);
     setCharmsOpen(false);
+    setCompanionsOpen(false);
   };
   // E / touch USE / the name chip at a stump: open the
   // dialog on that stump's context, Craft door first.
@@ -5837,6 +6083,323 @@ export default function App() {
     if (charmsOpen) setCharmsOpen(false);
     else openCharmsPanel();
   };
+  const toggleCompanionsPanel = () => {
+    if (companionsOpen) setCompanionsOpen(false);
+    else openCompanionsPanel();
+  };
+  const openCompanionsPanel = () => {
+    setCompanionsOpen(true);
+    setInventoryOpen(false);
+    setCraftingOpen(false);
+    setCharmsOpen(false);
+  };
+
+  // COMPANION ACTS (build 1, 2026-10-31): the panel's
+  // three verbs against Systems' CompanionState. Every
+  // act refreshes the mirror and saves — the state is
+  // the record; the panel only ever reads the mirror.
+  const refreshCompanions = () => {
+    setCompanionRecords(companionStateRef.current.snapshot());
+  };
+  // THE CAT'S LINES (Adam, 2026-10-31 — the theater):
+  // a stance press at a cat comes back with Systems'
+  // typed 'cat' refusal, and the panel plays one of
+  // these, rolled per press. DRAFT wording.
+  const CAT_NONCOMPLIANCE_LINES = [
+    'The cat looks away.',
+    'The cat grooms a paw.',
+    'The cat saunters off, hunting.',
+    'The cat slow-blinks.',
+  ];
+  const rollCatLine = (): string =>
+    CAT_NONCOMPLIANCE_LINES[
+      Math.floor(Math.random() * CAT_NONCOMPLIANCE_LINES.length)
+    ];
+  // RUNTIME DRIVING (Piece B, 2026-10-31): a stance the
+  // record accepts also reaches the living body —
+  // Background's companion runtime — directly (the
+  // torchState precedent: the shell imports game
+  // modules). 'come' is the runtime's one-shot recall;
+  // 'stay'/'follow' set its standing stance. The cat
+  // never reaches the runtime (Systems refuses first;
+  // the registry never holds one). The runtime answers
+  // its own changes on 'companion:stance', which the
+  // boot listeners persist back through Systems — a
+  // completed come lands in the record as 'follow'
+  // there, not here.
+  const driveCompanionRuntime = (
+    creatureId: string,
+    stance: CompanionStance,
+  ) => {
+    const record = companionStateRef.current.recordFor(creatureId);
+    if (!record || record.kind === 'cat') return;
+    if (stance === 'come') runtimeComeHere(creatureId);
+    else runtimeSetStance(creatureId, stance);
+  };
+  const handleCompanionStance = (
+    creatureId: string,
+    stance: CompanionStance,
+  ) => {
+    const result = companionStateRef.current.setStance(creatureId, stance);
+    if (result.ok === false && result.code === 'cat') {
+      setCompanionNotes((current) => ({
+        ...current,
+        [creatureId]: rollCatLine(),
+      }));
+      return;
+    }
+    if (result.ok === true) {
+      setCompanionNotes((current) => {
+        const next = { ...current };
+        delete next[creatureId];
+        return next;
+      });
+      refreshCompanions();
+      saveNow();
+      driveCompanionRuntime(creatureId, stance);
+    }
+    // 'unknown' / 'unbonded' cannot arise from the
+    // panel (its rows are bonded records) — no line is
+    // invented for an impossible code.
+  };
+  const handleCompanionStanceAll = (stance: CompanionStance) => {
+    let catPresent = false;
+    for (const record of companionStateRef.current.snapshot()) {
+      if (record.bond === 'none') continue;
+      if (record.kind === 'cat') {
+        catPresent = true;
+        continue;
+      }
+      companionStateRef.current.setStance(record.creatureId, stance);
+      driveCompanionRuntime(record.creatureId, stance);
+    }
+    setCompanionAllNote(catPresent ? rollCatLine() : null);
+    refreshCompanions();
+    saveNow();
+  };
+  const handleCompanionRelease = (creatureId: string) => {
+    const removed = companionStateRef.current.release(creatureId);
+    if (removed === null) return;
+    // The shell speaks for Systems' return on the bus
+    // (the emitter-layering rule): the runtime hears
+    // the release and starts the departure leg. Its
+    // 'companion:departed' answer is met by the boot
+    // listener with Systems' idempotent clear.
+    bus.emit('companion:released', { id: creatureId });
+    refreshCompanions();
+    saveNow();
+    // The last bond going closes the panel — its door
+    // is gone with the list it would show.
+    const anyBonded = companionStateRef.current
+      .snapshot()
+      .some((record) => record.bond !== 'none');
+    if (!anyBonded) setCompanionsOpen(false);
+  };
+
+  // THE NAME GATE (Piece B, 2026-10-31 — Adam's bones
+  // ruling via DEV): SPEAK's predicate is the name
+  // chain's own fact — the kind stands awakened, its
+  // true name in her journal. Each entry is the kind's
+  // own Waking bone (Systems' RITUAL_RECIPES set — 21
+  // since the bones-for-the-boneless landings; squirrel
+  // joined last on Adam's yes, keyed 'squirrel-tail-bone'
+  // exactly as Systems registered it).
+  const BONE_KIND_FOR_ANIMAL: Readonly<Record<string, string>> = {
+    squirrel: 'squirrel-tail-bone',
+    rabbit: 'rabbit-jaw',
+    muskrat: 'muskrat-tail',
+    mouse: 'mouse-spine',
+    vole: 'vole-skull',
+    groundhog: 'groundhog-tooth',
+    opossum: 'opossum-crest',
+    raccoon: 'raccoon-tooth',
+    beaver: 'beaver-incisor',
+    deer: 'deer-antler-tip',
+    fox: 'fox-femur',
+    wolf: 'wolf-tooth',
+    bear: 'bear-claw',
+    crow: 'crow-beak',
+    owl: 'owl-talon',
+    snake: 'snake-vertebra',
+    turtle: 'turtle-shell-fragment',
+    pigeon: 'pigeon-wing-bone',
+  };
+  const companionNameKnown = (kind: string): boolean => {
+    const boneKind = BONE_KIND_FOR_ANIMAL[kind];
+    return (
+      boneKind !== undefined &&
+      charmStateRef.current.isAwakened(boneKind)
+    );
+  };
+
+  // THE FACED VERBS (Piece B, 2026-10-31): the winner
+  // race's creature candidacy and the one act behind
+  // both the pill and E. Candidacy is NARROW — a verb
+  // must be live, or the animal is ambience and never
+  // a target: a fish is SNATCH; a bond-ready record is
+  // SPEAK; a feedable kind she carries food for is
+  // OFFER (the first diet item she holds is the
+  // offering — diet order is the pick order). A bonded
+  // companion is the panel's, never the pill's.
+  type CreatureVerb = 'offer' | 'speak' | 'snatch';
+  // PERCH GATE (DEV, 2026-10-31): the height at which a
+  // squirrel is up a trunk, out of hand's reach — above
+  // it, no OFFER. DRAFT: 1.2 m, DEV's figure from
+  // Background's climb landing (the feed now carries y).
+  const PERCH_Y = 1.2;
+  const creatureVerbFor = (animal: {
+    id: string;
+    kind: string;
+    y?: number;
+  }): { verb: CreatureVerb; item?: ItemId } | null => {
+    if (animal.kind === 'fish') return { verb: 'snatch' };
+    const record = companionStateRef.current.recordFor(animal.id);
+    if (record && record.bond !== 'none') return null;
+    if (record && record.trust >= TRUST_FOR_BOND) {
+      return { verb: 'speak' };
+    }
+    // A perched squirrel cannot be handed food — the
+    // gate is the offering's only: it still tags, can
+    // be looked at, and SPEAK above is untouched.
+    if (animal.kind === 'squirrel' && (animal.y ?? 0) >= PERCH_Y) {
+      return null;
+    }
+    if (isFeedable(animal.kind)) {
+      const offered = dietFor(animal.kind).find(
+        (food) => inventory.count(food) > 0,
+      );
+      if (offered !== undefined) return { verb: 'offer', item: offered };
+    }
+    return null;
+  };
+
+  // The creature act. Every line DRAFT for Adam's pin
+  // pass; refusals voice per typed code, distinctly
+  // (the feral is the animal itself, final; not-food
+  // is the offering). The shell speaks for Systems'
+  // returns on the bus (emitter layering): 'feral'
+  // emits the snap, a bond emits the promotion, a
+  // caught fish emits its catch.
+  const handleCreatureInteract = (winner: {
+    id: string;
+    animalKind: string;
+    verb: CreatureVerb;
+    item?: ItemId;
+  }) => {
+    const label =
+      winner.animalKind.length > 0
+        ? winner.animalKind.charAt(0).toUpperCase() +
+          winner.animalKind.slice(1)
+        : winner.animalKind;
+    const state = companionStateRef.current;
+    if (winner.verb === 'offer') {
+      if (winner.item === undefined) return;
+      const day =
+        rendererRef.current?.snapshotSky()?.daysElapsed ?? 0;
+      const result = state.feed(
+        winner.id,
+        winner.animalKind,
+        winner.item,
+        inventory,
+        day,
+      );
+      if (result.ok === false) {
+        if (result.code === 'feral') {
+          bus.emit('companion:feral-snap', { id: winner.id });
+          showFeedback('This one is feral — it will never tame.', 'blocked');
+        } else if (result.code === 'sated') {
+          showFeedback(`The ${label} has eaten today.`, 'info');
+        } else if (result.code === 'not-food') {
+          showFeedback(
+            `The ${label} turns from the ${displayNameFor(winner.item)}.`,
+            'info',
+          );
+        } else if (result.code === 'not-held') {
+          showFeedback('Nothing to offer.', 'blocked');
+        }
+        // 'bonded' cannot arise — candidacy excludes
+        // bonded records, and the race is the only door.
+        return;
+      }
+      showFeedback(
+        `The ${label} takes the ${displayNameFor(winner.item)}.`,
+        'gain',
+      );
+      if (result.bondReady) {
+        showFeedback(`The ${label} is ready to be spoken to.`, 'info');
+      }
+      refreshCompanions();
+      refreshInventory();
+      saveNow();
+      return;
+    }
+    if (winner.verb === 'speak') {
+      const result = state.bondWith(
+        winner.id,
+        companionNameKnown(winner.animalKind),
+      );
+      if (result.ok === false) {
+        if (result.code === 'name') {
+          showFeedback('You do not know its true name.', 'blocked');
+        } else if (result.code === 'trust') {
+          showFeedback(
+            'Not yet — it does not know you well enough.',
+            'blocked',
+          );
+        } else if (result.code === 'feral') {
+          showFeedback('This one is feral — it will never tame.', 'blocked');
+        }
+        // 'unknown' / 'already' cannot arise from the
+        // candidacy (a record stands, unbonded).
+        return;
+      }
+      bus.emit('companion:bonded', { id: winner.id, kind: winner.animalKind });
+      showFeedback(`The ${label} walks with you now.`, 'gain');
+      refreshCompanions();
+      saveNow();
+      return;
+    }
+    // SNATCH — the live composition (animals.ts' own
+    // prescription): Systems' snatchFish owns the roll,
+    // the hunger gate, and the grant; Background's
+    // machinery owns the visible fish. 'caught' despawns
+    // the instance; 'spooked' and 'slipped' spook it
+    // like an escape (DEV-settled: slipped consumes
+    // nothing, the fish is not despawned).
+    const renderer = rendererRef.current;
+    const player = playerRef.current;
+    if (!renderer || !player) return;
+    const instances = renderer.getLoadedAnimalInstances();
+    const target =
+      instances.find((instance) => instance.id === winner.id) ??
+      pickSnatchTarget(instances, player.x, player.z);
+    const outcome = snatchFish(inventory, Math.random(), hunger);
+    if (outcome === 'caught') {
+      if (target) renderer.despawnChunkAnimal(target.id);
+      bus.emit('animal:snatch-caught', {
+        id: winner.id,
+        kind: winner.animalKind,
+        x: target?.x ?? player.x,
+        z: target?.z ?? player.z,
+      });
+      showFeedback('Caught a fish!', 'gain');
+      refreshInventory();
+      saveNow();
+    } else if (outcome === 'spooked') {
+      if (target) applySnatchSpook(instances, target, player.x, player.z);
+      showFeedback('It darts away.', 'info');
+    } else if (outcome === 'slipped') {
+      if (target) applySnatchSpook(instances, target, player.x, player.z);
+      showFeedback(
+        'Caught it — but your pack is full, and it slips free.',
+        'blocked',
+      );
+      refreshInventory();
+      saveNow();
+    } else {
+      showFeedback('Too hungry for that work.', 'blocked');
+    }
+  };
 
   // Open the charms panel with a valid selection: keep
   // the current one if it is still listed (awakenings
@@ -5846,6 +6409,7 @@ export default function App() {
     setCharmsOpen(true);
     setInventoryOpen(false);
     setCraftingOpen(false);
+    setCompanionsOpen(false);
     setSelectedCharmKind((current) =>
       charmEntries.some((charm) => charm.kind === current)
         ? current
@@ -6166,7 +6730,7 @@ export default function App() {
 
   const handlePlaceItem = (itemId: string) => {
     // Placed torches never enter the preview flow — the
-    // branch above places instantly at her feet.
+    // branch above places instantly at the crosshair.
     if (itemId === ITEMS.litTorch) {
       handlePlaceLitTorch();
       return;
@@ -6193,19 +6757,25 @@ export default function App() {
       return;
     }
     // Placed tents never enter the preview flow either —
-    // the torch mirror: one press places one tent at her
-    // feet (camping.ts: "one press places one tent").
-    // No placement mode (the preview ghost is the
-    // house/fire pattern, heavy for a site placed where
-    // she stands).
+    // the torch mirror: one press places one tent at the
+    // crosshair (camping.ts: "one press places one tent";
+    // the landing moved with the fold-in ruling,
+    // 2026-10-31). No placement mode (the preview ghost
+    // is the house/fire pattern, heavy for a torch-class
+    // act).
     if (itemId === ITEMS.tent) {
       handlePlaceTent();
       return;
     }
-    // Single-tap campfire (Adam, 2026-10-28): Place places at
-    // her feet immediately — no placement mode, no ghost, no
-    // "Place here" panel. Hearth/kiln keep the
-    // two-step flow below; this branch is campfire only.
+    // Single-tap campfire (Adam, 2026-10-28): Place places
+    // immediately — no placement mode, no ghost, no
+    // "Place here" panel. AT THE CROSSHAIR since Adam's
+    // fold-in ruling (2026-10-31): the aim point serves
+    // the campfire as it serves the torch — a groundless
+    // gaze refuses on the fire note (after the carried
+    // check, so an empty hand hears the truer refusal),
+    // a far gaze clamps to the reach. Hearth/kiln keep
+    // the two-step flow below; this branch is campfire only.
     if (itemId === ITEMS.campfire) {
       // Clear any armed placement mode first so no stale ghost
       // lingers after the tap.
@@ -6219,8 +6789,13 @@ export default function App() {
         setFireNote('Nothing to place — that item is no longer carried.');
         return;
       }
+      const target = aimedPlacementPoint();
+      if (target === null) {
+        setFireNote('Nowhere to set it down.');
+        return;
+      }
       try {
-        fireState.placeFire('campfire', player.x, player.z);
+        fireState.placeFire('campfire', target.x, target.z);
         inventory.remove(itemId, 1);
       } catch (error) {
         setFireNote(
@@ -8171,6 +8746,7 @@ export default function App() {
       inventoryOpen ||
       craftingOpen ||
       charmsOpen ||
+      companionsOpen ||
       placement !== null ||
       selectedSiteId !== null ||
       optionsOpen ||
@@ -8239,6 +8815,7 @@ export default function App() {
       inventoryOpen ||
       craftingOpen ||
       charmsOpen ||
+      companionsOpen ||
       placement !== null ||
       selectedSiteId !== null ||
       optionsOpen ||
@@ -8361,6 +8938,10 @@ export default function App() {
         setRitualNote(null);
         return;
       }
+      if (companionsOpen) {
+        setCompanionsOpen(false);
+        return;
+      }
       if (charmsOpen) {
         setCharmsOpen(false);
         return;
@@ -8390,6 +8971,7 @@ export default function App() {
     selectedCauldronHearthId,
     selectedSiteId,
     charmsOpen,
+    companionsOpen,
     craftingOpen,
     inventoryOpen,
     firstRunDone,
@@ -8466,6 +9048,10 @@ export default function App() {
     if (selectedSiteId !== null) {
       setSelectedSiteId(null);
       setRitualNote(null);
+      return true;
+    }
+    if (companionsOpen) {
+      setCompanionsOpen(false);
       return true;
     }
     if (charmsOpen) {
@@ -8655,6 +9241,7 @@ export default function App() {
     selectedFireId,
     selectedSiteId,
     charmsOpen,
+    companionsOpen,
     craftingOpen,
     inventoryOpen,
     firstRunDialogOpen,
@@ -8838,7 +9425,15 @@ export default function App() {
         distance: number;
       }
     | { kind: 'home'; distance: number }
-    | { kind: 'scry'; distance: number };
+    | { kind: 'scry'; distance: number }
+    | {
+        kind: 'creature';
+        id: string;
+        animalKind: string;
+        verb: 'offer' | 'speak' | 'snatch';
+        item?: ItemId;
+        distance: number;
+      };
 
   // GROVE TREE FACT (Adam, 2026-10-30): a scatter target
   // is one of the Grove's own trees when its source fells
@@ -9021,6 +9616,32 @@ export default function App() {
     // from Background's singleton like the looms.
     for (const cauldron of cauldronState.snapshot()) {
       considerPlaced('cauldron', cauldron.hearthId, cauldron.x, cauldron.z);
+    }
+    // COMPANIONS (Piece B, 2026-10-31): the faced
+    // creature joins the race ONLY when a verb is live
+    // (creatureVerbFor — narrow candidacy; ambience is
+    // never a target). The derivation reads the
+    // renderer's live animal feed at render — the same
+    // surface AnimalTag polls, now carrying the stable
+    // spawn ids Systems' records key on.
+    const animalRenderer = rendererRef.current;
+    if (animalRenderer) {
+      for (const animal of animalRenderer.getVisibleAnimals()) {
+        const live = creatureVerbFor(animal);
+        if (live === null) continue;
+        const f = facingOf(animal.x, animal.z);
+        if (f.distance <= HARVEST_RANGE) anyCandidateInRange = true;
+        if (f.isFaced && f.distance <= HARVEST_RANGE) {
+          challengers.push({
+            kind: 'creature',
+            id: animal.id,
+            animalKind: animal.kind,
+            verb: live.verb,
+            item: live.item,
+            distance: f.distance,
+          });
+        }
+      }
     }
     // CAVE TRAVEL (claim as approved 2026-10-30): the
     // dimension anchors join the same race — on the
@@ -9239,6 +9860,11 @@ export default function App() {
         break;
       case 'tent':
         setSelectedTentId(winner.id);
+        break;
+      case 'creature':
+        // The faced creature's live verb (Piece B) —
+        // the same act the creature pill runs.
+        handleCreatureInteract(winner);
         break;
       case 'torch':
         // TORCH PICKUP ON E (Adam, 2026-10-31): E at a
@@ -9483,6 +10109,7 @@ export default function App() {
       inventoryOpen ||
       craftingOpen ||
       charmsOpen ||
+      companionsOpen ||
       optionsOpen ||
       introOpen ||
       firstRunDialogOpen ||
@@ -9505,6 +10132,7 @@ export default function App() {
     inventoryOpen,
     craftingOpen,
     charmsOpen,
+    companionsOpen,
     optionsOpen,
     introOpen,
     firstRunDialogOpen,
@@ -9610,7 +10238,7 @@ export default function App() {
       // waits. (Before this, only the open panel's own
       // key did anything here — I then K was blocked
       // by the open Inventory. That was the bug.)
-      if (inventoryOpen || craftingOpen || charmsOpen) {
+      if (inventoryOpen || craftingOpen || charmsOpen || companionsOpen) {
         if (key === 'i') toggleInventoryPanel();
         else if (key === 'k') toggleCraftingPanel();
         else if (key === 'l') toggleCharmsPanel();
@@ -9673,6 +10301,7 @@ export default function App() {
     inventoryOpen,
     craftingOpen,
     charmsOpen,
+    companionsOpen,
     handleUseInteract,
     handleSecondInteract,
     openCharmsPanel,
@@ -9726,7 +10355,8 @@ export default function App() {
         pendingTrapRecipe ||
         pendingRemoveTarget !== null ||
         craftingOpen ||
-        charmsOpen
+        charmsOpen ||
+        companionsOpen
       ) {
         return;
       }
@@ -9756,6 +10386,7 @@ export default function App() {
     inventoryOpen,
     craftingOpen,
     charmsOpen,
+    companionsOpen,
     placement,
     handleUseInteract,
     handleWorldPlaceTorch,
@@ -10317,6 +10948,23 @@ export default function App() {
     useWinner?.kind === 'loom'
       ? { id: useWinner.id, label: 'Weave' }
       : null;
+  // THE CREATURE'S PILL (Piece B, 2026-10-31): the
+  // creature winner presents its row — the loom shape —
+  // with the live verb as its label (OFFER names its
+  // item). The press runs the stored pick's act, the
+  // very act E performs (the contract).
+  const presentedCreature =
+    useWinner?.kind === 'creature'
+      ? {
+          id: useWinner.id,
+          label:
+            useWinner.verb === 'offer'
+              ? `Offer ${displayNameFor(useWinner.item as ItemId)}`
+              : useWinner.verb === 'speak'
+                ? 'Speak'
+                : 'Snatch',
+        }
+      : null;
 
   // DESKTOP PILE PICKUP (see the header): the mouse twin
   // of R's pile second — shown only when the faced
@@ -10379,7 +11027,13 @@ export default function App() {
             ? 'HARVEST'
             : useWinner.kind === 'loom'
               ? 'WEAVE'
-              : useWinner.kind === 'site' &&
+              : useWinner.kind === 'creature'
+                ? useWinner.verb === 'offer'
+                  ? 'OFFER'
+                  : useWinner.verb === 'speak'
+                    ? 'SPEAK'
+                    : 'SNATCH'
+                : useWinner.kind === 'site' &&
                   useWinner.siteId.startsWith('stump:')
                 ? 'KRAFT'
                 : useWinner.kind === 'cauldron'
@@ -10784,6 +11438,12 @@ export default function App() {
           onHarvestHive={handleHarvestHive}
           loom={presentedLoom}
           onWeave={() => openCraftingPanel()}
+          creature={presentedCreature}
+          onCreature={() => {
+            if (useWinner?.kind === 'creature') {
+              handleCreatureInteract(useWinner);
+            }
+          }}
           showKeyHints={!isTouch}
           lookNode={
             !LOOK_PARKED && lookTarget ? (
@@ -10862,6 +11522,8 @@ export default function App() {
           !inventoryOpen &&
           !craftingOpen &&
           !charmsOpen &&
+      !companionsOpen &&
+          !companionsOpen &&
           !optionsOpen &&
           !introOpen ? (
             <LocationChip theme={lookThemes.world}
@@ -10978,6 +11640,20 @@ export default function App() {
                 </span>
               ) : null}
             </button>
+            {hasBondedCompanion ? (
+              <button
+                type="button"
+                onClick={toggleCompanionsPanel}
+                aria-pressed={companionsOpen}
+                className={
+                  isTouch
+                    ? 'rounded bg-moss-deep px-3 py-2 text-sm min-h-[44px] hover:bg-moss'
+                    : 'rounded bg-moss-deep px-3 py-1 text-xs hover:bg-moss'
+                }
+              >
+                Companions
+              </button>
+            ) : null}
             <button
               type="button"
               onClick={() => setOptionsOpen(true)}
@@ -11149,6 +11825,16 @@ export default function App() {
             >
               Charms
             </button>
+            {hasBondedCompanion ? (
+              <button
+                type="button"
+                onClick={toggleCompanionsPanel}
+                aria-pressed={companionsOpen}
+                className="min-h-[44px] rounded bg-moss-deep px-3 py-2 text-sm hover:bg-moss"
+              >
+                Companions
+              </button>
+            ) : null}
             <button
               type="button"
               onClick={() => setOptionsOpen(true)}
@@ -11171,6 +11857,7 @@ export default function App() {
               setInventoryOpen(false);
               setCraftingOpen(false);
               setCharmsOpen(false);
+              setCompanionsOpen(false);
             }}
             aria-label="Hide HUD panels to reveal the game"
             className="pointer-events-auto absolute right-2 top-2 z-40 min-h-[44px] rounded bg-black/60 px-3 py-2 text-sm"
@@ -11445,6 +12132,18 @@ export default function App() {
             selectedKind={selectedCharmKind}
             onSelectKind={setSelectedCharmKind}
             onClose={() => setCharmsOpen(false)}
+            comfortable={isTouch}
+          />
+        ) : null}
+        {companionsOpen ? (
+          <CompanionsPanel theme={lookThemes.world}
+            companions={companionRows}
+            onStance={handleCompanionStance}
+            onStanceAll={handleCompanionStanceAll}
+            onRelease={handleCompanionRelease}
+            notes={companionNotes}
+            allNote={companionAllNote ?? undefined}
+            onClose={() => setCompanionsOpen(false)}
             comfortable={isTouch}
           />
         ) : null}
@@ -11888,6 +12587,7 @@ export default function App() {
       !inventoryOpen &&
       !craftingOpen &&
       !charmsOpen &&
+      !companionsOpen &&
       !optionsOpen &&
       !introOpen &&
       !pendingTrapRecipe &&
@@ -11908,6 +12608,7 @@ export default function App() {
       !inventoryOpen &&
       !craftingOpen &&
       !charmsOpen &&
+      !companionsOpen &&
       !optionsOpen &&
       !introOpen &&
       !pendingTrapRecipe &&
@@ -11931,6 +12632,7 @@ export default function App() {
       !inventoryOpen &&
       !craftingOpen &&
       !charmsOpen &&
+      !companionsOpen &&
       !optionsOpen &&
       !introOpen &&
       !pendingTrapRecipe &&
@@ -11956,6 +12658,7 @@ export default function App() {
       !inventoryOpen &&
       !craftingOpen &&
       !charmsOpen &&
+      !companionsOpen &&
       !optionsOpen &&
       !introOpen &&
       !pendingTrapRecipe &&
@@ -11985,6 +12688,7 @@ export default function App() {
       {!inventoryOpen &&
       !craftingOpen &&
       !charmsOpen &&
+      !companionsOpen &&
       !optionsOpen &&
       !introOpen &&
       !pendingTrapRecipe &&

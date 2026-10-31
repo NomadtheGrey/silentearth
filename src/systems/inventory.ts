@@ -523,6 +523,10 @@ export const ITEM_DISPLAY_NAMES: Readonly<Record<string, string>> = {
   'primal-bone-bear-claw': 'Primal Bone - bear claw',
   'primal-bone-rabbit-jaw': 'Primal Bone - rabbit jaw',
   'primal-bone-beaver-incisor': 'Primal Bone - beaver incisor',
+  'primal-bone-opossum-crest': 'Primal Bone - opossum crest',
+  'primal-bone-muskrat-tail': 'Primal Bone - muskrat tail',
+  'primal-bone-vole-skull': 'Primal Bone - vole skull',
+  'primal-bone-squirrel-tail-bone': 'Primal Bone - squirrel tail bone',
   'rabbit-carcass': 'Rabbit Carcass',
   'squirrel-carcass': 'Squirrel Carcass',
   'muskrat-carcass': 'Muskrat Carcass',
@@ -709,7 +713,7 @@ export const ITEM_DESCRIPTIONS: Readonly<Record<string, string>> = {
   honey: 'Wild honey. Eat it to restore hunger.',
   // Camping.
   'sleeping-bag': 'Bedding you can carry. A bed wherever you stop. Woven at a loom.',
-  tent: 'A portable shelter. Pitch it where you stand; pack it up when you move. Made at a workstation.',
+  tent: 'A portable shelter. Pitch it where you aim; pack it up when you move. Made at a workstation.',
   // Flowers (three are food; the rest have no use yet).
   'white-yarrow': 'A picked white yarrow. No known use yet.',
   'gold-coneflower': 'A picked gold coneflower. No known use yet.',
@@ -898,6 +902,10 @@ export const ITEM_CATEGORIES: Readonly<Record<string, ItemCategory>> = {
   'primal-bone-bear-claw': 'Bones',
   'primal-bone-rabbit-jaw': 'Bones',
   'primal-bone-beaver-incisor': 'Bones',
+  'primal-bone-opossum-crest': 'Bones',
+  'primal-bone-muskrat-tail': 'Bones',
+  'primal-bone-vole-skull': 'Bones',
+  'primal-bone-squirrel-tail-bone': 'Bones',
   // Carcasses — trap catches.
   'rabbit-carcass': 'Carcasses',
   'squirrel-carcass': 'Carcasses',

@@ -2286,6 +2286,30 @@ export const SOURCES: HarvestSourceDef[] = [
     mesh: { shape: 'flowerPouch', color: 0xdd7a9a, baseY: 0 },
   },
   {
+    // Pre-built for the village beats build (Models,
+    // 2026-10-31): weathered human remains. INERT by shape:
+    // biomes is EMPTY, so no scatter filter can ever select
+    // this source — placement belongs to the beats build's
+    // boneSpots (Background), and the carry-or-bury staging
+    // to Systems/UI. Scenery only: harvestable=false, there
+    // is nothing to take from the dead. The mesh shape slot
+    // is nominal — buildKindGeometry's kind override builds
+    // the bones; extraColor is the ash-darkened tone the
+    // fire-side bones carry.
+    id: 'humanRemains',
+    kind: 'humanRemains',
+    name: 'Human Remains',
+    description:
+      'Weathered bones, long dead — ribs, a skull, long bones trailed in the ash. ' +
+      'Someone the village lost, before the burning or in it. Nothing to take.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: [],
+    mesh: { shape: 'disc', color: 0xd8d0bc, extraColor: 0x6a6058, baseY: 0 },
+  },
+  {
     id: 'creekIris',
     kind: 'iris',
     name: 'Creek Iris',

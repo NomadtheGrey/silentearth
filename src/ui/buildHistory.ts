@@ -43,6 +43,14 @@ export interface BuildRecord {
 
 const ALL_RECORDS: BuildRecord[] = [
   {
+    merge: 'Merge #43',
+    pr: 82,
+    sha: 'eed50f3',
+    date: '2026-10-31',
+    what: 'Twenty-three commits, and the twenty-third is this record itself. The animals of the world become individuals: every creature carries a stable name of its own now, and she can feed what one eats, earn its trust feeding by feeding, and speak its kind\u2019s true name to make a friend of it \u2014 a friend who follows at her heel, stays resident where she leaves it, comes when she calls, and can be released by a guarded word, walking away for good. A few are feral and will never soften; their answer to an offered hand is a snap that stops short of her skin, and then gone. Her own hand learns the creek: at a faced fish in the shallows she can snatch, and take it or spook the whole reach empty. The panel keeps her friends\u2019 names and stances; the faced verbs offer, speak, and snatch by one pick. Four kinds that had no bones have them now \u2014 muskrat, opossum, vole, and squirrel join the Waking set, in the registry, in the world\u2019s scatter, and in the look portions, so their names can be woken like the rest. What she places goes where she aims: torch, campfire, and tent all land at the crosshair now, and the pack and the recipe book answer a typed filter in their headers. Squirrels know their trees: startled, one runs for the nearest trunk and climbs out of reach, sits the canopy while she lingers, and comes down when the coast is clear \u2014 and no offering reaches it overhead. Two pieces of groundwork ride named as such: the cat, modelled and posed for the hearth it will haunt in the next build, and human remains, a scenery kind for the village\u2019s story \u2014 both built, neither yet met in the world.',
+    why: 'Adam asked for friendship before familiars, and this is the friendship build whole: feeding, trust, following, staying, release \u2014 earned animal by animal, with the feral fraction standing as the world\u2019s refusal to be entirely tamed. The four boneless kinds closed a gap UI found (no bone, no name, no bond), the crosshair made placing honest to her aim, and the squirrel\u2019s climb is Adam\u2019s own line \u2014 let\u2019s make sure squirrels know how to climb trees \u2014 taken literally. The batch lands as one because its pieces hold each other up: the verbs need the ids, the gate needs the climb, the bones need their looks.',
+  },
+  {
     merge: 'Merge #42',
     pr: 81,
     sha: 'b7808c5',
