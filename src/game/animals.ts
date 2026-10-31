@@ -63,7 +63,8 @@ export type AnimalKind =
   | 'fish'
   | 'eels'
   | 'opossum'
-  | 'shrew';
+  | 'shrew'
+  | 'cat';
 
 export const ANIMAL_KINDS: AnimalKind[] = [
   'owl', 'bat', 'pigeon', 'beaver', 'turtle', 'deer', 'fox', 'mole',
@@ -147,6 +148,16 @@ export const ANIMAL_DEFS: Record<AnimalKind, AnimalDef> = {
   eels: { biomes: ['creekBottom', 'mirewood'], temperament: 'skittish', movement: 'water', anim: 'swim', active: 'day', flee: 'straight', wanderRange: 8, nearestHop: true },
   opossum: { biomes: ['forest', 'oldfieldRise', 'tanglewood'], temperament: 'skittish', movement: 'ground', anim: 'bob', active: 'day', flee: 'freeze', wanderRange: 8 },
   shrew: { biomes: ['forest', 'meadow'], temperament: 'skittish', movement: 'ground', anim: 'hop', active: 'day', flee: 'zigzag', wanderRange: 3 },
+  // The cat is SINGULAR (Adam, 2026-10-31): the found
+  // familiar at the burnt village's hearthHouse, not an
+  // ambient population. This entry exists only because the
+  // Record is exhaustive over AnimalKind — it is NOT a
+  // roster entry: 'cat' is absent from ANIMAL_KINDS (the
+  // list every spawn/eligibility filter iterates) and its
+  // biomes are empty, so no filter can ever select it.
+  // Build 2 owns its spawn, record, and behavior; the
+  // values below are inert placeholders in its shape.
+  cat: { biomes: [], temperament: 'curious', movement: 'ground', anim: 'bob', active: 'day', flee: 'straight', wanderRange: 3 },
 };
 
 /** Draft tunables (all flagged for Adam's pin pass). */
