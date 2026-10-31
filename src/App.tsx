@@ -5982,8 +5982,8 @@ export default function App() {
     ({
       'Needs 4 river stone.': 'She needs four river stones for the ring.',
       'The glyph comes after the stones.': 'The glyph wants the stones first.',
-      'Needs a charcoal stick to draw the glyph.':
-        'She needs a charcoal stick to draw with.',
+      'Needs a charred stick to draw the glyph.':
+        'She needs a charred stick to draw with.',
       'The candle comes after the glyph.': 'The candle wants the glyph first.',
       'Needs a candle.': 'She has no candle to set.',
       'No journal carried.': 'She carries no journal to link.',
@@ -6799,7 +6799,7 @@ export default function App() {
       // CHAR A STICK (Adam, 2026-10-31 — asked for at his
       // lit campfire, for the sigil): the fire panel
       // carries Systems' charStick beside Cook — the
-      // second door to the charcoal stick (the
+      // second door to the charred stick (the
       // 'fire'-station recipe stays; both doors stay per
       // DEV). One stick per press, 1:1 by charStick; the
       // menu stays open so she can char more. Refusals
