@@ -1758,6 +1758,10 @@ import {
   saveInventorySort,
   type InventorySortPreference,
 } from './ui/InventoryPanel';
+import type {
+  ItemListVerb,
+  ItemListVisibleVerb,
+} from './ui/ItemListSurface';
 import { CraftingMenu } from './ui/CraftingMenu';
 import { ProximityHarvestButtons } from './ui/ProximityHarvestButtons';
 import { ObjectFeedback } from './ui/ObjectFeedback';
@@ -2712,7 +2716,7 @@ export default function App() {
   // the tracker. Drives the touch USE fallback, the touch
   // PICK UP label, the desktop pickup button, and the pile
   // chips + menu (see handleUseInteract + the pile
-  // computations before return + pileMenuActions /
+  // computations before return + pileModalModel /
   // handlePileAction). Ref mirrors state so the
   // first-render recomputeAnchors closure sees piles fresh.
   const [piles, setPiles] = useState<PileTarget[]>([]);
@@ -3183,6 +3187,15 @@ export default function App() {
   const [leaveConfirmOpen, setLeaveConfirmOpen] = useState(false);
   const leaveArmedRef = useRef(false);
   const selectedPileIdRef = useRef<string | null>(null);
+  // The pile modal's visible verb list, reported by its
+  // ItemListSurface (Inventory Unification, 2026-10-31):
+  // digit dispatch reads THIS — the verbs in the order
+  // the player sees them, search/sort/fold applied — so
+  // the badge numbers and the keys can never disagree.
+  const pileVisibleVerbsRef = useRef<{
+    pileId: string;
+    verbs: ItemListVisibleVerb[];
+  } | null>(null);
   const [placement, setPlacement] = useState<PlacementMode | null>(null);
   const [placementAnchor, setPlacementAnchor] = useState<{
     x: number;
@@ -8296,8 +8309,21 @@ export default function App() {
     };
   })();
 
-  const pileMenuActions = (pile: PileTarget): ContextAction[] => {
-    const actions: ContextAction[] = [];
+  // The pile modal's model, as unified item rows + verbs
+  // (Inventory Unification, 2026-10-31 — this replaces the
+  // ContextAction dialect pileMenuActions used to build;
+  // the worn-gear and counts rules below are unchanged,
+  // only the shape moved). Verb ids stay the standing
+  // pile action ids ('take-one:<kind>' etc.) so
+  // handlePileAction dispatches them verbatim.
+  const pileModalModel = (
+    pile: PileTarget,
+  ): {
+    items: InventoryItem[];
+    verbsByItem: ReadonlyMap<string, ItemListVerb[]>;
+  } => {
+    const items: InventoryItem[] = [];
+    const verbsByItem = new Map<string, ItemListVerb[]>();
     const pileKinds = new Set(
       pile.stacks.map((stack) => normalizeItemId(stack.item as ItemId)),
     );
@@ -8305,46 +8331,47 @@ export default function App() {
       const name = displayNameFor(stack.item);
       const carried = inventory.count(stack.item as ItemId);
       const noCarried = carried <= 0;
-      // Worn gear is never droppable: deposit arrows are
+      // Worn gear is never droppable: deposit verbs are
       // GONE for worn-gear kinds (not disabled), while Take
-      // arrows stay as the recovery path.
+      // verbs stay as the recovery path.
       const isWornGear = wornGear.ids.has(
         normalizeItemId(stack.item as ItemId),
       );
-      actions.push({
-        id: `kind:${stack.item}`,
-        label: name,
-        counts: { pile: stack.quantity, carried },
-        disabledNote: noCarried ? `Needs carried ${name}` : undefined,
-        arrows: [
-          {
-            id: `take-one:${stack.item}`,
-            glyph: '↑',
-            ariaLabel: `Pick up one ${name}`,
-          },
-          {
-            id: `take-all:${stack.item}`,
-            glyph: '↑↑',
-            ariaLabel: `Pick up all ${name}`,
-          },
-          ...(isWornGear
-            ? []
-            : [
-                {
-                  id: `deposit-one:${stack.item}`,
-                  glyph: '↓',
-                  ariaLabel: `Drop one ${name} here`,
-                  disabled: noCarried,
-                },
-                {
-                  id: `deposit-all:${stack.item}`,
-                  glyph: '↓↓',
-                  ariaLabel: `Drop all ${name} here`,
-                  disabled: noCarried,
-                },
-              ]),
-        ],
+      items.push({
+        id: stack.item,
+        name,
+        category: categoryFor(stack.item as ItemId),
+        titleMeta: `pile ×${stack.quantity} · carried ×${carried}`,
+        note: noCarried ? `Needs carried ${name}` : undefined,
       });
+      verbsByItem.set(stack.item, [
+        {
+          id: `take-one:${stack.item}`,
+          glyph: '↑',
+          ariaLabel: `Pick up one ${name}`,
+        },
+        {
+          id: `take-all:${stack.item}`,
+          glyph: '↑↑',
+          ariaLabel: `Pick up all ${name}`,
+        },
+        ...(isWornGear
+          ? []
+          : [
+              {
+                id: `deposit-one:${stack.item}`,
+                glyph: '↓',
+                ariaLabel: `Drop one ${name} here`,
+                disabled: noCarried,
+              },
+              {
+                id: `deposit-all:${stack.item}`,
+                glyph: '↓↓',
+                ariaLabel: `Drop all ${name} here`,
+                disabled: noCarried,
+              },
+            ]),
+      ]);
     }
     for (const stack of inventory.stacksSnapshot()) {
       if (pileKinds.has(stack.item)) continue;
@@ -8352,26 +8379,26 @@ export default function App() {
       // entry at all (no deposit path, nothing to take).
       if (wornGear.ids.has(normalizeItemId(stack.item as ItemId))) continue;
       const name = displayNameFor(stack.item);
-      actions.push({
-        id: `kind:${stack.item}`,
-        label: name,
-        counts: { pile: 0, carried: stack.quantity },
-        arrows: [
-          {
-            id: `deposit-one:${stack.item}`,
-            glyph: '↓',
-            ariaLabel: `Drop one ${name} here`,
-          },
-          {
-            id: `deposit-all:${stack.item}`,
-            glyph: '↓↓',
-            ariaLabel: `Drop all ${name} here`,
-          },
-        ],
+      items.push({
+        id: stack.item,
+        name,
+        category: categoryFor(stack.item as ItemId),
+        titleMeta: `pile ×0 · carried ×${stack.quantity}`,
       });
+      verbsByItem.set(stack.item, [
+        {
+          id: `deposit-one:${stack.item}`,
+          glyph: '↓',
+          ariaLabel: `Drop one ${name} here`,
+        },
+        {
+          id: `deposit-all:${stack.item}`,
+          glyph: '↓↓',
+          ariaLabel: `Drop all ${name} here`,
+        },
+      ]);
     }
-    actions.push({ id: 'close', label: 'Close' });
-    return actions;
+    return { items, verbsByItem };
   };
 
   // Multi-kind pile menu press. The menu STAYS OPEN after a
@@ -8685,6 +8712,9 @@ export default function App() {
                     // Same display rule as panel rows above:
                     // storage rows are panel rows too.
                     name: displayNameFor(id),
+                    // Category for the unified surface's
+                    // grouped order (2026-10-31).
+                    category: categoryFor(id as ItemId),
                     // Same note rule as personal rows (the
                     // one itemNoteFor helper — descriptor
                     // wiring, 2026-10-29).
@@ -8950,17 +8980,21 @@ export default function App() {
       : piles.reduce((best, pile) =>
           pile.distance < best.distance ? pile : best,
         );
-  const nearbyPile =
+  // The nearby-pile section's rows, AS ITEM ROWS (the
+  // unified shape, 2026-10-31): the panel's surface
+  // wants the same InventoryItem contract as every
+  // other list — name, category, and the counts riding
+  // the meta slot ('pile ×N · carried ×M', the text the
+  // section has always shown).
+  const nearbyPileItems =
     nearestPile === undefined
       ? undefined
-      : {
-          kinds: nearestPile.stacks.map((stack) => ({
-            id: stack.item,
-            name: displayNameFor(stack.item),
-            pileQuantity: stack.quantity,
-            carriedQuantity: inventory.count(stack.item as ItemId),
-          })),
-        };
+      : nearestPile.stacks.map((stack) => ({
+          id: stack.item,
+          name: displayNameFor(stack.item),
+          category: categoryFor(stack.item as ItemId),
+          titleMeta: `pile ×${stack.quantity} · carried ×${inventory.count(stack.item as ItemId)}`,
+        }));
 
   // The fire whose lighting menu is open, with its anchor.
   const selectedFire =
@@ -10615,11 +10649,16 @@ export default function App() {
       return;
     }
     if (selectedPile !== null) {
-      const target = flattenMenuTargets(pileMenuActions(selectedPile))[
-        digit - 1
-      ];
+      // The pile modal's verbs come from its surface's
+      // reported VISIBLE list (unification) — digits hit
+      // what the badges show, in visible order.
+      const visible = pileVisibleVerbsRef.current;
+      const target =
+        visible !== null && visible.pileId === selectedPile.id
+          ? visible.verbs[digit - 1]
+          : undefined;
       if (target && !target.disabled) {
-        handlePileAction(selectedPile, target.id);
+        handlePileAction(selectedPile, target.verbId);
       }
       return;
     }
@@ -12509,20 +12548,38 @@ export default function App() {
         }
       >
         {selectedPile ? (
-          <PileInventoryModal theme={lookThemes.world}
-            title={
-              selectedPile.stacks.length === 1
-                ? `${displayNameFor(selectedPile.stacks[0].item)} × ${selectedPile.stacks[0].quantity}`
-                : `Pile × ${selectedPile.stacks.reduce((sum, stack) => sum + stack.quantity, 0)} (${selectedPile.stacks.length} kinds)`
-            }
-            actions={pileMenuActions(selectedPile)}
-            showKeyHints={!isTouch}
-            onSelect={(id) => handlePileAction(selectedPile, id)}
-            onClose={() => {
-              selectedPileIdRef.current = null;
-              setSelectedPileId(null);
-            }}
-          />
+          (() => {
+            const pileModel = pileModalModel(selectedPile);
+            return (
+              <PileInventoryModal theme={lookThemes.world}
+                title={
+                  selectedPile.stacks.length === 1
+                    ? `${displayNameFor(selectedPile.stacks[0].item)} × ${selectedPile.stacks[0].quantity}`
+                    : `Pile × ${selectedPile.stacks.reduce((sum, stack) => sum + stack.quantity, 0)} (${selectedPile.stacks.length} kinds)`
+                }
+                items={pileModel.items}
+                verbsFor={(item) => pileModel.verbsByItem.get(item.id) ?? []}
+                onVerb={(_itemId, verbId) =>
+                  handlePileAction(selectedPile, verbId)
+                }
+                onVisibleVerbs={(verbs) => {
+                  pileVisibleVerbsRef.current = {
+                    pileId: selectedPile.id,
+                    verbs,
+                  };
+                }}
+                showKeyHints={!isTouch}
+                sortMode={inventorySort.mode}
+                sortReversed={inventorySort.reversed}
+                onSortChange={handleInventorySortChange}
+                categoryOrder={ITEM_CATEGORY_ORDER}
+                onClose={() => {
+                  selectedPileIdRef.current = null;
+                  setSelectedPileId(null);
+                }}
+              />
+            );
+          })()
         ) : null}
         {inventoryOpen ? (
           <InventoryPanel theme={lookThemes.world}
@@ -12542,7 +12599,7 @@ export default function App() {
             onDepositItem={handleDepositItem}
             onDropItem={handleDropItem}
             onDropAllItem={handleDropAllItem}
-            nearbyPile={nearbyPile}
+            nearbyPileItems={nearbyPileItems}
             onTakeItem={(kind, quantity) =>
               nearestPile !== undefined
                 ? handlePileAction(

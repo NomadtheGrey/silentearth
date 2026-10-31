@@ -16,114 +16,45 @@
  * (mittens, boots) have no body part drawn to hang them on — so that
  * reflection is a separate illustration landing, not part of this mount.
  *
- * SORTING (Adam, 2026-10-31): the personal list can render in
- * three orders — Recent (most recently gained first), Grouped
- * (by category, with heading rows), Alphabetical — plus a
- * Reverse flip of whichever order is active. The panel owns
- * the CONTROLS and the ordering arithmetic; every fact it
- * orders by is caller-supplied (the recency list, each item's
- * category, the category order), and the preference itself is
- * a caller-owned prop. The preference persists per-device in
- * the shared settings key (the font/look pattern — never in
- * the world save): loadInventorySort / saveInventorySort below.
- *
- * SEARCH (Adam, 2026-10-31): a filter-as-you-type field above
- * the personal list narrows it by name — display-only: the
- * sort orders and Grouped headings derive over the narrowed
- * set exactly as over the full one, and every row keeps its
- * actions. The query is panel-local presentation state —
- * the panel unmounts on close, so it clears itself; nothing
- * persists. Typing is safe because every key listener in
- * the game already yields to text entry (the seed-field
- * precedent) — the field needs no guard of its own. The
- * home-storage and nearby-pile lists are NOT searched:
- * they are place-bound and short; the personal list is
- * the one that grows.
+ * THE LISTS (Inventory Unification, Adam via DEV,
+ * 2026-10-31): every list in this panel — the personal
+ * list, the home-storage section, the nearby-pile
+ * section — renders through the shared ItemListSurface
+ * (see its header): one row anatomy, one grouping, one
+ * sort, one search, one fold, the caller's ONE
+ * persisted sort preference passed to all three. The
+ * only differences are the verbs each list's rows
+ * carry (Place / Eat / Light / Deposit / Drop on hers;
+ * Withdraw in the store; Take at the pile), composed
+ * here from the panel's standing props and dispatched
+ * back out through them — no handler changed. The
+ * sort/search/fold machinery itself lives in the
+ * surface now; this file keeps the panel's chrome
+ * (portrait, worn strip, carrying line, legend,
+ * deposit destination) and the section frames.
  */
 
-import { useState, type ReactNode } from 'react';
 import type { InventoryItem } from './types';
 import { UI_THEMES, type UiThemeName } from './themes';
 import { VineDivider } from './WitchyArt';
 import { WitchPortrait } from './WitchPortrait';
+import {
+  ItemListSurface,
+  type InventorySortMode,
+  type InventorySortPreference,
+  type ItemListVerb,
+} from './ItemListSurface';
 
-/** The personal list's sort orders (labels DRAFT). */
-export type InventorySortMode = 'recent' | 'grouped' | 'alpha';
-
-export interface InventorySortPreference {
-  mode: InventorySortMode;
-  reversed: boolean;
-}
-
-export const INVENTORY_SORT_OPTIONS: Array<{
-  id: InventorySortMode;
-  label: string;
-}> = [
-  { id: 'recent', label: 'Recent' },
-  { id: 'grouped', label: 'Grouped' },
-  { id: 'alpha', label: 'Alphabetical' },
-];
-
-/** No stored choice reads as Recent, not reversed. */
-export const DEFAULT_INVENTORY_SORT: InventorySortPreference = {
-  mode: 'recent',
-  reversed: false,
-};
-
-const SORT_SETTINGS_KEY = 'silent-earth-settings';
-const SORT_MODES = new Set<string>(
-  INVENTORY_SORT_OPTIONS.map((option) => option.id),
-);
-
-/** Read the stored sort preference; anything unreadable is the default. */
-export function loadInventorySort(): InventorySortPreference {
-  try {
-    const raw = window.localStorage.getItem(SORT_SETTINGS_KEY);
-    if (!raw) return DEFAULT_INVENTORY_SORT;
-    const parsed: unknown = JSON.parse(raw);
-    if (typeof parsed === 'object' && parsed !== null) {
-      const record = parsed as Record<string, unknown>;
-      return {
-        mode:
-          typeof record.inventorySortMode === 'string' &&
-          SORT_MODES.has(record.inventorySortMode)
-            ? (record.inventorySortMode as InventorySortMode)
-            : DEFAULT_INVENTORY_SORT.mode,
-        reversed:
-          typeof record.inventorySortReversed === 'boolean'
-            ? record.inventorySortReversed
-            : DEFAULT_INVENTORY_SORT.reversed,
-      };
-    }
-  } catch {
-    // Corrupt or unavailable storage reads as the default.
-  }
-  return DEFAULT_INVENTORY_SORT;
-}
-
-/** Persist the sort preference (merge-write, the font/look pattern). */
-export function saveInventorySort(pref: InventorySortPreference): void {
-  try {
-    let current: Record<string, unknown> = {};
-    const raw = window.localStorage.getItem(SORT_SETTINGS_KEY);
-    if (raw) {
-      const parsed: unknown = JSON.parse(raw);
-      if (typeof parsed === 'object' && parsed !== null) {
-        current = parsed as Record<string, unknown>;
-      }
-    }
-    window.localStorage.setItem(
-      SORT_SETTINGS_KEY,
-      JSON.stringify({
-        ...current,
-        inventorySortMode: pref.mode,
-        inventorySortReversed: pref.reversed,
-      }),
-    );
-  } catch {
-    // Blocked storage: the choice applies for this session only.
-  }
-}
+export {
+  loadInventorySort,
+  saveInventorySort,
+  DEFAULT_INVENTORY_SORT,
+  INVENTORY_SORT_OPTIONS,
+} from './ItemListSurface';
+export type {
+  InventorySortMode,
+  InventorySortPreference,
+} from './ItemListSurface';
 
 /**
  * A home-storage section inside the inventory panel (the SAME
@@ -154,23 +85,6 @@ export interface InventoryWornSection {
   title: string;
   /** Display lines, e.g. "Cloak — worn, +6 lb". */
   entries: string[];
-}
-
-/** One kind in the Inventory modal's nearby-pile section. */
-export interface InventoryNearbyPileKind {
-  /** Item id (kind key for take actions). */
-  id: string;
-  /** Display name. */
-  name: string;
-  /** Quantity in the pile. */
-  pileQuantity: number;
-  /** Quantity carried. */
-  carriedQuantity: number;
-}
-
-/** The nearest in-range pile for the modal's pickup section. */
-export interface InventoryNearbyPile {
-  kinds: InventoryNearbyPileKind[];
 }
 
 export interface InventoryPanelProps {
@@ -230,11 +144,13 @@ export interface InventoryPanelProps {
   /**
    * Nearby pile for the pickup section, shown after the
    * personal rows when present (nearest in-range pile,
-   * caller-derived). Its kinds gain ↑/↑↑ buttons via
-   * onTakeItem. Omitted = no pickup section. Worn-gear
-   * kinds are NOT filtered here — pile Take is recovery.
+   * caller-derived AS ITEM ROWS — the unified shape: the
+   * caller composes name, category, and the counts line).
+   * Its rows gain ↑/↑↑ verbs via onTakeItem. Omitted =
+   * no pickup section. Worn-gear kinds are NOT filtered
+   * here — pile Take is recovery.
    */
-  nearbyPile?: InventoryNearbyPile;
+  nearbyPileItems?: InventoryItem[];
   /**
    * Called when the player presses a Take arrow on a
    * nearby-pile kind: quantity 1 (↑) or 'all' (↑↑, the
@@ -254,20 +170,20 @@ export interface InventoryPanelProps {
   /** Caller-supplied capacity line, e.g. a total the system provides. */
   capacityText?: string;
   /**
-   * Sort preference for the personal list (sorting,
-   * 2026-10-31). Omitted = no sort controls and the
-   * incoming order, the pre-feature behavior.
+   * The ONE sort preference, shared by every list in the
+   * panel (unification): the caller's persisted choice.
    */
   sortMode?: InventorySortMode;
   /** Reverse flip of the active sort order. Default false. */
   sortReversed?: boolean;
-  /** Called when the player changes the sort controls. Optional. */
+  /** Called when the player changes any list's sort controls. */
   onSortChange?: (pref: InventorySortPreference) => void;
   /**
    * Held kinds, most recently gained first (caller-read
    * from the inventory's acquisition order). Kinds missing
    * from the list keep their incoming order after the
-   * listed ones (legacy saves). Used by Recent.
+   * listed ones (legacy saves). Used by Recent (personal
+   * list only — the store and the pile have no recency).
    */
   recencyOrder?: readonly string[];
   /**
@@ -299,7 +215,7 @@ export function InventoryPanel({
   onDepositItem,
   onDropItem,
   onDropAllItem,
-  nearbyPile,
+  nearbyPileItems,
   onTakeItem,
   worn,
   capacityText,
@@ -313,211 +229,80 @@ export function InventoryPanel({
   theme = 'mire',
 }: InventoryPanelProps) {
   const t = UI_THEMES[theme];
-  const actionBtn = comfortable
-    ? 'rounded bg-moss-deep px-3 py-2 text-sm min-h-[44px] hover:bg-moss'
-    : 'rounded bg-moss-deep px-2 py-1 text-xs hover:bg-moss';
-  const sortBtn = comfortable
-    ? 'rounded px-3 py-2 text-sm min-h-[44px] '
-    : 'rounded px-2 py-1 text-sm ';
-  // SEARCH (see the header): the query narrows the
-  // personal list BEFORE any ordering — sort modes and
-  // Grouped headings read the narrowed set, so grouping
-  // ownership never moves. Panel-local state.
-  const [query, setQuery] = useState('');
-  const needle = query.trim().toLowerCase();
-  const searching = needle.length > 0;
-  const visibleItems = searching
-    ? items.filter((item) => item.name.toLowerCase().includes(needle))
-    : items;
-  // SORTING (2026-10-31): order the personal list from the
-  // caller-supplied facts. No sortMode = incoming order
-  // (the pre-feature behavior), and Reverse only ever
-  // flips an active sort's flattened order — in Grouped
-  // that reverses the groups and their contents together,
-  // one honest definition with no special cases.
-  const orderedItems = ((): InventoryItem[] => {
-    if (sortMode === undefined) return visibleItems;
-    const list = [...visibleItems];
-    if (sortMode === 'recent') {
-      const rank = new Map(
-        (recencyOrder ?? []).map((id, index) => [id, index] as const),
-      );
-      // Stable sort: unlisted kinds (legacy) keep their
-      // incoming order after every listed kind.
-      list.sort(
-        (a, b) =>
-          (rank.get(a.id) ?? Number.MAX_SAFE_INTEGER) -
-          (rank.get(b.id) ?? Number.MAX_SAFE_INTEGER),
-      );
-    } else if (sortMode === 'alpha') {
-      list.sort((a, b) => a.name.localeCompare(b.name));
-    } else {
-      const order = categoryOrder ?? [];
-      const rankOf = (item: InventoryItem): number => {
-        const index = order.indexOf(item.category ?? 'Other');
-        return index === -1 ? order.length : index;
-      };
-      list.sort(
-        (a, b) => rankOf(a) - rankOf(b) || a.name.localeCompare(b.name),
-      );
-    }
-    if (sortReversed) list.reverse();
-    return list;
-  })();
   const closeBtn = comfortable
     ? 'rounded px-3 py-2 text-sm min-h-[44px] ' + t.button
     : 'rounded px-2 py-1 text-sm ' + t.button;
-  // One personal row (extracted so the sorted render
-  // below can interleave Grouped headings without a
-  // second copy of the row shape).
-  const renderPersonalRow = (item: InventoryItem): ReactNode => {
-    const selected = item.id === selectedItemId;
-    const placeable = placeableIds?.has(item.id) ?? false;
-    const food = foodIds?.has(item.id) ?? false;
-    return (
-      <li
-        key={item.id}
-        className={
-          'flex flex-col gap-y-1 @xl:col-span-3 @xl:grid @xl:grid-cols-subgrid @xl:items-center' +
-          (item.note
-            ? ' @xl:row-span-2 @xl:grid-rows-subgrid'
-            : '')
-        }
-      >
-        {/* Title row: name left, the one-line meta
-          right on the SAME line, the descriptor
-          unobstructed beneath (Adam's shape — see
-          the row-layout comment above). */}
-        <div className="flex flex-wrap items-center gap-x-2 @xl:contents">
-          <button
-            type="button"
-            onClick={() => onSelectItem?.(item.id)}
-            aria-pressed={selected}
-            className={
-              'min-w-[8ch] flex-1 rounded px-2 py-1 text-left @xl:col-start-1 @xl:row-start-1 ' +
-              (item.note ? 'rounded-b-none ' : '') +
-              (selected ? t.selected : 'hover:bg-stone-800')
-            }
-          >
-            <span className="flex items-center gap-1.5">
-              {item.icon ? (
-                <span className="inline-flex shrink-0">{item.icon}</span>
-              ) : null}
-              <span className="min-w-0 truncate">{item.name}</span>
-            </span>
-          </button>
-          <span className="whitespace-nowrap text-right text-sm tabular-nums text-stone-300 @max-[12rem]:whitespace-normal @max-[12rem]:text-left @xl:col-start-2 @xl:row-start-1">
-            {item.titleMeta ??
-              [item.quantityText, item.weightText]
-                .filter(
-                  (part): part is string =>
-                    part !== undefined && part !== '',
-                )
-                .join(' · ')}
-          </span>
-        </div>
-        {item.note ? (
-          <span
-            onClick={() => onSelectItem?.(item.id)}
-            className={
-              'block cursor-pointer rounded-b px-2 pb-1 text-sm @xl:col-start-1 @xl:row-start-2 ' +
-              (selected ? t.selected + ' ' : '') +
-              t.muted
-            }
-          >
-            {item.note}
-          </span>
-        ) : null}
-        <span className="flex flex-wrap gap-1 @xl:col-start-3 @xl:row-start-1">
-        {placeable && onPlaceItem ? (
-          <button
-            type="button"
-            onClick={() => onPlaceItem(item.id)}
-            aria-label={`Place ${item.name}`}
-            className={actionBtn}
-          >
-            Place
-          </button>
-        ) : null}
-        {food && onEatItem ? (
-          <button
-            type="button"
-            onClick={() => onEatItem(item.id)}
-            aria-label={`Eat ${item.name}`}
-            className={actionBtn}
-          >
-            Eat
-          </button>
-        ) : null}
-        {(lightableIds?.has(item.id) ?? false) && onLightItem ? (
-          <button
-            type="button"
-            onClick={() => onLightItem(item.id)}
-            aria-label={`Light ${item.name}`}
-            className={actionBtn}
-          >
-            Light
-          </button>
-        ) : null}
-        {storage !== undefined && onDepositItem ? (
-          <button
-            type="button"
-            onClick={() => onDepositItem(item.id)}
-            aria-label={`Deposit ${item.name} at ${storage.label}`}
-            className={actionBtn}
-          >
-            Deposit
-          </button>
-        ) : null}
-        {onDropItem ? (
-          <button
-            type="button"
-            onClick={() => onDropItem(item.id)}
-            aria-label={`Drop one ${item.name} at feet`}
-            className="min-h-[44px] min-w-[44px] rounded text-base hover:bg-stone-800"
-          >
-            <span aria-hidden="true">↓</span>
-          </button>
-        ) : null}
-        {onDropAllItem ? (
-          <button
-            type="button"
-            onClick={() => onDropAllItem(item.id)}
-            aria-label={`Drop all ${item.name} at feet`}
-            className="min-h-[44px] min-w-[44px] rounded text-base hover:bg-stone-800"
-          >
-            <span aria-hidden="true">↓↓</span>
-          </button>
-        ) : null}
-        </span>
-      </li>
-    );
-  };
-  // Personal rows in display order, with Grouped's
-  // category headings interleaved when the category
-  // changes (grouped mode only).
-  const personalRows: ReactNode[] = [];
-  orderedItems.forEach((item, index) => {
-    if (sortMode === 'grouped') {
-      const category = item.category ?? 'Other';
-      const previous =
-        index > 0 ? (orderedItems[index - 1].category ?? 'Other') : null;
-      if (category !== previous) {
-        personalRows.push(
-          <li
-            key={`category:${category}`}
-            className={
-              'pt-1 text-xs font-semibold uppercase tracking-wide @xl:col-span-3 ' +
-              t.muted
-            }
-          >
-            {category}
-          </li>,
-        );
-      }
+  // THE PERSONAL VERBS (the standing row rules, composed
+  // for the surface): Place / Eat / Light by id set,
+  // Deposit while a home store is open, Drop arrows
+  // always (when wired). Aria labels verbatim.
+  const personalVerbsFor = (item: InventoryItem): ItemListVerb[] => {
+    const verbs: ItemListVerb[] = [];
+    if ((placeableIds?.has(item.id) ?? false) && onPlaceItem) {
+      verbs.push({ id: 'place', label: 'Place', ariaLabel: `Place ${item.name}` });
     }
-    personalRows.push(renderPersonalRow(item));
-  });
+    if ((foodIds?.has(item.id) ?? false) && onEatItem) {
+      verbs.push({ id: 'eat', label: 'Eat', ariaLabel: `Eat ${item.name}` });
+    }
+    if ((lightableIds?.has(item.id) ?? false) && onLightItem) {
+      verbs.push({ id: 'light', label: 'Light', ariaLabel: `Light ${item.name}` });
+    }
+    if (storage !== undefined && onDepositItem) {
+      verbs.push({
+        id: 'deposit',
+        label: 'Deposit',
+        ariaLabel: `Deposit ${item.name} at ${storage.label}`,
+      });
+    }
+    if (onDropItem) {
+      verbs.push({
+        id: 'drop-one',
+        glyph: '↓',
+        ariaLabel: `Drop one ${item.name} at feet`,
+      });
+    }
+    if (onDropAllItem) {
+      verbs.push({
+        id: 'drop-all',
+        glyph: '↓↓',
+        ariaLabel: `Drop all ${item.name} at feet`,
+      });
+    }
+    return verbs;
+  };
+  const handlePersonalVerb = (itemId: string, verbId: string): void => {
+    if (verbId === 'place') onPlaceItem?.(itemId);
+    else if (verbId === 'eat') onEatItem?.(itemId);
+    else if (verbId === 'light') onLightItem?.(itemId);
+    else if (verbId === 'deposit') onDepositItem?.(itemId);
+    else if (verbId === 'drop-one') onDropItem?.(itemId);
+    else if (verbId === 'drop-all') onDropAllItem?.(itemId);
+  };
+  const storageVerbsFor = (item: InventoryItem): ItemListVerb[] =>
+    storage?.onWithdrawItem
+      ? [
+          {
+            id: 'withdraw',
+            label: 'Withdraw',
+            ariaLabel: `Withdraw ${item.name} from ${storage.label}`,
+          },
+        ]
+      : [];
+  const nearbyVerbsFor = (item: InventoryItem): ItemListVerb[] =>
+    onTakeItem
+      ? [
+          {
+            id: 'take-one',
+            glyph: '↑',
+            ariaLabel: `Take one ${item.name} from pile`,
+          },
+          {
+            id: 'take-all',
+            glyph: '↑↑',
+            ariaLabel: `Take all ${item.name} from pile`,
+          },
+        ]
+      : [];
   return (
     <section aria-label="Inventory" className={'@container rounded-2xl p-3 ' + t.panel}>
       <div className="mb-1 flex items-center justify-between gap-2">
@@ -629,184 +414,57 @@ export function InventoryPanel({
         <span>Take all from pile</span>
       </div>
       {/* Deposit destination (Adam, 2026-10-29 — the buttons
-        appeared beside a plant outdoors and the destination
-        read nowhere near them): while home storage is open,
-        state where Deposit goes at the TOP of the list, with
-        the legend. The section header far below names the
-        same house (storage.label); this line exists so the
-        rows carrying the buttons say it too. Unsheltered =
-        no storage prop = no line, no buttons, as before. */}
+          appeared beside a plant outdoors and the destination
+          read nowhere near them): while home storage is open,
+          state where Deposit goes at the TOP of the list, with
+          the legend. The section header far below names the
+          same house (storage.label); this line exists so the
+          rows carrying the buttons say it too. Unsheltered =
+          no storage prop = no line, no buttons, as before. */}
       {storage !== undefined ? (
         <p className={'mb-2 text-xs ' + t.muted}>
           Home storage — {storage.label}. Deposit stores one there.
         </p>
       ) : null}
 
-      {/* Search field (2026-10-31): directly above the
-          sort controls and the list they order together.
-          Rendered only when there is anything to search. */}
-      {items.length > 0 ? (
-        <input
-          type="text"
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder="Search items"
-          aria-label="Search items"
-          className={
-            'mb-2 w-full rounded bg-stone-800/60 px-2 py-1 text-sm text-stone-100 placeholder:text-stone-400 ' +
-            (comfortable ? 'min-h-[44px]' : '')
-          }
-        />
-      ) : null}
+      <ItemListSurface
+        items={items}
+        verbsFor={personalVerbsFor}
+        onVerb={handlePersonalVerb}
+        selectedItemId={selectedItemId}
+        onSelectItem={onSelectItem}
+        sortMode={sortMode}
+        sortReversed={sortReversed}
+        onSortChange={onSortChange}
+        recencyOrder={recencyOrder}
+        categoryOrder={categoryOrder}
+        emptyText="Nothing carried yet."
+        searchLabel="Search items"
+        comfortable={comfortable}
+        theme={theme}
+      />
 
-      {/* Sort controls (2026-10-31): a radio row + a
-          Reverse checkbox, directly above the list they
-          order. Rendered only when the caller wires the
-          preference (onSortChange); labels DRAFT. */}
-      {onSortChange ? (
-        <div
-          className="mb-2 flex flex-wrap items-center gap-1"
-          role="group"
-          aria-label="Sort inventory"
-        >
-          {INVENTORY_SORT_OPTIONS.map((option) => (
-            <button
-              key={option.id}
-              type="button"
-              aria-pressed={sortMode === option.id}
-              onClick={() =>
-                onSortChange({ mode: option.id, reversed: sortReversed })
-              }
-              className={
-                sortBtn + (sortMode === option.id ? t.selected : t.button)
-              }
-            >
-              {option.label}
-            </button>
-          ))}
-          <label
-            className={
-              'ml-2 flex items-center gap-1 text-sm ' + t.muted
-            }
-          >
-            <input
-              type="checkbox"
-              checked={sortReversed}
-              onChange={(event) =>
-                onSortChange({
-                  mode: sortMode ?? DEFAULT_INVENTORY_SORT.mode,
-                  reversed: event.target.checked,
-                })
-              }
-            />
-            Reverse
-          </label>
-        </div>
-      ) : null}
-
-      {items.length === 0 ? (
-        <p className={'italic ' + t.muted}>Nothing carried yet.</p>
-      ) : searching && visibleItems.length === 0 ? (
-        <p className={'italic ' + t.muted}>
-          {`Nothing matches "${query.trim()}".`}
-        </p>
-      ) : (
-        // Row layout (narrow-width fix, 2026-10-29 — Adam's
-        // screenshot: descriptors wrapped one word per line
-        // and the meta line printed OVER the descriptor):
-        // the single-line 3-column subgrid (name+note |
-        // nowrap meta | button cluster) starves the text
-        // column at phone width — meta + buttons + padding
-        // leave the name column a sliver, and the note's
-        // text paints out of its collapsed box over the
-        // meta. The first fix stacked the row below the
-        // sm VIEWPORT breakpoint — but the panel never
-        // gets a viewport-sized box (desktop stack caps at
-        // max-w-sm, the touch stack at 46vw), so the grid
-        // still engaged inside ~360 px on every desktop
-        // window and landscape phone and Adam hit the same
-        // screenshot on the merged build. Now the switch
-        // is keyed to the PANEL's own width: the section
-        // is a CSS container (@container) and the grid
-        // returns only at @xl (panel ≥ 36 rem, where meta
-        // + the widest button cluster + a readable text
-        // column genuinely fit — verified by measurement:
-        // starved at 358/371 px containers, healthy at
-        // 559). Below that the row STACKS.
-        //
-        // TITLE-ROW SHAPE (Adam, later the same day:
-        // "Still could put the one liner next to the
-        // item's title, get it out of the way"): in the
-        // stack, the meta does NOT get a line of its own
-        // — it rides the title row, name left (flexing,
-        // truncating past a min-w stub), meta right,
-        // nowrap; the descriptor takes the full width
-        // beneath, unobstructed, and the buttons keep
-        // their own row (flex-wrap, for the ~150 px
-        // portrait touch column). If name + meta
-        // genuinely can't share the title line, the
-        // header wraps: the meta drops to its own line
-        // UNDER the name, still above the descriptor —
-        // it never spills into the descriptor's space.
-        // At @xl the header div dissolves (@xl:contents)
-        // and name / meta / buttons take their subgrid
-        // columns on row 1 while the descriptor moves to
-        // row 2 under the name (the li spans both rows) —
-        // so the wide form's noted rows stand one
-        // descriptor-line taller than the original
-        // single-row grid, the one visible change there.
-        // All three lists in this panel (personal, pile,
-        // storage) share the shape and the fix.
-        <ul className="flex flex-col gap-y-2 @xl:grid @xl:grid-cols-[minmax(0,1fr)_auto_auto] @xl:gap-x-2 @xl:gap-y-1">
-          {personalRows}
-        </ul>
-      )}
-
-      {nearbyPile !== undefined && nearbyPile.kinds.length > 0 ? (
+      {nearbyPileItems !== undefined && nearbyPileItems.length > 0 ? (
         <>
           <VineDivider className="mb-2 mt-3" />
           <h3 className={'text-base font-semibold ' + t.heading}>
             Nearby pile
           </h3>
-          <ul className="flex flex-col gap-y-2 @xl:grid @xl:grid-cols-[minmax(0,1fr)_auto_auto] @xl:gap-x-2 @xl:gap-y-1">
-            {nearbyPile.kinds.map((kind) => (
-              <li
-                key={kind.id}
-                className="flex flex-col gap-y-1 @xl:col-span-3 @xl:grid @xl:grid-cols-subgrid @xl:items-center"
-              >
-                <div className="flex flex-wrap items-center gap-x-2 @xl:contents">
-                  <span className="min-w-[8ch] flex-1 truncate rounded px-2 py-1 text-left text-sm @xl:col-start-1 @xl:row-start-1">
-                    {kind.name}
-                  </span>
-                  <span className="whitespace-nowrap text-right text-sm tabular-nums text-stone-300 @max-[12rem]:whitespace-normal @max-[12rem]:text-left @xl:col-start-2 @xl:row-start-1">
-                    pile ×{kind.pileQuantity} · carried ×{kind.carriedQuantity}
-                  </span>
-                </div>
-                <span className="flex flex-wrap gap-1 @xl:col-start-3 @xl:row-start-1">
-                {onTakeItem ? (
-                  <button
-                    type="button"
-                    onClick={() => onTakeItem(kind.id, 1)}
-                    aria-label={`Take one ${kind.name} from pile`}
-                    className="min-h-[44px] min-w-[44px] rounded text-base hover:bg-stone-800"
-                  >
-                    <span aria-hidden="true">↑</span>
-                  </button>
-                ) : null}
-                {onTakeItem ? (
-                  <button
-                    type="button"
-                    onClick={() => onTakeItem(kind.id, 'all')}
-                    aria-label={`Take all ${kind.name} from pile`}
-                    className="min-h-[44px] min-w-[44px] rounded text-base hover:bg-stone-800"
-                  >
-                    <span aria-hidden="true">↑↑</span>
-                  </button>
-                ) : null}
-                </span>
-              </li>
-            ))}
-          </ul>
+          <ItemListSurface
+            items={nearbyPileItems}
+            verbsFor={nearbyVerbsFor}
+            onVerb={(itemId, verbId) =>
+              onTakeItem?.(itemId, verbId === 'take-all' ? 'all' : 1)
+            }
+            sortMode={sortMode}
+            sortReversed={sortReversed}
+            onSortChange={onSortChange}
+            categoryOrder={categoryOrder}
+            emptyText="Nothing in the pile."
+            searchLabel="Search pile items"
+            comfortable={comfortable}
+            theme={theme}
+          />
         </>
       ) : null}
       {storage !== undefined ? (
@@ -820,67 +478,19 @@ export function InventoryPanel({
               {storage.capacityText}
             </p>
           ) : null}
-          {storage.items.length === 0 ? (
-            <p className={'italic ' + t.muted}>Nothing stored here yet.</p>
-          ) : (
-            <ul className="flex flex-col gap-y-2 @xl:grid @xl:grid-cols-[minmax(0,1fr)_auto_auto] @xl:gap-x-2 @xl:gap-y-1">
-              {storage.items.map((item) => (
-                <li
-                  key={item.id}
-                  className={
-                    'flex flex-col gap-y-1 @xl:col-span-3 @xl:grid @xl:grid-cols-subgrid @xl:items-center' +
-                    (item.note
-                      ? ' @xl:row-span-2 @xl:grid-rows-subgrid'
-                      : '')
-                  }
-                >
-                  <div className="flex flex-wrap items-center gap-x-2 @xl:contents">
-                    <span className="min-w-[8ch] flex-1 rounded px-2 py-1 text-left @xl:col-start-1 @xl:row-start-1">
-                      <span className="flex items-center gap-1.5">
-                        {item.icon ? (
-                          <span className="inline-flex shrink-0">
-                            {item.icon}
-                          </span>
-                        ) : null}
-                        <span className="min-w-0 truncate">{item.name}</span>
-                      </span>
-                    </span>
-                    <span className="whitespace-nowrap text-right text-sm tabular-nums text-stone-300 @max-[12rem]:whitespace-normal @max-[12rem]:text-left @xl:col-start-2 @xl:row-start-1">
-                      {item.quantityText ?? null}
-                    </span>
-                  </div>
-                  {/* Row note, same shape as the personal
-                    rows (descriptor wiring, 2026-10-29):
-                    storage rows carry notes by the same
-                    rule, so they render them the same
-                    way — full width beneath the title
-                    row. */}
-                  {item.note ? (
-                    <span
-                      className={
-                        'block px-2 pb-1 text-sm @xl:col-start-1 @xl:row-start-2 ' +
-                        t.muted
-                      }
-                    >
-                      {item.note}
-                    </span>
-                  ) : null}
-                  <span className="flex flex-wrap gap-1 @xl:col-start-3 @xl:row-start-1">
-                  {storage.onWithdrawItem ? (
-                    <button
-                      type="button"
-                      onClick={() => storage.onWithdrawItem?.(item.id)}
-                      aria-label={`Withdraw ${item.name} from ${storage.label}`}
-                      className={actionBtn}
-                    >
-                      Withdraw
-                    </button>
-                  ) : null}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
+          <ItemListSurface
+            items={storage.items}
+            verbsFor={storageVerbsFor}
+            onVerb={(itemId) => storage.onWithdrawItem?.(itemId)}
+            sortMode={sortMode}
+            sortReversed={sortReversed}
+            onSortChange={onSortChange}
+            categoryOrder={categoryOrder}
+            emptyText="Nothing stored here yet."
+            searchLabel="Search stored items"
+            comfortable={comfortable}
+            theme={theme}
+          />
           {storage.note ? (
             <p className="mt-1 text-xs text-red-300">{storage.note}</p>
           ) : null}
