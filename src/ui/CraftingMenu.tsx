@@ -19,15 +19,66 @@
  * 70vh; the scrollbar ALWAYS wears its track, styled in the
  * stone palette, so the player can see there is more and
  * where they are in it. The menu owns this frame itself, so
- * every seat that renders it (the K dialog, the stump hub's
- * Craft door) inherits the same behaviour — no seat wraps
- * its own clip around the menu.
+ * every seat that renders it (the crafting dialog, plain or
+ * on a stump's context) inherits the same behaviour — no
+ * seat wraps its own clip around the menu.
+ *
+ * STATION ROWS + FILTER (Adam, 2026-10-31): a row whose
+ * station want is unmet (caller-flagged stationUnmet) still
+ * SHOWS — its availabilityNote names the want ('Needs a
+ * loom.') in the row, so the station is discoverable
+ * without poking around. The header's 'Craftable here'
+ * checkbox (shown only when some row is unmet) filters
+ * those rows out on the player's word; default shows them.
  */
 
 import { useState } from 'react';
 import type { CraftingRecipe } from './types';
 import { UI_THEMES, type UiThemeName } from './themes';
 import { WitchMark } from './WitchyArt';
+
+/**
+ * 'Craftable here' filter preference (Adam, 2026-10-31):
+ * per-device, stored on the shared settings key beside
+ * the inventory sort — never in the world save. Default
+ * FALSE: station-gated rows show (and name their want);
+ * the filter is the player's choice, not the panel's.
+ */
+const CRAFT_FILTER_SETTINGS_KEY = 'silent-earth-settings';
+
+function loadCraftStationFilter(): boolean {
+  try {
+    const raw = window.localStorage.getItem(CRAFT_FILTER_SETTINGS_KEY);
+    if (!raw) return false;
+    const parsed: unknown = JSON.parse(raw);
+    if (typeof parsed === 'object' && parsed !== null) {
+      const record = parsed as Record<string, unknown>;
+      return record.craftStationFilterOnly === true;
+    }
+  } catch {
+    // Corrupt or unavailable storage reads as the default.
+  }
+  return false;
+}
+
+function saveCraftStationFilter(on: boolean): void {
+  try {
+    let current: Record<string, unknown> = {};
+    const raw = window.localStorage.getItem(CRAFT_FILTER_SETTINGS_KEY);
+    if (raw) {
+      const parsed: unknown = JSON.parse(raw);
+      if (typeof parsed === 'object' && parsed !== null) {
+        current = parsed as Record<string, unknown>;
+      }
+    }
+    window.localStorage.setItem(
+      CRAFT_FILTER_SETTINGS_KEY,
+      JSON.stringify({ ...current, craftStationFilterOnly: on }),
+    );
+  } catch {
+    // Storage unavailable: the choice lasts the session.
+  }
+}
 
 export interface CraftingMenuSection {
   title: string;
@@ -93,6 +144,18 @@ export function CraftingMenu({
   // entry state — the menu remounts when reopened, so every
   // entry starts collapsed. The caller never manages this.
   const [openSection, setOpenSection] = useState<string | null>(null);
+  // 'CRAFTABLE HERE' FILTER (Adam, 2026-10-31): when on,
+  // rows whose station want is unmet (caller-flagged
+  // stationUnmet) leave the list; ingredient-short rows
+  // are never filtered on their own. Menu-local state,
+  // per-device persisted (helpers above); default off.
+  const [stationFilterOnly, setStationFilterOnly] = useState<boolean>(
+    () => loadCraftStationFilter(),
+  );
+  const handleStationFilterChange = (on: boolean) => {
+    setStationFilterOnly(on);
+    saveCraftStationFilter(on);
+  };
   const closeBtn = comfortable
     ? 'rounded px-3 py-2 text-sm min-h-[44px] ' + t.button
     : 'rounded px-2 py-1 text-sm ' + t.button;
@@ -205,12 +268,27 @@ export function CraftingMenu({
     );
   };
   // Sections, when provided, skip their empty groups; the flat
-  // list is the fallback when no sections are passed.
-  const shownSections = (sections ?? []).filter(
-    (section) => section.recipes.length > 0,
-  );
+  // list is the fallback when no sections are passed. The
+  // station filter (above) applies to both shapes before
+  // either renders, so section counts read the filtered set.
+  const anyStationUnmet = (
+    sections !== undefined
+      ? sections.flatMap((section) => section.recipes)
+      : recipes
+  ).some((recipe) => recipe.stationUnmet);
+  const keepRecipe = (recipe: CraftingRecipe) =>
+    !stationFilterOnly || !recipe.stationUnmet;
+  const shownSections = (sections ?? [])
+    .map((section) => ({
+      ...section,
+      recipes: section.recipes.filter(keepRecipe),
+    }))
+    .filter((section) => section.recipes.length > 0);
+  const shownRecipes = recipes.filter(keepRecipe);
   const isEmpty =
-    sections !== undefined ? shownSections.length === 0 : recipes.length === 0;
+    sections !== undefined
+      ? shownSections.length === 0
+      : shownRecipes.length === 0;
   return (
     <section
       aria-label="Crafting"
@@ -239,10 +317,29 @@ export function CraftingMenu({
         <p className={'mb-2 text-sm ' + t.muted}>{stationNote}</p>
       ) : null}
 
+      {anyStationUnmet ? (
+        <label
+          className={
+            'mb-2 flex cursor-pointer items-center gap-2 text-sm ' +
+            t.muted
+          }
+        >
+          <input
+            type="checkbox"
+            checked={stationFilterOnly}
+            onChange={(e) => handleStationFilterChange(e.target.checked)}
+            className="h-5 w-5 shrink-0"
+          />
+          Craftable here
+        </label>
+      ) : null}
+
       <div className="min-h-0 overflow-y-scroll pr-1 [scrollbar-color:#78716c_#1c1917] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-stone-500 [&::-webkit-scrollbar-track]:bg-stone-900">
       {isEmpty ? (
         <p className={'italic ' + t.muted}>
-          No recipes yet — recipes arrive from the Systems lane.
+          {stationFilterOnly && anyStationUnmet
+            ? 'Nothing here is craftable at hand — every recipe wants a station elsewhere.'
+            : 'No recipes yet — recipes arrive from the Systems lane.'}
         </p>
       ) : sections !== undefined ? (
         <div className="flex flex-col gap-4">
@@ -283,7 +380,7 @@ export function CraftingMenu({
           })}
         </div>
       ) : (
-        <ul className="flex flex-col gap-2">{recipes.map(renderRecipe)}</ul>
+        <ul className="flex flex-col gap-2">{shownRecipes.map(renderRecipe)}</ul>
       )}
       </div>
     </section>

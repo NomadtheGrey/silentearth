@@ -10032,21 +10032,20 @@ export default function App() {
           )
           .join(', ')}`;
 
-  // FILTER BY STATION (Adam, 2026-10-30): only hand and
-  // unstated recipes (always available) and the recipes
-  // of fed stations reach the panel — absent-station
-  // recipes do not appear at all. Everything below
-  // (grouping, the ownership sink, the counts) derives
-  // from this visible set, so the sink partitions
-  // visible rows only: a superseded recipe at an absent
-  // station hides with its station and stays out of
-  // the 'Owned & Superseded' block until it returns.
-  const craftingRecipes: CraftingRecipe[] = RECIPES.filter(
-    (recipe) =>
-      recipe.station === undefined ||
-      recipe.station === 'hand' ||
-      availableStations.includes(recipe.station),
-  ).map((recipe) => {
+  // STATION ROWS SPEAK (Adam, 2026-10-31 — supersedes
+  // the 2026-10-30 FILTER BY STATION): absent-station
+  // recipes used to not appear at all, which made their
+  // station want invisible — "the player won't know he
+  // needs a loom unless he goes poking around for it."
+  // Now EVERY recipe maps: a station-gated row at an
+  // absent station shows with its want named in the row
+  // (the availabilityNote below) and a stationUnmet flag
+  // the menu's 'Craftable here' filter reads. Everything
+  // below (grouping, the ownership sink, the counts)
+  // derives from this full set, so the sink partitions
+  // all rows: a superseded recipe at an absent station
+  // sinks visibly instead of hiding with its station.
+  const craftingRecipes: CraftingRecipe[] = RECIPES.map((recipe) => {
     // OR over every present station: a recipe is craftable
     // when ANY present station satisfies it. When none does,
     // prefer the check for a present station (ingredient /
@@ -10075,7 +10074,7 @@ export default function App() {
       availabilityNote =
         check.requiredStation === 'workstation'
           ? 'Needs a tree stump to work at.'
-          : `Needs a ${check.requiredStation} station.`;
+          : `Needs a ${check.requiredStation}.`;
     } else if (check.missingIngredients.length > 0) {
       const first = check.missingIngredients[0];
       availabilityNote = `Missing ${first.item} (${first.held} / ${first.quantity}).`;
@@ -10129,9 +10128,9 @@ export default function App() {
     // carries the workstation addition disables + labels,
     // overriding Systems' mapping. The label replaces
     // the availability note via the no-recraft render
-    // (disabledLabel set → note not rendered). No stump
-    // in range → the station gate above already failed;
-    // the override needs a target, so it does not fire.
+    // (disabledLabel set → note not rendered). The
+    // override needs a faced stump target, so it does
+    // not fire without one.
     // Systems' canCraft is UNCHANGED — this is a shell
     // mapping override only.
     const stumpAlreadyWorkbench =
@@ -10190,6 +10189,18 @@ export default function App() {
       canCraft: stumpAlreadyWorkbench
         ? false
         : check.ok && check.ownership === 'available',
+      // STATION UNMET (Adam, 2026-10-31): the caller-
+      // decided flag the menu's 'Craftable here' filter
+      // reads — the recipe wants a station (stated, not
+      // hand) that is not among the stations at hand.
+      // The want itself is spoken by availabilityNote
+      // above; when the station IS present the row is
+      // silent about it (the header's station note
+      // already names what's nearby).
+      stationUnmet:
+        recipe.station !== undefined &&
+        recipe.station !== 'hand' &&
+        !availableStations.includes(recipe.station),
       // NO-RECRAFT BINDING (Adam, 2026-10-28 — Systems owns
       // the rule, the shell renders it): Systems' check.ok
       // already folds ownership in (ok is false when
