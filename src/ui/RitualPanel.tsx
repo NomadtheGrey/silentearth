@@ -13,12 +13,14 @@
  *
  * SHAPE (brief's pieces, as rendered here):
  * - Unstaged site: a kind list to stage — one button per
- *   bone kind not yet awakened, each hinted with its sky
- *   condition. Kinds she doesn't carry render DISABLED
- *   but visible (the collection shows what remains to
- *   find); digit badges number the carried rows only.
- *   (Shrew skull never appears: the first
- *   charm is given outright, no ritual.)
+ *   CARRIED bone kind not yet awakened, each hinted with
+ *   its sky condition. Kinds she doesn't carry simply
+ *   don't appear (Adam, 2026-10-31 — supersedes the
+ *   2026-10-29 disabled-but-visible honesty rows); digit
+ *   badges number the listed rows, which are exactly the
+ *   carried ones. When nothing unawakened is carried,
+ *   one plain line says so. (Shrew skull never appears:
+ *   the first charm is given outright, no ritual.)
  * - Staged site: the required recipe as rows — bone,
  *   offering, spoken name — each showing done or missing,
  *   in the crafting-row pattern (required + have/missing).
@@ -53,13 +55,11 @@ export interface RitualKindOption {
   skyLabel: string;
   /**
    * How many of this kind's bone item she carries
-   * (shell-counted). Zero renders the row DISABLED but
-   * visible (Adam, 2026-10-29 — the list is the Waking
-   * collection; greyed rows show what remains to find,
-   * instead of a live button that answers 'No such bone
-   * carried.'). Disabled rows take no click/touch and
-   * consume no digit badge — digits number the carried
-   * rows only, matching the shell's digit dispatch.
+   * (shell-counted). The list shows CARRIED kinds only
+   * (Adam, 2026-10-31): a zero count means the row does
+   * not render at all — the field still decides, and the
+   * shell's digit dispatch filters by the same count, so
+   * badges and digits number the rendered rows 1..n.
    */
   carried: number;
 }
@@ -139,6 +139,15 @@ export function RitualPanel({
   theme = 'mire',
 }: RitualPanelProps) {
   const t = UI_THEMES[theme];
+  // CARRIED-ONLY LIST (Adam, 2026-10-31): the staging
+  // list shows only bones actually in her pack — kinds
+  // with a zero count don't render. The shell's digit
+  // dispatch filters its options by the same count, so
+  // badges and digits stay in lockstep on the rows that
+  // remain.
+  const carriedKindOptions = kindOptions.filter(
+    (option) => option.carried > 0,
+  );
   // Digit-badge counter, consumed in render order (see
   // the prop doc). Beyond 9 there is no digit, so no
   // badge.
@@ -204,48 +213,32 @@ export function RitualPanel({
             <p className="mt-2 text-xs text-stone-300">
               All known bones are awakened.
             </p>
+          ) : carriedKindOptions.length === 0 ? (
+            // Unawakened kinds exist but none are in her
+            // pack (Adam, 2026-10-31): one plain line
+            // instead of an empty list (copy DRAFT).
+            <p className="mt-2 text-xs text-stone-300">
+              No bones in your pack.
+            </p>
           ) : (
             <div className="mt-2 flex flex-col gap-1">
-              {kindOptions.map((option) =>
-                option.carried > 0 ? (
-                  <button
-                    key={option.kind}
-                    type="button"
-                    onClick={() => onStageBone(option.kind)}
-                    onTouchStart={(e) => {
-                      e.stopPropagation();
-                    }}
-                    className={'min-h-[44px] rounded px-3 py-2 text-left text-sm ' + t.button}
-                  >
-                    {option.display}
-                    {hintBadge(nextHint())}
-                    <span className={'block text-xs ' + t.muted}>
-                      {option.skyLabel}
-                    </span>
-                  </button>
-                ) : (
-                  // Not carried: visible but inert — no
-                  // handler, no badge (nextHint is never
-                  // called, so carried rows number from 1
-                  // in display order, the shell's dispatch
-                  // rule too).
-                  <button
-                    key={option.kind}
-                    type="button"
-                    disabled
-                    aria-disabled="true"
-                    className={
-                      'min-h-[44px] cursor-not-allowed rounded px-3 py-2 text-left text-sm opacity-50 ' +
-                      t.button
-                    }
-                  >
-                    {option.display}
-                    <span className={'block text-xs ' + t.muted}>
-                      {option.skyLabel}
-                    </span>
-                  </button>
-                ),
-              )}
+              {carriedKindOptions.map((option) => (
+                <button
+                  key={option.kind}
+                  type="button"
+                  onClick={() => onStageBone(option.kind)}
+                  onTouchStart={(e) => {
+                    e.stopPropagation();
+                  }}
+                  className={'min-h-[44px] rounded px-3 py-2 text-left text-sm ' + t.button}
+                >
+                  {option.display}
+                  {hintBadge(nextHint())}
+                  <span className={'block text-xs ' + t.muted}>
+                    {option.skyLabel}
+                  </span>
+                </button>
+              ))}
             </div>
           )}
         </>
