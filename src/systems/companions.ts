@@ -555,7 +555,7 @@ export class CompanionState {
 // is not guarding) is the panel's to voice.
 
 export const PROVISIONING_CATCHES: Readonly<Record<string, readonly string[]>> = {
-  cat: ['fish', 'mice', 'voles'],
+  cat: ['fish', 'mouse', 'mice', 'voles'],
 };
 
 /** The prey kinds a kind may hunt (empty for non-provisioners). */

@@ -136,6 +136,7 @@ const CATCH_ITEM_BY_KIND: Record<string, string> = {
   groundhog: ITEMS.groundhogCarcass,
   raccoon: ITEMS.raccoonCarcass,
   mice: ITEMS.mouseCarcass,
+  mouse: ITEMS.mouseCarcass,
   voles: ITEMS.voleCarcass,
 };
 
