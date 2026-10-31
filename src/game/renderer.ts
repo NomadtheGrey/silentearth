@@ -38,6 +38,7 @@ import {
 } from './companionRuntime';
 import { catActor, catGlowOn, ensureCat, installCatPreyAccess, stepCat } from './catRuntime';
 import { guideActor, guideVisible, stageGuide, stepGuide } from './guideRuntime';
+import { exodusBats, stepExodus } from './exodusRuntime';
 import { crowGlowIntensity, CROW_GLOW_EMISSIVE } from './crow';
 import type { CrowTier } from './crow';
 import { ProximityTracker } from './proximity';
@@ -52,7 +53,7 @@ import { standingInWater, terrainSpeedAt, WADING_FACTOR, type WaterDisc } from '
 import { treeKindAt } from './treeKind';
 import { riverParamsFor, riverRibbonForChunk } from './river';
 import { barnSite, caveMouthSite, chapelSite, drownedMillSite, farmhouseSite, generalStoreSite, groveSite, pushOutOfWalls, railSidingSite, schoolhouseSite, siloSite, sunkenRoadSite, villageSite, wallsNearSites, type SiteFootprint } from './sites';
-import { caveFootprintFor, caveInstancesInRect, caveLayoutForKey } from './caves';
+import { caveFootprintFor, caveInstancesInRect, caveLayoutForKey, caveMouthsNear } from './caves';
 import type { RiverParams } from './river';
 import { fireState } from './fireState';
 import { torchState } from './torchState';
@@ -595,6 +596,10 @@ export class WorldRenderer {
   /** The guide's layer (a single crow mesh) + its tree-point memo. */
   private guideGroup: THREE.Group | null = null;
   private treeMemo = new Map<string, { x: number; z: number }[]>();
+  /** The bat exodus layer: pooled bat meshes keyed by bat id. */
+  private exodusGroup: THREE.Group | null = null;
+  private exodusMeshes = new Map<string, THREE.Group>();
+  private exodusMouthCache: { at: number; list: { id: string; x: number; z: number }[] } | null = null;
   /** Memo for the site-walls query's cave-instance spawn (see siteWallsAt). */
   private wallsSpawnMemo: { seed: string; spawn: { x: number; z: number } } | null = null;
   /**
@@ -1088,6 +1093,16 @@ export class WorldRenderer {
     const t = sky.cycleT;
     const w = 2 / 24;
     if (t <= w) return true;
+    const f = dayFraction(SEASON_START_MONTH);
+    return t >= f - w && t <= f;
+  }
+
+  /** The dusk band alone (the guide's second window; the bat exodus's only one). */
+  private duskOpen(): boolean {
+    const sky = this.sky;
+    if (!sky) return false;
+    const t = sky.cycleT;
+    const w = 2 / 24;
     const f = dayFraction(SEASON_START_MONTH);
     return t >= f - w && t <= f;
   }
@@ -2768,6 +2783,52 @@ export class WorldRenderer {
         this.guideGroup.visible = guideVisible() && !this.gen.dimensionKey;
         if (this.guideGroup.visible) {
           this.poseAnimal(g.instance, this.guideGroup);
+        }
+      }
+    }
+    // The bat exodus (2026-10-31): stepped after the
+    // guide; meshes pool against the runtime's bats. A
+    // surface spectacle — hidden inside dimensions.
+    {
+      stepExodus(dt, {
+        playerX: this.player.x,
+        playerZ: this.player.z,
+        duskOpen: this.duskOpen() && !this.gen.dimensionKey,
+        mouthsNear: (x, z, r) => {
+          if (this.gen.dimensionKey) return [];
+          // The mouth scan is worldgen-priced; refresh it
+          // at most every 2 s (the exodus reads a cached
+          // list between refreshes — mouths don't move).
+          const now = performance.now();
+          if (!this.exodusMouthCache || now - this.exodusMouthCache.at > 2000) {
+            const spawn = this.gen.findSpawn();
+            const list = caveMouthsNear(String(this.gen.seed), spawn, (wx, wz) => this.gen.weightsAt(wx, wz), x, z, r)
+              .map((m) => ({ id: m.id, x: m.spot.x, z: m.spot.z }));
+            this.exodusMouthCache = { at: now, list };
+          }
+          return this.exodusMouthCache.list;
+        },
+      });
+      if (!this.exodusGroup) {
+        this.exodusGroup = new THREE.Group();
+        this.scene.add(this.exodusGroup);
+      }
+      this.exodusGroup.visible = !this.gen.dimensionKey;
+      const seen = new Set<string>();
+      for (const b of exodusBats()) {
+        seen.add(b.instance.id);
+        let mesh = this.exodusMeshes.get(b.instance.id);
+        if (!mesh) {
+          mesh = buildAnimal('bat');
+          this.exodusMeshes.set(b.instance.id, mesh);
+          this.exodusGroup.add(mesh);
+        }
+        this.poseAnimal(b.instance, mesh);
+      }
+      for (const [id, mesh] of [...this.exodusMeshes]) {
+        if (!seen.has(id)) {
+          this.exodusGroup.remove(mesh);
+          this.exodusMeshes.delete(id);
         }
       }
     }
