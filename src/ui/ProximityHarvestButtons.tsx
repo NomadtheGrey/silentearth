@@ -93,10 +93,15 @@
  * follow-up cleanup, not part of this position-only change.
  *
  * REMOVE OPTION (Adam, 2026-10-26): when the caller passes
- * onRemove, each SCATTER target also gets a RemoveButton stacked
- * under its Harvest button — totally remove the plant, more at
- * once, gone permanently. Ground targets never get one (no plant
- * to remove), and with no onRemove passed nothing extra renders.
+ * onRemove, each REMOVABLE scatter target also gets a
+ * RemoveButton stacked under its Harvest button — totally
+ * remove the plant, more at once, gone permanently. Ground
+ * targets never get one (no plant to remove), and neither
+ * do ground-class scatter (logs, stones, silt beds,
+ * anchors — the Remove offer's honesty, 2026-10-31: the
+ * offer itself was the defect; the engine's not-removable
+ * outcome is backstop only). With no onRemove passed
+ * nothing extra renders.
  * onRemove receives the target itself, not a bus payload — the
  * wiring caller maps the target to Background's documented
  * remove shape ('harvest:requested' with action 'remove',
@@ -355,7 +360,7 @@ export function ProximityHarvestButtons({
       {lookNode}
       {visibleTargets.map((target) => (
         <Fragment key={target.id}>
-          {target.kind === 'scatter' && onRemove ? (
+          {target.kind === 'scatter' && target.removable && onRemove ? (
             <div className="flex flex-col items-center gap-1">
               {!harvestedIds?.has(target.id) ? (
                 <HarvestButton

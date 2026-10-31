@@ -67,14 +67,18 @@
  *   (2003619): a remove press is 'harvest:requested' with action
  *   'remove' — same event, not a second channel. The outcome
  *   grants primary base x 3 + bonus roll + all secondaries, and
- *   marks the plant removed permanently. The button renders on
- *   every scatter target (removability is outcome-time: plant-
- *   like sources only, so a remove press on a log, stone, bone,
- *   salt, silt, or anchor returns an honest 'not-removable'
- *   failure through the existing feedback path); ground targets
- *   never get one. The "Remove" label is the lane's pick,
- *   flagged, not pinned. Feedback for a remove completion shows
- *   the yields exactly as carried, like any harvest.
+ *   marks the plant removed permanently. The offer is
+ *   pre-judged at projection (the Remove offer's honesty,
+ *   2026-10-31, superseding the 2026-10-26 outcome-time
+ *   reading): HarvestTarget.removable is minted from
+ *   SOURCE_BY_ID, and no Remove renders or arms (pill, R,
+ *   Shift+E) for ground targets or ground-class scatter
+ *   (logs, stones, bone, salt, silt, anchors). The engine's
+ *   'not-removable' outcome stays as backstop and speaks
+ *   one honest line if it ever lands. The "Remove" label
+ *   is the lane's pick, flagged, not pinned. Feedback for
+ *   a remove completion shows the yields exactly as
+ *   carried, like any harvest.
  * - Owned tool (Adam correction, 2026-10-26 — owning is
  *   sufficient, no equipping): there is no held/equipped slot.
  *   The owned tool is the highest-stage ladder tool present in
@@ -4092,6 +4096,11 @@ export default function App() {
         sourceId: target.sourceId,
         name: target.name,
         kind: target.kind,
+        // The Remove offer's honesty (2026-10-31):
+        // removability is read from the source
+        // definition here, at projection, so no Remove
+        // is ever offered for ground-class scatter.
+        removable: SOURCE_BY_ID[target.sourceId]?.removable === true,
         anchorX: anchor.x,
         anchorY: anchor.y,
         worldX: target.x,
@@ -5212,7 +5221,14 @@ export default function App() {
           ? `Pack full — ${p.yields.map((y) => `${y.item} × ${y.quantity}`).join(', ')} didn't fit.`
           : p.reason === 'below-permit'
             ? belowPermitText(p.sourceId)
-            : `Harvest failed: ${p.reason}.`;
+            : p.reason === 'not-removable'
+              ? // Backstop voice (2026-10-31): the offer
+                // chain no longer renders Remove for
+                // ground-class scatter, so this speaks
+                // only if a remove somehow still lands —
+                // in words, not the raw code. DRAFT line.
+                "That is the ground itself — it can't be taken up"
+              : `Harvest failed: ${p.reason}.`;
       showFeedback(text, 'blocked');
     });
     const offProgress = bus.on('harvest:progress', (p) => {
@@ -8212,9 +8228,11 @@ export default function App() {
   const handleRemove = (target: HarvestTarget) => {
     // Same shape as a harvest press, action 'remove' (Background's
     // documented shape, 2003619): the outcome listener resolves
-    // it into the bigger one-time yield or an honest failure
-    // ('not-removable' for logs, stones, and the like). Nothing
-    // here pre-judges removability or previews a yield.
+    // it into the bigger one-time yield or an honest failure.
+    // The doors pre-judge removability now (the offer's
+    // honesty, 2026-10-31) — this press is reachable only
+    // for removable targets; the outcome stays the
+    // backstop, and no yield is previewed here.
     bus.emit('harvest:requested', removeRequestFor(target));
   };
 
@@ -10083,11 +10101,11 @@ export default function App() {
 
   // R — the winner's SECOND action (Adam, 2026-10-29,
   // tentative made real for the seconds that exist
-  // today): scatter → Remove (the SAME confirm Shift+E
-  // arms — R sits ALONGSIDE Shift+E, which stays as
-  // pinned; the difference is scope: Shift+E reaches
-  // the nearest scatter whatever the winner is, R acts
-  // on the winner); pile → pick up the WHOLE pile on
+  // today): removable scatter → Remove (the SAME confirm
+  // Shift+E arms — R sits ALONGSIDE Shift+E, which stays
+  // as pinned; the difference is scope: Shift+E reaches
+  // the nearest removable scatter whatever the winner is,
+  // R acts on the winner); pile → pick up the WHOLE pile on
   // the existing pickup path (Adam pinned: "R can pick
   // up the whole pile if possible" — the grant's own
   // capacity behavior, no second rule); torch → Pick
@@ -10101,7 +10119,12 @@ export default function App() {
     if (winner === null) return;
     switch (winner.kind) {
       case 'scatter':
-        setPendingRemoveTarget(winner.target);
+        // The Remove offer's honesty (2026-10-31): R
+        // arms the confirm only where Remove may be
+        // offered — ground-class scatter gets nothing.
+        if (winner.target.removable) {
+          setPendingRemoveTarget(winner.target);
+        }
         break;
       case 'pile':
         bus.emit('pile:pickup-requested', { pileId: winner.pile.id });
@@ -10439,7 +10462,8 @@ export default function App() {
           handleUseInteract();
         } else if (inventoryOpen && key === 'e' && e.shiftKey) {
           const scatter = harvestTargets.find(
-            (candidate) => candidate.kind === 'scatter',
+            (candidate) =>
+              candidate.kind === 'scatter' && candidate.removable,
           );
           if (scatter) setPendingRemoveTarget(scatter);
         }
@@ -10449,7 +10473,8 @@ export default function App() {
         handleUseInteract();
       } else if (key === 'e' && e.shiftKey) {
         const scatter = harvestTargets.find(
-          (candidate) => candidate.kind === 'scatter',
+          (candidate) =>
+            candidate.kind === 'scatter' && candidate.removable,
         );
         if (scatter) setPendingRemoveTarget(scatter);
       } else if (key === 'r') {
