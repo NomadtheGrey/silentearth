@@ -1766,6 +1766,8 @@ import {
 } from './systems/save';
 import {
   CLOUD_BASE_URL,
+  adoptWords,
+  armMirror,
   bringHere,
   canonicalizeWords,
   deleteCloudSave,
@@ -3525,6 +3527,46 @@ export default function App() {
     void refreshCloudList();
   };
 
+  // ADOPT EXISTING WORDS (Adam, 2026-10-31: "let's get
+  // the words first"): switch this device's identity to
+  // words he already has. Validation is the module's —
+  // a refusal shows plainly and changes nothing. On
+  // success the identity display + the cloud list
+  // re-point to the ADOPTED shelf (refreshCloudList
+  // reads the stored words, which are now the adopted
+  // ones), so he immediately sees what's on it.
+  // Adoption never mirrors: the module holds mirroring
+  // until a deliberate arm (DEV ruling, 2026-10-31).
+  // Copy is DRAFT for Adam's pin pass.
+  const handleCloudAdoptWords = (input: string) => {
+    const res = adoptWords(input);
+    if (res.ok === false) {
+      setCloudNote(res.reason ?? 'Could not switch words.');
+      return;
+    }
+    setCloudNote(
+      'Now using these words — you are looking at that shelf.',
+    );
+    refreshCloudState();
+    void refreshCloudList();
+  };
+
+  // The deliberate arm after an adoption hold: copying
+  // resumes for the current shelf. A manual sync does
+  // NOT clear the hold (by design) — this button is the
+  // only panel path that arms.
+  const handleArmMirroring = () => {
+    const res = armMirror();
+    if (res.ok === false) {
+      setCloudNote(res.reason ?? 'Could not start copying.');
+      return;
+    }
+    setCloudNote(
+      'Copying is on — this device will copy its world to this shelf when it saves.',
+    );
+    refreshCloudState();
+  };
+
   const runCloudBring = async (
     slot: string,
     words: [string, string, string] | null,
@@ -3548,6 +3590,20 @@ export default function App() {
         return;
       }
       saveGame(brought.value);
+      // ADOPTION ARMING (DEV ruling, 2026-10-31): a save
+      // APPLIED under the device's own identity — the
+      // bring's words ARE the stored words — arms
+      // copying if adoption left it held. A typed-words
+      // (load door) bring under other words does not.
+      const storedWords = getWords();
+      if (
+        storedWords !== null &&
+        storedWords[0] === words[0] &&
+        storedWords[1] === words[1] &&
+        storedWords[2] === words[2]
+      ) {
+        armMirror();
+      }
       // Install = write + fresh boot: the boot path is
       // the tested restore path; mid-session rehydration
       // is a far larger surface. Reload boots into the
@@ -3649,6 +3705,11 @@ export default function App() {
       return;
     }
     saveGame(parked);
+    // A restore applied under the current identity is
+    // the same deliberate application as a bring: it
+    // arms copying if adoption left it held (DEV
+    // ruling, 2026-10-31).
+    armMirror();
     // Same install shape as bring-down: write + fresh boot.
     // The pagehide autosave stands down (see bring-down).
     unloadSaveSuppressedRef.current = true;
@@ -3717,6 +3778,8 @@ export default function App() {
     onToggle: handleCloudToggle,
     onGenerateWords: handleCloudGenerateWords,
     onEnterWords: handleCloudEnterWords,
+    onAdoptWords: handleCloudAdoptWords,
+    onArmMirroring: handleArmMirroring,
     onRefreshList: () => {
       void refreshCloudList();
     },
