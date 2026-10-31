@@ -6198,13 +6198,23 @@ export default function App() {
     (record) => record.bond !== 'none',
   );
   const hasBondedCompanion = bondedCompanions.length > 0;
-  const companionRows = bondedCompanions.map((record) => ({
-    creatureId: record.creatureId,
-    kindLabel: companionKindLabel(record.kind),
-    bond: record.bond as 'companion' | 'familiar',
-    stance: record.stance,
-    isCat: record.kind === 'cat',
-  }));
+  // THE FAMILIAR LEADS (Build 2, Piece 4): the standing
+  // familiar's row seats first in the panel — the
+  // one-standing law made visible in the list's order.
+  // The sort is stable, so companions keep their record
+  // order behind it (at most one familiar can stand).
+  const companionRows = [...bondedCompanions]
+    .sort(
+      (a, b) =>
+        (a.bond === 'familiar' ? 0 : 1) - (b.bond === 'familiar' ? 0 : 1),
+    )
+    .map((record) => ({
+      creatureId: record.creatureId,
+      kindLabel: companionKindLabel(record.kind),
+      bond: record.bond as 'companion' | 'familiar',
+      stance: record.stance,
+      isCat: record.kind === 'cat',
+    }));
   const charmEntries = listCharms(charmStateRef.current).map((charm) => ({
     ...charm,
     display: boneDisplayFor(charm.kind),
