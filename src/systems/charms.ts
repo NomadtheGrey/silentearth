@@ -114,6 +114,7 @@ export const BONE_EFFECT_NOTES: Readonly<Record<string, string>> = {
   'snake-vertebra': 'Needing less',
   'turtle-shell-fragment': 'Shell protection',
   'crow-beak': 'Remembers where things lie',
+  'squirrel-tail-bone': 'A leaper’s spring',
   'owl-talon': 'Night sight',
   'bat-wing-bone': 'Night way-finding',
   'mouse-spine': 'A hoarder’s store',

@@ -526,6 +526,7 @@ export const ITEM_DISPLAY_NAMES: Readonly<Record<string, string>> = {
   'primal-bone-opossum-crest': 'Primal Bone - opossum crest',
   'primal-bone-muskrat-tail': 'Primal Bone - muskrat tail',
   'primal-bone-vole-skull': 'Primal Bone - vole skull',
+  'primal-bone-squirrel-tail-bone': 'Primal Bone - squirrel tail bone',
   'rabbit-carcass': 'Rabbit Carcass',
   'squirrel-carcass': 'Squirrel Carcass',
   'muskrat-carcass': 'Muskrat Carcass',
@@ -904,6 +905,7 @@ export const ITEM_CATEGORIES: Readonly<Record<string, ItemCategory>> = {
   'primal-bone-opossum-crest': 'Bones',
   'primal-bone-muskrat-tail': 'Bones',
   'primal-bone-vole-skull': 'Bones',
+  'primal-bone-squirrel-tail-bone': 'Bones',
   // Carcasses — trap catches.
   'rabbit-carcass': 'Carcasses',
   'squirrel-carcass': 'Carcasses',

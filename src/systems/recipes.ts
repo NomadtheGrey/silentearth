@@ -128,6 +128,7 @@ export const ITEMS = {
   primalBoneSnakeVertebra: 'primal-bone-snake-vertebra',
   primalBoneTurtleShellFragment: 'primal-bone-turtle-shell-fragment',
   primalBoneCrowBeak: 'primal-bone-crow-beak',
+  primalBoneSquirrelTailBone: 'primal-bone-squirrel-tail-bone',
   // NIGHT.
   primalBoneOwlTalon: 'primal-bone-owl-talon',
   primalBoneBatWingBone: 'primal-bone-bat-wing-bone',
