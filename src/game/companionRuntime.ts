@@ -18,8 +18,8 @@
  * temperament. The renderer owns the meshes (a persistent
  * companion layer beside the chunk animals) and calls
  * stepActors from its loop; Systems owns the records and
- * speaks to this module only through the bus (systems never
- * call game modules) — 'companion:bonded' promotes,
+ * never calls game modules — the SHELL speaks for its
+ * return values on the bus: 'companion:bonded' promotes,
  * 'companion:released' starts a departure, and the runtime
  * answers with 'companion:departed' / 'companion:stance'.
  *
