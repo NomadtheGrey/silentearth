@@ -9282,7 +9282,16 @@ export default function App() {
         setSelectedTentId(winner.id);
         break;
       case 'torch':
-        setSelectedTorchId(winner.id);
+        // TORCH PICKUP ON E (Adam, 2026-10-31): E at a
+        // faced placed torch picks it up — the same
+        // pickup the torch window's Pick up act runs
+        // (grant-first; a full pack refuses at the torch
+        // and the torch stays). This DISPLACES E's old
+        // torch act (opening the window): the window
+        // stays as the second door, behind the torch's
+        // chip click. R already picked up and is
+        // unchanged — E and R agree now.
+        handleTorchAction(winner.id, 'pick-up');
         break;
       case 'loom':
         // The loom's door is its pill: facing it and
@@ -10383,9 +10392,10 @@ export default function App() {
                   ? 'RENDER'
                   : useWinner.kind === 'fire'
                     ? fireWinnerLabel
-                  : useWinner.kind === 'site' ||
+                  : useWinner.kind === 'torch'
+                ? 'PICK UP'
+                : useWinner.kind === 'site' ||
                     useWinner.kind === 'tent' ||
-                  useWinner.kind === 'torch' ||
                   useWinner.kind === 'home'
                 ? 'OPEN'
               : useWinner.kind === 'cave-enter'
