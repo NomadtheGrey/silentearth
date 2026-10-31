@@ -43,6 +43,14 @@ export interface BuildRecord {
 
 const ALL_RECORDS: BuildRecord[] = [
   {
+    merge: 'Merge #41',
+    pr: 80,
+    sha: '24445e3',
+    date: '2026-10-31',
+    what: 'Nineteen commits, most of them under her hands. The inventory sorts now \u2014 recent-first by default, grouped or alphabetical when she asks \u2014 standing on the gathering-order data the last merge laid down. The stump\u2019s scattered doors fold into one crafting dialog: Craft, Upgrade, and Ritual in a single seat, and the altar keeps its honesty \u2014 no ritual staging until the stones, the glyph, and the candle have truly made it one. At a lit fire she can char a stick, the charred stick the glyph-drawing needs, renamed plainly everywhere it is spoken of. Panels mind their manners: walk away from a fire, a pile, or her tent and the window closes behind her; a pile reads as one clean stack with its counts on a single line; the crafting list scrolls inside its own frame under a pinned header; the site window sits a smidge lower, out of the centre of her eye; and looking up no longer makes a chosen window vanish. The crafting shelf speaks in one order \u2014 each thing\u2019s own kind, not a hand-kept map \u2014 the stations describe themselves truly (the apron is the loom\u2019s to gate, like the rest of its cloth), and the dome keeps its phases by the hour. In the marsh, the grass is grass again: nine green blades where a grey mound stood.',
+    why: 'Adam\u2019s word: soon as the fold-in finished, merge. Nearly everything here is his playtest made law \u2014 the sorting he asked for, the charred stick his altar work needed, the grade gate from his \u201Cno ritual use until the altar items are placed,\u201D the walk-away close and pile spacing from his screenshots, grass that is green because he said a grass tuft shouldn\u2019t be gray. Nineteen commits land as one so the world she tests next is the whole stretch of work at once.',
+  },
+  {
     merge: 'Merge #40',
     pr: 79,
     sha: '9d23d28',
