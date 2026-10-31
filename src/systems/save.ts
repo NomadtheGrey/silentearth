@@ -174,6 +174,7 @@ import type { SavedNameLook } from './name-sight';
 // charms.ts own them; save.ts imports them — no second
 // mirror to drift, the placed-torch id lesson).
 import type { SavedRitualStaging } from './rituals';
+import type { SavedCompanion } from './companions';
 import { FIRST_CHARM_ITEM, FIRST_CHARM_KIND } from './charms';
 import type { SavedAwakening } from './charms';
 import type { SavedQuestFlags } from './quests';
@@ -547,6 +548,9 @@ export interface SaveData {
   /** Acquisition order for the Recent sort (held kinds,
    * most recently gained first); [] for old saves. */
   acquisitionOrder: string[];
+  /** Companion records (touched individuals only);
+   * [] for old saves. */
+  companions: SavedCompanion[];
   /** Placed tents (portable shelters); [] for old saves. */
   tents: SavedTent[];
   /** Partial-true-name look counts; [] for old saves. */
@@ -706,6 +710,12 @@ export interface SaveDraft {
    * to stack order until gains rebuild it).
    */
   acquisitionOrder?: readonly string[];
+  /**
+   * Companion records, from CompanionState.snapshot()
+   * at save time. OPTIONAL, same trap-save pattern;
+   * absent = [] (no individual has been touched).
+   */
+  companions?: readonly SavedCompanion[];
   /**
    * Placed tents from the placed-tent source
    * (Background's entity snapshot, once it lands).
@@ -987,6 +997,12 @@ export function serializeSave(draft: SaveDraft): SaveData {
     // Acquisition order: written AS-IS (held kinds,
     // newest first — the inventory's own list).
     acquisitionOrder: [...(draft.acquisitionOrder ?? [])],
+    // Companions: written AS-IS (the state's own
+    // records, copied). Invalid entries are
+    // deserialize's problem, not serialize's.
+    companions: (draft.companions ?? []).map((record) => ({
+      ...record,
+    })),
     // Tents: written AS-IS (positions verbatim, id when
     // the entity provides one — no filtering, no
     // normalization). Invalid entries are restore()'s
@@ -1501,6 +1517,53 @@ export function deserializeSave(value: unknown): SaveData | null {
         }
       }
     }
+    // Companions are optional on read: an old v1 save
+    // without them loads with companions: []. Entries
+    // are validated field by field (the enums drive
+    // behavior, so they coerce to their safe values —
+    // an unknown bond reads 'none', an unknown stance
+    // reads null); a record needs a creature id and a
+    // kind to exist at all. The cat's stance is forced
+    // null on read, as everywhere (it takes no orders).
+    const companions: SavedCompanion[] = [];
+    if (Array.isArray(value.companions)) {
+      for (const entry of value.companions) {
+        if (!isRecord(entry)) continue;
+        if (
+          typeof entry.creatureId !== 'string' ||
+          entry.creatureId.length === 0 ||
+          typeof entry.kind !== 'string' ||
+          companions.some((c) => c.creatureId === entry.creatureId)
+        ) {
+          continue;
+        }
+        companions.push({
+          creatureId: entry.creatureId,
+          kind: entry.kind,
+          trust:
+            typeof entry.trust === 'number' && Number.isFinite(entry.trust)
+              ? Math.max(0, Math.floor(entry.trust))
+              : 0,
+          bond:
+            entry.bond === 'companion' || entry.bond === 'familiar'
+              ? entry.bond
+              : 'none',
+          origin: entry.origin === 'found' ? 'found' : 'wild',
+          stance:
+            entry.kind !== 'cat' &&
+            (entry.stance === 'stay' ||
+              entry.stance === 'follow' ||
+              entry.stance === 'come')
+              ? entry.stance
+              : null,
+          lastFedDay:
+            typeof entry.lastFedDay === 'number' &&
+            Number.isFinite(entry.lastFedDay)
+              ? Math.floor(entry.lastFedDay)
+              : null,
+        });
+      }
+    }
     // Tents are optional on read, same leniency as
     // altars: an old v1 save without them loads with
     // tents: []. Entries pass through UNVALIDATED —
@@ -1659,6 +1722,7 @@ export function deserializeSave(value: unknown): SaveData | null {
       cauldrons,
       dimensionVisit,
       acquisitionOrder,
+      companions,
       tents,
       nameSight,
       stagings,
