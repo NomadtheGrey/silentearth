@@ -1766,7 +1766,12 @@ import {
   COOK_REQUIRED_ITEMS,
   type HungerStage,
 } from './systems/hunger';
-import { FireState as SystemsFireState, cook } from './systems/fire';
+import {
+  FireState as SystemsFireState,
+  charStick,
+  CHAR_INPUT_ITEM,
+  cook,
+} from './systems/fire';
 import { HomeStorage } from './systems/shelter';
 import {
   clearSave,
@@ -6625,6 +6630,7 @@ export default function App() {
   const fireMenuActions = (fire: PlacedFire): ContextAction[] => {
     if (fire.lit) {
       const hasAcorns = inventory.count(FOOD_ACORNS) > 0;
+      const hasSnapWood = inventory.count(CHAR_INPUT_ITEM) > 0;
       const unlitTorches = inventory.count(ITEMS.torch);
       return [
         ...(unlitTorches >= 1
@@ -6647,6 +6653,14 @@ export default function App() {
           label: 'Cook acorns (buried)',
           disabled: !hasAcorns,
           disabledNote: hasAcorns ? undefined : 'Needs carried acorns',
+        },
+        {
+          id: 'char-stick',
+          label: 'Char a stick',
+          disabled: !hasSnapWood,
+          disabledNote: hasSnapWood
+            ? undefined
+            : 'Needs carried snap wood',
         },
         { id: 'close', label: 'Close' },
       ];
@@ -6776,6 +6790,31 @@ export default function App() {
       } catch (error) {
         say(
           error instanceof Error ? error.message : 'Cooking failed.',
+          'blocked',
+        );
+      }
+      refreshInventory();
+      saveNow();
+    } else if (actionId === 'char-stick') {
+      // CHAR A STICK (Adam, 2026-10-31 — asked for at his
+      // lit campfire, for the sigil): the fire panel
+      // carries Systems' charStick beside Cook — the
+      // second door to the charcoal stick (the
+      // 'fire'-station recipe stays; both doors stay per
+      // DEV). One stick per press, 1:1 by charStick; the
+      // menu stays open so she can char more. Refusals
+      // throw and speak verbatim, the cook pattern.
+      const systemsFire = getSystemsFire(fireId);
+      try {
+        ensureSystemsLit(fireId, systemsFire);
+        const result = charStick(systemsFire, inventory, 1);
+        say(
+          `Charred ${result.count} stick${result.count === 1 ? '' : 's'} → ${displayNameFor(result.charred)}.`,
+          'gain',
+        );
+      } catch (error) {
+        say(
+          error instanceof Error ? error.message : 'Charring failed.',
           'blocked',
         );
       }
