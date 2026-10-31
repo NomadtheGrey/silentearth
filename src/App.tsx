@@ -1894,6 +1894,7 @@ import {
 import { crowPileArrow, type CrowTier } from './game/crow';
 import { CrowArrows } from './ui/CrowArrows';
 import { RitualPanel } from './ui/RitualPanel';
+import { walkAwayShouldClose } from './ui/walkAway';
 import { CharmsPanel } from './ui/CharmsPanel';
 import { StormWarning } from './ui/StormWarning';
 import { WakeNotice } from './ui/WakeNotice';
@@ -4586,11 +4587,12 @@ export default function App() {
       pilesRef.current = inRange;
       setPiles(inRange);
       recomputeAnchors();
-      const key = selectedPileIdRef.current;
-      if (key && !inRange.some((pile) => pile.id === key)) {
-        selectedPileIdRef.current = null;
-        setSelectedPileId(null);
-      }
+      // The selected pile's out-of-range close used to
+      // live here (at this feed's 2.5 m). It is absorbed
+      // into the walk-away leash (see the WALK-AWAY CLOSE
+      // effect): the pile rides the same leash as every
+      // faced window, and a vanished pile still closes
+      // through the leash's missing-anchor case.
     });
     // Systems' 'pile:pickup-requested' listener (see the header
     // + systems/piles.ts): the SOLE granter on the event since
@@ -8326,6 +8328,110 @@ export default function App() {
     setLeaveConfirmOpen(false);
     window.history.back();
   };
+  // WALK-AWAY CLOSE (Adam, 2026-10-31 — the Campfire
+  // window stayed open after he'd walked off; DEV's
+  // call: the whole anchored family, one mechanism, not
+  // a campfire special case; claim as approved). While
+  // any anchored world window is open (fire, site, pile,
+  // torch, tent, home menu), her moved ticks measure the
+  // distance to the window's anchor; past the leash the
+  // window closes WITH ITS OWN CLOSE SEMANTICS (the same
+  // setters its close control runs). The leash is the
+  // range that opened it + 2 m (DRAFT — Adam's sighting
+  // tunes it): faced windows opened inside HARVEST_RANGE
+  // ride 4.5 m; the home menu opened on hut presence
+  // rides the footprint's half + 2 m from the house's
+  // center. A window whose anchor stops resolving (a
+  // pile emptied out of the world, the shelter zone left)
+  // closes. PENDING DIALOGS OUTRANK: while a confirm is
+  // up this effect does not even subscribe — the dialog
+  // owns the moment and is never orphaned over a closed
+  // window; the leash resumes the moment it resolves.
+  // World state is never touched: a staged ritual stays
+  // staged, a fire's lighting keeps running. The pile's
+  // old 2.5 m feed-clear is absorbed into this rule.
+  const WALK_AWAY_LEASH = HARVEST_RANGE + 2;
+  useEffect(() => {
+    const anyOpen =
+      selectedPileId !== null ||
+      selectedFireId !== null ||
+      selectedSiteId !== null ||
+      selectedTorchId !== null ||
+      selectedTentId !== null ||
+      homeMenuOpen;
+    if (!anyOpen) return;
+    const dialogUp =
+      pendingTrapRecipeId !== null ||
+      pendingRemoveTarget !== null ||
+      leaveConfirmOpen ||
+      cloudPendingBring !== null ||
+      cloudPendingRemove !== null ||
+      cloudPendingRestore !== null ||
+      cloudPendingNewGame !== null;
+    if (dialogUp) return;
+    const off = bus.on('player:moved', ({ x, z }) => {
+      const p = { x, z };
+      if (selectedPileId !== null) {
+        const pile = pileState.get(selectedPileId);
+        if (walkAwayShouldClose(pile, p, WALK_AWAY_LEASH)) {
+          selectedPileIdRef.current = null;
+          setSelectedPileId(null);
+        }
+      }
+      if (selectedFireId !== null) {
+        const fire = fireState.get(selectedFireId) ?? null;
+        if (walkAwayShouldClose(fire, p, WALK_AWAY_LEASH)) {
+          setSelectedFireId(null);
+        }
+      }
+      if (selectedSiteId !== null) {
+        const site = sitePositionFor(selectedSiteId);
+        if (walkAwayShouldClose(site, p, WALK_AWAY_LEASH)) {
+          setSelectedSiteId(null);
+          setRitualNote(null);
+        }
+      }
+      if (selectedTorchId !== null) {
+        const torch = torchState.get(selectedTorchId) ?? null;
+        if (walkAwayShouldClose(torch, p, WALK_AWAY_LEASH)) {
+          setSelectedTorchId(null);
+        }
+      }
+      if (selectedTentId !== null) {
+        const tent =
+          placedTents.find((t) => t.id === selectedTentId) ?? null;
+        if (walkAwayShouldClose(tent, p, WALK_AWAY_LEASH)) {
+          setSelectedTentId(null);
+        }
+      }
+      if (homeMenuOpen) {
+        const leash =
+          homeHouse === undefined
+            ? 0
+            : HOUSE_DEFS[homeHouse.type].footprint / 2 + 2;
+        if (walkAwayShouldClose(homeHouse ?? null, p, leash)) {
+          setHomeMenuOpen(false);
+        }
+      }
+    });
+    return off;
+  }, [
+    selectedPileId,
+    selectedFireId,
+    selectedSiteId,
+    selectedTorchId,
+    selectedTentId,
+    homeMenuOpen,
+    pendingTrapRecipeId,
+    pendingRemoveTarget,
+    leaveConfirmOpen,
+    cloudPendingBring,
+    cloudPendingRemove,
+    cloudPendingRestore,
+    cloudPendingNewGame,
+    placedTents,
+    homeHouse,
+  ]);
   useEffect(() => {
     window.history.pushState({ silentEarthBackTrap: true }, '');
     // BEFOREUNLOAD (desktop bonus only): browsers that
