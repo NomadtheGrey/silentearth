@@ -43,12 +43,11 @@
  * SYNODIC_DAYS = 29.5 (the real synodic month, in game-days
  * — a full cycle takes ~5 real hours of play at the 10-min
  * day, so phases visibly change night to night without
- * rushing). A new world starts at day 0. PERSISTENCE GAP
- * (flagged, Systems follow-up): save.ts picks cycleT ONLY
- * from the sky snapshot, so daysElapsed resets to 0 on load
- * until save.ts carries it too (one field, same pattern) —
- * until then a refresh rewinds the phase toward the seed
- * base. The counter itself is session-true (wraps + sleeps).
+ * rushing). A new world starts at day 0. PERSISTENCE: the
+ * save carries daysElapsed alongside cycleT (Systems,
+ * landed) — a load restores the dawn count, so the phase
+ * continues where it left off; the counter advances on
+ * natural wraps + sleep-to-dawn restores, as above.
  *
  * MINIMAL TIME DRIVER (the brief's flag, decided here — Adam's
  * pin pass applies; no full calendar is invented):
