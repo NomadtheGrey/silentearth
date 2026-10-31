@@ -3080,6 +3080,18 @@ export default function App() {
   };
 
   const busTargetsRef = useRef<BusHarvestTarget[]>([]);
+  // THE ONE PICK (Adam's contract, 2026-10-31 — "we need
+  // the pill and the 'E' to match"): the render's winner,
+  // stored. The pill renders it; E, R, and the cauldron
+  // placement read THIS — no press path re-derives a
+  // winner of its own (the four derivations that used to
+  // agree by care are one derivation now). Written every
+  // render below, beside the useWinner computation; the
+  // events that can change the pick (move, look, camera,
+  // target-set, placed-state) all set state and so all
+  // render — the stored pick is exactly as fresh as the
+  // pill the player is looking at, by construction.
+  const useWinnerRef = useRef<UseWinner | null>(null);
   const transitionTimerRef = useRef<number | undefined>(undefined);
   const feedbackCounterRef = useRef(0);
   const feedbackTimersRef = useRef<
@@ -5687,7 +5699,7 @@ export default function App() {
   // sets the pot before she lights the hearth. Panel
   // stays open, cauldronNote carries the result.
   const handlePlaceCauldron = () => {
-    const winner = computeUseWinner();
+    const winner = useWinnerRef.current;
     let hearthId = '';
     if (winner?.kind === 'fire') {
       const fire = fireState.get(winner.id);
@@ -8789,9 +8801,11 @@ export default function App() {
   // nearest overall, facing-tested alone), and ground's
   // fallback is gated on NOTHING else being in range at
   // all (accidental mud/dirt scooping).
-  // ONE shared computeUseWinner() feeds the press, the
-  // R press, the touch USE label, and the desktop pile
-  // button, so the tell can never disagree with the act.
+  // ONE derivation of the winner exists (this function,
+  // called once per render); the press, the R press,
+  // the touch USE label, and the desktop pile button
+  // all consume the stored pick (useWinnerRef), so the
+  // tell can never disagree with the act.
   const pileWouldWin = (
     pile: PileTarget | undefined,
     scatter: HarvestTarget | undefined,
@@ -9175,7 +9189,7 @@ export default function App() {
   const handleUseInteract = (): void => {
     const player = playerRef.current;
     if (!player) return;
-    const winner = computeUseWinner();
+    const winner = useWinnerRef.current;
     if (winner === null) return;
     switch (winner.kind) {
       case 'scatter':
@@ -9276,7 +9290,7 @@ export default function App() {
   // R is a no-op there (hive Relocate is an unbuilt
   // seed, named not built).
   const handleSecondInteract = (): void => {
-    const winner = computeUseWinner();
+    const winner = useWinnerRef.current;
     if (winner === null) return;
     switch (winner.kind) {
       case 'scatter':
@@ -9906,8 +9920,13 @@ export default function App() {
   // it, so every tell agrees with what USE/R will do.
   // Position state (10 Hz tick) drives the re-renders,
   // so the tells appear and disappear as she moves
-  // and turns.
+  // and turns. THE ONE PICK (Adam's contract): the same
+  // object is stored to useWinnerRef — E, R, and the
+  // cauldron placement act on the stored pick, never a
+  // re-derivation, so the pill and the press cannot
+  // disagree.
   const useWinner = computeUseWinner();
+  useWinnerRef.current = useWinner;
 
   const availableStations: CraftingStation[] = [];
   // FACED-TARGET STATION FEED (Adam, 2026-10-30, final
