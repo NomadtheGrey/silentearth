@@ -262,3 +262,59 @@ export function cook(
   inventory.add(cooked, count);
   return { raw: item, cooked, count, method };
 }
+
+// ---------------------------------------------------------------------------
+// Charring — the stick's end, for the sigil (Adam, 2026-10-31)
+// ---------------------------------------------------------------------------
+
+/** What charring consumes: one snap-wood per stick charred. */
+export const CHAR_INPUT_ITEM: ItemId = ITEMS.snapWood;
+
+/**
+ * What charring grants: the charcoal stick — the glyph
+ * medium (the Stumpy Altar's glyph step today, Marks
+ * drawing later). The same item the station-'fire'
+ * recipe makes at the same 1:1 price: one system, two
+ * entrances (the crafting book and the fire's own
+ * panel).
+ */
+export const CHAR_OUTPUT_ITEM: ItemId = ITEMS.charcoalStick;
+
+export interface CharResult {
+  raw: ItemId;
+  charred: ItemId;
+  count: number;
+}
+
+/**
+ * Char the end of a stick at a lit fire. A sibling of
+ * cook(), NOT a cook path — charring is not cooking
+ * and never joins COOK_TRANSFORMATIONS (that table is
+ * the food contract isCookable drives). Checks before
+ * consuming anything: the fire must be lit and the
+ * snap-wood must be carried — a failed char touches
+ * nothing. 1:1 by removal then addition, and the
+ * charred stick is LIGHTER than the wood it came from,
+ * so a full pack still chars. No hunger gate: fire
+ * work, carrying cooking's standing exemption.
+ */
+export function charStick(
+  fire: FireState,
+  inventory: CraftingInventory,
+  count = 1,
+): CharResult {
+  if (!fire.lit) {
+    throw new Error('Cannot char a stick: the fire is not lit.');
+  }
+  if (!Number.isInteger(count) || count < 1) {
+    throw new Error('Char count must be a positive integer.');
+  }
+  if (inventory.count(CHAR_INPUT_ITEM) < count) {
+    throw new Error(
+      `Cannot char ${count} stick${count === 1 ? '' : 's'}: only ${inventory.count(CHAR_INPUT_ITEM)} snap wood carried.`,
+    );
+  }
+  inventory.remove(CHAR_INPUT_ITEM, count);
+  inventory.add(CHAR_OUTPUT_ITEM, count);
+  return { raw: CHAR_INPUT_ITEM, charred: CHAR_OUTPUT_ITEM, count };
+}
