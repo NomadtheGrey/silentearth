@@ -548,6 +548,14 @@ export class CompanionState {
 // authority (trap-catch's catchItemFor, which already
 // maps the colony kinds) — this table never names an
 // item, so no shell adapter inverts or aliases it.
+// PROBE LESSON (2026-10-31, UI's drive evidence): the
+// row's first prey-kind draft dropped the singular
+// 'mouse' — a real roster kind the old item-table had
+// hunted all along through the carcass inversion —
+// because the verification asserted "same result" over
+// the ITEMS NAMED, not over the HUNT SET THE WORLD
+// ACTUALLY SPAWNS. Equivalence claims about this table
+// get asserted over the spawnable prey set, every time.
 // Catches are delivered to home storage by Background's
 // engine. The hunt's cadence, the travelling-together
 // condition, and the real-prey consumption are the
