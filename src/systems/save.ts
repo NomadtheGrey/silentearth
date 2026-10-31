@@ -175,6 +175,7 @@ import type { SavedNameLook } from './name-sight';
 // mirror to drift, the placed-torch id lesson).
 import type { SavedRitualStaging } from './rituals';
 import type { SavedCompanion } from './companions';
+import type { SavedMarkProgress } from './fragments';
 import { FIRST_CHARM_ITEM, FIRST_CHARM_KIND } from './charms';
 import type { SavedAwakening } from './charms';
 import type { SavedQuestFlags } from './quests';
@@ -551,6 +552,9 @@ export interface SaveData {
   /** Companion records (touched individuals only);
    * [] for old saves. */
   companions: SavedCompanion[];
+  /** Fragment progress by mark (begun marks only);
+   * [] for old saves. */
+  fragments: SavedMarkProgress[];
   /** Placed tents (portable shelters); [] for old saves. */
   tents: SavedTent[];
   /** Partial-true-name look counts; [] for old saves. */
@@ -716,6 +720,12 @@ export interface SaveDraft {
    * absent = [] (no individual has been touched).
    */
   companions?: readonly SavedCompanion[];
+  /**
+   * Fragment progress, from FragmentState.snapshot()
+   * at save time. OPTIONAL, same pattern; absent = []
+   * (no mark has been begun).
+   */
+  fragments?: readonly SavedMarkProgress[];
   /**
    * Placed tents from the placed-tent source
    * (Background's entity snapshot, once it lands).
@@ -1002,6 +1012,13 @@ export function serializeSave(draft: SaveDraft): SaveData {
     // deserialize's problem, not serialize's.
     companions: (draft.companions ?? []).map((record) => ({
       ...record,
+    })),
+    // Fragments: written AS-IS (copies deep-copied with
+    // their marks). Invalid entries are deserialize's
+    // problem, not serialize's.
+    fragments: (draft.fragments ?? []).map((progress) => ({
+      ...progress,
+      copies: progress.copies.map((copy) => ({ ...copy })),
     })),
     // Tents: written AS-IS (positions verbatim, id when
     // the entity provides one — no filtering, no
@@ -1564,6 +1581,71 @@ export function deserializeSave(value: unknown): SaveData | null {
         });
       }
     }
+    // Fragments are optional on read: an old v1 save
+    // without them loads with fragments: []. Entries
+    // are validated field by field: a progress needs a
+    // mark; a copy needs a fragment id (copies dedupe
+    // by id across ALL marks — a noted fragment is
+    // noted once); completeness clamps into [0, 1];
+    // a missing seeking day repairs from the first
+    // copy's day, since the pursuit began when it
+    // landed.
+    const fragments: SavedMarkProgress[] = [];
+    if (Array.isArray(value.fragments)) {
+      const seenFragmentIds = new Set<string>();
+      for (const entry of value.fragments) {
+        if (!isRecord(entry)) continue;
+        if (
+          typeof entry.mark !== 'string' ||
+          entry.mark.length === 0 ||
+          fragments.some((p) => p.mark === entry.mark)
+        ) {
+          continue;
+        }
+        const copies: SavedMarkProgress['copies'] = [];
+        if (Array.isArray(entry.copies)) {
+          for (const copy of entry.copies) {
+            if (!isRecord(copy)) continue;
+            if (
+              typeof copy.fragmentId !== 'string' ||
+              copy.fragmentId.length === 0 ||
+              seenFragmentIds.has(copy.fragmentId)
+            ) {
+              continue;
+            }
+            seenFragmentIds.add(copy.fragmentId);
+            copies.push({
+              fragmentId: copy.fragmentId,
+              completeness:
+                typeof copy.completeness === 'number' &&
+                Number.isFinite(copy.completeness)
+                  ? Math.min(1, Math.max(0, copy.completeness))
+                  : 0,
+              day:
+                typeof copy.day === 'number' && Number.isFinite(copy.day)
+                  ? Math.floor(copy.day)
+                  : 0,
+            });
+          }
+        }
+        fragments.push({
+          mark: entry.mark,
+          copies,
+          seekingSinceDay:
+            typeof entry.seekingSinceDay === 'number' &&
+            Number.isFinite(entry.seekingSinceDay)
+              ? Math.floor(entry.seekingSinceDay)
+              : copies.length > 0
+                ? copies[0].day
+                : null,
+          completedDay:
+            typeof entry.completedDay === 'number' &&
+            Number.isFinite(entry.completedDay)
+              ? Math.floor(entry.completedDay)
+              : null,
+        });
+      }
+    }
     // Tents are optional on read, same leniency as
     // altars: an old v1 save without them loads with
     // tents: []. Entries pass through UNVALIDATED —
@@ -1723,6 +1805,7 @@ export function deserializeSave(value: unknown): SaveData | null {
       dimensionVisit,
       acquisitionOrder,
       companions,
+      fragments,
       tents,
       nameSight,
       stagings,
