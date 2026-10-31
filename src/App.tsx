@@ -6242,15 +6242,27 @@ export default function App() {
   // offering — diet order is the pick order). A bonded
   // companion is the panel's, never the pill's.
   type CreatureVerb = 'offer' | 'speak' | 'snatch';
+  // PERCH GATE (DEV, 2026-10-31): the height at which a
+  // squirrel is up a trunk, out of hand's reach — above
+  // it, no OFFER. DRAFT: 1.2 m, DEV's figure from
+  // Background's climb landing (the feed now carries y).
+  const PERCH_Y = 1.2;
   const creatureVerbFor = (animal: {
     id: string;
     kind: string;
+    y?: number;
   }): { verb: CreatureVerb; item?: ItemId } | null => {
     if (animal.kind === 'fish') return { verb: 'snatch' };
     const record = companionStateRef.current.recordFor(animal.id);
     if (record && record.bond !== 'none') return null;
     if (record && record.trust >= TRUST_FOR_BOND) {
       return { verb: 'speak' };
+    }
+    // A perched squirrel cannot be handed food — the
+    // gate is the offering's only: it still tags, can
+    // be looked at, and SPEAK above is untouched.
+    if (animal.kind === 'squirrel' && (animal.y ?? 0) >= PERCH_Y) {
+      return null;
     }
     if (isFeedable(animal.kind)) {
       const offered = dietFor(animal.kind).find(
