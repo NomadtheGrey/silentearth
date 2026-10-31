@@ -380,11 +380,14 @@ export type SnatchOutcome = 'caught' | 'spooked' | 'slipped' | 'too-hungry';
  * caller's runtime roll in [0, 1) (the trap precedent:
  * the seed law governs worldgen, not the moment).
  * Success grants fish-carcass by the harvest idiom —
- * addPartial, so what cannot be carried slips back
- * ('slipped': caught, unholdable, gone) rather than
- * vanishing into a full pack silently. Too-hungry
- * refuses (hand-harvest work, not trap collection —
- * DRAFT lean, the pin pass settles).
+ * addPartial — and a full pack grants nothing:
+ * 'slipped' means the lunge connected but her hands
+ * could not hold it, and NOTHING is consumed — the
+ * fish escapes and spooks, per the standing harvest
+ * law that capacity failure never consumes the world
+ * (DEV ruling, 2026-10-31). Too-hungry refuses
+ * (hand-harvest work, not trap collection — DRAFT
+ * lean, the pin pass settles).
  */
 export function snatchFish(
   inventory: PersonalInventory,
