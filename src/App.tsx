@@ -1668,6 +1668,7 @@ import {
   setCatBond,
   type CatCatchTable,
 } from './game/catRuntime';
+import { installGuideProbes } from './game/guideRuntime';
 import {
   collectTrapCatch,
   catchItemFor,
@@ -1938,6 +1939,7 @@ import {
   type CompanionStance,
   type SavedCompanion,
 } from './systems/companions';
+import { DiscoveryState } from './systems/discovery';
 import {
   CharmState,
   GroundhogRest,
@@ -2869,6 +2871,16 @@ export default function App() {
       bootSave?.companions ?? [],
     );
   }
+  // DISCOVERY STATE (the Raven Guide wiring, 2026-10-31):
+  // the shell owns the one DiscoveryState (Systems'
+  // module), constructed from the boot save's record —
+  // the same ref-lazy pattern. The guide's probes read
+  // it live, grove entry flips it, and snapshot() rides
+  // every saveNow.
+  const discoveryStateRef = useRef<DiscoveryState | null>(null);
+  if (discoveryStateRef.current === null) {
+    discoveryStateRef.current = new DiscoveryState(bootSave?.discovery);
+  }
   // The ritual site whose panel is open, by SITE ID
   // ('altar:<n>' or 'stump:x,z' — one selection for
   // both site kinds since the bone build; the panel +
@@ -3471,6 +3483,10 @@ export default function App() {
           // serialize writes them verbatim, load validates
           // and defaults []). Bonds survive refresh.
           companions: companionStateRef.current.snapshot(),
+          // DISCOVERY SAVE WIRING (the Raven Guide,
+          // 2026-10-31): the grove fact rides every save
+          // (the day she found it, or null while unfound).
+          discovery: discoveryStateRef.current.snapshot(),
           // QUEST SAVE WIRING: the live quest flags ride every
           // save (all-false serializes as all-false; absent on
           // old saves reads as all-false on load). Flags are
@@ -4787,6 +4803,15 @@ export default function App() {
       },
       sleepingAtHome: catSleepingAtHome,
     });
+    // GUIDE PROBES (Discovery wiring, 2026-10-31):
+    // Background's raven reads the one discovery fact
+    // through this seam and retires the moment it
+    // flips. The closure reads the ref live, so this
+    // one install stays live for the session (the cat
+    // probes' pattern).
+    installGuideProbes({
+      groveDiscovered: () => discoveryStateRef.current.groveDiscovered(),
+    });
     // FIRST-CHARM BOOT GRANT (outright, tier 1,
     // GRANT-TO-LIST since Systems 9e9a9dd): runs
     // AFTER the CharmState restore above, so a loaded
@@ -4880,6 +4905,32 @@ export default function App() {
           houses.length > 0 &&
           isNearStillWater(x, z, waters),
       );
+      // GROVE ENTRY DETECTION (Discovery wiring,
+      // 2026-10-31): the surface only (a cave visit's
+      // coordinates are not the world's), and only
+      // while the fact is unfound — markGroveDiscovered
+      // returns true ONLY on the flip, so the beat and
+      // the save fire exactly once, on entry. The site
+      // derives from the seed (memoized in sites.ts),
+      // so the per-tick test is a cache read + a
+      // distance check. DRAFT line.
+      if (
+        !dimensionState.isUnderground() &&
+        !discoveryStateRef.current.groveDiscovered()
+      ) {
+        const grove = groveSite(gen.seed, gen.findSpawn(), (gx, gz) =>
+          gen.weightsAt(gx, gz).dominant,
+        );
+        if (
+          groveContains(grove, x, z) &&
+          discoveryStateRef.current.markGroveDiscovered(
+            rendererRef.current?.snapshotSky()?.daysElapsed ?? 0,
+          )
+        ) {
+          showFeedback('The Grove — you have found it.', 'info');
+          saveNow();
+        }
+      }
     });
     const offLooked = bus.on('player:looked', () => {
       recomputeAnchors();
@@ -5088,6 +5139,28 @@ export default function App() {
         'info',
       );
       saveNow();
+    });
+    // GUIDE CALLS (Discovery wiring, 2026-10-31):
+    // feed-only for v1 — no audio engine, volume/mute
+    // setting, or gesture-unlock path exists in the
+    // tree, and a synthesized caw is a separate
+    // subsystem for Adam's word. The line is judged by
+    // her live distance to the bird (near / ahead /
+    // faint), and past the last band the call goes
+    // unvoiced; the engine's own cadence is the only
+    // throttle. The shell says 'raven' (Adam's word);
+    // the engine kind stays 'crow'. DRAFT lines.
+    const offGuideCall = bus.on('guide:call', ({ x, z }) => {
+      const player = playerRef.current;
+      if (!player) return;
+      const distance = Math.hypot(x - player.x, z - player.z);
+      if (distance <= 15) {
+        showFeedback('A raven calls from a nearby tree.', 'info');
+      } else if (distance <= 35) {
+        showFeedback('A raven calls ahead.', 'info');
+      } else if (distance <= 60) {
+        showFeedback('A raven calls, faintly.', 'info');
+      }
     });
     // CAT PROVISIONING DELIVERIES (Piece 3): the hunt's
     // goods land three ways, and the shell answers each.
@@ -5432,6 +5505,7 @@ export default function App() {
       offCompanionStance();
       offCompanionDeparted();
       offCatMet();
+      offGuideCall();
       offCatDelivered();
       offCatPresent();
       offCatGift();
