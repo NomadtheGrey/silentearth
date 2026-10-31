@@ -43,6 +43,14 @@ export interface BuildRecord {
 
 const ALL_RECORDS: BuildRecord[] = [
   {
+    merge: 'Merge #42',
+    pr: 81,
+    sha: 'b7808c5',
+    date: '2026-10-31',
+    what: 'Twelve commits, and the twelfth is this record itself. The recipe book stops hiding what she cannot yet make: every row stands, and a row whose station is absent speaks its lack in plain words \u2014 Needs a loom, Needs a kiln \u2014 with a Craftable here filter in the header for when she wants only what the ground around her allows. Facing a placed torch, E now picks it up (the window stays as the second door), and the torch\u2019s whole placing is one shared core \u2014 panel, right-click, and chip tap all set it down the same way, the old torch window retired. The grimoire is listed: one book of workings, and a second craft is refused at the ownership gate; and the writing desk wants oak now, two downed-oak lengths beside its snap-wood. A new old place stands in the country: the Water Tower, the thirteenth site \u2014 four legs and a tank high enough to walk beneath, a ladder up its approach side, a pump shed beside some of them; in some worlds it has fallen, tank and legs down in the grass where they dropped. Her spoken lines gather in one feed at the bottom of the screen and follow each other in order, so a refusal at her feet is never lost off the edge of the world again; the pill she reads and the E she presses now read one and the same pick, by construction; the loom gains its WEAVE pill; and a faced hive\u2019s reach runs a little longer, so the smoking torch at its base stays in frame while she works it. One rider is named as such: the roof fix crossed in during the landing window and rides on Adam\u2019s word \u2014 five roofs in the world (village, farmhouse, chapel, store, and the drowned mill) had their pitches inverted, valleys where their ridges belonged and chimneys floating over the dip; they are flipped to the barn\u2019s pairing, eaves at the wall tops and ridges high.',
+    why: 'Adam approved this scope piece by piece through the morning, and two of its pieces are his playtest made law: the loom pill, because he faced his own loom and found no verb on it, and the roof fix, because his photograph of the building with wings caught what no probe had \u2014 the measured inversion of a whole family of roofs. The Water Tower is the sites run continuing, thirteenth of the settled places. The batch lands as one so the book, the tower, the feed, and the mended roofs all arrive in the same walkable world; and the rider rides openly, on his amended word, rather than slipping in unnamed.',
+  },
+  {
     merge: 'Merge #41',
     pr: 80,
     sha: '24445e3',
