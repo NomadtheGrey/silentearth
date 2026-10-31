@@ -9296,6 +9296,20 @@ export default function App() {
         selectedFireId !== null ||
         selectedSiteId !== null
       ) {
+        // E CLOSES SITE WINDOWS (Adam's crafting-window
+        // ruling, extended uniformly by DEV, 2026-10-31):
+        // E opened this window (the site's OPEN / KRAFT
+        // press), so E closes it — the stump hub and the
+        // made-altar alike, one rule to learn. The close
+        // is the window's own (clear the selection + the
+        // ritual note, exactly what its close buttons do;
+        // the hub's view resets on the next selection).
+        // Other world menus keep dead-E; digits dispatch
+        // as before, below.
+        if (key === 'e' && !e.shiftKey && selectedSiteId !== null) {
+          setSelectedSiteId(null);
+          setRitualNote(null);
+        }
         if (/^[1-9]$/.test(key)) {
           dispatchWorldMenuDigit(Number(key));
         }
@@ -9312,6 +9326,34 @@ export default function App() {
         if (key === 'i') toggleInventoryPanel();
         else if (key === 'k') toggleCraftingPanel();
         else if (key === 'l') toggleCharmsPanel();
+        // E CLOSES THE CRAFTING WINDOW (Adam, 2026-10-31 —
+        // the flint lesson: while crafting was up, E did
+        // nothing at all). E is the window's own key now,
+        // closing the modal exactly as K does. (Site
+        // windows close from the world-menu branch above —
+        // E closes the window it opened, as a class.)
+        else if (key === 'e' && !e.shiftKey && craftingOpen) {
+          toggleCraftingPanel();
+        }
+        // INVENTORY LEAVES THE MODAL SET FOR THE HARVEST
+        // FAMILY (Adam, 2026-10-31): with the pack open,
+        // E and Shift+E belong to the world again — she
+        // harvests and watches the pickup land in the
+        // list (the outcome refresh re-renders it in
+        // place). The radio family is exclusive, so
+        // inventoryOpen here means inventory is THE open
+        // panel. R stays captured (DEV's call, 2026-10-31):
+        // its second-actions (sleep, site acts) firing
+        // past an open panel is a surprise class Adam
+        // didn't ask for. Every other key still waits.
+        else if (inventoryOpen && key === 'e' && !e.shiftKey) {
+          handleUseInteract();
+        } else if (inventoryOpen && key === 'e' && e.shiftKey) {
+          const scatter = harvestTargets.find(
+            (candidate) => candidate.kind === 'scatter',
+          );
+          if (scatter) setPendingRemoveTarget(scatter);
+        }
         return;
       }
       if (key === 'e' && !e.shiftKey) {
@@ -9364,7 +9406,8 @@ export default function App() {
   // pointer-locked — the same shared USE path as E. Gated on
   // a captured pointer (the locking click itself fires while
   // pointerLockElement is still null, so it never harvests),
-  // left button only, not paused, no modal/panel open (locked
+  // left button only, not paused, no modal/panel open except
+  // the pack (inventory left the modal set, 2026-10-31) (locked
   // clicks can't reach HUD buttons, but a keyboard-opened
   // Options while locked must still block harvest). No
   // conflict with player.onCanvasClick (unlocked →
@@ -9380,12 +9423,16 @@ export default function App() {
         introOpen ||
         pendingTrapRecipe ||
         pendingRemoveTarget !== null ||
-        inventoryOpen ||
         craftingOpen ||
         charmsOpen
       ) {
         return;
       }
+      // Inventory is NOT a gate here (Adam, 2026-10-31):
+      // the pack left the modal set for world interaction
+      // (see the keydown's panel-family branch), and this
+      // click rides the same USE path as E — the two
+      // inputs stay in parity.
       handleUseInteract();
     };
     window.addEventListener('click', onClick);
