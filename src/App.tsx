@@ -35,8 +35,10 @@
  * - Station presence: stationPresence (on the current
  *   generator at her position) carries TWO booleans —
  *   stump in range = workstation, placed loom in range =
- *   loom — and serves ONLY the StationPanel door and the
- *   station anchor now. Crafting's station feed is the
+ *   loom — and serves the station anchor (and, through
+ *   the memo below, availableStations) now; its HUD
+ *   presence card (StationPanel) retired 2026-10-31
+ *   (dialog audit claim 2). Crafting's station feed is the
  *   FACED target (the USE winner), not presence: Adam's
  *   station law retired the radius feed whole (see the
  *   derivation's own comment). Background's presence
@@ -495,7 +497,8 @@
  *   'workstation' id for canCraft; presence comes
  *   solely from stumps today, so the name is truthful).
  *   FOLLOW-UP, NOT CHANGED: when presence learns kinds,
- *   the header follows the kind per StationPanel's map.
+ *   the station naming follows the kind (the fold
+ *   dialog's heading carries stump naming today).
  * - STATION UI V1, LIVE (Adam, 2026-10-26): when she is at a
  *   stump, a station panel appears in the HUD stack naming it
  *   ("Tree stump") with one action: Craft, which opens the
@@ -514,6 +517,11 @@
  *   'stump' is the kind passed; the component maps all three
  *   brief-named kinds (stump / workstation / Stumpy) so the
  *   title follows from a prop when presence learns kinds.
+ *   RETIRED 2026-10-31 (dialog audit claim 2): the fold
+ *   (merge #41) gave the stump a better door — the dialog
+ *   E/K and the chip open — and this presence card's one
+ *   act duplicated it, so the card and StationPanel are
+ *   deleted; the stump's one door is the dialog.
  * - INVENTORY DROP, LIVE (Adam, 2026-10-26 — "for next
  *   pass", arrows 2026-10-28): every personal inventory
  *   row gains ↓ drop-one + ↓↓ drop-all arrows (storage
@@ -1700,7 +1708,7 @@ import { WitchHealth } from './ui/WitchHealth';
 import { HungerIndicator } from './ui/HungerIndicator';
 import { ForageHint } from './ui/ForageHint';
 import { ShelteredIndicator } from './ui/ShelteredIndicator';
-import { StationPanel } from './ui/StationPanel';
+
 import { WornList, type WornGarment } from './ui/WornList';
 import { UmbrellaIcon } from './ui/UmbrellaIcon';
 import { FireState, type FireChipStatus } from './ui/FireState';
@@ -5346,8 +5354,8 @@ export default function App() {
   // Station presence from the real query at her position
   // (see the header): stump in range = workstation, placed
   // loom in range = loom — BOTH booleans, not one context.
-  // Its consumers are the StationPanel door (below) and
-  // the stationAnchor derivation — NOTHING ELSE: the
+  // Its consumers are availableStations and the
+  // stationAnchor derivation — NOTHING ELSE: the
   // crafting feed derives from the faced USE winner
   // (Adam's station law; see the derivation below
   // useWinner), and Background's presence cleanup
@@ -10723,7 +10731,7 @@ export default function App() {
   // for the canCraft checks below. Workstation presence
   // comes solely from stumps today, so "tree stump" is
   // truthful now; when presence learns kinds later, this
-  // mapping follows the kind per StationPanel's map.
+  // mapping follows the kind.
   const stationNote =
     availableStations.length === 0
       ? 'No station nearby'
@@ -11794,33 +11802,14 @@ export default function App() {
               houseName={shelterHouseName}
             />
           </div>
-          {stationPresenceValue.workstation ? (
-            <div className="mt-2">
-              {/* STATION TITLE FOLLOWS THE UPGRADE
-                  (stumpy shell, 2026-10-28): the panel
-                  names the station she stands at — a
-                  stump that already carries the
-                  workstation addition reads 'Workbench'
-                  (the panel's own 'workstation' kind),
-                  a plain stump reads 'Tree stump'. */}
-              <StationPanel theme={lookThemes.world}
-                stationKind={
-                  nearestStump !== null &&
-                  stumpState.isWorkbench(nearestStump.x, nearestStump.z)
-                    ? 'workstation'
-                    : 'stump'
-                }
-                actions={[
-                  {
-                    id: 'craft',
-                    label: 'Craft',
-                    onSelect: () => openCraftingPanel(),
-                  },
-                ]}
-                comfortable={isTouch}
-              />
-            </div>
-          ) : null}
+          {/* THE STUMP'S ONE DOOR (dialog audit claim 2,
+              2026-10-31): the StationPanel presence card
+              that stood here is retired — its one act
+              (Craft) opened the same fold dialog E/K and
+              the stump chip already open through
+              openCraftingPanel, so the stump keeps ONE
+              door, the dialog, which names the stump in
+              its own heading. StationPanel is deleted. */}
           {placement ? (
             <div className="mt-2 rounded bg-black/45 px-2 py-1 text-sm">
               <p>Placing {placement.label} at your feet.</p>
