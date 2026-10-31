@@ -43,6 +43,14 @@ export interface BuildRecord {
 
 const ALL_RECORDS: BuildRecord[] = [
   {
+    merge: 'Merge #39',
+    pr: 78,
+    sha: '6b0f4df',
+    date: '2026-10-31',
+    what: 'Words that already exist in the world can now be taken up as her own. Some places stand armed with words \u2014 written, carved, left standing from before \u2014 and at such a place her panel offers what stands there: she adopts the words deliberately, and from then they are held, hers to use. Nothing is taken up by accident or by walking past: the adopting is an act, done in the open at an armed site, and what she holds is mirrored where she can see it, so she always knows which words are in her keeping before she relies on one.',
+    why: 'Adam\u2019s word: this one is significant enough to merge on its own. The world is full of words the old world left standing, and a found word honestly taken up is as much hers as a learned one. The batch carries the whole feature \u2014 the adopting machinery and the mirror of her holding, the panel flow and the arming of sites \u2014 so the act is complete the first time she tries it.',
+  },
+  {
     merge: 'Merge #38',
     pr: 77,
     sha: 'ff9cc28',
