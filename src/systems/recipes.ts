@@ -173,14 +173,18 @@ export const ITEMS = {
   sleepingBag: 'sleeping-bag',
   tent: 'tent',
   // Flowers (2026-10-28 — brainstorm doc, 13 new kinds + existing
-  // pink; 12 harvested kinds here, DRAFT for Adam's pin pass).
+  // pink; the 12 sibling kinds here, plus the Meadow Flower
+  // since Adam's 2026-10-31 flip — DRAFT for Adam's pin pass).
   // Pink lady slipper gets NO item in v1: the doc's scenery-only
   // option "needs nothing," and the rare-harvest option is a
   // potion-branch decision for the pin pass (lane-decided
-  // exclusion, flippable then). Existing pink 'flower' stays
-  // scenery-only, untouched. No recipes: flowers are harvested,
-  // not crafted. Yields (1 per harvest, proposed) ride
-  // Background's harvest table, not this registry.
+  // exclusion, flippable then). The existing pink 'flower' —
+  // the Meadow Flower — was scenery-only under the same
+  // decision until Adam flipped it (2026-10-31): it has an
+  // item now (meadow-flower), harvested like its siblings.
+  // No recipes: flowers are harvested, not crafted. Yields
+  // (1 per harvest, proposed) ride Background's harvest
+  // table, not this registry.
   whiteYarrow: 'white-yarrow',
   goldConeflower: 'gold-coneflower',
   purpleClover: 'purple-clover',
@@ -193,6 +197,11 @@ export const ITEMS = {
   woodViolet: 'wood-violet',
   creekIris: 'creek-iris',
   whiteWaterLily: 'white-water-lily',
+  // The Meadow Flower (Adam's flip, 2026-10-31): the
+  // pre-existing scenery 'flower', now a picked item like
+  // its siblings. No use yet — it joins the no-use census
+  // (decorative tag pending Adam's read of that list).
+  meadowFlower: 'meadow-flower',
 } as const;
 
 // ---------------------------------------------------------------------------

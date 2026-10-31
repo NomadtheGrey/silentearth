@@ -229,6 +229,7 @@ export const ITEM_WEIGHT_LB: Readonly<Record<string, number>> = {
   [ITEMS.woodViolet]: 0.1,
   [ITEMS.creekIris]: 0.1,
   [ITEMS.whiteWaterLily]: 0.1,
+  [ITEMS.meadowFlower]: 0.1,
   // 0.25 lb
   [ITEMS.dryKindling]: 0.25,
   [ITEMS.charcoalStick]: 0.25,
@@ -562,6 +563,7 @@ export const ITEM_DISPLAY_NAMES: Readonly<Record<string, string>> = {
   'wood-violet': 'Wood Violet',
   'creek-iris': 'Creek Iris',
   'white-water-lily': 'White Water Lily',
+  'meadow-flower': 'Meadow Flower',
 };
 
 /**
@@ -721,6 +723,7 @@ export const ITEM_DESCRIPTIONS: Readonly<Record<string, string>> = {
   'wood-violet': 'A small edible flower. Eat it — a bite of food.',
   'creek-iris': 'A picked creek iris. No known use yet.',
   'white-water-lily': 'A picked white water lily. No known use yet.',
+  'meadow-flower': 'A picked meadow flower. No known use yet.',
 };
 
 /**
