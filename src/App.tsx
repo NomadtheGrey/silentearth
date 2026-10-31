@@ -1715,7 +1715,12 @@ import {
 import { IntroModal } from './ui/IntroModal';
 import { RemoveConfirm } from './ui/RemoveConfirm';
 import { LeaveConfirm } from './ui/LeaveConfirm';
-import { InventoryPanel } from './ui/InventoryPanel';
+import {
+  InventoryPanel,
+  loadInventorySort,
+  saveInventorySort,
+  type InventorySortPreference,
+} from './ui/InventoryPanel';
 import { CraftingMenu } from './ui/CraftingMenu';
 import { ProximityHarvestButtons } from './ui/ProximityHarvestButtons';
 import { ObjectFeedback } from './ui/ObjectFeedback';
@@ -1732,7 +1737,9 @@ import type {
   FeedbackTone,
 } from './ui/types';
 import {
+  ITEM_CATEGORY_ORDER,
   PersonalInventory,
+  categoryFor,
   descriptionFor,
   displayNameFor,
   isCarryingGear,
@@ -2335,6 +2342,10 @@ function toInventoryItem(
     // quantityText/weightText pair; storage rows still
     // build their own quantityText rows elsewhere.
     titleMeta: titleMetaFor(stack.item, stack.quantity, inventory),
+    // Sort category (inventory sorting, 2026-10-31):
+    // Systems' table decides the Grouped bucket; the
+    // panel only prints it.
+    category: categoryFor(stack.item as ItemId),
     icon: stack.item === UMBRELLA_ITEM_ID ? <UmbrellaIcon /> : undefined,
     // Row note via the one rule (itemNoteFor, above):
     // primal bones read boneNote (raw: 'Needs a ritual
@@ -2379,6 +2390,12 @@ export default function App() {
       // Restored stacks arrive normalized (save.ts never persists
       // UPPER ids) and the constructor merges spelling duplicates.
       initial: bootSave?.inventory,
+      // Acquisition order restored with the pack (inventory
+      // sorting, 2026-10-31): the Recent sort's memory; the
+      // constructor keeps only kinds actually held, so a
+      // legacy save's absence (undefined) seeds empty and
+      // gains rebuild it.
+      acquisitionOrder: bootSave?.acquisitionOrder,
     });
   }
   const inventory = inventoryRef.current;
@@ -3076,6 +3093,19 @@ export default function App() {
       `Carrying ${formatLb(inventory.usedLb())} lb / ${formatLb(inventory.capacityLb())} lb`,
   );
 
+  // Inventory sort preference (Adam, 2026-10-31): a
+  // per-device UI pref in the shared settings key (the
+  // font/look pattern) — NEVER in the world save. The
+  // FACTS it orders by are Systems' (acquisition order +
+  // category table, read live at render below); the shell
+  // owns only the preference and its persistence.
+  const [inventorySort, setInventorySort] =
+    useState<InventorySortPreference>(loadInventorySort);
+  const handleInventorySortChange = (pref: InventorySortPreference) => {
+    setInventorySort(pref);
+    saveInventorySort(pref);
+  };
+
   const busTargetsRef = useRef<BusHarvestTarget[]>([]);
   const transitionTimerRef = useRef<number | undefined>(undefined);
   const feedbackCounterRef = useRef(0);
@@ -3175,6 +3205,11 @@ export default function App() {
             ? { x: player.x, z: player.z }
             : meta.position,
           inventory: inventory.stacksSnapshot(),
+          // ACQUISITION ORDER (inventory sorting,
+          // 2026-10-31): the Recent sort's memory rides
+          // every save (Systems' field; absent in legacy
+          // documents, which load as []).
+          acquisitionOrder: inventory.acquisitionOrder(),
           hunger: hunger.value(),
           worn: wardrobe.wornItemIds(),
           // WORLD-STATE SAVE WIRING: ids + lighting ride
@@ -11063,6 +11098,11 @@ export default function App() {
                 : undefined
             }
             capacityText={capacityText}
+            sortMode={inventorySort.mode}
+            sortReversed={inventorySort.reversed}
+            onSortChange={handleInventorySortChange}
+            recencyOrder={inventory.acquisitionOrder()}
+            categoryOrder={ITEM_CATEGORY_ORDER}
             onClose={() => setInventoryOpen(false)}
             comfortable={isTouch}
           />

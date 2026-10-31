@@ -51,6 +51,13 @@ export interface InventoryItem {
   titleMeta?: string;
   /** Caller-supplied short note, e.g. a category or origin. Optional. */
   note?: string;
+  /**
+   * Caller-supplied sort category (inventory sorting,
+   * 2026-10-31): the Grouped order's bucket for this item,
+   * from the systems category table. Display data only —
+   * the Grouped heading prints it verbatim. Optional.
+   */
+  category?: string;
   /** Caller-supplied glyph, rendered before the name. Optional. */
   icon?: ReactNode;
 }
