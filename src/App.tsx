@@ -5923,6 +5923,15 @@ export default function App() {
     }
   };
 
+  // THE ALTAR GATE LINE (Adam, 2026-10-31 — 'we
+  // shouldn't be allowed to use a ritual until we place
+  // our items'): one DRAFT line spoken by every surface
+  // the grade gate touches — the hub's gated Ritual door
+  // renders it as its body, and the staging guard below
+  // sets it as the ritual note.
+  const RITUAL_ALTAR_REFUSAL =
+    "A ritual wants an altar, and this stump isn't one yet. The making — stones, glyph, candle — is under Upgrade.";
+
   // RITUAL STAGING, ALTAR + STUMP SITES (bone build):
   // made altars carry ids + chips + positions; stumps
   // carry chips from Background's stumpPositions
@@ -5931,6 +5940,30 @@ export default function App() {
     const site = sitePositionFor(siteId);
     if (!site) {
       setRitualNote('No site there.');
+      return;
+    }
+    // GRADE GATE (Adam, 2026-10-31, same ruling): staging
+    // requires ALTAR-GRADE ground — siteGrade 2: an
+    // altar by kind, or a stump carrying the completing
+    // 'altar' addition (all three items placed). A plain
+    // or part-made stump reads grade 1 and refuses HERE,
+    // in the shell's one staging path, so no door (panel
+    // rows, digit dispatch, any caller) can stage below
+    // the altar. Offering and Speak act on an existing
+    // staging and are not gated — a staging that exists
+    // (a pre-rule save is the only way one can sit at
+    // grade 1; additions never come off) can still be
+    // completed, and the state-based completion check
+    // fires regardless.
+    const gateAdditions =
+      site.kind === 'stump'
+        ? (stumpState
+            .snapshot()
+            .find((r) => r.x === site.x && r.z === site.z)
+            ?.additions ?? [])
+        : [];
+    if (siteGrade(site.kind, gateAdditions) < 2) {
+      setRitualNote(RITUAL_ALTAR_REFUSAL);
       return;
     }
     // Composition contract (DEV): the shell checks the
@@ -10640,6 +10673,38 @@ export default function App() {
                       Nothing to add here.
                     </p>
                   )}
+                </section>
+              ) : selectedSiteGrade !== 2 ? (
+                // GRADE GATE (Adam, 2026-10-31): the
+                // Ritual door stays VISIBLE at a plain
+                // stump, gated — its body is the refusal,
+                // naming the want (an altar) and pointing
+                // at the Upgrade door beside it.
+                // Discoverability over absence. The
+                // staging handler guards itself too, so
+                // the gate is not this rendering's word
+                // alone. (The grade derivation reads 2
+                // only for altar-grade ground; a completed
+                // stump takes the live panel below.)
+                <section
+                  aria-label={`${selectedSiteLabel} ritual`}
+                  className={
+                    'w-72 max-h-[70vh] overflow-y-auto rounded-2xl p-2 ' +
+                    UI_THEMES[lookThemes.world].panel
+                  }
+                >
+                  <h3 className="text-sm font-medium">
+                    {selectedSiteLabel}
+                  </h3>
+                  <p className="mt-2 text-sm text-stone-200">
+                    {RITUAL_ALTAR_REFUSAL}
+                  </p>
+                  {ritualNote !== null &&
+                  ritualNote !== RITUAL_ALTAR_REFUSAL ? (
+                    <p className="mt-1 text-xs text-stone-300">
+                      {ritualNote}
+                    </p>
+                  ) : null}
                 </section>
               ) : (
               <RitualPanel theme={lookThemes.world}
