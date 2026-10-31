@@ -131,15 +131,18 @@ export interface CloudSyncNote {
 export interface CloudSyncState {
   enabled: boolean;
   wordsStored: boolean;
+  /** True while an adopted identity's mirroring is held (adoptWords). */
+  mirrorHeld: boolean;
   lastMirror: CloudSyncNote | null;
 }
 
 /**
  * Mirror outcome. mirrored:false + ok:true = no PUT was
  * needed/performed by this call and nothing failed: cloud
- * off, the record already mirrored identically, or the
- * record coalesced into the pending flush (see the
- * coalescing note at mirrorSave).
+ * off, an adoption hold not yet armed, the record already
+ * mirrored identically, or the record coalesced into
+ * the pending flush (see the coalescing note at
+ * mirrorSave).
  */
 export interface MirrorResult {
   mirrored: boolean;
@@ -174,6 +177,15 @@ const CLOUD_PARK_KEY = 'silentearth.savePark.v1';
 interface CloudWordsBlob {
   words: [string, string, string] | null;
   enabled: boolean;
+  /**
+   * The adoption hold (DEV ruling, 2026-10-31): true
+   * only for an ADOPTED identity whose mirroring has
+   * not yet been deliberately armed (see adoptWords /
+   * armMirror). Blobs written before the field existed
+   * read as unheld — legacy identities keep the
+   * behavior their own opt-in earned.
+   */
+  mirrorHeld: boolean;
 }
 
 function defaultFetch(
@@ -219,6 +231,7 @@ function readWordsBlob(): CloudWordsBlob | null {
     return {
       words: words as [string, string, string] | null,
       enabled: record['enabled'] === true,
+      mirrorHeld: record['mirrorHeld'] === true,
     };
   } catch {
     return null;
@@ -324,6 +337,10 @@ export function turnOn(words: CloudWords): CloudAction {
   const stored = writeWordsBlob({
     words: [words[0], words[1], words[2]],
     enabled: true,
+    // Generation / first entry are this device's own
+    // deliberate enable — mirroring is NOT held (the
+    // hold belongs to adoption alone; see adoptWords).
+    mirrorHeld: false,
   });
   return stored
     ? { ok: true }
@@ -338,7 +355,11 @@ export function turnOff(): CloudAction {
   // A pending coalesced mirror dies with the opt-in: it
   // must not PUT after the player turned cloud off.
   cancelPendingMirror();
-  const cleared = writeWordsBlob({ words: null, enabled: false });
+  const cleared = writeWordsBlob({
+    words: null,
+    enabled: false,
+    mirrorHeld: false,
+  });
   try {
     globalThis.localStorage?.removeItem(CLOUD_SYNC_KEY);
   } catch {
@@ -374,11 +395,119 @@ export function enterWords(input: string): CloudAction {
   return turnOn(canonical.words);
 }
 
+/** True while an adopted identity's mirroring is held. */
+function mirrorHeldNow(): boolean {
+  const blob = readWordsBlob();
+  return blob !== null && blob.enabled && blob.mirrorHeld === true;
+}
+
+/**
+ * ADOPT an existing word set as this browser's
+ * identity (Adam, 2026-10-31: "get the words first to
+ * where i can set them from the previous saves").
+ * One shelf everywhere: the typed set REPLACES any
+ * locally generated set, so listing and bringing here
+ * address the same shelf as everywhere else.
+ *
+ * Validation is the bring-here lookup's own machinery
+ * (canonicalizeWords), storage is the same blob —
+ * nothing forked. Adopting the set this browser
+ * already holds (and has enabled) is a no-op success:
+ * no state is touched, a live pending mirror under
+ * the same identity survives.
+ *
+ * ADOPTION NEVER MIRRORS (DEV ruling, 2026-10-31).
+ * The identity is stored with mirroring HELD
+ * (mirrorHeld): listing and bringing work at once,
+ * but this device's local world is not written to the
+ * adopted shelf by the adoption, by any routine
+ * autosave, or by a pagehide — a stale local world on
+ * a borrowed machine must never overwrite the real
+ * save. Mirroring arms only on a deliberate act (see
+ * armMirror). The hygiene matches the ruling:
+ * a pending coalesced mirror under the old identity
+ * is discarded HERE, at adoption; the mirror dedupe
+ * key is deliberately LEFT as-is — suppression rides
+ * on the hold, and the key resets at arming, when the
+ * current record must truly reach the new shelf. The
+ * old shelf's sync note is cleared (it would lie
+ * about the new one). The local save is never read,
+ * moved, or written by any of this.
+ */
+export function adoptWords(input: string): CloudAction {
+  const canonical = canonicalizeWords(input);
+  if (canonical.ok === false) return { ok: false, reason: canonical.reason };
+  const stored = getWords();
+  if (
+    stored !== null &&
+    isCloudEnabled() &&
+    stored.join(' ') === canonical.words.join(' ')
+  ) {
+    return { ok: true };
+  }
+  const wrote = writeWordsBlob({
+    words: [canonical.words[0], canonical.words[1], canonical.words[2]],
+    enabled: true,
+    mirrorHeld: true,
+  });
+  if (wrote === false) {
+    return {
+      ok: false,
+      reason: 'Could not store the words on this device.',
+    };
+  }
+  cancelPendingMirror();
+  try {
+    globalThis.localStorage?.removeItem(CLOUD_SYNC_KEY);
+  } catch {
+    // Clearing the note is best-effort; the adoption is what matters.
+  }
+  return { ok: true };
+}
+
+/**
+ * ARM mirroring for the current identity — the
+ * deliberate act that releases an adoption hold. The
+ * call sites are deliberate by construction: the
+ * shell calls this when a bring/restore COMPLETES
+ * under the adopted identity (this device's world is
+ * then the shelf's own world, and its mirroring back
+ * is content-identical — safe by construction), and
+ * the panel's post-adoption button calls it as the
+ * player's explicit save step.
+ *
+ * Arming also resets the mirror dedupe key: a record
+ * already mirrored to a PREVIOUS shelf must not read
+ * as "already mirrored" here — the current record
+ * truly reaches this shelf on the next save. An
+ * explicit-words manual sync (mirrorSave with words)
+ * is one deliberate WRITE and does not come through
+ * here: it never arms by itself. Idempotent; refuses
+ * plainly when no words are stored.
+ */
+export function armMirror(): CloudAction {
+  const blob = readWordsBlob();
+  if (blob === null || blob.words === null) {
+    return { ok: false, reason: 'No cloud words on this device.' };
+  }
+  lastMirroredKey = null;
+  if (blob.mirrorHeld !== true) return { ok: true };
+  const wrote = writeWordsBlob({
+    words: blob.words,
+    enabled: blob.enabled,
+    mirrorHeld: false,
+  });
+  return wrote
+    ? { ok: true }
+    : { ok: false, reason: 'Could not store the words on this device.' };
+}
+
 /** Sync state for UI's Settings display. */
 export function syncState(): CloudSyncState {
   return {
     enabled: isCloudEnabled(),
     wordsStored: getWords() !== null,
+    mirrorHeld: mirrorHeldNow(),
     lastMirror: readSyncNote(),
   };
 }
@@ -882,6 +1011,14 @@ export async function mirrorSave(
   try {
     const words = opts?.words ?? getWords();
     if (words === null || (opts?.words === undefined && !isCloudEnabled())) {
+      return { mirrored: false, ok: true };
+    }
+    if (opts?.words === undefined && mirrorHeldNow()) {
+      // ADOPTION HOLD (DEV ruling, 2026-10-31): the identity
+      // was adopted and mirroring is not yet armed — routine
+      // mirroring is a no-op here (no pend, no PUT) until a
+      // deliberate act arms it (armMirror). Explicit-words
+      // calls are deliberate writes and pass this gate.
       return { mirrored: false, ok: true };
     }
     const fetchFn = opts?.fetchFn ?? defaultFetch;
