@@ -46,8 +46,13 @@
  * (lowest) multiplier of any house in range.
  */
 
-import { ITEMS, type ItemId } from './recipes';
-import { POUND_UNITS_PER_LB, weightUnits } from './inventory';
+import { ITEMS, RECIPES, type ItemId, type Recipe } from './recipes';
+import {
+  POUND_UNITS_PER_LB,
+  normalizeItemId,
+  weightUnits,
+} from './inventory';
+import type { CraftingInventory } from './crafting';
 
 // ---------------------------------------------------------------------------
 // House types, storage, protection
@@ -100,6 +105,120 @@ export function homeStorageCapacity(house: ItemId): number {
     throw new Error(`No home storage capacity for ${house}: not a house.`);
   }
   return capacity;
+}
+
+// ---------------------------------------------------------------------------
+// The home-screen Upgrade door (Adam, 2026-10-31: an
+// upgrade needs no stump or workstation, so the button
+// belongs on the home screen). The transition machinery
+// is the engine's (upgradeHouse in place, same house id,
+// contents ride); this section is the PRICE: the next
+// rung's existing recipe, consumed from her pack with
+// nothing granted — no transient house item, no second
+// price list. The first lean-to still comes via Crafting
+// + placement; this door only climbs from a standing
+// house. No hunger or station gates: home acts (storing,
+// sleeping) are not gated, and the rung recipes carry no
+// station of their own.
+// ---------------------------------------------------------------------------
+
+/** The ladder's rungs, as recipe ids, lowest first. */
+export const HOME_LADDER_RUNGS: readonly string[] = [
+  'primitive-lean-to',
+  'thatch-hut',
+  'woven-cottage',
+  'small-wooden-hut',
+];
+
+/**
+ * The rung a house item stands on (its recipe id), or
+ * null for a non-house. Wattle-and-daub and woven
+ * cottage are one stage, so both items read the
+ * 'woven-cottage' rung.
+ */
+export function homeRungFor(house: ItemId): string | null {
+  const item = normalizeItemId(house);
+  if (item === ITEMS.wattleAndDaubHut || item === ITEMS.wovenCottage) {
+    return 'woven-cottage';
+  }
+  return HOME_LADDER_RUNGS.includes(item) ? item : null;
+}
+
+/**
+ * The next rung up from a house item: its rung id and
+ * the recipe that prices it. Null at the top rung and
+ * for non-houses (the screen shows no button for either).
+ */
+export function nextHomeUpgrade(
+  house: ItemId,
+): { rung: string; recipe: Recipe } | null {
+  const rung = homeRungFor(house);
+  if (rung === null) {
+    return null;
+  }
+  const next = HOME_LADDER_RUNGS[HOME_LADDER_RUNGS.indexOf(rung) + 1];
+  if (next === undefined) {
+    return null;
+  }
+  const recipe = RECIPES.find((r) => r.id === next);
+  return recipe ? { rung: next, recipe } : null;
+}
+
+export type HomeUpgradeResult =
+  | {
+      ok: true;
+      /** The rung climbed from (recipe id). */
+      from: string;
+      /** The rung climbed to (recipe id). */
+      to: string;
+      /** What the price took, in recipe order. */
+      consumed: { item: ItemId; quantity: number }[];
+    }
+  | {
+      ok: false;
+      code: 'unknown-house' | 'top-rung' | 'missing';
+      /** On 'missing': every short ingredient, needed vs held. */
+      missing?: { item: ItemId; needed: number; held: number }[];
+    };
+
+/**
+ * Pay the next rung's price from her pack. Every
+ * ingredient is checked before anything is consumed
+ * (executeCraft's refusal hygiene): a refusal spends
+ * nothing. On success the price is out of the pack and
+ * the caller runs the engine's in-place upgrade to the
+ * `to` rung's type; this function grants no item.
+ */
+export function consumeHomeUpgradePrice(
+  house: ItemId,
+  inventory: CraftingInventory,
+): HomeUpgradeResult {
+  const from = homeRungFor(house);
+  if (from === null) {
+    return { ok: false, code: 'unknown-house' };
+  }
+  const next = nextHomeUpgrade(house);
+  if (next === null) {
+    return { ok: false, code: 'top-rung' };
+  }
+  const missing: { item: ItemId; needed: number; held: number }[] = [];
+  for (const ingredient of next.recipe.ingredients) {
+    const item = normalizeItemId(ingredient.item);
+    const held = inventory.count(item);
+    if (held < ingredient.quantity) {
+      missing.push({ item, needed: ingredient.quantity, held });
+    }
+  }
+  if (missing.length > 0) {
+    return { ok: false, code: 'missing', missing };
+  }
+  const consumed: { item: ItemId; quantity: number }[] = [];
+  for (const ingredient of next.recipe.ingredients) {
+    const item = normalizeItemId(ingredient.item);
+    inventory.remove(item, ingredient.quantity);
+    consumed.push({ item, quantity: ingredient.quantity });
+  }
+  return { ok: true, from, to: next.rung, consumed };
 }
 
 export function shelterMultiplierFor(house: ItemId): number {
