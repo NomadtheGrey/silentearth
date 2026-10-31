@@ -137,9 +137,12 @@ export type CompanionOrigin = 'wild' | 'found';
  * Is this individual feral — untamable, forever? A
  * pure function of its stable id (Background's
  * creature id): same id, same answer, across saves
- * and sessions. The FOUND origin is exempt by
- * construction — the hearth resident's bond cannot be
- * stillborn.
+ * and sessions. The FOUND origin reads false — and
+ * for the cat that is not an exemption: the feral
+ * distinction does not reach the cat at all (Adam:
+ * "They're already like that — both wild and tame,
+ * yet neither"). The category is a wild-road fact,
+ * and the cat was never on that road.
  */
 export function isFeral(creatureId: string, origin: CompanionOrigin = 'wild'): boolean {
   if (origin === 'found') {
@@ -290,8 +293,9 @@ export class CompanionState {
    * the wild road. Idempotent — an existing record
    * (whatever its trust or bond) is returned
    * unchanged. The found origin carries its laws with
-   * it: feral-exempt by construction (isFeral), and
-   * stance null — the cat takes no commands.
+   * it: outside the feral distinction entirely
+   * (isFeral), and stance null — the cat takes no
+   * commands.
    */
   seedFoundCat(creatureId: string): SavedCompanion {
     const existing = this.records.get(creatureId);
@@ -389,10 +393,13 @@ export class CompanionState {
       return { ok: false, code: 'trust' };
     }
     // The name gate guards the WILD road: a stranger's
-    // name must be awakened and spoken. The FOUND cat
-    // is waived through it — she knows the resident's
-    // name the way you know the name of what lives at
-    // your hearth; there is no cat bone to awaken.
+    // name must be awakened and spoken. The found road
+    // never passes that gate — acquaintance is the
+    // cat's road (Adam, ratifying build 2: "We don't
+    // need a cat bone. Cats domesticated themselves.").
+    // No cat Waking exists or will be invented; she
+    // knows the resident the way you know what lives
+    // at your hearth.
     if (!nameKnown && record.origin !== 'found') {
       return { ok: false, code: 'name' };
     }
