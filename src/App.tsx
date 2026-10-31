@@ -1881,6 +1881,11 @@ import {
   type SkyFacts,
 } from './systems/rituals';
 import {
+  CompanionState,
+  type CompanionStance,
+  type SavedCompanion,
+} from './systems/companions';
+import {
   CharmState,
   GroundhogRest,
   WeatherWarning,
@@ -1905,6 +1910,7 @@ import { CrowArrows } from './ui/CrowArrows';
 import { RitualPanel } from './ui/RitualPanel';
 import { walkAwayShouldClose } from './ui/walkAway';
 import { CharmsPanel } from './ui/CharmsPanel';
+import { CompanionsPanel } from './ui/CompanionsPanel';
 import { StormWarning } from './ui/StormWarning';
 import { WakeNotice } from './ui/WakeNotice';
 
@@ -2559,6 +2565,26 @@ export default function App() {
   const [inventoryOpen, setInventoryOpen] = useState(false);
   const [craftingOpen, setCraftingOpen] = useState(false);
   const [charmsOpen, setCharmsOpen] = useState(false);
+  // COMPANIONS (build 1, 2026-10-31): the fourth panel —
+  // a radio-family member like its siblings, with one
+  // difference: its DOOR exists only while she has a
+  // companion (see the button rows + hasBondedCompanion).
+  const [companionsOpen, setCompanionsOpen] = useState(false);
+  // The panel's mirror of CompanionState (records are
+  // ref-state; the mirror is what renders). Refreshed at
+  // boot and after every companion act.
+  const [companionRecords, setCompanionRecords] = useState<
+    SavedCompanion[]
+  >([]);
+  // Per-row note lines keyed by creatureId — the cat's
+  // theater lands here (CompanionsPanel renders them
+  // under the row). The All-row's note is its own state.
+  const [companionNotes, setCompanionNotes] = useState<
+    Record<string, string>
+  >({});
+  const [companionAllNote, setCompanionAllNote] = useState<string | null>(
+    null,
+  );
   const [selectedCharmKind, setSelectedCharmKind] = useState<string | null>(
     null,
   );
@@ -2728,6 +2754,18 @@ export default function App() {
   // the book (the steps), never from a snapshot.
   const stagingBookRef = useRef(new StagingBook());
   const charmStateRef = useRef(new CharmState());
+  // COMPANION STATE (build 1, 2026-10-31): the shell owns
+  // the one CompanionState (Systems' module), constructed
+  // from the boot save's records — the ref-lazy pattern of
+  // the inventory/hunger blocks. Mutations ride
+  // companionRecords (the mirror) to the panel, and
+  // snapshot() rides every saveNow.
+  const companionStateRef = useRef<CompanionState | null>(null);
+  if (companionStateRef.current === null) {
+    companionStateRef.current = new CompanionState(
+      bootSave?.companions ?? [],
+    );
+  }
   // The ritual site whose panel is open, by SITE ID
   // ('altar:<n>' or 'stump:x,z' — one selection for
   // both site kinds since the bone build; the panel +
@@ -3315,6 +3353,12 @@ export default function App() {
           // refresh.
           stagings: stagingBookRef.current.snapshot(),
           awakenings: charmStateRef.current.snapshot(),
+          // COMPANIONS SAVE WIRING (build 1, 2026-10-31):
+          // the touched individuals' records ride every
+          // save as-is (Systems' SavedCompanion shape;
+          // serialize writes them verbatim, load validates
+          // and defaults []). Bonds survive refresh.
+          companions: companionStateRef.current.snapshot(),
           // QUEST SAVE WIRING: the live quest flags ride every
           // save (all-false serializes as all-false; absent on
           // old saves reads as all-false on load). Flags are
@@ -4502,6 +4546,9 @@ export default function App() {
     setPlacedFires(fireState.snapshot());
     setPlacedTorches(torchState.snapshot());
     setPlacedAltars(altarState.snapshot());
+    // COMPANIONS boot re-read: the panel's mirror starts
+    // from the constructed state's records.
+    setCompanionRecords(companionStateRef.current.snapshot());
     // FIRST-CHARM BOOT GRANT (outright, tier 1,
     // GRANT-TO-LIST since Systems 9e9a9dd): runs
     // AFTER the CharmState restore above, so a loaded
@@ -5780,6 +5827,25 @@ export default function App() {
   // contract — kind + tier + note in awakening order;
   // App maps kind to its display name. Derived live each
   // render, so the panel always opens on the current list.
+  // COMPANIONS DOOR RULE (build 1, 2026-10-31): the door
+  // exists only while a bonded companion stands. The
+  // panel's rows are the bonded records, shaped for the
+  // component (kind label = the capitalized kind, the
+  // AnimalTag precedent — no name table invented).
+  const bondedCompanions = companionRecords.filter(
+    (record) => record.bond !== 'none',
+  );
+  const hasBondedCompanion = bondedCompanions.length > 0;
+  const companionRows = bondedCompanions.map((record) => ({
+    creatureId: record.creatureId,
+    kindLabel:
+      record.kind.length > 0
+        ? record.kind.charAt(0).toUpperCase() + record.kind.slice(1)
+        : record.kind,
+    bond: record.bond as 'companion' | 'familiar',
+    stance: record.stance,
+    isCat: record.kind === 'cat',
+  }));
   const charmEntries = listCharms(charmStateRef.current).map((charm) => ({
     ...charm,
     display: boneDisplayFor(charm.kind),
@@ -5799,6 +5865,7 @@ export default function App() {
     setInventoryOpen(true);
     setCraftingOpen(false);
     setCharmsOpen(false);
+    setCompanionsOpen(false);
   };
   const openCraftingPanel = () => {
     // THE FOLD: opening the dialog while a stump (plain
@@ -5817,6 +5884,7 @@ export default function App() {
     setCraftingOpen(true);
     setInventoryOpen(false);
     setCharmsOpen(false);
+    setCompanionsOpen(false);
   };
   // E / touch USE / the name chip at a stump: open the
   // dialog on that stump's context, Craft door first.
@@ -5837,6 +5905,89 @@ export default function App() {
     if (charmsOpen) setCharmsOpen(false);
     else openCharmsPanel();
   };
+  const toggleCompanionsPanel = () => {
+    if (companionsOpen) setCompanionsOpen(false);
+    else openCompanionsPanel();
+  };
+  const openCompanionsPanel = () => {
+    setCompanionsOpen(true);
+    setInventoryOpen(false);
+    setCraftingOpen(false);
+    setCharmsOpen(false);
+  };
+
+  // COMPANION ACTS (build 1, 2026-10-31): the panel's
+  // three verbs against Systems' CompanionState. Every
+  // act refreshes the mirror and saves — the state is
+  // the record; the panel only ever reads the mirror.
+  const refreshCompanions = () => {
+    setCompanionRecords(companionStateRef.current.snapshot());
+  };
+  // THE CAT'S LINES (Adam, 2026-10-31 — the theater):
+  // a stance press at a cat comes back with Systems'
+  // typed 'cat' refusal, and the panel plays one of
+  // these, rolled per press. DRAFT wording.
+  const CAT_NONCOMPLIANCE_LINES = [
+    'The cat looks away.',
+    'The cat grooms a paw.',
+    'The cat saunters off, hunting.',
+    'The cat slow-blinks.',
+  ];
+  const rollCatLine = (): string =>
+    CAT_NONCOMPLIANCE_LINES[
+      Math.floor(Math.random() * CAT_NONCOMPLIANCE_LINES.length)
+    ];
+  const handleCompanionStance = (
+    creatureId: string,
+    stance: CompanionStance,
+  ) => {
+    const result = companionStateRef.current.setStance(creatureId, stance);
+    if (result.ok === false && result.code === 'cat') {
+      setCompanionNotes((current) => ({
+        ...current,
+        [creatureId]: rollCatLine(),
+      }));
+      return;
+    }
+    if (result.ok === true) {
+      setCompanionNotes((current) => {
+        const next = { ...current };
+        delete next[creatureId];
+        return next;
+      });
+      refreshCompanions();
+      saveNow();
+    }
+    // 'unknown' / 'unbonded' cannot arise from the
+    // panel (its rows are bonded records) — no line is
+    // invented for an impossible code.
+  };
+  const handleCompanionStanceAll = (stance: CompanionStance) => {
+    let catPresent = false;
+    for (const record of companionStateRef.current.snapshot()) {
+      if (record.bond === 'none') continue;
+      if (record.kind === 'cat') {
+        catPresent = true;
+        continue;
+      }
+      companionStateRef.current.setStance(record.creatureId, stance);
+    }
+    setCompanionAllNote(catPresent ? rollCatLine() : null);
+    refreshCompanions();
+    saveNow();
+  };
+  const handleCompanionRelease = (creatureId: string) => {
+    const removed = companionStateRef.current.release(creatureId);
+    if (removed === null) return;
+    refreshCompanions();
+    saveNow();
+    // The last bond going closes the panel — its door
+    // is gone with the list it would show.
+    const anyBonded = companionStateRef.current
+      .snapshot()
+      .some((record) => record.bond !== 'none');
+    if (!anyBonded) setCompanionsOpen(false);
+  };
 
   // Open the charms panel with a valid selection: keep
   // the current one if it is still listed (awakenings
@@ -5846,6 +5997,7 @@ export default function App() {
     setCharmsOpen(true);
     setInventoryOpen(false);
     setCraftingOpen(false);
+    setCompanionsOpen(false);
     setSelectedCharmKind((current) =>
       charmEntries.some((charm) => charm.kind === current)
         ? current
@@ -8171,6 +8323,7 @@ export default function App() {
       inventoryOpen ||
       craftingOpen ||
       charmsOpen ||
+      companionsOpen ||
       placement !== null ||
       selectedSiteId !== null ||
       optionsOpen ||
@@ -8239,6 +8392,7 @@ export default function App() {
       inventoryOpen ||
       craftingOpen ||
       charmsOpen ||
+      companionsOpen ||
       placement !== null ||
       selectedSiteId !== null ||
       optionsOpen ||
@@ -8361,6 +8515,10 @@ export default function App() {
         setRitualNote(null);
         return;
       }
+      if (companionsOpen) {
+        setCompanionsOpen(false);
+        return;
+      }
       if (charmsOpen) {
         setCharmsOpen(false);
         return;
@@ -8390,6 +8548,7 @@ export default function App() {
     selectedCauldronHearthId,
     selectedSiteId,
     charmsOpen,
+    companionsOpen,
     craftingOpen,
     inventoryOpen,
     firstRunDone,
@@ -8466,6 +8625,10 @@ export default function App() {
     if (selectedSiteId !== null) {
       setSelectedSiteId(null);
       setRitualNote(null);
+      return true;
+    }
+    if (companionsOpen) {
+      setCompanionsOpen(false);
       return true;
     }
     if (charmsOpen) {
@@ -8655,6 +8818,7 @@ export default function App() {
     selectedFireId,
     selectedSiteId,
     charmsOpen,
+    companionsOpen,
     craftingOpen,
     inventoryOpen,
     firstRunDialogOpen,
@@ -9483,6 +9647,7 @@ export default function App() {
       inventoryOpen ||
       craftingOpen ||
       charmsOpen ||
+      companionsOpen ||
       optionsOpen ||
       introOpen ||
       firstRunDialogOpen ||
@@ -9505,6 +9670,7 @@ export default function App() {
     inventoryOpen,
     craftingOpen,
     charmsOpen,
+    companionsOpen,
     optionsOpen,
     introOpen,
     firstRunDialogOpen,
@@ -9610,7 +9776,7 @@ export default function App() {
       // waits. (Before this, only the open panel's own
       // key did anything here — I then K was blocked
       // by the open Inventory. That was the bug.)
-      if (inventoryOpen || craftingOpen || charmsOpen) {
+      if (inventoryOpen || craftingOpen || charmsOpen || companionsOpen) {
         if (key === 'i') toggleInventoryPanel();
         else if (key === 'k') toggleCraftingPanel();
         else if (key === 'l') toggleCharmsPanel();
@@ -9673,6 +9839,7 @@ export default function App() {
     inventoryOpen,
     craftingOpen,
     charmsOpen,
+    companionsOpen,
     handleUseInteract,
     handleSecondInteract,
     openCharmsPanel,
@@ -9726,7 +9893,8 @@ export default function App() {
         pendingTrapRecipe ||
         pendingRemoveTarget !== null ||
         craftingOpen ||
-        charmsOpen
+        charmsOpen ||
+        companionsOpen
       ) {
         return;
       }
@@ -9756,6 +9924,7 @@ export default function App() {
     inventoryOpen,
     craftingOpen,
     charmsOpen,
+    companionsOpen,
     placement,
     handleUseInteract,
     handleWorldPlaceTorch,
@@ -10862,6 +11031,8 @@ export default function App() {
           !inventoryOpen &&
           !craftingOpen &&
           !charmsOpen &&
+      !companionsOpen &&
+          !companionsOpen &&
           !optionsOpen &&
           !introOpen ? (
             <LocationChip theme={lookThemes.world}
@@ -10978,6 +11149,20 @@ export default function App() {
                 </span>
               ) : null}
             </button>
+            {hasBondedCompanion ? (
+              <button
+                type="button"
+                onClick={toggleCompanionsPanel}
+                aria-pressed={companionsOpen}
+                className={
+                  isTouch
+                    ? 'rounded bg-moss-deep px-3 py-2 text-sm min-h-[44px] hover:bg-moss'
+                    : 'rounded bg-moss-deep px-3 py-1 text-xs hover:bg-moss'
+                }
+              >
+                Companions
+              </button>
+            ) : null}
             <button
               type="button"
               onClick={() => setOptionsOpen(true)}
@@ -11149,6 +11334,16 @@ export default function App() {
             >
               Charms
             </button>
+            {hasBondedCompanion ? (
+              <button
+                type="button"
+                onClick={toggleCompanionsPanel}
+                aria-pressed={companionsOpen}
+                className="min-h-[44px] rounded bg-moss-deep px-3 py-2 text-sm hover:bg-moss"
+              >
+                Companions
+              </button>
+            ) : null}
             <button
               type="button"
               onClick={() => setOptionsOpen(true)}
@@ -11171,6 +11366,7 @@ export default function App() {
               setInventoryOpen(false);
               setCraftingOpen(false);
               setCharmsOpen(false);
+              setCompanionsOpen(false);
             }}
             aria-label="Hide HUD panels to reveal the game"
             className="pointer-events-auto absolute right-2 top-2 z-40 min-h-[44px] rounded bg-black/60 px-3 py-2 text-sm"
@@ -11445,6 +11641,18 @@ export default function App() {
             selectedKind={selectedCharmKind}
             onSelectKind={setSelectedCharmKind}
             onClose={() => setCharmsOpen(false)}
+            comfortable={isTouch}
+          />
+        ) : null}
+        {companionsOpen ? (
+          <CompanionsPanel theme={lookThemes.world}
+            companions={companionRows}
+            onStance={handleCompanionStance}
+            onStanceAll={handleCompanionStanceAll}
+            onRelease={handleCompanionRelease}
+            notes={companionNotes}
+            allNote={companionAllNote ?? undefined}
+            onClose={() => setCompanionsOpen(false)}
             comfortable={isTouch}
           />
         ) : null}
@@ -11888,6 +12096,7 @@ export default function App() {
       !inventoryOpen &&
       !craftingOpen &&
       !charmsOpen &&
+      !companionsOpen &&
       !optionsOpen &&
       !introOpen &&
       !pendingTrapRecipe &&
@@ -11908,6 +12117,7 @@ export default function App() {
       !inventoryOpen &&
       !craftingOpen &&
       !charmsOpen &&
+      !companionsOpen &&
       !optionsOpen &&
       !introOpen &&
       !pendingTrapRecipe &&
@@ -11931,6 +12141,7 @@ export default function App() {
       !inventoryOpen &&
       !craftingOpen &&
       !charmsOpen &&
+      !companionsOpen &&
       !optionsOpen &&
       !introOpen &&
       !pendingTrapRecipe &&
@@ -11956,6 +12167,7 @@ export default function App() {
       !inventoryOpen &&
       !craftingOpen &&
       !charmsOpen &&
+      !companionsOpen &&
       !optionsOpen &&
       !introOpen &&
       !pendingTrapRecipe &&
@@ -11985,6 +12197,7 @@ export default function App() {
       {!inventoryOpen &&
       !craftingOpen &&
       !charmsOpen &&
+      !companionsOpen &&
       !optionsOpen &&
       !introOpen &&
       !pendingTrapRecipe &&
