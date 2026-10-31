@@ -712,7 +712,7 @@ export const ITEM_DESCRIPTIONS: Readonly<Record<string, string>> = {
   honey: 'Wild honey. Eat it to restore hunger.',
   // Camping.
   'sleeping-bag': 'Bedding you can carry. A bed wherever you stop. Woven at a loom.',
-  tent: 'A portable shelter. Pitch it where you stand; pack it up when you move. Made at a workstation.',
+  tent: 'A portable shelter. Pitch it where you aim; pack it up when you move. Made at a workstation.',
   // Flowers (three are food; the rest have no use yet).
   'white-yarrow': 'A picked white yarrow. No known use yet.',
   'gold-coneflower': 'A picked gold coneflower. No known use yet.',
