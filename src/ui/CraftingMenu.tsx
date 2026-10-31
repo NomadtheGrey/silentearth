@@ -48,6 +48,14 @@ export interface CraftingMenuProps {
   onSelectRecipe?: (id: string) => void;
   /** Called when the player asks to craft the selected recipe. Optional. */
   onCraft?: (id: string) => void;
+  /**
+   * Called when a row's chain-craft button is pressed
+   * (prerequisite crafting, Adam 2026-10-31): craft the
+   * ingredient item (and whatever IT needs) without leaving
+   * the open recipe. The button renders only on rows the
+   * caller flagged chainCraftable with an itemId. Optional.
+   */
+  onCraftPrerequisite?: (recipeId: string, itemId: string) => void;
   /** Called when the menu is closed. Optional. */
   onClose?: () => void;
   /** Thumb-sized action buttons (44 px targets) on touch. Default false. */
@@ -63,6 +71,7 @@ export function CraftingMenu({
   selectedRecipeId,
   onSelectRecipe,
   onCraft,
+  onCraftPrerequisite,
   onClose,
   comfortable = false,
   theme = 'hearth',
@@ -122,21 +131,51 @@ export function CraftingMenu({
           </p>
         ) : null}
         <ul className="mt-1 flex flex-col gap-0.5 text-sm text-stone-300">
-          {recipe.ingredients.map((ingredient, index) => (
-            <li key={index} className="flex items-center gap-1.5">
-              {ingredient.icon ? (
-                <span className="inline-flex shrink-0">
-                  {ingredient.icon}
-                </span>
-              ) : null}
-              {ingredient.name}
-              {ingredient.amountText ? (
-                <span className={'ml-2 ' + t.muted}>
-                  {ingredient.amountText}
-                </span>
-              ) : null}
-            </li>
-          ))}
+          {recipe.ingredients.map((ingredient, index) => {
+            // Chain-craft button (prerequisite crafting, Adam
+            // 2026-10-31): rendered only when the caller flagged
+            // the row chainCraftable and supplied the item id +
+            // the handler. The press reports (recipe, item) —
+            // the menu crafts nothing itself, and the open
+            // recipe stays open (the caller runs the chain).
+            const chainItemId =
+              ingredient.chainCraftable && onCraftPrerequisite
+                ? ingredient.itemId
+                : undefined;
+            return (
+              <li key={index} className="flex items-center gap-1.5">
+                {ingredient.icon ? (
+                  <span className="inline-flex shrink-0">
+                    {ingredient.icon}
+                  </span>
+                ) : null}
+                {ingredient.name}
+                {ingredient.amountText ? (
+                  <span className={'ml-2 ' + t.muted}>
+                    {ingredient.amountText}
+                  </span>
+                ) : null}
+                {chainItemId ? (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      onCraftPrerequisite(recipe.id, chainItemId)
+                    }
+                    aria-label={`Craft ${ingredient.name}`}
+                    className={
+                      'ml-auto shrink-0 rounded text-sm ' +
+                      (comfortable
+                        ? 'px-3 py-2 min-h-[44px] '
+                        : 'px-2 py-1 ') +
+                      t.button
+                    }
+                  >
+                    Craft
+                  </button>
+                ) : null}
+              </li>
+            );
+          })}
         </ul>
         {recipe.availabilityNote && !recipe.disabledLabel ? (
           <p className={'mt-1 text-sm ' + t.muted}>

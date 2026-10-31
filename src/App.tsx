@@ -1745,7 +1745,11 @@ import {
   handlePilePickupRequest,
   handlePileTakeRequest,
 } from './systems/piles';
-import { executeCraft } from './systems/crafting-execution';
+import {
+  executeCraft,
+  executeCraftChain,
+  hasChainProducer,
+} from './systems/crafting-execution';
 import {
   HungerState,
   eat,
@@ -5359,6 +5363,42 @@ export default function App() {
       return;
     }
     executeCraftNow(recipeId);
+  };
+
+  // PREREQUISITE CRAFTING (Adam, 2026-10-31): the button
+  // on a CraftingMenu ingredient row — craft the missing
+  // prerequisite (and ITS prerequisites) without leaving
+  // the open recipe. Systems' executeCraftChain plans the
+  // whole chain first (atomic: a refusal consumes NOTHING
+  // and throws the blocker's reason, executeCraft idiom)
+  // and crafts exactly the ingredient's shortfall; batch
+  // surplus stays in her pack. The menu and the selection
+  // never move — the note carries the outcome, and the
+  // refresh re-reads every row's counts in place. Station
+  // + hunger arguments mirror executeCraftNow exactly.
+  const handleCraftPrerequisite = (recipeId: string, item: string) => {
+    const recipe = RECIPES.find((candidate) => candidate.id === recipeId);
+    if (!recipe) return;
+    try {
+      const result = executeCraftChain(
+        recipe,
+        item,
+        inventory,
+        availableStations.length > 0 ? availableStations : null,
+        hunger,
+      );
+      setCraftNote(
+        result.crafted.quantity > 0
+          ? `Crafted ${result.crafted.item} × ${result.crafted.quantity}.`
+          : `You already have enough ${result.crafted.item}.`,
+      );
+    } catch (error) {
+      setCraftNote(
+        error instanceof Error ? error.message : 'Crafting failed.',
+      );
+    }
+    refreshInventory();
+    saveNow();
   };
 
   const handleTrapConfirmYes = () => {
@@ -9750,6 +9790,23 @@ export default function App() {
         ...recipe.ingredients.map((ingredient) => ({
           name: ingredient.item,
           amountText: `${inventory.count(ingredient.item)} / ${ingredient.quantity}`,
+          // PREREQUISITE CRAFTING (Adam, 2026-10-31): the
+          // row carries its item id + the caller-decided
+          // chain flag — a chain producer exists for the
+          // item (Systems' hasChainProducer; trap/stump
+          // producers are excluded Systems-side, so the
+          // candidacy is honest) AND she holds fewer than
+          // this recipe needs. The button shows on the flag
+          // alone: a press may still refuse in planning
+          // (station, ingredients, weight) and the refusal
+          // IS the feedback — the shell never pre-walks
+          // the chain (exactly one chain-walk exists,
+          // Systems'). Dependency rows below carry neither
+          // field, so they never grow the button.
+          itemId: ingredient.item,
+          chainCraftable:
+            hasChainProducer(ingredient.item) &&
+            inventory.count(ingredient.item) < ingredient.quantity,
           icon:
             ingredient.item === UMBRELLA_ITEM_ID ? (
               <UmbrellaIcon />
@@ -10304,6 +10361,7 @@ export default function App() {
                   selectedRecipeId={selectedRecipeId}
                   onSelectRecipe={setSelectedRecipeId}
                   onCraft={handleCraft}
+                  onCraftPrerequisite={handleCraftPrerequisite}
                   onClose={() => {
                     setSelectedSiteId(null);
                     setRitualNote(null);
@@ -10971,6 +11029,7 @@ export default function App() {
             selectedRecipeId={selectedRecipeId}
             onSelectRecipe={setSelectedRecipeId}
             onCraft={handleCraft}
+            onCraftPrerequisite={handleCraftPrerequisite}
             onClose={() => setCraftingOpen(false)}
           />
         ) : null}
