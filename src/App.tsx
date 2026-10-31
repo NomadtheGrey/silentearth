@@ -4736,6 +4736,24 @@ export default function App() {
         setMovementMode(record.creatureId, 'settleDart');
       }
     }
+    // THE CAT'S BOND SYNC (Piece 2): the engine's cat
+    // reads its bond level from the record — 'hearth'
+    // (no bond: the resident), 'attending' (a companion
+    // bond), 'familiar' (the rite's). This runs after
+    // the renderer's construction seated the cat at
+    // the village hearth (same effect, above), so the
+    // level lands on a living actor; setCatBond
+    // no-ops harmlessly if the cat is somehow absent.
+    const catRecord = companionStateRef.current
+      .snapshot()
+      .find((record) => record.creatureId === CAT_ID);
+    setCatBond(
+      catRecord?.bond === 'familiar'
+        ? 'familiar'
+        : catRecord?.bond === 'companion'
+          ? 'attending'
+          : 'hearth',
+    );
     // FIRST-CHARM BOOT GRANT (outright, tier 1,
     // GRANT-TO-LIST since Systems 9e9a9dd): runs
     // AFTER the CharmState restore above, so a loaded
@@ -5020,6 +5038,24 @@ export default function App() {
       setCompanionRecords(companionStateRef.current.snapshot());
       saveNow();
     });
+    // THE FOUND CAT'S MEETING (Build 2, Piece 2): the
+    // engine's first-meeting signal, once per world —
+    // the shell seeds the found record (Systems' usual
+    // door: acquaintance starts from the cat's own
+    // staging), speaks the discovery, and saves. From
+    // here the bond road is the ordinary faced
+    // OFFER/SPEAK path; Systems waives the true-name
+    // gate for found origin, so no cat bone is ever
+    // needed. DRAFT line.
+    const offCatMet = bus.on('cat:met', () => {
+      companionStateRef.current.seedFoundCat(CAT_ID);
+      setCompanionRecords(companionStateRef.current.snapshot());
+      showFeedback(
+        'Something watches from the hearth. A cat — alive, the one living thing the burning left.',
+        'info',
+      );
+      saveNow();
+    });
     // TRAP ROW (Adam, 2026-10-28): the shell owns trap
     // rolls + row refresh. 'trap:catch' (emitted by
     // setCatch, the shell's only catch writer) re-reads
@@ -5298,6 +5334,7 @@ export default function App() {
       offFireLighting();
       offCompanionStance();
       offCompanionDeparted();
+      offCatMet();
       offTrapCatch();
       offTrapPlaced();
       offTrapHour();
@@ -6328,8 +6365,17 @@ export default function App() {
     // (the emitter-layering rule): the runtime hears
     // the release and starts the departure leg. Its
     // 'companion:departed' answer is met by the boot
-    // listener with Systems' idempotent clear.
-    bus.emit('companion:released', { id: creatureId });
+    // listener with Systems' idempotent clear. THE CAT
+    // is the exception (Piece 2): a found one does not
+    // depart — it returns to its hearth seat (Systems'
+    // law), the registry never held it, and no
+    // departure leg exists for it, so no released emit;
+    // its engine bond simply goes home.
+    if (removed.kind === 'cat') {
+      setCatBond('hearth');
+    } else {
+      bus.emit('companion:released', { id: creatureId });
+    }
     refreshCompanions();
     saveNow();
     // The last bond going closes the panel — its door
@@ -6498,6 +6544,10 @@ export default function App() {
         return;
       }
       bus.emit('companion:bonded', { id: winner.id, kind: winner.animalKind });
+      // The cat's bond arm (Piece 2): the registry
+      // never holds the cat — its engine bond lives in
+      // catRuntime, driven in from the record.
+      if (winner.animalKind === 'cat') setCatBond('attending');
       showFeedback(`The ${label} walks with you now.`, 'gain');
       refreshCompanions();
       saveNow();
