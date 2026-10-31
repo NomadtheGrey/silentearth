@@ -2017,11 +2017,15 @@ const HOUSE_ITEM_TO_TYPE: Record<string, HouseType> = {
 };
 
 /** Item ids the inventory panel offers a Place button for.
- * Lit torches, altars, writing desks, and campfires ride
- * this set for the BUTTON only — their handlers branch to
- * instant-at-feet (see handlePlaceItem), never the
- * preview-ghost flow the other ids (hearth/kiln/houses/
- * looms) use. */
+ * Lit torches, altars, writing desks, campfires, and
+ * tents ride this set for the BUTTON only — their
+ * handlers branch to instant placement (see
+ * handlePlaceItem), never the preview-ghost flow the
+ * other ids (hearth/kiln/houses/looms) use. Since the
+ * crosshair fold-in (2026-10-31) the instant family
+ * splits by landing: torch / campfire / tent land at
+ * the crosshair aim; altar / desk still land at her
+ * feet, each awaiting its own word. */
 const PLACEABLE_IDS: ReadonlySet<string> = new Set([
   ...Object.keys(FIRE_ITEM_TO_TYPE),
   ...Object.keys(HOUSE_ITEM_TO_TYPE),
@@ -5647,13 +5651,37 @@ export default function App() {
     saveNow();
   };
 
-  // TORCH PLACE REACH (Adam's crosshair ruling,
-  // 2026-10-31): how far from her the crosshair may set a
-  // torch down. A gaze landing past it CLAMPS to the
-  // circle along the ray — the press is never wasted.
-  // DRAFT: 6 m, the torch light's own plenty-bright
-  // distance; Adam's pin pass settles it.
-  const TORCH_PLACE_REACH = 6;
+  // PLACE REACH (Adam's crosshair ruling, 2026-10-31):
+  // how far from her the crosshair may set a thing down.
+  // A gaze landing past it CLAMPS to the circle along
+  // the ray — the press is never wasted. DRAFT: 6 m,
+  // the torch light's own plenty-bright distance; Adam's
+  // pin pass settles it. One reach for the whole instant
+  // family (torch, campfire, tent — the fold-in ruling,
+  // 2026-10-31).
+  const PLACE_REACH = 6;
+
+  // The aimed placement point: the crosshair's ground
+  // point, clamped to PLACE_REACH along the ray. Null
+  // when the gaze never meets the ground — each act
+  // voices its own refusal on its own surface, in the
+  // family's one line ('Nowhere to set it down.').
+  const aimedPlacementPoint = (): { x: number; z: number } | null => {
+    const player = playerRef.current;
+    if (!player) return null;
+    const aim = crosshairAimPoint();
+    if (aim === null) return null;
+    const dx = aim.x - player.x;
+    const dz = aim.z - player.z;
+    const distance = Math.hypot(dx, dz);
+    if (distance > PLACE_REACH) {
+      return {
+        x: player.x + (dx / distance) * PLACE_REACH,
+        z: player.z + (dz / distance) * PLACE_REACH,
+      };
+    }
+    return aim;
+  };
 
   /**
    * Placing a carried lit torch: INSTANT AT THE CROSSHAIR
@@ -5667,7 +5695,7 @@ export default function App() {
    * down.', DRAFT) — but only when she actually carries a
    * torch; empty-handed, the grant's own refusal speaks
    * (the aim is not the truer refusal then). A landing
-   * past TORCH_PLACE_REACH clamps to the reach circle
+   * past PLACE_REACH clamps to the reach circle
    * along the ray. Grant FIRST (Systems placeTorch
    * consumes one carried lit-torch; failure touches
    * nothing), then the entity place (Background
@@ -5687,25 +5715,18 @@ export default function App() {
     | null => {
     const player = playerRef.current;
     if (!player) return null;
-    const aim = crosshairAimPoint();
-    if (aim === null && inventory.count(ITEMS.litTorch) > 0) {
+    const target = aimedPlacementPoint();
+    if (target === null && inventory.count(ITEMS.litTorch) > 0) {
       return { placed: false, reason: 'Nowhere to set it down.' };
     }
     // Aim null + empty-handed falls back to her feet as
     // the target — the grant refuses below and nothing
     // is consumed, so the fallback never lands.
-    const raw = aim ?? { x: player.x, z: player.z };
-    const aimDx = raw.x - player.x;
-    const aimDz = raw.z - player.z;
-    const aimDistance = Math.hypot(aimDx, aimDz);
-    const target =
-      aimDistance > TORCH_PLACE_REACH
-        ? {
-            x: player.x + (aimDx / aimDistance) * TORCH_PLACE_REACH,
-            z: player.z + (aimDz / aimDistance) * TORCH_PLACE_REACH,
-          }
-        : raw;
-    const outcome = grantPlaceTorch(inventory, target.x, target.z);
+    const outcome = grantPlaceTorch(
+      inventory,
+      target?.x ?? player.x,
+      target?.z ?? player.z,
+    );
     // Equality check, not truthiness: non-strict tsc does
     // not narrow this union's boolean discriminant on
     // truthiness (see the torch Light button handler).
@@ -5744,8 +5765,13 @@ export default function App() {
   };
 
   // PLACED TENT (tent shell, 2026-10-28 — torch
-  // mirror: one press places one tent at her feet,
-  // no placement mode, no ghost). Grant FIRST
+  // mirror: one press places one tent, no placement
+  // mode, no ghost). AT THE CROSSHAIR since Adam's
+  // fold-in ruling (2026-10-31) — the aim point serves
+  // tent as it serves the torch: a groundless gaze
+  // refuses on the note when a tent is carried (the
+  // grant's own refusal speaks when none is), a far
+  // gaze clamps to the reach. Grant FIRST
   // (Systems placeTent consumes one carried tent;
   // failure touches nothing), then the shell record
   // (Background's placed-tent entity has not landed
@@ -5759,7 +5785,16 @@ export default function App() {
   const handlePlaceTent = () => {
     const player = playerRef.current;
     if (!player) return;
-    const outcome = placeTent(inventory, player.x, player.z);
+    const target = aimedPlacementPoint();
+    if (target === null && inventory.count(ITEMS.tent) > 0) {
+      setTentNote('Nowhere to set it down.');
+      return;
+    }
+    const outcome = placeTent(
+      inventory,
+      target?.x ?? player.x,
+      target?.z ?? player.z,
+    );
     // Equality check, not truthiness: non-strict tsc does
     // not narrow this union's boolean discriminant on
     // truthiness (see the torch Light button handler).
@@ -6394,7 +6429,7 @@ export default function App() {
 
   const handlePlaceItem = (itemId: string) => {
     // Placed torches never enter the preview flow — the
-    // branch above places instantly at her feet.
+    // branch above places instantly at the crosshair.
     if (itemId === ITEMS.litTorch) {
       handlePlaceLitTorch();
       return;
@@ -6421,19 +6456,25 @@ export default function App() {
       return;
     }
     // Placed tents never enter the preview flow either —
-    // the torch mirror: one press places one tent at her
-    // feet (camping.ts: "one press places one tent").
-    // No placement mode (the preview ghost is the
-    // house/fire pattern, heavy for a site placed where
-    // she stands).
+    // the torch mirror: one press places one tent at the
+    // crosshair (camping.ts: "one press places one tent";
+    // the landing moved with the fold-in ruling,
+    // 2026-10-31). No placement mode (the preview ghost
+    // is the house/fire pattern, heavy for a torch-class
+    // act).
     if (itemId === ITEMS.tent) {
       handlePlaceTent();
       return;
     }
-    // Single-tap campfire (Adam, 2026-10-28): Place places at
-    // her feet immediately — no placement mode, no ghost, no
-    // "Place here" panel. Hearth/kiln keep the
-    // two-step flow below; this branch is campfire only.
+    // Single-tap campfire (Adam, 2026-10-28): Place places
+    // immediately — no placement mode, no ghost, no
+    // "Place here" panel. AT THE CROSSHAIR since Adam's
+    // fold-in ruling (2026-10-31): the aim point serves
+    // the campfire as it serves the torch — a groundless
+    // gaze refuses on the fire note (after the carried
+    // check, so an empty hand hears the truer refusal),
+    // a far gaze clamps to the reach. Hearth/kiln keep
+    // the two-step flow below; this branch is campfire only.
     if (itemId === ITEMS.campfire) {
       // Clear any armed placement mode first so no stale ghost
       // lingers after the tap.
@@ -6447,8 +6488,13 @@ export default function App() {
         setFireNote('Nothing to place — that item is no longer carried.');
         return;
       }
+      const target = aimedPlacementPoint();
+      if (target === null) {
+        setFireNote('Nowhere to set it down.');
+        return;
+      }
       try {
-        fireState.placeFire('campfire', player.x, player.z);
+        fireState.placeFire('campfire', target.x, target.z);
         inventory.remove(itemId, 1);
       } catch (error) {
         setFireNote(
