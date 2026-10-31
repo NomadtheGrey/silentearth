@@ -54,6 +54,31 @@
 /** Fragments of one mark a Tier I wants (Adam's threshold rule). */
 export const FRAGMENTS_FOR_TIER = 3;
 
+// ---------------------------------------------------------------------------
+// Mark names — the ONE naming home (UI's need, 2026-10-31)
+// ---------------------------------------------------------------------------
+//
+// Surfaces must not each title-case the mark id and hope
+// they agree: the pill, the teaching beat, the journal
+// rows, and the grimoire all read the name from HERE.
+// A mark registers when its first fragment site is
+// placed; the fragment-bearing marks today are the
+// founding three. Unregistered marks render as their
+// bare id (markDisplayName passes it through) — the
+// visible prompt to register a mark here BEFORE its
+// surfaces ship, never after they drift.
+
+export const MARK_DISPLAY_NAMES: Readonly<Record<string, string>> = {
+  home: 'Home',
+  circle: 'Circle',
+  travel: 'Travel',
+};
+
+/** The canonical display name for a mark id (the id itself until registered). */
+export function markDisplayName(mark: string): string {
+  return MARK_DISPLAY_NAMES[mark] ?? mark;
+}
+
 /** One transcribed fragment, as the journal keeps it. */
 export interface SavedFragmentCopy {
   /** The site-carrier's stable identity (the caller's anchor id). */
