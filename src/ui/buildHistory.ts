@@ -42,6 +42,17 @@ export interface BuildRecord {
 }
 
 const ALL_RECORDS: BuildRecord[] = [
+  // Merge #37's sha is recorded by the correction merge
+  // that follows it (Adam's pre-authorized second merge,
+  // 2026-10-27): a merge sha cannot be known pre-merge.
+  {
+    merge: 'Merge #37',
+    pr: 75,
+    sha: 'pending',
+    date: '2026-10-30',
+    what: 'The compass turned around. North is positive now \u2014 plain Cartesian: east +x, north +z \u2014 and her two readouts agree: her position prints raw, and her zone carries the same signs on both axes, so a place south-east of home reads south-east in both. The sky turned with it: the sun and moon now cross the south at the top of their arcs, the way a Great Lakes sky does \u2014 the sun had been culminating in what the new compass calls the north. Nothing in the world moved; only what its directions are called, settled everywhere at once.',
+    why: 'Adam\u2019s call: the old north was a screen habit that rode in on an early draft \u2014 negative z was a rendering convention, never a direction. He reversed the pin, and this batch carries the reversal through the chip, the zone grid, and the sky in one merge, so the game never sits half-turned.',
+  },
   {
     merge: 'Merge #36',
     pr: 73,
