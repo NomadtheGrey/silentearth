@@ -44,6 +44,15 @@
  *   (2026-10-29, Adam's sprint/jump order). No touch
  *   sprint button — sprint on touch is the MOVE stick's
  *   double-push (Background's movement path).
+ * - PLACE button (2026-10-31): the touch counterpart of
+ *   the desktop right-click torch placement — a third
+ *   button on the USE/JUMP row, INBOARD of USE
+ *   (right-[10.5rem], same 232-296 px band, same 64 px
+ *   family), rendered ONLY while the shell passes
+ *   onPlaceTorch (the shell passes it exactly while she
+ *   carries a lit torch): visible only when it can act,
+ *   one tap = the shared place act. Seat DRAFT for
+ *   Adam's sighting, like the row's other tunings.
  *
  * GESTURE OWNERSHIP (BioForge v1 lesson, required): a look-drag
  * NEVER fires interact on release. Only two gestures interact:
@@ -76,6 +85,12 @@ export interface TouchControlsProps {
   /** JUMP press (the touch half of Space; added 2026-10-29
     with Background's pressJump seam). */
   onJump?: () => void;
+  /** PLACE press (2026-10-31): place a carried lit torch
+    at her feet — the touch counterpart of the desktop
+    right-click. When omitted, no PLACE button renders:
+    the shell passes it only while a lit torch is
+    carried, so the button exists only when it can act. */
+  onPlaceTorch?: () => void;
   /** When set, the USE button shows this label instead of "USE"
     (the shell sets it when a dropped pile would win the press). */
   interactLabel?: string;
@@ -98,6 +113,7 @@ export function TouchControls({
   onInteract,
   interactLabel,
   onJump,
+  onPlaceTorch,
   lookEnabled = true,
 }: TouchControlsProps) {
   const [stickUsed, setStickUsed] = useState(false);
@@ -384,6 +400,27 @@ export function TouchControls({
         not across JUMP. Renders after the look field and
         the sticks, so its touches land on the button
         (same DOM-order rule as the sticks). */}
+      {/* PLACE: same row as USE/JUMP (2026-10-31),
+        inboard — right-[10.5rem], USE's left neighbour
+        on the 232-296 px band. Renders only while the
+        shell passes onPlaceTorch (a lit torch carried);
+        one tap places it at her feet through the
+        shell's shared place act. Before USE in DOM
+        (the family's render-order rule). */}
+      {onPlaceTorch ? (
+        <button
+          type="button"
+          aria-label="Place a lit torch"
+          className="pointer-events-auto absolute bottom-[14.5rem] right-[10.5rem] flex h-16 w-16 touch-none items-center justify-center whitespace-nowrap rounded-full border-2 border-[#f0ead6]/80 bg-moss-deep/90 text-sm font-bold text-[#f0ead6]"
+          onTouchStart={(e) => {
+            e.preventDefault();
+            onPlaceTorch();
+          }}
+        >
+          PLACE
+        </button>
+      ) : null}
+
       <button
         type="button"
         aria-label={

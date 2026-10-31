@@ -2634,19 +2634,17 @@ export default function App() {
     null,
   );
   // Placed torches (Background singleton, read fresh on every
-  // event), their projected anchors, and the torch whose menu
-  // is open — the fire-chip pattern, one torch per chip. The
-  // menu is LIVE like the fire menu: selectedTorchId names
-  // the torch, and the menu renders from the live torch in
-  // placedTorches; a picked-up torch closes it (the find
-  // returns undefined, and the handler closes explicitly).
+  // event) and their projected anchors — the fire-chip
+  // pattern, one torch per chip. NO selected-torch state
+  // (Adam's torch completion, 2026-10-31): the chip tap IS
+  // the pickup now, so the torch's little window and its
+  // whole selection family retired — see handlePickupTorch.
   const [placedTorches, setPlacedTorches] = useState<PlacedTorchEntity[]>(
     () => torchState.snapshot(),
   );
   const [torchAnchors, setTorchAnchors] = useState<
     { torch: PlacedTorchEntity; x: number; y: number }[]
   >([]);
-  const [selectedTorchId, setSelectedTorchId] = useState<string | null>(null);
   // PLACED TENTS (tent shell, 2026-10-28 — interim
   // shell store, NOT Background's entity: Background's
   // placed-tent entity + renderer.setTents setter have
@@ -5563,32 +5561,63 @@ export default function App() {
   };
 
   /**
-   * Inventory Place press on a lit-torch row: INSTANT AT
-   * HER FEET (settled design — the preview ghost is the
+   * Placing a carried lit torch: INSTANT AT HER FEET
+   * (settled design — the preview ghost is the
    * house/fire pattern, heavy for a torch). Grant FIRST
    * (Systems placeTorch consumes one carried lit-torch;
    * failure touches nothing), then the entity place
    * (Background primitive, emits torch:placed →
-   * refreshTorches). Panel action, not a world action:
-   * the panel stays open, the count drops, the note
-   * carries the result — the Light button's shape, not
-   * the preview flow's.
+   * refreshTorches). ONE CORE, THREE HANDLES (Adam's
+   * torch completion, 2026-10-31): the inventory panel's
+   * Place button (its note carries the result — a panel
+   * action; the panel stays open, the count drops), the
+   * desktop right-click in the locked world, and the
+   * touch PLACE button (both speak through the message
+   * feed). The act is identical behind all three; only
+   * the result's surface differs, as the pickup's does.
    */
-  const handlePlaceLitTorch = () => {
+  const placeCarriedLitTorch = ():
+    | { placed: true }
+    | { placed: false; reason: string }
+    | null => {
     const player = playerRef.current;
-    if (!player) return;
+    if (!player) return null;
     const outcome = grantPlaceTorch(inventory, player.x, player.z);
     // Equality check, not truthiness: non-strict tsc does
     // not narrow this union's boolean discriminant on
     // truthiness (see the torch Light button handler).
     if (outcome.placed === false) {
-      setTorchNote(outcome.reason);
-      return;
+      return { placed: false, reason: outcome.reason };
     }
     torchState.placeTorch(outcome.torch.x, outcome.torch.z);
     refreshInventory();
     saveNow();
+    return { placed: true };
+  };
+
+  const handlePlaceLitTorch = () => {
+    const result = placeCarriedLitTorch();
+    if (!result) return;
+    // Equality check, not truthiness (non-strict tsc does
+    // not narrow the union on the ternary — house pattern).
+    if (result.placed === false) {
+      setTorchNote(result.reason);
+      return;
+    }
     setTorchNote('Placed a lit torch.');
+  };
+
+  // The world doors' press (right-click, touch PLACE):
+  // same core, the feed carries the result — a world
+  // press is never a silent no-op (the hive lesson).
+  const handleWorldPlaceTorch = () => {
+    const result = placeCarriedLitTorch();
+    if (!result) return;
+    if (result.placed === false) {
+      showFeedback(result.reason, 'blocked');
+      return;
+    }
+    showFeedback('Placed a lit torch.', 'gain');
   };
 
   // PLACED TENT (tent shell, 2026-10-28 — torch
@@ -6866,45 +6895,32 @@ export default function App() {
     recomputeAnchors();
   };
 
-  // Placed-torch menu actions (chip menu, Adam's placed-
-  // torch order): one torch, one action — Pick up returns
-  // it lit. Close only closes; the menu stays open after
-  // a failed pickup (the torch is still there).
-  const torchMenuActions = (): ContextAction[] => [
-    { id: 'pick-up', label: 'Pick up' },
-    { id: 'close', label: 'Close' },
-  ];
-
-  const handleTorchAction = (torchId: string, actionId: string) => {
+  // TORCH PICKUP (Adam's torch completion, 2026-10-31):
+  // ONE act behind every door — E at a faced torch, R,
+  // and a tap on the torch's chip (touching the torch
+  // or its pill IS the pickup, Adam's ruling; the mouse
+  // unified — one verb, every pointer). The chip's old
+  // window held nothing but this act and Close, so the
+  // window and its selection state retired whole.
+  // Grant FIRST, then the entity removal — the
+  // pile-pickup rule (take granted only): a full pack
+  // grants 0 and the torch stays placed, the refusal
+  // spoken in the feed; a grant of 1 removes the entity
+  // (emits torch:removed → refreshTorches). Pickup
+  // returns 'lit-torch', lit not unlit; no hunger gate
+  // (a move, like drop/pickup, not a build).
+  const handlePickupTorch = (torchId: string) => {
     const torch = torchState.get(torchId);
     if (!torch) return;
-    const say = (text: string, tone: FeedbackTone) => {
-      showFeedback(text, tone);
-    };
-    if (actionId === 'close') {
-      setSelectedTorchId(null);
+    const grant = grantPickupTorch(inventory);
+    if (grant.granted === 0) {
+      showFeedback('Pack full — no room.', 'blocked');
       return;
     }
-    if (actionId === 'pick-up') {
-      // Grant FIRST, then the entity removal — the
-      // pile-pickup rule (take granted only): a full pack
-      // grants 0, the torch stays placed, the menu stays
-      // open; a grant of 1 removes the entity (emits
-      // torch:removed → refreshTorches) and the menu
-      // closes explicitly. Pickup returns 'lit-torch',
-      // lit not unlit; no hunger gate (a move, like
-      // drop/pickup, not a build).
-      const grant = grantPickupTorch(inventory);
-      if (grant.granted === 0) {
-        say('Pack full — no room.', 'blocked');
-        return;
-      }
-      torchState.removeTorch(torchId);
-      setSelectedTorchId(null);
-      say('Picked up a lit torch.', 'gain');
-      refreshInventory();
-      saveNow();
-    }
+    torchState.removeTorch(torchId);
+    showFeedback('Picked up a lit torch.', 'gain');
+    refreshInventory();
+    saveNow();
     setPlacedTorches(torchState.snapshot());
     recomputeAnchors();
   };
@@ -7856,21 +7872,6 @@ export default function App() {
           ) ?? null,
         );
 
-  // The torch whose menu is open, with its anchor — the
-  // fire pattern, live: the menu renders from placedTorches,
-  // so a picked-up torch leaves the menu with nothing.
-  const selectedTorch =
-    selectedTorchId === null
-      ? undefined
-      : placedTorches.find((t) => t.id === selectedTorchId);
-  const selectedTorchAnchor =
-    selectedTorch === undefined
-      ? null
-      : retainAnchor(
-          `torch:${selectedTorch.id}`,
-          torchAnchors.find((a) => a.torch.id === selectedTorch.id) ??
-            null,
-        );
   // The selected tent + its anchor — the torch pattern,
   // over the shell store (no entity yet).
   const selectedTent =
@@ -8322,10 +8323,6 @@ export default function App() {
         setSelectedPileId(null);
         return;
       }
-      if (selectedTorchId !== null) {
-        setSelectedTorchId(null);
-        return;
-      }
       if (selectedTentId !== null) {
         setSelectedTentId(null);
         return;
@@ -8367,7 +8364,6 @@ export default function App() {
     placement,
     homeMenuOpen,
     selectedPileId,
-    selectedTorchId,
     selectedTentId,
     selectedFireId,
     selectedCauldronHearthId,
@@ -8436,10 +8432,6 @@ export default function App() {
     if (selectedPileId !== null) {
       selectedPileIdRef.current = null;
       setSelectedPileId(null);
-      return true;
-    }
-    if (selectedTorchId !== null) {
-      setSelectedTorchId(null);
       return true;
     }
     if (selectedTentId !== null) {
@@ -8514,7 +8506,6 @@ export default function App() {
       selectedPileId !== null ||
       selectedFireId !== null ||
       selectedSiteId !== null ||
-      selectedTorchId !== null ||
       selectedTentId !== null ||
       homeMenuOpen ||
       (craftingOpen && craftContextSiteId !== null);
@@ -8550,12 +8541,6 @@ export default function App() {
           setRitualNote(null);
         }
       }
-      if (selectedTorchId !== null) {
-        const torch = torchState.get(selectedTorchId) ?? null;
-        if (walkAwayShouldClose(torch, p, WALK_AWAY_LEASH)) {
-          setSelectedTorchId(null);
-        }
-      }
       if (selectedTentId !== null) {
         const tent =
           placedTents.find((t) => t.id === selectedTentId) ?? null;
@@ -8584,7 +8569,6 @@ export default function App() {
     selectedPileId,
     selectedFireId,
     selectedSiteId,
-    selectedTorchId,
     selectedTentId,
     homeMenuOpen,
     craftingOpen,
@@ -8646,7 +8630,6 @@ export default function App() {
     placement,
     homeMenuOpen,
     selectedPileId,
-    selectedTorchId,
     selectedTentId,
     selectedFireId,
     selectedSiteId,
@@ -9246,7 +9229,7 @@ export default function App() {
         // stays as the second door, behind the torch's
         // chip click. R already picked up and is
         // unchanged — E and R agree now.
-        handleTorchAction(winner.id, 'pick-up');
+        handlePickupTorch(winner.id);
         break;
       case 'loom':
         // The loom's door is its pill: facing it and
@@ -9304,7 +9287,7 @@ export default function App() {
         bus.emit('pile:pickup-requested', { pileId: winner.pile.id });
         break;
       case 'torch':
-        handleTorchAction(winner.id, 'pick-up');
+        handlePickupTorch(winner.id);
         break;
       case 'tent':
         handleTentAction(winner.id, 'take-down');
@@ -9354,13 +9337,6 @@ export default function App() {
       ];
       if (target && !target.disabled) {
         handlePileAction(selectedPile, target.id);
-      }
-      return;
-    }
-    if (selectedTorch !== undefined) {
-      const target = flattenMenuTargets(torchMenuActions())[digit - 1];
-      if (target && !target.disabled) {
-        handleTorchAction(selectedTorch.id, target.id);
       }
       return;
     }
@@ -9491,7 +9467,6 @@ export default function App() {
       firstRunDialogOpen ||
       homeMenuOpen ||
       selectedPileId !== null ||
-      selectedTorchId !== null ||
       selectedTentId !== null ||
       selectedFireId !== null ||
       selectedSiteId !== null ||
@@ -9514,7 +9489,6 @@ export default function App() {
     firstRunDialogOpen,
     homeMenuOpen,
     selectedPileId,
-    selectedTorchId,
     selectedTentId,
     selectedFireId,
     selectedSiteId,
@@ -9585,8 +9559,7 @@ export default function App() {
       if (
         homeMenuOpen ||
         selectedPileId !== null ||
-        selectedTorchId !== null ||
-        selectedTentId !== null ||
+          selectedTentId !== null ||
         selectedFireId !== null ||
         selectedSiteId !== null
       ) {
@@ -9690,7 +9663,6 @@ export default function App() {
     handlePlaceConfirm,
     homeMenuOpen,
     selectedPileId,
-    selectedTorchId,
     selectedTentId,
     selectedFireId,
     selectedSiteId,
@@ -9707,9 +9679,24 @@ export default function App() {
   // conflict with player.onCanvasClick (unlocked →
   // requestPointerLock, locked → no-op there). Phone
   // unchanged (no pointer lock).
+  // RIGHT BUTTON (Adam's torch completion, 2026-10-31):
+  // in the same locked state, a right-click places a
+  // carried lit torch at her feet — the shared place
+  // core, the feed speaks the result. The gate set is
+  // the left button's, shared verbatim, PLUS one of its
+  // own: never while a placement preview is armed (no
+  // torch planted behind a ghost). Unlocked, the game
+  // claims nothing — the browser keeps its menu; the
+  // platform suppresses that menu while locked, so no
+  // contextmenu handling is needed or wanted. Event
+  // route: 'click' fires only for the primary button,
+  // so the right button arrives on 'auxclick' — one
+  // handler registered for both; auxclick never fires
+  // for button 0, so the left button can't double-fire,
+  // and the button guard inside drops the middle (1).
   useEffect(() => {
     const onClick = (e: MouseEvent): void => {
-      if (e.button !== 0) return;
+      if (e.button !== 0 && e.button !== 2) return;
       if (document.pointerLockElement === null) return;
       if (pausedRef.current) return;
       if (
@@ -9722,6 +9709,11 @@ export default function App() {
       ) {
         return;
       }
+      if (e.button === 2) {
+        if (placement !== null) return;
+        handleWorldPlaceTorch();
+        return;
+      }
       // Inventory is NOT a gate here (Adam, 2026-10-31):
       // the pack left the modal set for world interaction
       // (see the keydown's panel-family branch), and this
@@ -9730,7 +9722,11 @@ export default function App() {
       handleUseInteract();
     };
     window.addEventListener('click', onClick);
-    return () => window.removeEventListener('click', onClick);
+    window.addEventListener('auxclick', onClick);
+    return () => {
+      window.removeEventListener('click', onClick);
+      window.removeEventListener('auxclick', onClick);
+    };
   }, [
     optionsOpen,
     introOpen,
@@ -9739,7 +9735,9 @@ export default function App() {
     inventoryOpen,
     craftingOpen,
     charmsOpen,
+    placement,
     handleUseInteract,
+    handleWorldPlaceTorch,
   ]);
 
   // LOCATION CHIP (see the header): dominant biome from the
@@ -10485,7 +10483,7 @@ export default function App() {
         {torchAnchors.map(({ torch, x, y }) => (
           <Fragment key={torch.id}>
             <WorldAnchor x={x} y={y} interactive>
-              <TorchChip onSelect={() => setSelectedTorchId(torch.id)} />
+              <TorchChip onSelect={() => handlePickupTorch(torch.id)} />
             </WorldAnchor>
           </Fragment>
         ))}
@@ -10569,21 +10567,6 @@ export default function App() {
               showKeyHints={!isTouch}
               onSelect={(id) => handleFireAction(selectedFire.id, id)}
               onClose={() => setSelectedFireId(null)}
-            />
-          </WorldAnchor>
-        ) : null}
-        {selectedTorch && selectedTorchAnchor ? (
-          <WorldAnchor
-            x={selectedTorchAnchor.x}
-            y={selectedTorchAnchor.y}
-            interactive
-          >
-            <ContextMenu theme={lookThemes.world}
-              objectName="Lit Torch"
-              actions={torchMenuActions()}
-              showKeyHints={!isTouch}
-              onSelect={(id) => handleTorchAction(selectedTorch.id, id)}
-              onClose={() => setSelectedTorchId(null)}
             />
           </WorldAnchor>
         ) : null}
@@ -11523,6 +11506,7 @@ export default function App() {
         <p>V / C to switch camera</p>
         <p>E — Interact</p>
         <p>R — 2nd Interact</p>
+        <p>RMB — Place lit torch</p>
         <p>Esc — Options</p>
         {cameraMode === 'first' && <p>Click the world to capture the mouse</p>}
       </div>
@@ -11539,6 +11523,11 @@ export default function App() {
           onLook={applyTouchLook}
           onInteract={handleUseInteract}
           interactLabel={useWinnerLabel}
+          onPlaceTorch={
+            inventoryItems.some((item) => item.id === ITEMS.litTorch)
+              ? handleWorldPlaceTorch
+              : undefined
+          }
           onJump={() => {
             playerRef.current?.pressJump();
           }}
