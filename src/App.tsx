@@ -6200,12 +6200,12 @@ export default function App() {
   // ruling via DEV): SPEAK's predicate is the name
   // chain's own fact — the kind stands awakened, its
   // true name in her journal. Each entry is the kind's
-  // own Waking bone (Systems' RITUAL_RECIPES set — 20
-  // since the bones-for-the-boneless landing). Squirrel
-  // has NO entry: it awaits Adam's word, and until then
-  // its SPEAK fails with Systems' 'name' refusal by the
-  // ordinary path — no special case anywhere.
+  // own Waking bone (Systems' RITUAL_RECIPES set — 21
+  // since the bones-for-the-boneless landings; squirrel
+  // joined last on Adam's yes, keyed 'squirrel-tail-bone'
+  // exactly as Systems registered it).
   const BONE_KIND_FOR_ANIMAL: Readonly<Record<string, string>> = {
+    squirrel: 'squirrel-tail-bone',
     rabbit: 'rabbit-jaw',
     muskrat: 'muskrat-tail',
     mouse: 'mouse-spine',
