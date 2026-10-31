@@ -189,6 +189,12 @@ export const SPOOK_BURST_FACTOR = 3;
 export const SNAP_LUNGE_S = 0.28;
 export const SNAP_LUNGE_SPEED_MPS = 5;
 export const SNAP_STOP_SHORT_M = 0.8;
+/** Squirrel climb (2026-10-31, all DRAFT): refuge reach, rise speed, perch height, coast-clear range + delay. */
+export const SQUIRREL_TREE_REACH_M = 12;
+export const SQUIRREL_CLIMB_SPEED_MPS = 1.4;
+export const SQUIRREL_PERCH_Y_M = 2.6;
+export const SQUIRREL_COAST_CLEAR_M = 10;
+export const SQUIRREL_DESCENT_DELAY_S = 3;
 
 export interface AnimalPoint {
   x: number;
@@ -196,6 +202,15 @@ export interface AnimalPoint {
 }
 
 export type AnimalMode = 'wander' | 'idle' | 'flee' | 'perched' | 'fly';
+
+/**
+ * Squirrel climb states (2026-10-31 — squirrels climb
+ * trees): 'none' is every other kind, always, and a
+ * squirrel on the ground. The cycle: toTree (run for the
+ * trunk) → climbing (rise) → perched (canopy refuge) →
+ * descending (coast clear, come down) → none.
+ */
+export type ClimbState = 'none' | 'toTree' | 'climbing' | 'perched' | 'descending';
 
 export interface AnimalInstance {
   /**
@@ -247,6 +262,10 @@ export interface AnimalInstance {
    * the spook-dart away. Zero for every unprovoked animal.
    */
   snapT: number;
+  /** Squirrel climb state (see ClimbState); 'none' for every other kind. */
+  climbState: ClimbState;
+  /** Seconds she has stayed beyond coast-clear range of a perched squirrel. */
+  clearT: number;
   /** Water points (water kinds) / perch points (flying kinds) in this chunk. */
   anchors: AnimalPoint[];
 }
@@ -380,6 +399,8 @@ export function spawnAnimalsForChunk(input: SpawnAnimalsInput): AnimalInstance[]
       fleeTurn: false,
       spookT: 0,
       snapT: 0,
+      climbState: 'none',
+      clearT: 0,
       anchors: [],
     };
     if (def.movement === 'water') {
@@ -413,6 +434,14 @@ export function spawnAnimalsForChunk(input: SpawnAnimalsInput): AnimalInstance[]
       base.y = 0;
       base.homeX = base.x;
       base.homeZ = base.z;
+      if (kind === 'squirrel') {
+        // Squirrels climb (2026-10-31): their refuge pool
+        // is the chunk's trees — the same anchor list the
+        // flyers perch from — and their perch height is the
+        // climb's ceiling.
+        base.anchors = input.treePoints;
+        base.perchY = SQUIRREL_PERCH_Y_M;
+      }
     }
     base.targetX = base.x;
     base.targetZ = base.z;
@@ -454,6 +483,116 @@ export interface AnimalUpdateInput {
 }
 
 /**
+ * THE SQUIRREL CLIMB (Adam 2026-10-31: "squirrels know how
+ * to climb trees"). Returns true when the climb machinery
+ * handled this step (the generic body stands down);
+ * false leaves the squirrel to ordinary ground life.
+ *
+ * The shape: startled (she inside the flee radius) with a
+ * tree within SQUIRREL_TREE_REACH_M, the flee becomes a
+ * climb — run to the trunk at flee speed, rise pinned to
+ * the bark at climb speed, perch at SQUIRREL_PERCH_Y_M
+ * while she stays within SQUIRREL_COAST_CLEAR_M, descend
+ * after SQUIRREL_DESCENT_DELAY_S of clear coast. No tree
+ * in reach: the ordinary zigzag flee, untouched. A
+ * startle mid-descent sends it back up from where it
+ * hangs. Canopy tree-to-tree travel ("the highway") is a
+ * named follow-up, deliberately not here — v1 is refuge.
+ *
+ * A PROMOTED squirrel never reaches this code (companions
+ * step in companionRuntime, not updateAnimal), and a
+ * perched squirrel is out of offer reach by height — the
+ * shell's feed reads y for that gate; this module only
+ * makes the height true.
+ */
+function stepSquirrelClimb(
+  a: AnimalInstance,
+  dt: number,
+  input: AnimalUpdateInput,
+  distP: number,
+): boolean {
+  if (a.climbState === 'none') {
+    if (distP >= FLEE_RADIUS_M) return false;
+    // Nearest tree in refuge reach of the squirrel.
+    let best: AnimalPoint | null = null;
+    let bestDist = Infinity;
+    for (const p of a.anchors) {
+      const d = Math.hypot(p.x - a.x, p.z - a.z);
+      if (d <= SQUIRREL_TREE_REACH_M && d < bestDist) {
+        best = p;
+        bestDist = d;
+      }
+    }
+    if (!best) return false;
+    a.targetX = best.x;
+    a.targetZ = best.z;
+    a.climbState = 'toTree';
+  }
+  let moving = false;
+  if (a.climbState === 'toTree') {
+    const dx = a.targetX - a.x;
+    const dz = a.targetZ - a.z;
+    const dist = Math.hypot(dx, dz);
+    const step = FLEE_SPEED_MPS * dt;
+    if (dist <= Math.max(step, 0.15)) {
+      // At the trunk: take the bark offset on the approach
+      // side and face outward, away from the trunk centre.
+      const ox = dist > 0.001 ? -dx / dist : 1;
+      const oz = dist > 0.001 ? -dz / dist : 0;
+      a.x = a.targetX + ox * 0.25;
+      a.z = a.targetZ + oz * 0.25;
+      a.heading = Math.atan2(ox, oz);
+      a.climbState = 'climbing';
+    } else {
+      a.x += (dx / dist) * step;
+      a.z += (dz / dist) * step;
+      a.heading = Math.atan2(dx, dz);
+      moving = true;
+    }
+    a.mode = 'flee';
+    a.flying = false;
+  } else if (a.climbState === 'climbing') {
+    a.y = Math.min(a.perchY, a.y + SQUIRREL_CLIMB_SPEED_MPS * dt);
+    moving = true;
+    a.mode = 'flee';
+    if (a.y >= a.perchY) {
+      a.climbState = 'perched';
+      a.clearT = 0;
+      a.mode = 'perched';
+      moving = false;
+    }
+  } else if (a.climbState === 'perched') {
+    a.y = a.perchY;
+    a.mode = 'perched';
+    if (distP <= SQUIRREL_COAST_CLEAR_M) {
+      a.clearT = 0;
+    } else {
+      a.clearT += dt;
+      if (a.clearT >= SQUIRREL_DESCENT_DELAY_S) a.climbState = 'descending';
+    }
+  } else if (a.climbState === 'descending') {
+    if (distP < FLEE_RADIUS_M) {
+      // Startled on the way down: back up from here.
+      a.climbState = 'climbing';
+      a.mode = 'flee';
+      moving = true;
+    } else {
+      a.y = Math.max(0, a.y - SQUIRREL_CLIMB_SPEED_MPS * dt);
+      a.mode = 'flee';
+      moving = true;
+      if (a.y <= 0) {
+        a.y = 0;
+        a.climbState = 'none';
+        a.mode = 'idle';
+        a.timer = 2 + Math.random() * 2;
+      }
+    }
+  }
+  stepAnimalAnimation(a, dt, moving);
+  return true;
+}
+
+/**
  * Gameplay-time behavior step (Math.random allowed here — this is
  * gameplay, not worldgen). Wander within the kind's range, idle/feed
  * pauses, per-kind flee styles from a close player, perch + short flights for
@@ -467,6 +606,16 @@ export function updateAnimal(a: AnimalInstance, dt: number, input: AnimalUpdateI
   const dxP = a.x - input.playerX;
   const dzP = a.z - input.playerZ;
   const distP = Math.hypot(dxP, dzP);
+  // Squirrels climb (2026-10-31): the climb machinery
+  // handles the whole step when it takes it (including a
+  // ground squirrel resting at night — 'none' + inactive
+  // falls through to the generic rest below).
+  if (a.kind === 'squirrel') {
+    if (a.climbState === undefined) a.climbState = 'none';
+    if (a.climbState !== 'none' || active) {
+      if (stepSquirrelClimb(a, dt, input, distP)) return;
+    }
+  }
   // Spook-dart (hand-snatch failure): the dart target stands
   // while the timer runs — the ordinary flee re-target below
   // would overwrite it every frame and scatter the dart.

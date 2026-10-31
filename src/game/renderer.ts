@@ -1003,15 +1003,19 @@ export class WorldRenderer {
    * ALL loaded-chunk animals, no cap, no nearest filter —
    * nearest-only + range cap are the tag's job, UI-side. Kind is
    * the AnimalKind id (UI capitalizes for display — no name
-   * field exists in ANIMAL_DEFS). No y: tags project x/z.
+   * field exists in ANIMAL_DEFS). Tags project x/z; y rides
+   * for the OFFER gate (squirrel climb, 2026-10-31): an
+   * animal overhead — a climbed squirrel at its perch —
+   * is out of offer reach, and height is the honest fact
+   * the candidacy derives that from.
    * No App.tsx touch: the shell polls this getter and renders
    * its own tag.
    */
-  getVisibleAnimals(): { kind: AnimalKind; x: number; z: number; id: string; companion?: boolean }[] {
-    const out: { kind: AnimalKind; x: number; z: number; id: string; companion?: boolean }[] = [];
+  getVisibleAnimals(): { kind: AnimalKind; x: number; z: number; y: number; id: string; companion?: boolean }[] {
+    const out: { kind: AnimalKind; x: number; z: number; y: number; id: string; companion?: boolean }[] = [];
     for (const loaded of this.chunks.values()) {
       for (const pair of loaded.animals) {
-        out.push({ kind: pair.instance.kind, x: pair.instance.x, z: pair.instance.z, id: pair.instance.id });
+        out.push({ kind: pair.instance.kind, x: pair.instance.x, z: pair.instance.z, y: pair.instance.y, id: pair.instance.id });
       }
     }
     // Promoted companions (Companions Build 1): persistent
@@ -1020,7 +1024,7 @@ export class WorldRenderer {
     // resolution key on the id).
     for (const actor of allActors()) {
       const a = actor.instance;
-      out.push({ kind: a.kind, x: a.x, z: a.z, id: a.id, companion: true });
+      out.push({ kind: a.kind, x: a.x, z: a.z, y: a.y, id: a.id, companion: true });
     }
     return out;
   }
@@ -2433,7 +2437,17 @@ export class WorldRenderer {
    */
   private poseAnimal(instance: AnimalInstance, group: THREE.Group): void {
     group.position.set(instance.x, instance.y + instance.bob, instance.z);
-    group.rotation.set(0, instance.heading, 0);
+    // Squirrel cling (2026-10-31): while a squirrel climbs
+    // or descends a trunk it pitches onto the bark — the
+    // tilt IS the read at distance (a shape on the trunk,
+    // then a silhouette in the canopy). Upright otherwise,
+    // perched included. A bespoke cling pose in models.ts
+    // is the named follow-up if this reads poorly.
+    const cling = instance.kind === 'squirrel'
+      && (instance.climbState === 'climbing' || instance.climbState === 'descending')
+      ? -1.2
+      : 0;
+    group.rotation.set(cling, instance.heading, 0);
     const wings = group.userData.wings as THREE.Mesh[] | undefined;
     if (wings && wings.length === 2) {
       const flutter = instance.flying ? 0.15 + 0.6 * Math.sin(instance.wingPhase) : 0;

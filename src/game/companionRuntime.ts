@@ -168,6 +168,8 @@ export function makeCompanionInstance(
     fleeTurn: false,
     spookT: 0,
     snapT: 0,
+    climbState: 'none',
+    clearT: 0,
     anchors: [],
   };
 }
