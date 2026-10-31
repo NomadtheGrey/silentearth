@@ -84,8 +84,9 @@ export const HOME_STORAGE_CAPACITY: Readonly<Record<string, number>> = {
  * lower = more protected). LANE-DECIDED starting tunables for
  * Adam's pin pass, in Background's ShelterQuery shape.
  *
- * STAGED, NOT DEAD (Adam, 2026-10-31, answering the code
- * audit): this protection half — SHELTER_PROTECTION,
+ * WIP — STAGED, NOT DEAD (Adam, 2026-10-31, answering the
+ * code audit: "things not implemented yet get marked
+ * WIP"): this protection half — SHELTER_PROTECTION,
  * SHELTER_RADIUS, shelterMultiplierFor, createShelterQuery,
  * shelterMultiplierAt — is NOT YET CALLED because cold and
  * wet are not implemented yet; it is the staged shelter

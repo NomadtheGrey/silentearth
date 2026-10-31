@@ -23,6 +23,14 @@
 // claim. These grants take inventory only — the
 // shell calls fillJar when the world says she can.
 //
+// WIP (Adam, 2026-10-31): fill/empty are NOT orphans
+// awaiting a water feature — they are the seed of a
+// UNIVERSAL CONTAINER. The jar is being built as THE
+// container, water first among its contents; the
+// general-contents design and the world trigger land
+// together in the container wiring claim. Until then
+// these verbs are deliberately unwired.
+//
 // THE EXTRA POUND, handled honestly: a filled jar
 // weighs 2 lb against the empty jar's 1 lb, so
 // filling GAINS a pound net. fillJar checks the free

@@ -106,6 +106,16 @@ export function isBoneItem(item: string): boolean {
  * phrases drafted from the bone-charms doc's effects,
  * not pins; shrew's phrase is UI's draft note shape).
  * Tier flows from the awakening record (see boneNote).
+ *
+ * WIP (Adam, 2026-10-31): an entry here is a REGISTERED
+ * DRAFT, not a promise of a live effect. Six entries
+ * have no consumer yet and are undecided drafts by
+ * design — turtle-shell-fragment, beaver-incisor,
+ * muskrat-tail, opossum-crest, vole-skull,
+ * squirrel-tail-bone. Unwired is their correct state
+ * until their consuming build is called; the code
+ * audit tracks the set so none is mistaken for a
+ * defect or a silent promise.
  */
 export const BONE_EFFECT_NOTES: Readonly<Record<string, string>> = {
   'shrew-skull':
