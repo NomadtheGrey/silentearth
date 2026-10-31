@@ -37,6 +37,12 @@
  * true). That clamp lives in App, not here: this helper reports
  * the raw projection, including off-screen values, and lets the
  * caller decide.
+ *
+ * THE INVERSE (2026-10-31): screenCenterGroundPoint() runs the
+ * same posed camera backwards — the center ray intersected with
+ * the ground plane — for crosshair-aimed placement. Both
+ * directions share poseCamera(), so aim and anchors can never
+ * disagree about where the camera is.
  */
 
 import * as THREE from 'three';
@@ -81,17 +87,22 @@ export interface ProjectedPoint {
   y: number;
 }
 
+/** The camera half of a projection input (everything but the point). */
+export type CameraInput = Omit<
+  ProjectionInput,
+  'worldX' | 'worldY' | 'worldZ'
+>;
+
 /** Scratch camera, reused across calls — geometry only, no state. */
 const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 1000);
 
 /**
- * Project a world point to screen percentages. Returns null when the
- * point is behind the camera. Off-screen-but-in-front points return
- * percentages outside 0–100; callers decide whether to drop or clamp.
+ * Pose the scratch camera for a frame, exactly as the renderer
+ * would. Shared by the forward projection and its inverse (the
+ * screen-center ground ray, below) so the two can never drift:
+ * one geometry source, both directions.
  */
-export function projectWorldToScreen(
-  input: ProjectionInput,
-): ProjectedPoint | null {
+function poseCamera(input: CameraInput): void {
   camera.aspect = input.aspect;
   camera.updateProjectionMatrix();
   if (input.mode === 'first') {
@@ -120,6 +131,17 @@ export function projectWorldToScreen(
     camera.lookAt(input.playerX, 0, input.playerZ);
   }
   camera.updateMatrixWorld();
+}
+
+/**
+ * Project a world point to screen percentages. Returns null when the
+ * point is behind the camera. Off-screen-but-in-front points return
+ * percentages outside 0–100; callers decide whether to drop or clamp.
+ */
+export function projectWorldToScreen(
+  input: ProjectionInput,
+): ProjectedPoint | null {
+  poseCamera(input);
 
   const vector = new THREE.Vector3(
     input.worldX,
@@ -136,4 +158,38 @@ export function projectWorldToScreen(
     x: ((vector.x + 1) / 2) * 100,
     y: ((1 - vector.y) / 2) * 100,
   };
+}
+
+/**
+ * The inverse of the forward projection, for the screen CENTER:
+ * cast the center ray from the posed camera and intersect the
+ * ground plane (y = 0 — the renderer's ground is a flat plane,
+ * and the forward projection anchors ground targets at y = 0,
+ * so the two directions agree by construction). Returns the
+ * world (x, z) the crosshair rests on, or null when the ray
+ * never meets the ground (a level or upward gaze). This is
+ * where an aimed placement lands (Adam's crosshair ruling,
+ * 2026-10-31); reach and refusal policy live with the caller.
+ */
+export function screenCenterGroundPoint(
+  input: CameraInput,
+): { x: number; z: number } | null {
+  poseCamera(input);
+  const origin = camera.position;
+  // A point on the center axis in front of the camera,
+  // unprojected: the ray through NDC (0, 0).
+  const axisPoint = new THREE.Vector3(0, 0, 0.5).unproject(camera);
+  const dir = axisPoint.sub(origin).normalize();
+  if (!Number.isFinite(dir.x) || !Number.isFinite(dir.y)) {
+    return null;
+  }
+  // Level or up: parallel to (or away from) the plane.
+  if (dir.y >= -1e-6) {
+    return null;
+  }
+  const t = -origin.y / dir.y;
+  if (!Number.isFinite(t) || t < 0) {
+    return null;
+  }
+  return { x: origin.x + dir.x * t, z: origin.z + dir.z * t };
 }

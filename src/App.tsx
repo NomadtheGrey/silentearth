@@ -936,7 +936,11 @@
  *   row-button pattern as house/fire Place + Eat + Light)
  *   and places INSTANTLY AT HER FEET — the settled lean,
  *   decided at build (the preview ghost is the house/fire
- *   pattern, heavy for a torch); the panel stays open,
+ *   pattern, heavy for a torch) [AMENDED 2026-10-31:
+ *   Adam's crosshair ruling moved the landing to the
+ *   screen-center aim — see placeCarriedLitTorch; the
+ *   panel press still carries its result on the note];
+ *   the panel stays open,
  *   the count drops, the note carries the result. Grant
  *   FIRST (Systems placeTorch consumes one lit-torch;
  *   failure touches nothing), then the entity place
@@ -1195,8 +1199,10 @@
  *   DEV signal, Systems 508fcb7 + Background 8302cdc):
  *   the altar's inventory row gains Place (ITEMS.altar
  *   joins PLACEABLE_IDS for the BUTTON only) placing
- *   INSTANTLY AT HER FEET — torch precedent, not the
- *   house/fire preview flow. Grant FIRST (Systems
+ *   INSTANTLY AT HER FEET — the then-torch precedent,
+ *   not the house/fire preview flow (the torch itself
+ *   moved to the crosshair 2026-10-31; the altar keeps
+ *   its feet until its own word). Grant FIRST (Systems
  *   placeAltar consumes one carried altar; failure
  *   touches nothing + shows the reason), then the
  *   entity place (Background primitive, emits
@@ -1728,7 +1734,10 @@ import { WorldAnchor } from './ui/WorldAnchor';
 import { KEY_BADGE_CLASS, LOOK_THEMES, UI_THEMES } from './ui/themes';
 import { CameraTransition } from './ui/CameraTransition';
 import { CAMERA_TRANSITION } from './ui/cameraPresentation';
-import { projectWorldToScreen } from './ui/worldProjection';
+import {
+  projectWorldToScreen,
+  screenCenterGroundPoint,
+} from './ui/worldProjection';
 import type { HarvestTarget, HarvestRequest } from './ui/proximityHarvest';
 import { removeRequestFor } from './ui/proximityHarvest';
 import type {
@@ -3934,6 +3943,37 @@ export default function App() {
     return point;
   };
 
+  // The crosshair's ground point (Adam's crosshair ruling,
+  // 2026-10-31): where the screen-center ray meets the
+  // ground, through the same camera model projectAnchor
+  // projects with — aim and anchors can never disagree.
+  // Null when the gaze never meets the ground (level/up).
+  const crosshairAimPoint = (): { x: number; z: number } | null => {
+    const player = playerRef.current;
+    const container = containerRef.current;
+    if (!player || !container) return null;
+    const width = container.clientWidth;
+    const height = container.clientHeight;
+    if (width === 0 || height === 0) return null;
+    return screenCenterGroundPoint({
+      playerX: player.x,
+      playerZ: player.z,
+      pitch: player.pitch,
+      yaw: player.yaw,
+      mode: player.mode,
+      facing: player.facing,
+      aspect: width / height,
+      eyeHeight: PLAYER_EYE_HEIGHT,
+      thirdOffset: THIRD_PERSON_OFFSET,
+      behindCamera: {
+        distance: BEHIND_CAMERA_DISTANCE,
+        height: BEHIND_CAMERA_HEIGHT,
+        lookAhead: BEHIND_LOOK_AHEAD,
+        lookHeight: BEHIND_LOOK_HEIGHT,
+      },
+    });
+  };
+
   // Re-project the last in-range targets from current player state.
   // Every camera change (move, look, switch, resize) flows through
   // an event that calls this. Placed fires re-project here too
@@ -5607,21 +5647,39 @@ export default function App() {
     saveNow();
   };
 
+  // TORCH PLACE REACH (Adam's crosshair ruling,
+  // 2026-10-31): how far from her the crosshair may set a
+  // torch down. A gaze landing past it CLAMPS to the
+  // circle along the ray — the press is never wasted.
+  // DRAFT: 6 m, the torch light's own plenty-bright
+  // distance; Adam's pin pass settles it.
+  const TORCH_PLACE_REACH = 6;
+
   /**
-   * Placing a carried lit torch: INSTANT AT HER FEET
-   * (settled design — the preview ghost is the
-   * house/fire pattern, heavy for a torch). Grant FIRST
-   * (Systems placeTorch consumes one carried lit-torch;
-   * failure touches nothing), then the entity place
-   * (Background primitive, emits torch:placed →
-   * refreshTorches). ONE CORE, THREE HANDLES (Adam's
-   * torch completion, 2026-10-31): the inventory panel's
-   * Place button (its note carries the result — a panel
-   * action; the panel stays open, the count drops), the
-   * desktop right-click in the locked world, and the
-   * touch PLACE button (both speak through the message
-   * feed). The act is identical behind all three; only
-   * the result's surface differs, as the pickup's does.
+   * Placing a carried lit torch: INSTANT AT THE CROSSHAIR
+   * (Adam, 2026-10-31: "the torch lands where she aims,
+   * if it's not too far away" — nobody places anything
+   * between their feet; this supersedes the at-feet
+   * landing the torch completion shipped with). The aim
+   * is the screen-center ray's ground point (the same
+   * camera model the anchors project with). A ray that
+   * never meets the ground refuses ('Nowhere to set it
+   * down.', DRAFT) — but only when she actually carries a
+   * torch; empty-handed, the grant's own refusal speaks
+   * (the aim is not the truer refusal then). A landing
+   * past TORCH_PLACE_REACH clamps to the reach circle
+   * along the ray. Grant FIRST (Systems placeTorch
+   * consumes one carried lit-torch; failure touches
+   * nothing), then the entity place (Background
+   * primitive, emits torch:placed → refreshTorches).
+   * ONE CORE, THREE HANDLES (Adam's torch completion,
+   * 2026-10-31): the inventory panel's Place button (its
+   * note carries the result — a panel action; she aims
+   * before opening the pack), the desktop right-click in
+   * the locked world, and the touch PLACE button (both
+   * speak through the message feed). The act is identical
+   * behind all three; only the result's surface differs,
+   * as the pickup's does.
    */
   const placeCarriedLitTorch = ():
     | { placed: true }
@@ -5629,7 +5687,25 @@ export default function App() {
     | null => {
     const player = playerRef.current;
     if (!player) return null;
-    const outcome = grantPlaceTorch(inventory, player.x, player.z);
+    const aim = crosshairAimPoint();
+    if (aim === null && inventory.count(ITEMS.litTorch) > 0) {
+      return { placed: false, reason: 'Nowhere to set it down.' };
+    }
+    // Aim null + empty-handed falls back to her feet as
+    // the target — the grant refuses below and nothing
+    // is consumed, so the fallback never lands.
+    const raw = aim ?? { x: player.x, z: player.z };
+    const aimDx = raw.x - player.x;
+    const aimDz = raw.z - player.z;
+    const aimDistance = Math.hypot(aimDx, aimDz);
+    const target =
+      aimDistance > TORCH_PLACE_REACH
+        ? {
+            x: player.x + (aimDx / aimDistance) * TORCH_PLACE_REACH,
+            z: player.z + (aimDz / aimDistance) * TORCH_PLACE_REACH,
+          }
+        : raw;
+    const outcome = grantPlaceTorch(inventory, target.x, target.z);
     // Equality check, not truthiness: non-strict tsc does
     // not narrow this union's boolean discriminant on
     // truthiness (see the torch Light button handler).
