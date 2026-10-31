@@ -431,7 +431,7 @@ const DRAFT_RECIPES: Recipe[] = [
   },
   {
     id: 'charcoal-stick',
-    name: 'Charcoal Stick',
+    name: 'Charred Stick',
     status: 'draft',
     output: { item: ITEMS.charcoalStick, quantity: 1 },
     ingredients: [i(ITEMS.snapWood, 1)],
