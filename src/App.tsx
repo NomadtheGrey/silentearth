@@ -11316,7 +11316,12 @@ export default function App() {
                       ? 'Home storage — empty until first deposit'
                       : // POUNDS (Adam, 2026-10-28): same
                         // unit as the panel header above.
-                        `Stored ${openHomeStore.used()} lb / ${openHomeStore.capacity()} lb`}
+                        // CARRIED rides along (Adam's
+                        // amendment, 2026-10-31): storage
+                        // decisions are pound decisions —
+                        // both pans of the scale on the
+                        // screen where she weighs them.
+                        `Stored ${formatLb(openHomeStore.used())} of ${formatLb(openHomeStore.capacity())} lb · Carrying ${formatLb(inventory.usedLb())} lb`}
                   </p>
                   <p className="text-xs text-stone-400">
                     ↑ Take one · ↑↑ Take all · ↓ Store one · ↓↓ Store all
