@@ -6434,47 +6434,35 @@ export default function App() {
     if (!sky) return false;
     return cycleSplit(sky.cycleT, SEASON_START_MONTH).isDay === false;
   };
-  // Systems' catch set is the authority: the prey kinds
-  // derive by inverting its carcass items
-  // ('fish-carcass' → 'fish'); an item that ever breaks
-  // the -carcass pattern yields no kind, and the cat
-  // does not hunt what it cannot name.
-  const buildCatCatchTable = (): CatCatchTable => {
-    const itemByKind = new Map<string, string>();
-    for (const item of provisioningCatchesFor('cat')) {
-      if (item.endsWith('-carcass')) {
-        itemByKind.set(item.slice(0, -'-carcass'.length), item);
-      }
-    }
-    // COLONY ALIASES: the roster's colony kinds are
-    // plural ('mice', 'voles') where Systems' carcasses
-    // are singular — the same prey under its living
-    // name, yielding the same carcass. Without these
-    // the table would name kinds the world never spawns.
-    if (itemByKind.has('mouse')) itemByKind.set('mice', itemByKind.get('mouse')!);
-    if (itemByKind.has('vole')) itemByKind.set('voles', itemByKind.get('vole')!);
-    return {
-      // The cast is the seam: the derived kinds ride
-      // Systems' data, and 'vole' precedes its AnimalKind
-      // (Models' true vole is pending) — until the kind
-      // exists the prey access simply never matches it,
-      // and the day it exists the table works untouched.
-      kinds: [...itemByKind.keys()] as AnimalKind[],
-      itemFor: (kind) => itemByKind.get(kind) ?? null,
-      // The mouth prop: a vole rides the mouse prop as
-      // a DRAFT stand-in (DEV-approved; Models may add
-      // a true vole).
-      propFor: (kind) =>
-        kind === 'fish'
-          ? 'fish'
-          : (kind as string) === 'mouse' ||
-              (kind as string) === 'mice' ||
-              (kind as string) === 'vole' ||
-              (kind as string) === 'voles'
-            ? 'mouse'
-            : null,
-    };
-  };
+  // Systems' catch set is the authority, and since
+  // Systems' cleanup (5c8143f) it names PREY KINDS
+  // verbatim ('fish', 'mice', 'voles' — roster kinds,
+  // colonies included), so this adapter is a
+  // pass-through now: the kinds read directly, and
+  // the carcass derives through trap-catch's
+  // catchItemFor — the ONE kind->carcass authority,
+  // whose colony mappings are already native. The
+  // inversion + colony alias table this function used
+  // to carry retired whole with the cleanup. The
+  // cast stays as the seam: the kinds ride Systems'
+  // strings, and a named kind the roster hasn't grown
+  // yet simply never matches live prey until it does.
+  const buildCatCatchTable = (): CatCatchTable => ({
+    kinds: provisioningCatchesFor('cat') as AnimalKind[],
+    itemFor: (kind) => catchItemFor(kind),
+    // The mouth prop: a vole rides the mouse prop as
+    // a DRAFT stand-in (DEV-approved; Models may add
+    // a true vole).
+    propFor: (kind) =>
+      kind === 'fish'
+        ? 'fish'
+        : (kind as string) === 'mouse' ||
+            (kind as string) === 'mice' ||
+            (kind as string) === 'vole' ||
+            (kind as string) === 'voles'
+          ? 'mouse'
+          : null,
+  });
   // THE CAT'S LINES (Adam, 2026-10-31 — the theater):
   // a stance press at a cat comes back with Systems'
   // typed 'cat' refusal, and the panel plays one of
