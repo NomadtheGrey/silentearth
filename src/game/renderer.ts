@@ -37,6 +37,7 @@ import {
   stepActors,
 } from './companionRuntime';
 import { catActor, catGlowOn, ensureCat, installCatPreyAccess, stepCat } from './catRuntime';
+import { guideActor, guideVisible, stageGuide, stepGuide } from './guideRuntime';
 import { crowGlowIntensity, CROW_GLOW_EMISSIVE } from './crow';
 import type { CrowTier } from './crow';
 import { ProximityTracker } from './proximity';
@@ -70,7 +71,7 @@ import type { TrapType } from './traps';
 import { pauseState } from './pause';
 import { SkyRig } from './sky';
 import type { SkySnapshot } from './sky';
-import { SEASON_START_MONTH, seasonalWeatherAt } from './weather';
+import { SEASON_START_MONTH, dayFraction, seasonalWeatherAt } from './weather';
 import { createBiomeTexture, TEXTURE_REPEAT } from './terrain';
 import {
   CHUNK_SIZE,
@@ -591,6 +592,9 @@ export class WorldRenderer {
   private catPropKind: string | null = null;
   /** Cover points (trees / bushes) per chunk, for settle/dart watch points. */
   private coverMemo = new Map<string, { x: number; z: number }[]>();
+  /** The guide's layer (a single crow mesh) + its tree-point memo. */
+  private guideGroup: THREE.Group | null = null;
+  private treeMemo = new Map<string, { x: number; z: number }[]>();
   /** Memo for the site-walls query's cave-instance spawn (see siteWallsAt). */
   private wallsSpawnMemo: { seed: string; spawn: { x: number; z: number } } | null = null;
   /**
@@ -1065,6 +1069,56 @@ export class WorldRenderer {
     if (gen.dimensionKey) return;
     const village = villageSite(String(gen.seed), gen.findSpawn(), (x, z) => gen.weightsAt(x, z));
     ensureCat(village.hearthHouse.hearthSpot.x, village.hearthHouse.hearthSpot.z);
+    const grove = groveSite(String(gen.seed), gen.findSpawn(), (x, z) => gen.weightsAt(x, z).dominant);
+    stageGuide(grove.center.x, grove.center.z);
+  }
+
+  /**
+   * The guide's windows (Adam-settled dawn + dusk, 2026-
+   * 10-31): the first and last ~2 game-hours of the day
+   * arc, read off the sky rig's own clock. The cycle
+   * starts at dawn; dusk ends where the day fraction
+   * ends (September's fraction — the calendar's month
+   * drift is not built, and September is the world's
+   * standing start). Width DRAFT.
+   */
+  private guideWindowOpen(): boolean {
+    const sky = this.sky;
+    if (!sky) return false;
+    const t = sky.cycleT;
+    const w = 2 / 24;
+    if (t <= w) return true;
+    const f = dayFraction(SEASON_START_MONTH);
+    return t >= f - w && t <= f;
+  }
+
+  /** The nearest real tree point (the guide's perches), generateChunk ground truth, memoized per chunk. */
+  private treePointNear(x: number, z: number, r: number): { x: number; z: number } | null {
+    const pcx = Math.floor(x / CHUNK_SIZE);
+    const pcz = Math.floor(z / CHUNK_SIZE);
+    let best: { x: number; z: number } | null = null;
+    let bestD = r;
+    for (let cx = pcx - 1; cx <= pcx + 1; cx++) {
+      for (let cz = pcz - 1; cz <= pcz + 1; cz++) {
+        const key = `${cx},${cz}`;
+        let pts = this.treeMemo.get(key);
+        if (!pts) {
+          pts = [];
+          for (const obj of this.gen.generateChunk(cx, cz).objects) {
+            if (obj.kind === 'tree' || obj.kind === 'oakTree') pts.push({ x: obj.x, z: obj.z });
+          }
+          this.treeMemo.set(key, pts);
+        }
+        for (const p of pts) {
+          const d = Math.hypot(p.x - x, p.z - z);
+          if (d < bestD) {
+            bestD = d;
+            best = p;
+          }
+        }
+      }
+    }
+    return best;
   }
 
   /**
@@ -2691,6 +2745,30 @@ export class WorldRenderer {
           this.catGlowLight = null;
         }
         this.poseAnimal(c.instance, this.catGroup);
+      }
+    }
+    // The raven guide (2026-10-31): stepped after the cat,
+    // in its own one-mesh layer; visible only while it
+    // perches or flies, and never inside a dimension.
+    {
+      const g = guideActor();
+      if (g) {
+        stepGuide(dt, {
+          playerX: this.player.x,
+          playerZ: this.player.z,
+          windowOpen: this.guideWindowOpen(),
+          dimensionActive: !!this.gen.dimensionKey,
+          perchNear: (x, z, r) => this.treePointNear(x, z, r),
+        });
+        if (!this.guideGroup) {
+          this.guideGroup = new THREE.Group();
+          this.guideGroup.add(buildAnimal('crow'));
+          this.scene.add(this.guideGroup);
+        }
+        this.guideGroup.visible = guideVisible() && !this.gen.dimensionKey;
+        if (this.guideGroup.visible) {
+          this.poseAnimal(g.instance, this.guideGroup);
+        }
       }
     }
     this.stream();

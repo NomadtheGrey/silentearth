@@ -504,6 +504,13 @@ export interface EventMap {
   'cat:delivered': { item: string };
   'cat:present': { item: string; x: number; z: number };
   'cat:gift': { item: string; x: number; z: number };
+  /**
+   * The raven guide (2026-10-31): the bird calls from its
+   * perch — the payload position lets the shell judge the
+   * call's reach by distance; its surface (a feed line, a
+   * sound) is the shell's.
+   */
+  'guide:call': { x: number; z: number };
 }
 
 type Handler<E> = (payload: E) => void;
