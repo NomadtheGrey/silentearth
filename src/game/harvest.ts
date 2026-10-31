@@ -306,14 +306,16 @@ export function clayBonusChanceFor(moleActive: boolean): number {
  * - workstation: a stump within range (stumps are
  *   workstation anchors in objects.ts).
  * - loom: a placed loom within range (loomState).
- * Their consumers are the shell's StationPanel door
- * (keyed on workstation) and the station-anchor
+ * Their consumer is the shell's station-anchor
  * derivation (the harvest column's projection point,
  * gated on both) — NOT the crafting feed: under
  * Adam's faced-target law (2026-10-30) every station
- * feeds from her one faced target, so no fire fact is
- * carried here and no context mapping is built on
- * this. (A litFire fact + a fallback mapper lived
+ * feeds from her one faced target (the stump's one
+ * crafting dialog keys on the faced stump, not on
+ * presence; the old StationPanel door retired with
+ * the stump-one-door landing, 2026-10-31), so no fire
+ * fact is carried here and no context mapping is built
+ * on this. (A litFire fact + a fallback mapper lived
  * here briefly and were removed in the #30 cleanup —
  * zero consumers once the feed went faced-target.)
  */
