@@ -2737,21 +2737,36 @@ export default function App() {
   // and anchor source differ). Renamed from
   // selectedAltarId when stump sites gained panels.
   const [selectedSiteId, setSelectedSiteId] = useState<string | null>(null);
-  // STUMP HUB (Adam's ruling, 2026-10-31): at a stump
-  // the anchored window is a hub of three sibling
-  // doors — Craft (the default: E is Craft at a stump),
-  // Upgrade (the transformation acts, one pill per
-  // entry in the hoisted acts list), Ritual (the
-  // staging list). The view resets to Craft whenever
-  // the selection changes, so every fresh E at a stump
-  // lands on Craft. Altar sites never read this — their
-  // anchored panel is unchanged.
-  const [stumpView, setStumpView] = useState<
+  // CRAFT CONTEXT — THE FOLD (Adam's design, approved
+  // as claimed 2026-10-31): there is ONE crafting dialog.
+  // When it opens while a stump — plain or made altar —
+  // is her faced context, the dialog carries that stump's
+  // doors inside itself (Craft | Upgrade | Ritual, Craft
+  // default): E at a stump, K or the panel button while
+  // facing one, touch USE, and the stump's name chip all
+  // open the dialog WITH the context; any other opening
+  // is the plain dialog exactly as before. The anchored
+  // stump hub this replaces is retired (the altar sites
+  // beyond the stump family keep their anchored panel).
+  // The context is the stump she OPENED at — it does not
+  // follow her facing afterwards (she can look around
+  // freely; the look-up trap dies of its cause), while
+  // the station feed inside Craft still follows the
+  // faced winner as always. The context clears whenever
+  // the dialog closes, however it closes (E, the radio
+  // swap, Close, the walk-away leash) — the effect below
+  // is the single guarantee, so no close site can leak it.
+  const [craftContextSiteId, setCraftContextSiteId] =
+    useState<string | null>(null);
+  const [craftDoor, setCraftDoor] = useState<
     'craft' | 'upgrade' | 'ritual'
   >('craft');
   useEffect(() => {
-    setStumpView('craft');
-  }, [selectedSiteId]);
+    if (!craftingOpen) {
+      setCraftContextSiteId(null);
+      setCraftDoor('craft');
+    }
+  }, [craftingOpen]);
   // Stump ritual anchors (bone build): stumpPositions
   // at her feet, projected like altar anchors. State,
   // not memo — projection needs the live container +
@@ -5736,9 +5751,29 @@ export default function App() {
     setCharmsOpen(false);
   };
   const openCraftingPanel = () => {
+    // THE FOLD: opening the dialog while a stump (plain
+    // or made altar) is her faced winner attaches that
+    // stump as the dialog's context, doors and all. The
+    // press-specific openers (E at a stump, its chip)
+    // set the same context directly. Any other opening
+    // leaves the context null — the plain dialog.
+    if (
+      useWinner?.kind === 'site' &&
+      useWinner.siteId.startsWith('stump:')
+    ) {
+      setCraftContextSiteId(useWinner.siteId);
+      setCraftDoor('craft');
+    }
     setCraftingOpen(true);
     setInventoryOpen(false);
     setCharmsOpen(false);
+  };
+  // E / touch USE / the name chip at a stump: open the
+  // dialog on that stump's context, Craft door first.
+  const openStumpContext = (siteId: string) => {
+    setCraftContextSiteId(siteId);
+    setCraftDoor('craft');
+    openCraftingPanel();
   };
   const toggleInventoryPanel = () => {
     if (inventoryOpen) setInventoryOpen(false);
@@ -7960,7 +7995,7 @@ export default function App() {
   // show what remains to find. Systems' stageBone
   // refusal stays as backstop.
   const selectedSiteKindOptions =
-    selectedSiteId === null
+    selectedSiteId === null && craftContextSiteId === null
       ? []
       : (() => {
           const counts = new Map<string, number>();
@@ -7980,7 +8015,7 @@ export default function App() {
           }));
         })();
   const selectedSiteFoodOptions =
-    selectedSiteId === null
+    selectedSiteId === null && craftContextSiteId === null
       ? []
       : (() => {
           const byItem = new Map<string, number>();
@@ -7997,33 +8032,91 @@ export default function App() {
           }));
         })();
 
+  // CRAFT CONTEXT FACTS (the fold): the same derivations
+  // as the selected site's, run on the dialog's context
+  // stump — position, additions, progress, grade, label,
+  // acts, and the ritual reads. The context is always a
+  // stump (plain or made altar), so the label is the
+  // stump pair. The kind/food option lists above are
+  // shared (they read the pack, not the site; their guard
+  // opens for the context too).
+  const contextSitePosition =
+    craftContextSiteId === null
+      ? null
+      : sitePositionFor(craftContextSiteId);
+  const contextSiteAdditions: readonly string[] =
+    contextSitePosition?.kind === 'stump'
+      ? (stumpState
+          .snapshot()
+          .find(
+            (record) =>
+              record.x === contextSitePosition.x &&
+              record.z === contextSitePosition.z,
+          )?.additions ?? [])
+      : [];
+  const contextSiteProgress = altarProgressFrom(contextSiteAdditions);
+  const contextSiteGrade =
+    contextSitePosition === null
+      ? null
+      : siteGrade(contextSitePosition.kind, contextSiteAdditions);
+  const contextSiteLabel =
+    craftContextSiteId === null
+      ? null
+      : isStumpyAltar(contextSiteAdditions)
+        ? 'Stumpy Altar'
+        : 'Stump';
+  const contextSiteActs: { id: string; label: string }[] = (() => {
+    if (craftContextSiteId === null || contextSitePosition === null) {
+      return [];
+    }
+    const acts: { id: string; label: string }[] = [];
+    if (contextSitePosition.kind === 'stump') {
+      if (!contextSiteProgress.stones) {
+        acts.push({ id: 'place-stones', label: 'Place the Stones' });
+      }
+      if (!contextSiteProgress.glyph) {
+        acts.push({ id: 'draw-glyph', label: 'Draw the Glyph' });
+      }
+      if (!contextSiteProgress.candle) {
+        acts.push({ id: 'set-candle', label: 'Set the Candle' });
+      }
+    }
+    if (contextSiteGrade === 2 && !journalLinked) {
+      acts.push({ id: 'link-journal', label: 'Link the Journal' });
+    }
+    return acts;
+  })();
+  const contextSiteStaged =
+    craftContextSiteId === null
+      ? null
+      : (ritualSiteState.getStaged(craftContextSiteId) ?? null);
+  const contextSiteStaging =
+    contextSiteStaged === null || craftContextSiteId === null
+      ? null
+      : (stagingBookRef.current.get(
+          craftContextSiteId,
+          contextSiteStaged.bone,
+        ) ?? null);
+  const contextSiteRecipe =
+    contextSiteStaged === null
+      ? null
+      : (ritualRecipeFor(contextSiteStaged.bone) ?? null);
+
   // TRANSFORMATION ACTS for the selected site, hoisted
   // like the option lists below's neighbours so the
   // digit dispatch reads the SAME list the panel
-  // renders. At a stump: the three makings in order,
-  // each present until its step is done (none once the
-  // transformation completes). At altar-grade ground
-  // (grade 2 — a Stumpy Altar or a made Altar) while
-  // the books are unlinked: the Linking. Grade-1 sites
-  // (plain stumps) never show the Linking.
-  const selectedIsStump =
-    selectedSiteId !== null && selectedSiteId.startsWith('stump:');
+  // renders. The makings at a stump live in the CONTEXT
+  // acts list (the fold — stumps no longer select, so
+  // this selected list never sees one); here, at an
+  // altar site: while the books are unlinked and the
+  // ground is altar-grade (grade 2 — a made Altar; a
+  // Stumpy Altar reaches the same act through the
+  // context list), the Linking.
   const selectedSiteActs: { id: string; label: string }[] = (() => {
     if (selectedSiteId === null || selectedSitePosition === null) {
       return [];
     }
     const acts: { id: string; label: string }[] = [];
-    if (selectedSitePosition.kind === 'stump') {
-      if (!selectedSiteProgress.stones) {
-        acts.push({ id: 'place-stones', label: 'Place the Stones' });
-      }
-      if (!selectedSiteProgress.glyph) {
-        acts.push({ id: 'draw-glyph', label: 'Draw the Glyph' });
-      }
-      if (!selectedSiteProgress.candle) {
-        acts.push({ id: 'set-candle', label: 'Set the Candle' });
-      }
-    }
     if (selectedSiteGrade === 2 && !journalLinked) {
       acts.push({ id: 'link-journal', label: 'Link the Journal' });
     }
@@ -8428,12 +8521,18 @@ export default function App() {
   // World state is never touched: a staged ritual stays
   // staged, a fire's lighting keeps running. The pile's
   // old 2.5 m feed-clear is absorbed into this rule.
+  // THE FOLD'S ARM (2026-10-31): a crafting dialog opened
+  // on a stump's context rides the same leash from that
+  // stump — walking off closes the dialog (and the
+  // context clears with it). A PLAIN dialog (no context)
+  // is never leashed: K in the open field stays open
+  // until she closes it, exactly as before.
   const WALK_AWAY_LEASH = HARVEST_RANGE + 2;
   // SITE WINDOW SEAT (Adam, 2026-10-31: 'lower that
   // window a smidge' — the anchored site window's top
-  // crowded the screen edge): the hub and the altar
-  // panel drop this far below their standard seat.
-  // DRAFT — tunable at his sighting.
+  // crowded the screen edge): the altar panel drops
+  // this far below its standard seat. DRAFT — tunable
+  // at his sighting.
   const SITE_WINDOW_DROP_PX = 24;
   useEffect(() => {
     const anyOpen =
@@ -8442,7 +8541,8 @@ export default function App() {
       selectedSiteId !== null ||
       selectedTorchId !== null ||
       selectedTentId !== null ||
-      homeMenuOpen;
+      homeMenuOpen ||
+      (craftingOpen && craftContextSiteId !== null);
     if (!anyOpen) return;
     const dialogUp =
       pendingTrapRecipeId !== null ||
@@ -8497,6 +8597,12 @@ export default function App() {
           setHomeMenuOpen(false);
         }
       }
+      if (craftingOpen && craftContextSiteId !== null) {
+        const stump = sitePositionFor(craftContextSiteId);
+        if (walkAwayShouldClose(stump, p, WALK_AWAY_LEASH)) {
+          setCraftingOpen(false);
+        }
+      }
     });
     return off;
   }, [
@@ -8506,6 +8612,8 @@ export default function App() {
     selectedTorchId,
     selectedTentId,
     homeMenuOpen,
+    craftingOpen,
+    craftContextSiteId,
     pendingTrapRecipeId,
     pendingRemoveTarget,
     leaveConfirmOpen,
@@ -9158,7 +9266,14 @@ export default function App() {
         handleHarvestHive(winner.x, winner.z);
         break;
       case 'site':
-        setSelectedSiteId(winner.siteId);
+        // THE FOLD: a stump opens the crafting dialog on
+        // its context (doors inside); an altar site keeps
+        // its anchored panel. Stumps no longer select.
+        if (winner.siteId.startsWith('stump:')) {
+          openStumpContext(winner.siteId);
+        } else {
+          setSelectedSiteId(winner.siteId);
+        }
         break;
       case 'fire':
         setSelectedFireId(winner.id);
@@ -9311,30 +9426,16 @@ export default function App() {
       // panel's own render order, from the hoisted
       // lists the panel renders.
       const siteId = selectedSiteId;
-      // STUMP HUB (2026-10-31): digits follow the
-      // ACTIVE VIEW. Craft is click-driven (the
-      // CraftingMenu has no digit rows — digits wait);
-      // Upgrade's digits fire the act pills in list
-      // order; Ritual falls through to the lists below
-      // with NO acts offset (the acts live in Upgrade
-      // now, and the hub's RitualPanel isn't passed
-      // them, so its badges start at the kinds too).
-      if (siteId.startsWith('stump:')) {
-        if (stumpView === 'craft') return;
-        if (stumpView === 'upgrade') {
-          const act = selectedSiteActs[digit - 1];
-          if (act) handleSiteAct(siteId, act.id);
-          return;
-        }
-      }
       // TRANSFORMATION ACTS take the panel's first
       // digits (their render order — the panel badges
       // them first too); every later list shifts by the
-      // acts count, from this one hoisted list. At a
-      // stump the count is 0 (see above).
-      const actsInPanel = siteId.startsWith('stump:')
-        ? 0
-        : selectedSiteActs.length;
+      // acts count, from this one hoisted list. (Only
+      // altar sites reach this dispatch now — the fold
+      // retired the stump hub's digit arm whole: a
+      // stump's acts and ritual rows are dialog doors,
+      // click/touch-driven, with no digit keys. Named
+      // consequence of the fold, DEV's report to Adam.)
+      const actsInPanel = selectedSiteActs.length;
       if (digit <= actsInPanel) {
         const act = selectedSiteActs[digit - 1];
         if (act) handleSiteAct(siteId, act.id);
@@ -10430,7 +10531,7 @@ export default function App() {
             <WorldAnchor x={x} y={y} interactive>
               <AltarChip
                 label="Stump"
-                onSelect={() => setSelectedSiteId(siteId)}
+                onSelect={() => openStumpContext(siteId)}
               />
             </WorldAnchor>
           </Fragment>
@@ -10577,232 +10678,7 @@ export default function App() {
         ) : null}
         {selectedSiteId !== null &&
         selectedSiteLabel !== null &&
-        selectedSiteAnchor &&
-        selectedIsStump ? (
-          <WorldAnchor
-            x={selectedSiteAnchor.x}
-            y={selectedSiteAnchor.y}
-            interactive
-            dropPx={SITE_WINDOW_DROP_PX}
-          >
-            {/* STUMP HUB (Adam's ruling, 2026-10-31):
-              the stump's anchored window is one hub of
-              three sibling doors. E lands on Craft (the
-              stump's primary job); Upgrade presents the
-              transformation acts — one pill per entry in
-              the hoisted acts list, so future additions
-              arrive as more pills with no hub changes;
-              Ritual keeps the staging list. Uniform
-              across stump grades. Door labels + the
-              empty-upgrade line are DRAFT copy. */}
-            <div className="flex w-72 flex-col gap-2">
-              <div
-                className={
-                  'flex items-center gap-1 rounded-2xl p-1.5 ' +
-                  UI_THEMES[lookThemes.world].panel
-                }
-                role="group"
-                aria-label={`${selectedSiteLabel} doors`}
-              >
-                {(['craft', 'upgrade', 'ritual'] as const).map(
-                  (view) => (
-                    <button
-                      key={view}
-                      type="button"
-                      aria-pressed={stumpView === view}
-                      onClick={() => setStumpView(view)}
-                      onTouchStart={(e) => {
-                        e.stopPropagation();
-                      }}
-                      className={
-                        'min-h-[44px] flex-1 rounded-xl px-2 py-1.5 text-sm ' +
-                        (stumpView === view
-                          ? UI_THEMES[lookThemes.world].button
-                          : 'text-stone-300 hover:bg-white/10')
-                      }
-                    >
-                      {view === 'craft'
-                        ? 'Craft'
-                        : view === 'upgrade'
-                          ? 'Upgrade'
-                          : 'Ritual'}
-                    </button>
-                  ),
-                )}
-              </div>
-              {stumpView === 'craft' ? (
-                // HUB CRAFT BOUND (Adam's scroll bug,
-                // hunted 2026-10-31): the Craft door was
-                // the hub's one UNBOUNDED seat — the menu
-                // grew taller than the screen and the
-                // wheel had no scrollable ancestor, so the
-                // top sections were unreachable. It wears
-                // the Upgrade door's bound now (the
-                // ContextMenu/RitualPanel pattern). Interim
-                // while the hub lives: the frame-fixed
-                // split + styled scrollbar belong to the
-                // surviving dialog seat (the fold claim).
-                <div className="w-72 max-w-[calc(100vw-1rem)]">
-                <CraftingMenu theme={lookThemes.dialog}
-                  recipes={orderedCraftingRecipes}
-                  sections={craftingSections}
-                  stationNote={stationNote}
-                  comfortable={isTouch}
-                  selectedRecipeId={selectedRecipeId}
-                  onSelectRecipe={setSelectedRecipeId}
-                  onCraft={handleCraft}
-                  onCraftPrerequisite={handleCraftPrerequisite}
-                  onClose={() => {
-                    setSelectedSiteId(null);
-                    setRitualNote(null);
-                  }}
-                />
-                </div>
-              ) : stumpView === 'upgrade' ? (
-                <section
-                  aria-label={`${selectedSiteLabel} upgrades`}
-                  className={
-                    'w-72 max-h-[70vh] overflow-y-auto rounded-2xl p-2 ' +
-                    UI_THEMES[lookThemes.world].panel
-                  }
-                >
-                  <h3 className="text-sm font-medium">
-                    {selectedSiteLabel}
-                  </h3>
-                  {selectedSiteActs.length > 0 ? (
-                    <div className="mt-2 flex flex-col gap-1">
-                      {selectedSiteActs.map((act, i) => (
-                        <button
-                          key={act.id}
-                          type="button"
-                          onClick={() =>
-                            selectedSiteId !== null &&
-                            handleSiteAct(selectedSiteId, act.id)
-                          }
-                          onTouchStart={(e) => {
-                            e.stopPropagation();
-                          }}
-                          className={
-                            'min-h-[44px] rounded px-3 py-2 text-left text-sm ' +
-                            UI_THEMES[lookThemes.world].button
-                          }
-                        >
-                          {act.label}
-                          {!isTouch ? (
-                            <span
-                              aria-hidden="true"
-                              className={'ml-1 ' + KEY_BADGE_CLASS}
-                            >
-                              {i + 1}
-                            </span>
-                          ) : null}
-                        </button>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="mt-2 text-xs text-stone-300">
-                      Nothing to add here.
-                    </p>
-                  )}
-                </section>
-              ) : selectedSiteGrade !== 2 ? (
-                // GRADE GATE (Adam, 2026-10-31): the
-                // Ritual door stays VISIBLE at a plain
-                // stump, gated — its body is the refusal,
-                // naming the want (an altar) and pointing
-                // at the Upgrade door beside it.
-                // Discoverability over absence. The
-                // staging handler guards itself too, so
-                // the gate is not this rendering's word
-                // alone. (The grade derivation reads 2
-                // only for altar-grade ground; a completed
-                // stump takes the live panel below.)
-                <section
-                  aria-label={`${selectedSiteLabel} ritual`}
-                  className={
-                    'w-72 max-h-[70vh] overflow-y-auto rounded-2xl p-2 ' +
-                    UI_THEMES[lookThemes.world].panel
-                  }
-                >
-                  <h3 className="text-sm font-medium">
-                    {selectedSiteLabel}
-                  </h3>
-                  <p className="mt-2 text-sm text-stone-200">
-                    {RITUAL_ALTAR_REFUSAL}
-                  </p>
-                  {ritualNote !== null &&
-                  ritualNote !== RITUAL_ALTAR_REFUSAL ? (
-                    <p className="mt-1 text-xs text-stone-300">
-                      {ritualNote}
-                    </p>
-                  ) : null}
-                </section>
-              ) : (
-              <RitualPanel theme={lookThemes.world}
-                siteLabel={selectedSiteLabel}
-                staged={
-                  selectedSiteStaged !== null &&
-                  selectedSiteStaging !== null &&
-                  selectedSiteRecipe !== null
-                    ? (() => {
-                        const facts = skyFacts();
-                        return {
-                          boneDisplay: boneDisplayFor(
-                            selectedSiteStaged.bone,
-                          ),
-                          bonePlaced: selectedSiteStaging.bonePlaced,
-                          offeringGiven: selectedSiteStaging.offeringGiven,
-                          nameSpoken: selectedSiteStaging.nameSpoken,
-                          looks: nameSightRef.current.looksAt(
-                            selectedSiteStaged.bone,
-                          ),
-                          minLooks: selectedSiteRecipe.spokenName.minLooks,
-                          sky: selectedSiteRecipe.sky,
-                          skyLabel: skyLabelFor(selectedSiteRecipe.sky),
-                          windowOpen:
-                            facts !== null &&
-                            windowOpen(selectedSiteRecipe.sky, facts),
-                          completed: selectedSiteStaging.completed,
-                        };
-                      })()
-                    : null
-                }
-                kindOptions={selectedSiteKindOptions}
-                foodOptions={selectedSiteFoodOptions}
-                note={ritualNote}
-                siteActs={undefined}
-                showKeyHints={!isTouch}
-                onStageBone={(kind) =>
-                  selectedSiteId !== null &&
-                  handleStageBone(selectedSiteId, kind)
-                }
-                onGiveOffering={(item) =>
-                  selectedSiteId !== null &&
-                  selectedSiteStaged !== null &&
-                  handleGiveOffering(
-                    selectedSiteId,
-                    selectedSiteStaged.bone,
-                    item,
-                  )
-                }
-                onSpeakName={() =>
-                  selectedSiteId !== null &&
-                  selectedSiteStaged !== null &&
-                  handleSpeakName(selectedSiteId, selectedSiteStaged.bone)
-                }
-                onClose={() => {
-                  setSelectedSiteId(null);
-                  setRitualNote(null);
-                }}
-              />
-              )}
-            </div>
-          </WorldAnchor>
-        ) : null}
-        {selectedSiteId !== null &&
-        selectedSiteLabel !== null &&
-        selectedSiteAnchor &&
-        !selectedIsStump ? (
+        selectedSiteAnchor ? (
           <WorldAnchor
             x={selectedSiteAnchor.x}
             y={selectedSiteAnchor.y}
@@ -11350,17 +11226,201 @@ export default function App() {
           />
         ) : null}
         {craftingOpen ? (
-          <CraftingMenu theme={lookThemes.dialog}
-            recipes={orderedCraftingRecipes}
-            sections={craftingSections}
-            stationNote={stationNote}
-            comfortable={isTouch}
-            selectedRecipeId={selectedRecipeId}
-            onSelectRecipe={setSelectedRecipeId}
-            onCraft={handleCraft}
-            onCraftPrerequisite={handleCraftPrerequisite}
-            onClose={() => setCraftingOpen(false)}
-          />
+          craftContextSiteId !== null ? (
+            // THE FOLD: the dialog on a stump's context —
+            // the door row rides on top of the active
+            // door's body, all inside the one dialog seat.
+            // Craft is the CraftingMenu itself; Upgrade
+            // is the acts list (the hub's, verbatim in
+            // behaviour — digit badges gone with the
+            // hub's digit arm); Ritual is the panel
+            // without site acts, the grade gate folded in.
+            <div className="flex flex-col gap-2">
+              <div
+                className={
+                  'flex items-center gap-1 rounded-2xl p-1.5 ' +
+                  UI_THEMES[lookThemes.dialog].panel
+                }
+                role="group"
+                aria-label={`${contextSiteLabel ?? 'Stump'} doors`}
+              >
+                {(['craft', 'upgrade', 'ritual'] as const).map(
+                  (door) => (
+                    <button
+                      key={door}
+                      type="button"
+                      aria-pressed={craftDoor === door}
+                      onClick={() => setCraftDoor(door)}
+                      onTouchStart={(e) => {
+                        e.stopPropagation();
+                      }}
+                      className={
+                        'min-h-[44px] flex-1 rounded-xl px-2 py-1.5 text-sm ' +
+                        (craftDoor === door
+                          ? UI_THEMES[lookThemes.dialog].button
+                          : 'text-stone-300 hover:bg-white/10')
+                      }
+                    >
+                      {door === 'craft'
+                        ? 'Craft'
+                        : door === 'upgrade'
+                          ? 'Upgrade'
+                          : 'Ritual'}
+                    </button>
+                  ),
+                )}
+              </div>
+              {craftDoor === 'craft' ? (
+                <CraftingMenu theme={lookThemes.dialog}
+                  recipes={orderedCraftingRecipes}
+                  sections={craftingSections}
+                  stationNote={stationNote}
+                  comfortable={isTouch}
+                  selectedRecipeId={selectedRecipeId}
+                  onSelectRecipe={setSelectedRecipeId}
+                  onCraft={handleCraft}
+                  onCraftPrerequisite={handleCraftPrerequisite}
+                  onClose={() => setCraftingOpen(false)}
+                />
+              ) : craftDoor === 'upgrade' ? (
+                <section
+                  aria-label={`${contextSiteLabel ?? 'Stump'} upgrades`}
+                  className={
+                    'max-h-[70vh] overflow-y-auto rounded-2xl p-2 ' +
+                    UI_THEMES[lookThemes.dialog].panel
+                  }
+                >
+                  <h3 className="text-sm font-medium">
+                    {contextSiteLabel}
+                  </h3>
+                  {contextSiteActs.length > 0 ? (
+                    <div className="mt-2 flex flex-col gap-1">
+                      {contextSiteActs.map((act) => (
+                        <button
+                          key={act.id}
+                          type="button"
+                          onClick={() =>
+                            handleSiteAct(craftContextSiteId, act.id)
+                          }
+                          onTouchStart={(e) => {
+                            e.stopPropagation();
+                          }}
+                          className={
+                            'min-h-[44px] rounded px-3 py-2 text-left text-sm ' +
+                            UI_THEMES[lookThemes.dialog].button
+                          }
+                        >
+                          {act.label}
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="mt-2 text-xs text-stone-300">
+                      Nothing to add here.
+                    </p>
+                  )}
+                </section>
+              ) : contextSiteGrade !== 2 ? (
+                // GRADE GATE, folded in: the Ritual door
+                // stays VISIBLE at a plain stump, gated —
+                // its body is the refusal, pointing at the
+                // Upgrade door. The staging handler guards
+                // itself too (handleStageBone), so the gate
+                // is not this rendering's word alone.
+                <section
+                  aria-label={`${contextSiteLabel ?? 'Stump'} ritual`}
+                  className={
+                    'max-h-[70vh] overflow-y-auto rounded-2xl p-2 ' +
+                    UI_THEMES[lookThemes.dialog].panel
+                  }
+                >
+                  <h3 className="text-sm font-medium">
+                    {contextSiteLabel}
+                  </h3>
+                  <p className="mt-2 text-sm text-stone-200">
+                    {RITUAL_ALTAR_REFUSAL}
+                  </p>
+                  {ritualNote !== null &&
+                  ritualNote !== RITUAL_ALTAR_REFUSAL ? (
+                    <p className="mt-1 text-xs text-stone-300">
+                      {ritualNote}
+                    </p>
+                  ) : null}
+                </section>
+              ) : (
+                <RitualPanel theme={lookThemes.dialog}
+                  siteLabel={contextSiteLabel ?? 'Stump'}
+                  staged={
+                    contextSiteStaged !== null &&
+                    contextSiteStaging !== null &&
+                    contextSiteRecipe !== null
+                      ? (() => {
+                          const facts = skyFacts();
+                          return {
+                            boneDisplay: boneDisplayFor(
+                              contextSiteStaged.bone,
+                            ),
+                            bonePlaced: contextSiteStaging.bonePlaced,
+                            offeringGiven:
+                              contextSiteStaging.offeringGiven,
+                            nameSpoken: contextSiteStaging.nameSpoken,
+                            looks: nameSightRef.current.looksAt(
+                              contextSiteStaged.bone,
+                            ),
+                            minLooks: contextSiteRecipe.spokenName.minLooks,
+                            sky: contextSiteRecipe.sky,
+                            skyLabel: skyLabelFor(contextSiteRecipe.sky),
+                            windowOpen:
+                              facts !== null &&
+                              windowOpen(contextSiteRecipe.sky, facts),
+                            completed: contextSiteStaging.completed,
+                          };
+                        })()
+                      : null
+                  }
+                  kindOptions={selectedSiteKindOptions}
+                  foodOptions={selectedSiteFoodOptions}
+                  note={ritualNote}
+                  siteActs={undefined}
+                  showKeyHints={false}
+                  onStageBone={(kind) =>
+                    handleStageBone(craftContextSiteId, kind)
+                  }
+                  onGiveOffering={(item) =>
+                    contextSiteStaged !== null &&
+                    handleGiveOffering(
+                      craftContextSiteId,
+                      contextSiteStaged.bone,
+                      item,
+                    )
+                  }
+                  onSpeakName={() =>
+                    contextSiteStaged !== null &&
+                    handleSpeakName(
+                      craftContextSiteId,
+                      contextSiteStaged.bone,
+                    )
+                  }
+                  onClose={() => {
+                    setCraftingOpen(false);
+                    setRitualNote(null);
+                  }}
+                />
+              )}
+            </div>
+          ) : (
+            <CraftingMenu theme={lookThemes.dialog}
+              recipes={orderedCraftingRecipes}
+              sections={craftingSections}
+              stationNote={stationNote}
+              comfortable={isTouch}
+              selectedRecipeId={selectedRecipeId}
+              onSelectRecipe={setSelectedRecipeId}
+              onCraft={handleCraft}
+              onCraftPrerequisite={handleCraftPrerequisite}
+              onClose={() => setCraftingOpen(false)}
+            />
+          )
         ) : null}
         {charmsOpen ? (
           <CharmsPanel theme={lookThemes.world}
