@@ -1527,6 +1527,75 @@ export const SOURCES: HarvestSourceDef[] = [
     biomes: ['oldfieldRise', 'meadow'],
     mesh: { shape: 'stone', color: 0x8a857c, extraColor: 0x6e6a62, baseY: 1.5 },
   },
+  // The Water Tower set (Adam, 2026-10-31 — site-pass
+  // only, same rule as the sets above). The tank and
+  // legs carry bespoke geometry in models.ts; shape
+  // names the nearest generic for the override case.
+  {
+    id: 'waterTowerLegs',
+    kind: 'waterTowerLegs',
+    name: 'Water Tower Legs',
+    description:
+      'The water tower\u2019s legs (Adam, 2026-10-31) \u2014 four braced posts and a riser pipe, high enough to walk beneath.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['oldfieldRise', 'meadow'],
+    mesh: { shape: 'stone', color: 0x7a756c, extraColor: 0x57534c, baseY: 4.8 },
+  },
+  {
+    id: 'waterTowerTank',
+    kind: 'waterTowerTank',
+    name: 'Water Tower',
+    description:
+      'A municipal water tower (Adam, 2026-10-31), its tank riding high over the fields \u2014 the tallest thing on the horizon.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['oldfieldRise', 'meadow'],
+    mesh: { shape: 'stone', color: 0x8b9496, extraColor: 0x5f6a70, baseY: 11.4 },
+  },
+  {
+    id: 'waterTowerTankDown',
+    kind: 'waterTowerTankDown',
+    name: 'Fallen Water Tower Tank',
+    description:
+      'The water tower\u2019s tank (Adam, 2026-10-31), down in the grass where the legs gave out.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['oldfieldRise', 'meadow'],
+    mesh: { shape: 'stone', color: 0x848d91, extraColor: 0x5f6a70, baseY: 2.9 },
+  },
+  {
+    id: 'waterTowerLegsDown',
+    kind: 'waterTowerLegsDown',
+    name: 'Toppled Water Tower Legs',
+    description:
+      'The water tower\u2019s legs (Adam, 2026-10-31), splayed and folded where the tower came down.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['oldfieldRise', 'meadow'],
+    mesh: { shape: 'stone', color: 0x7a756c, extraColor: 0x57534c, baseY: 0.9 },
+  },
+  {
+    id: 'pumpShed',
+    kind: 'pumpShed',
+    name: 'Pump Shed',
+    description:
+      'A pump shed (Adam, 2026-10-31) \u2014 the little gabled house the water tower\u2019s pump lived in.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['oldfieldRise', 'meadow'],
+    mesh: { shape: 'stone', color: 0x8a7a5c, extraColor: 0x5c4f3a, baseY: 1.05 },
+  },
   {
     id: 'barnWall',
     kind: 'barnWall',
