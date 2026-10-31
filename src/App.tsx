@@ -2375,6 +2375,27 @@ function toInventoryItem(
 
 
 
+/** One-shot localStorage key for the folded new-game
+ * flow (dialog audit claim 3, 2026-10-31): Begin in the
+ * new-game dialog stashes the entered name/seed here
+ * before the park + reload; the fresh boot consumes it
+ * in place of the first-run dialog. */
+const PENDING_NEW_WORLD_KEY = 'silent-earth-pending-new-world';
+
+function readPendingNewWorld(): { name: string; seed: string } | null {
+  try {
+    const raw = window.localStorage.getItem(PENDING_NEW_WORLD_KEY);
+    if (raw === null) return null;
+    const parsed = JSON.parse(raw) as { name?: unknown; seed?: unknown };
+    if (typeof parsed.name !== 'string' || typeof parsed.seed !== 'string') {
+      return null;
+    }
+    return { name: parsed.name, seed: parsed.seed };
+  } catch {
+    return null;
+  }
+}
+
 export default function App() {
   const containerRef = useRef<HTMLDivElement>(null);
   const rendererRef = useRef<WorldRenderer | null>(null);
@@ -2391,6 +2412,20 @@ export default function App() {
     bootSaveRef.current = loadSave();
   }
   const bootSave = bootSaveRef.current;
+
+  // Pending new world (claim 3): read once, lazily like
+  // bootSave. A non-null value means the folded new-game
+  // dialog was already seen and begun before the reload
+  // that produced this boot — its name/seed apply through
+  // the first-run Begin path (effect below) and the
+  // dialog never shows a second time.
+  const pendingNewWorldRef = useRef<
+    { name: string; seed: string } | null | undefined
+  >(undefined);
+  if (pendingNewWorldRef.current === undefined) {
+    pendingNewWorldRef.current = readPendingNewWorld();
+  }
+  const pendingNewWorld = pendingNewWorldRef.current;
 
   const genRef = useRef(createWorldGen(bootSave?.seed ?? DEFAULT_SEED));
 
@@ -3892,13 +3927,39 @@ export default function App() {
     setCloudPendingNewGame({ local: current, parked: readParked() });
   };
 
-  const confirmNewGame = () => {
+  // Folded new-game Begin (claim 3): the dialog already
+  // collected the name + seed, so stash them for the
+  // post-reload boot to consume, then run the ordinary
+  // park + reload (runNewGame re-reads loadSave() at run
+  // time, so what parks is the last saved state, not the
+  // press-time snapshot). A failed stash degrades
+  // honestly: the fresh boot shows the plain first-run
+  // dialog and she enters the values again.
+  const beginFoldedNewGame = (name: string, seed: string) => {
+    try {
+      window.localStorage.setItem(
+        PENDING_NEW_WORLD_KEY,
+        JSON.stringify({ name, seed }),
+      );
+    } catch {
+      /* see above — the park + reload still run */
+    }
     setCloudPendingNewGame(null);
-    // runNewGame re-reads loadSave() at run time (the
-    // bring/restore freshness pattern), so what parks is
-    // the last saved state, not the press-time snapshot.
     runNewGame();
   };
+
+  // The folded dialog's Esc = its Back (the Popup shell
+  // that used to carry this confirm mapped Esc to its
+  // cancel; the fold keeps the key's meaning): close
+  // parking nothing.
+  useEffect(() => {
+    if (cloudPendingNewGame === null) return;
+    const onKeyDown = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') setCloudPendingNewGame(null);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [cloudPendingNewGame]);
 
   const cloudPanelProps = {
     sync: cloudSync,
@@ -5350,6 +5411,28 @@ export default function App() {
     setFirstRunDone(true);
     setIntroOpen(true);
   };
+
+  // Consume the pending new world (claim 3): apply the
+  // folded dialog's collected name + seed through the
+  // ordinary Begin path. The stash clears FIRST, so no
+  // later boot can re-consume it; a stash riding a boot
+  // that somehow has a save is cleared and ignored (the
+  // folded flow only ever writes it alongside the park +
+  // clear + reload that guarantees a save-less boot).
+  useEffect(() => {
+    if (pendingNewWorld === null) return;
+    try {
+      window.localStorage.removeItem(PENDING_NEW_WORLD_KEY);
+    } catch {
+      /* a stuck stash is inert: firstRunDone already read it */
+    }
+    if (bootSave === null) {
+      handleFirstRunBegin(pendingNewWorld.name, pendingNewWorld.seed);
+    }
+    // Mount-only: bootSave and pendingNewWorld are
+    // first-render constants by construction.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Station presence from the real query at her position
   // (see the header): stump in range = workstation, placed
@@ -8784,13 +8867,17 @@ export default function App() {
   // FIRST-RUN DIALOG (Adam, 2026-10-28): on a no-save
   // boot the dialog comes FIRST and the intro second.
   // firstRunDone starts true when a save exists (the
-  // dialog never shows) and flips true on dialog Begin;
+  // dialog never shows), when a pending new world rides
+  // the reload (the folded dialog was already begun),
+  // and flips true on dialog Begin;
   // introOpen's init reads it, so the intro cannot open
   // under the dialog. Declared BEFORE introOpen — an
   // initializer reading a later-declared const is a TDZ
   // crash (the #17 lesson), and the dialog predicate
   // below reads both.
-  const [firstRunDone, setFirstRunDone] = useState(bootSave !== null);
+  const [firstRunDone, setFirstRunDone] = useState(
+    bootSave !== null || pendingNewWorld !== null,
+  );
 
   // Intro modal: open on first run — no save at boot (a corrupt
   // save reads as null, so it reads as fresh too). Gated by
@@ -12449,6 +12536,43 @@ export default function App() {
         />
       ) : null}
 
+      {/* New-game dialog (folded confirm, dialog audit
+        claim 3, 2026-10-31): the cloud New Game door opens
+        the first-run dialog's new-game mode over the live
+        session — the park warning (the press-time
+        snapshot's world, named) sits directly above
+        Begin, the commitment point, and Back returns to
+        the cloud panel parking nothing (Esc is Back too,
+        per the effect beside beginFoldedNewGame). Begin
+        stashes the entered name/seed, parks the current
+        save, and reloads; the fresh boot consumes the
+        stash instead of showing this dialog a second
+        time. The two dialogs never co-open: this seat
+        needs a live save, the first-run seat needs none. */}
+      {cloudPendingNewGame !== null ? (
+        <FirstRunDialog theme={lookThemes.world}
+          onBegin={beginFoldedNewGame}
+          onBack={() => setCloudPendingNewGame(null)}
+          warning={
+            <>
+              <p>
+                Start a fresh world? Your current world “
+                {cloudPendingNewGame.local.worldName ?? 'Main save'}”
+                will be parked, not deleted — the Restore parked
+                save door brings it back. Nothing carries over to
+                the new world.
+              </p>
+              {cloudPendingNewGame.parked !== null ? (
+                <p className="text-xs opacity-80">
+                  Your existing parked save will be replaced.
+                </p>
+              ) : null}
+            </>
+          }
+          comfortable={isTouch}
+        />
+      ) : null}
+
       {/* Intro modal: first run (no save at boot) + re-openable
         from Options. On first run the dialog precedes it
         (firstRunDone gate). Same z-50 shell as OptionsModal; the two
@@ -12604,58 +12728,6 @@ export default function App() {
                   (isTouch ? 'min-h-[44px] px-3 py-2' : '')
                 }
                 onClick={() => setCloudPendingRestore(null)}
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        ) : null}
-      </Popup>
-
-      {/* New Game confirm: names the current save
-        (press-time snapshot) + the park warning when a
-        parked save will be replaced. Confirm parks the
-        current save, clears the save key, and reloads
-        into the first-run dialog; Cancel (or Esc)
-        changes nothing. */}
-      <Popup theme={lookThemes.dialog}
-        open={cloudPendingNewGame !== null}
-        title="Start a new game?"
-        onClose={() => setCloudPendingNewGame(null)}
-        comfortable={isTouch}
-      >
-        {cloudPendingNewGame !== null ? (
-          <div className="flex flex-col gap-3 p-3 text-sm">
-            <p>
-              Start a fresh world? Your current world “
-              {cloudPendingNewGame.local.worldName ?? 'Main save'}”
-              will be parked, not deleted — the Restore parked
-              save door brings it back. Nothing carries over to
-              the new world.
-            </p>
-            {cloudPendingNewGame.parked !== null ? (
-              <p className="text-xs opacity-80">
-                Your existing parked save will be replaced.
-              </p>
-            ) : null}
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                className={
-                  'rounded bg-moss-deep hover:bg-moss px-3 py-1 text-sm text-stone-100 ' +
-                  (isTouch ? 'min-h-[44px] px-3 py-2' : '')
-                }
-                onClick={confirmNewGame}
-              >
-                New Game
-              </button>
-              <button
-                type="button"
-                className={
-                  'rounded bg-moss-deep hover:bg-moss px-3 py-1 text-sm text-stone-100 ' +
-                  (isTouch ? 'min-h-[44px] px-3 py-2' : '')
-                }
-                onClick={() => setCloudPendingNewGame(null)}
               >
                 Cancel
               </button>
