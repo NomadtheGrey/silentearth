@@ -1074,7 +1074,7 @@ export class WorldRenderer {
       : t;
   }
 
-  /** Live chunk-animal instances (the shell's snatch candidates — attemptSnatch reads positions off these). */
+  /** Live chunk-animal instances (the shell's snatch candidates — pickSnatchTarget reads positions off these). */
   getLoadedAnimalInstances(): AnimalInstance[] {
     const out: AnimalInstance[] = [];
     for (const loaded of this.chunks.values()) {
