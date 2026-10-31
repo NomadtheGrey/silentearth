@@ -10642,7 +10642,7 @@ export default function App() {
                 // while the hub lives: the frame-fixed
                 // split + styled scrollbar belong to the
                 // surviving dialog seat (the fold claim).
-                <div className="w-72 max-w-[calc(100vw-1rem)] max-h-[70vh] overflow-y-auto rounded-2xl">
+                <div className="w-72 max-w-[calc(100vw-1rem)]">
                 <CraftingMenu theme={lookThemes.dialog}
                   recipes={orderedCraftingRecipes}
                   sections={craftingSections}
