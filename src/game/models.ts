@@ -989,7 +989,12 @@ export function buildKindGeometry(spec: MeshSpec, kind: ScatterKind): THREE.Buff
   if (kind === 'siloBody' || kind === 'siloBreached') {
     const parts: THREE.BufferGeometry[] = [
       part(cyl(1.7, 1.7, 8.0, 14), c, { p: [0, -0.7, 0] }),
-      part(new THREE.SphereGeometry(1.7, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2), shade(c, 1.08), { p: [0, 3.3, 0], s: [1, 0.82, 1] }),
+      // Dome rotated half a segment (pi/14): a sphere's rim
+      // vertices sit half a step off a cylinder's, so unrotated
+      // the two 14-gons interleave at the seam — stair-stepped
+      // rim, sliver gaps (Adam's sighting, 2026-10-31). Rotated,
+      // the rim vertices coincide with the body's exactly.
+      part(new THREE.SphereGeometry(1.7, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2), shade(c, 1.08), { p: [0, 3.3, 0], s: [1, 0.82, 1], r: [0, Math.PI / 14, 0] }),
       part(cyl(1.78, 1.78, 0.25, 14), e, { p: [0, -4.58, 0] }),
       part(cyl(0.09, 0.09, 8.6, 8), e, { p: [1.95, -0.4, 0.35] }),
       part(cyl(0.09, 0.09, 1.1, 8), e, { p: [1.45, 3.85, 0.35], r: [0, 0, Math.PI / 2] }),
@@ -1233,15 +1238,25 @@ export function buildKindGeometry(spec: MeshSpec, kind: ScatterKind): THREE.Buff
       return merge([...stalks, ...heads]);
     }
     case 'grassTuft': {
+      // Blades, not mounds (Adam, 2026-10-31 — the old four
+      // cones were 0.5 m wide: a knee-high mound that read as
+      // anything but grass). Nine thin cones in the same
+      // family: narrow radii, varied heights and outward
+      // leans, bases buried below the local ground line.
       const blades: THREE.BufferGeometry[] = [];
-      const leans: [Vec3, Vec3, number][] = [
-        [[0, 0, 0], [0, 0, 0.15], 0.9],
-        [[0.2, 0, 0.1], [0, 0, -0.3], 0.7],
-        [[-0.2, 0, -0.05], [0.25, 0, 0.2], 0.7],
-        [[0.05, 0, -0.18], [-0.2, 0, -0.25], 0.6],
+      const leans: [Vec3, Vec3, number, number][] = [
+        [[0, 0, 0], [0.04, 0, 0.06], 1.0, 0.075],
+        [[0.14, 0, 0.08], [0.1, 0, -0.28], 0.85, 0.065],
+        [[-0.15, 0, 0.05], [0.22, 0, 0.18], 0.8, 0.07],
+        [[0.05, 0, -0.15], [-0.24, 0, -0.2], 0.9, 0.06],
+        [[-0.08, 0, -0.12], [-0.12, 0, 0.26], 0.7, 0.065],
+        [[0.2, 0, -0.06], [-0.06, 0, -0.34], 0.65, 0.055],
+        [[-0.2, 0, -0.02], [0.3, 0, -0.08], 0.6, 0.055],
+        [[0.02, 0, 0.17], [0.16, 0, 0.3], 0.75, 0.06],
+        [[-0.04, 0, -0.2], [-0.3, 0, -0.14], 0.55, 0.05],
       ];
-      for (const [p, r, h] of leans) {
-        blades.push(part(cone(0.5, 0.7, 5), shade(c, 0.95 + h * 0.1), { p, r, s: [1, h, 1] }));
+      for (const [p, r, h, w] of leans) {
+        blades.push(part(cone(w, 1.0, 4), shade(c, 0.92 + h * 0.12), { p, r, s: [1, h, 1] }));
       }
       return merge(blades);
     }
@@ -1382,7 +1397,10 @@ export function buildKindGeometry(spec: MeshSpec, kind: ScatterKind): THREE.Buff
       // rope tip may rise above the canopy top.
       return merge([
         part(cyl(0.35, 0.38, 0.5, 10), c, { p: [0, 0.25, 0] }),
-        part(new THREE.SphereGeometry(0.35, 10, 8, 0, Math.PI * 2, 0, Math.PI / 2), shade(c, 1.1), { p: [0, 0.5, 0] }),
+        // Dome rotated half a segment (pi/10) — the silo-seam
+        // fix (2026-10-31): sphere rims sit half a step off
+        // cylinder rims; rotated, the vertices coincide.
+        part(new THREE.SphereGeometry(0.35, 10, 8, 0, Math.PI * 2, 0, Math.PI / 2), shade(c, 1.1), { p: [0, 0.5, 0], r: [0, Math.PI / 10, 0] }),
         part(box(0.14, 0.09, 0.03), 0x1a1a12, { p: [0, 0.12, 0.38] }),
         part(cyl(0.015, 0.015, 0.5, 4), shade(c, 0.6), { p: [0, 1.1, 0] }),
       ]);

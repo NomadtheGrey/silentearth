@@ -64,6 +64,11 @@ import {
   type ItemId,
   type Recipe,
 } from './recipes';
+// The shelf rule reads the item registry's categories.
+// inventory.ts imports CraftingInventory from here as
+// type-only (erased at compile), so this value import
+// is not a runtime cycle — the same shape as clothes.ts.
+import { categoryFor, type ItemCategory } from './inventory';
 
 /**
  * Minimal inventory interface — see the header. This is the engine's
@@ -149,6 +154,23 @@ export const CRAFT_OWNERSHIP_LABELS: Record<
   'already-owned': 'Already Owned',
   superseded: 'Superseded',
 };
+
+/**
+ * The ONE SHELF SYSTEM (Adam, 2026-10-31): the crafting
+ * book files a recipe by its OUTPUT item's category —
+ * the same ITEM_CATEGORIES table the inventory panel
+ * groups by, so the two panels can never drift. Section
+ * order is ITEM_CATEGORY_ORDER (inventory.ts). Placed
+ * outcomes file by the thing made (a trap, a house, a
+ * kiln all sit in 'Structures & Stations'); the Owned &
+ * Superseded section is a state view, not a shelf, and
+ * is not this function's business. An output with no
+ * category reads 'Other' via categoryFor — the recipe
+ * trails there rather than vanishing.
+ */
+export function craftingSection(recipe: Recipe): ItemCategory {
+  return categoryFor(recipe.output.item);
+}
 
 /**
  * Pure ownership check: may this recipe be crafted again

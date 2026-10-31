@@ -167,7 +167,7 @@ export function drawGlyph(
   if (inventory.count(ITEMS.charcoalStick) <= 0) {
     return {
       applied: false,
-      reason: 'Needs a charcoal stick to draw the glyph.',
+      reason: 'Needs a charred stick to draw the glyph.',
     };
   }
   return {

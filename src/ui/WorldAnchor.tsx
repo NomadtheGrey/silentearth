@@ -33,6 +33,14 @@ export interface WorldAnchorProps {
    * world behind them.
    */
   interactive?: boolean;
+  /**
+   * Extra downward offset in px, added to the seat's lift
+   * (the window normally floats 8 px above its anchor).
+   * For windows whose top crowds the screen edge (Adam,
+   * 2026-10-31: the site window sits high — 'lower that
+   * window a smidge'). Default 0 = the standard seat.
+   */
+  dropPx?: number;
   className?: string;
 }
 
@@ -42,6 +50,7 @@ export function WorldAnchor({
   children,
   visible = true,
   interactive = false,
+  dropPx = 0,
   className,
 }: WorldAnchorProps) {
   if (!visible) {
@@ -57,7 +66,7 @@ export function WorldAnchor({
       style={{
         left: `${x}%`,
         top: `${y}%`,
-        transform: 'translate(-50%, calc(-100% - 8px))',
+        transform: `translate(-50%, calc(-100% - 8px + ${dropPx}px))`,
       }}
     >
       <div className={interactive ? 'pointer-events-auto' : 'pointer-events-none'}>

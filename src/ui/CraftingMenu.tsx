@@ -11,6 +11,17 @@
  *
  * PLACEHOLDER-FRIENDLY: with no recipes, it says plainly that recipes
  * arrive from the Systems lane, instead of inventing a recipe list.
+ *
+ * FRAME (Adam via DEV, 2026-10-31 — the sharpened window ask):
+ * the panel is a fixed frame with a moving middle. The header
+ * (title, Close, station note) is PINNED; the section list
+ * scrolls beneath it inside a region capped with the panel at
+ * 70vh; the scrollbar ALWAYS wears its track, styled in the
+ * stone palette, so the player can see there is more and
+ * where they are in it. The menu owns this frame itself, so
+ * every seat that renders it (the K dialog, the stump hub's
+ * Craft door) inherits the same behaviour — no seat wraps
+ * its own clip around the menu.
  */
 
 import { useState } from 'react';
@@ -201,7 +212,10 @@ export function CraftingMenu({
   const isEmpty =
     sections !== undefined ? shownSections.length === 0 : recipes.length === 0;
   return (
-    <section aria-label="Crafting" className={'rounded-2xl p-3 ' + t.panel}>
+    <section
+      aria-label="Crafting"
+      className={'flex max-h-[70vh] flex-col rounded-2xl p-3 ' + t.panel}
+    >
       <div className="mb-2 flex items-center justify-between gap-2">
         <h2
           className={'flex items-center gap-2 text-base font-semibold ' + t.heading}
@@ -225,6 +239,7 @@ export function CraftingMenu({
         <p className={'mb-2 text-sm ' + t.muted}>{stationNote}</p>
       ) : null}
 
+      <div className="min-h-0 overflow-y-scroll pr-1 [scrollbar-color:#78716c_#1c1917] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-stone-500 [&::-webkit-scrollbar-track]:bg-stone-900">
       {isEmpty ? (
         <p className={'italic ' + t.muted}>
           No recipes yet — recipes arrive from the Systems lane.
@@ -270,6 +285,7 @@ export function CraftingMenu({
       ) : (
         <ul className="flex flex-col gap-2">{recipes.map(renderRecipe)}</ul>
       )}
+      </div>
     </section>
   );
 }

@@ -431,7 +431,7 @@ const DRAFT_RECIPES: Recipe[] = [
   },
   {
     id: 'charcoal-stick',
-    name: 'Charcoal Stick',
+    name: 'Charred Stick',
     status: 'draft',
     output: { item: ITEMS.charcoalStick, quantity: 1 },
     ingredients: [i(ITEMS.snapWood, 1)],
@@ -1112,6 +1112,7 @@ const DRAFT_RECIPES: Recipe[] = [
     status: 'draft',
     output: { item: ITEMS.apron, quantity: 1 },
     ingredients: [i(ITEMS.twinedCordage, 6)],
+    station: 'loom',
     capacityBonus: 10,
     notes: 'DRAFT cost; BONUS PINNED (+10). Woven cordage cloth.',
   },
