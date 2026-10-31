@@ -30,8 +30,8 @@
 // the place direction is built. Whether she can ever
 // move / remove a placed desk is Adam's word later.
 // MULTIPLE desks are legitimate (crafting.ts leaves
-// the desk unlisted, on the grimoire precedent: a
-// second camp legitimately wants a second desk).
+// the desk unlisted: a second camp legitimately
+// wants a second desk).
 //
 // QUANTITIES: one desk per press (altar precedent).
 // Position arrives as params — systems never knows
