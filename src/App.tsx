@@ -8202,6 +8202,27 @@ export default function App() {
     };
   })();
 
+  // HIVE RANGE (Adam, 2026-10-31 — the range rider):
+  // the hive kind's targetable leash runs one metre
+  // past the family HARVEST_RANGE. His night screenshot
+  // is the reason: the hive hangs at ~1.8 m and her eye
+  // sits at ~1.6, so the sightline to the hive is near
+  // level while the smoking torch stands at the base,
+  // ~1.6 m below eye height — at 2.5 m the downward
+  // angle to the torch is ~33 degrees and it falls out
+  // of frame while the hive is targeted; at 3.5 m it is
+  // ~25 degrees and both fit. 'Targetable from a tad
+  // farther away so we can see the torch on screen at
+  // least.' This producer is the hive's ONLY range
+  // gate (the winner race checks facing alone for the
+  // hive; the handler re-checks nothing), so the wider
+  // leash lives here whole: the positions scan and the
+  // distance filter both take it. DRAFT — Adam tunes
+  // at sighting. placedTorchNearHive keeps its own
+  // radius (the torch still has to be UNDER the hive;
+  // where she stands was never that rule's business).
+  const HIVE_RANGE = 3.5;
+
   // HIVE ROW (Adam, 2026-10-28 — honey end-to-end):
   // nearest wild hive in range, trap-row precedent —
   // the caller owns gating (panels/modals/paused pass
@@ -8230,9 +8251,9 @@ export default function App() {
     }
     let nearest: { x: number; z: number } | null = null;
     let nearestDistance = Infinity;
-    for (const hive of hivePositions(genRef.current, player.x, player.z)) {
+    for (const hive of hivePositions(genRef.current, player.x, player.z, HIVE_RANGE)) {
       const distance = Math.hypot(hive.x - player.x, hive.z - player.z);
-      if (distance <= HARVEST_RANGE && distance < nearestDistance) {
+      if (distance <= HIVE_RANGE && distance < nearestDistance) {
         nearest = hive;
         nearestDistance = distance;
       }
