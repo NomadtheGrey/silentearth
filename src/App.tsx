@@ -1915,8 +1915,8 @@ interface FeedbackItem {
   id: string;
   text: string;
   tone: FeedbackTone;
-  x: number;
-  y: number;
+  /** True in the line's last ~0.6 s: the row fades out. */
+  fading: boolean;
 }
 
 /**
@@ -3082,7 +3082,9 @@ export default function App() {
   const busTargetsRef = useRef<BusHarvestTarget[]>([]);
   const transitionTimerRef = useRef<number | undefined>(undefined);
   const feedbackCounterRef = useRef(0);
-  const feedbackTimersRef = useRef<Map<string, number>>(new Map());
+  const feedbackTimersRef = useRef<
+    Map<string, { fade: number; remove: number }>
+  >(new Map());
 
   // PAUSE (Adam, 2026-10-26 — core 54e525c): the engine pause
   // flag, mirrored for the shell. The ref is what the timers
@@ -4036,30 +4038,66 @@ export default function App() {
   // would need remaining-time bookkeeping — out of scope for
   // this half; the gated clocks are hunger, lighting, and
   // friction above, plus the turn-stick and FPS loops.
-  const showFeedback = (text: string, tone: FeedbackTone, x: number, y: number) => {
-    const id = `fb-${feedbackCounterRef.current++}`;
-    setFeedbacks((current) => [...current, { id, text, tone, x, y }]);
-    const timer = window.setTimeout(() => {
-      setFeedbacks((current) => current.filter((item) => item.id !== id));
-      feedbackTimersRef.current.delete(id);
-    }, 4000);
-    feedbackTimersRef.current.set(id, timer);
-  };
-
-  // Anchor for an outcome event: the target's last known position
-  // when it is still in range, else her own position (e.g. a failed
-  // press on a target that already left range).
-  const anchorForOutcome = (
-    targetId: string,
-    kind: 'scatter' | 'ground',
-  ): { x: number; y: number } | null => {
-    const target = busTargetsRef.current.find((t) => t.id === targetId);
-    if (target) {
-      return projectAnchor(target.x, target.z, target.kind);
-    }
-    const player = playerRef.current;
-    if (!player) return null;
-    return projectAnchor(player.x, player.z, kind);
+  // THE MESSAGE FEED (Adam, 2026-10-31 — "make these
+  // messages not overlap... put them into a list and let
+  // them follow each other"): EVERY spoken line in the
+  // game joins ONE list in ONE reserved seat (rendered at
+  // the bottom-center stack below). Lines used to carry a
+  // projected world anchor each, so two lines at one
+  // target printed over each other and over the pill, and
+  // a line whose anchor projected off-screen (the hive at
+  // her feet) never rendered at all. Speech has no
+  // geometry now: a line is text + tone, in arrival order.
+  // Discipline: FIFO — arrival order is display order is
+  // expiry order; the newest line sits at the stack's
+  // bottom (the fixed seat) and older lines ride up; at
+  // most FEED_MAX lines show (FEED_MAX_TOUCH on phone),
+  // an arrival past the cap retires the oldest early; an
+  // identical line already in the feed refreshes its life
+  // and re-seats as newest instead of stacking a twin
+  // (multi-press struggle narration). Life is the tuned
+  // 4 s, the last ~0.6 s fading.
+  const FEED_MAX = 4;
+  const FEED_MAX_TOUCH = 3;
+  const showFeedback = (text: string, tone: FeedbackTone) => {
+    const cap = isTouch ? FEED_MAX_TOUCH : FEED_MAX;
+    setFeedbacks((current) => {
+      const twin = current.find(
+        (item) => item.text === text && item.tone === tone,
+      );
+      const id = twin ? twin.id : `fb-${feedbackCounterRef.current++}`;
+      const existing = feedbackTimersRef.current.get(id);
+      if (existing) {
+        window.clearTimeout(existing.fade);
+        window.clearTimeout(existing.remove);
+      }
+      const fade = window.setTimeout(() => {
+        setFeedbacks((list) =>
+          list.map((item) =>
+            item.id === id ? { ...item, fading: true } : item,
+          ),
+        );
+      }, 3400);
+      const remove = window.setTimeout(() => {
+        setFeedbacks((list) => list.filter((item) => item.id !== id));
+        feedbackTimersRef.current.delete(id);
+      }, 4000);
+      feedbackTimersRef.current.set(id, { fade, remove });
+      const rest = current.filter((item) => item.id !== id);
+      const next = [...rest, { id, text, tone, fading: false }];
+      while (next.length > cap) {
+        const dropped = next.shift();
+        if (dropped && dropped.id !== id) {
+          const timers = feedbackTimersRef.current.get(dropped.id);
+          if (timers) {
+            window.clearTimeout(timers.fade);
+            window.clearTimeout(timers.remove);
+            feedbackTimersRef.current.delete(dropped.id);
+          }
+        }
+      }
+      return next;
+    });
   };
 
   // Boot the world once. StrictMode double-mounts in dev only; the
@@ -4585,16 +4623,8 @@ export default function App() {
           inventory,
         );
         if (!outcome.found) return;
-        const anchor = projectAnchor(outcome.x, outcome.z, 'scatter');
         if (outcome.granted <= 0) {
-          if (anchor) {
-            showFeedback(
-              `Pack full — no room.`,
-              'blocked',
-              anchor.x,
-              anchor.y,
-            );
-          }
+          showFeedback(`Pack full — no room.`, 'blocked');
           return;
         }
         // PICKUP COUNTS AS A LOOK (same ruling):
@@ -4613,16 +4643,12 @@ export default function App() {
         }
         refreshInventory();
         saveNow();
-        if (anchor) {
-          showFeedback(
-            `Picked up ${outcome.taken
-              .map((t) => `${t.granted} ${displayNameFor(t.item)}`)
-              .join(', ')}.`,
-            'gain',
-            anchor.x,
-            anchor.y,
-          );
-        }
+        showFeedback(
+          `Picked up ${outcome.taken
+            .map((t) => `${t.granted} ${displayNameFor(t.item)}`)
+            .join(', ')}.`,
+          'gain',
+        );
       },
     );
     // The shell's one harvest outcome listener (see the header):
@@ -4911,47 +4937,41 @@ export default function App() {
       setHarvestProgress((current) =>
         current?.targetId === p.targetId ? null : current,
       );
-      const anchor = anchorForOutcome(p.targetId, p.kind);
-      if (anchor) {
-        // A multi-step finish carries the def's success
-        // line (Systems rider): it IS the finish chip —
-        // shown INSTEAD of the yields chip, because two
-        // chips at one anchor would print over each other
-        // (Adam's standing rule). The yields still land
-        // in inventory above; single-press completions
-        // (no successMessage) keep the yields chip.
-        if (p.successMessage) {
-          showFeedback(p.successMessage, 'info', anchor.x, anchor.y);
-        } else {
-          showFeedback(
-            p.yields.map((y) => `${y.item} × ${y.quantity}`).join(', '),
-            'gain',
-            anchor.x,
-            anchor.y,
-          );
-        }
+      // A multi-step finish carries the def's success
+      // line (Systems rider): it IS the finish line —
+      // shown INSTEAD of the yields line, because two
+      // lines for one event would print over each other
+      // in spirit even in the feed (Adam's standing
+      // rule). The yields still land in inventory above;
+      // single-press completions (no successMessage)
+      // keep the yields line.
+      if (p.successMessage) {
+        showFeedback(p.successMessage, 'info');
+      } else {
+        showFeedback(
+          p.yields.map((y) => `${y.item} × ${y.quantity}`).join(', '),
+          'gain',
+        );
       }
     });
     const offFailed = bus.on('harvest:failed', (p) => {
       setHarvestProgress((current) =>
         current?.targetId === p.targetId ? null : current,
       );
-      const anchor = anchorForOutcome(p.targetId, p.kind);
-      if (!anchor) return;
       const text =
         p.reason === 'inventory-full' && p.yields.length > 0
           ? `Pack full — ${p.yields.map((y) => `${y.item} × ${y.quantity}`).join(', ')} didn't fit.`
           : p.reason === 'below-permit'
             ? belowPermitText(p.sourceId)
             : `Harvest failed: ${p.reason}.`;
-      showFeedback(text, 'blocked', anchor.x, anchor.y);
+      showFeedback(text, 'blocked');
     });
     const offProgress = bus.on('harvest:progress', (p) => {
       // Pill-fill (Adam, 2026-10-29): the pill carries the
       // progress now — state from the payload verbatim
       // (fraction, press index/total, verb, all computed
-      // at the emit site). The struggle line rides the
-      // ordinary feedback chip at the target's anchor.
+      // at the emit site). The struggle line joins the
+      // message feed like every spoken line.
       setHarvestProgress({
         targetId: p.targetId,
         fraction: p.progress,
@@ -4959,10 +4979,7 @@ export default function App() {
         pressesTotal: p.pressesTotal,
         verb: p.verb,
       });
-      const anchor = anchorForOutcome(p.targetId, 'scatter');
-      if (anchor) {
-        showFeedback(p.struggleMessage, 'info', anchor.x, anchor.y);
-      }
+      showFeedback(p.struggleMessage, 'info');
     });
     const offLoaded = bus.on('world:chunkLoaded', () =>
       setChunkCount(renderer.loadedChunkCount),
@@ -4986,8 +5003,9 @@ export default function App() {
       window.clearInterval(hungerTimer);
       window.clearTimeout(warningFlashTimerRef.current);
       window.clearTimeout(transitionTimerRef.current);
-      for (const timeout of feedbackTimersRef.current.values()) {
-        window.clearTimeout(timeout);
+      for (const timers of feedbackTimersRef.current.values()) {
+        window.clearTimeout(timers.fade);
+        window.clearTimeout(timers.remove);
       }
       feedbackTimersRef.current.clear();
       window.removeEventListener('resize', onResize);
@@ -5451,10 +5469,7 @@ export default function App() {
   const handleCollectTrap = (trapId: string) => {
     const trap = trapState.get(trapId);
     if (!trap || trap.catch === null) {
-      sayAt(
-        trap?.x ?? playerRef.current?.x ?? 0,
-        trap?.z ?? playerRef.current?.z ?? 0,
-        'Nothing caught yet.',
+      showFeedback('Nothing caught yet.',
         'info',
       );
       return;
@@ -5463,10 +5478,7 @@ export default function App() {
     const outcome = collectTrapCatch(inventory, kind);
     if (outcome.collected === false) {
       const carcass = catchItemFor(kind);
-      sayAt(
-        trap.x,
-        trap.z,
-        outcome.reason === 'Pack full.'
+      showFeedback(outcome.reason === 'Pack full.'
           ? `Pack full — no room for ${carcass ? displayNameFor(carcass) : kind}.`
           : outcome.reason,
         'blocked',
@@ -5476,7 +5488,7 @@ export default function App() {
     trapState.setCatch(trapId, null);
     refreshTrapsFromState();
     refreshInventory();
-    sayAt(trap.x, trap.z, `Caught ${kind}!`, 'gain');
+    showFeedback(`Caught ${kind}!`, 'gain');
   };
 
   // HIVE HARVEST (Adam, 2026-10-28): ONE harvest per
@@ -5493,20 +5505,17 @@ export default function App() {
   // so a repeat press re-tries.
   const handleHarvestHive = (x: number, z: number) => {
     if (hungerStage === 'too-hungry') {
-      sayAt(x, z, 'Harvest failed: too-hungry.', 'blocked');
+      showFeedback('Harvest failed: too-hungry.', 'blocked');
       return;
     }
     const outcome = harvestHoney(inventory, placedTorchNearHive(x, z));
     if (outcome.granted === 1) {
       refreshInventory();
       saveNow();
-      sayAt(x, z, 'Harvested honey!', 'gain');
+      showFeedback('Harvested honey!', 'gain');
       return;
     }
-    sayAt(
-      x,
-      z,
-      outcome.reason === 'Pack full.'
+    showFeedback(outcome.reason === 'Pack full.'
         ? `Pack full — no room for ${displayNameFor(ITEMS.honey)}.`
         : (outcome.reason ?? 'Harvest failed.'),
       'blocked',
@@ -5885,28 +5894,11 @@ export default function App() {
       syncCrowTier();
       syncCharmBonuses();
       syncDeerWarning();
-      // Anchor BEFORE unstaging: the staged site record
-      // carries the site's true position for BOTH kinds
-      // (altar + stump) — the old altarState-only lookup
-      // stranded stump completions at her feet.
-      const staged = ritualSiteState.getStaged(entry.siteKey);
+      // The awakening line joins the message feed (it
+      // used to anchor at the site — the feed is every
+      // line's seat now, so the site lookup is gone).
       ritualSiteState.unstageBone(entry.siteKey);
-      const anchor = staged
-        ? projectAnchor(staged.site.x, staged.site.z, 'scatter')
-        : null;
-      const player = playerRef.current;
-      const fallback = player
-        ? projectAnchor(player.x, player.z, 'ground')
-        : null;
-      const at = anchor ?? fallback;
-      if (at) {
-        showFeedback(
-          `The ${boneDisplayFor(result.kind)} awakens.`,
-          'gain',
-          at.x,
-          at.y,
-        );
-      }
+      showFeedback(`The ${boneDisplayFor(result.kind)} awakens.`, 'gain');
       changed = true;
     }
     if (changed) {
@@ -6733,9 +6725,8 @@ export default function App() {
   const handleFireAction = (fireId: string, actionId: string) => {
     const fire = fireState.get(fireId);
     if (!fire) return;
-    const anchor = fireAnchors.find((a) => a.fire.id === fireId) ?? null;
     const say = (text: string, tone: FeedbackTone) => {
-      if (anchor) showFeedback(text, tone, anchor.x, anchor.y);
+      showFeedback(text, tone);
     };
     if (actionId === 'close') {
       setSelectedFireId(null);
@@ -6875,9 +6866,8 @@ export default function App() {
   const handleTorchAction = (torchId: string, actionId: string) => {
     const torch = torchState.get(torchId);
     if (!torch) return;
-    const anchor = torchAnchors.find((a) => a.torch.id === torchId) ?? null;
     const say = (text: string, tone: FeedbackTone) => {
-      if (anchor) showFeedback(text, tone, anchor.x, anchor.y);
+      showFeedback(text, tone);
     };
     if (actionId === 'close') {
       setSelectedTorchId(null);
@@ -6917,9 +6907,8 @@ export default function App() {
   const handleTentAction = (tentId: string, actionId: string) => {
     const tent = placedTentsRef.current.find((t) => t.id === tentId);
     if (!tent) return;
-    const anchor = tentAnchors.find((a) => a.tent.id === tentId) ?? null;
     const say = (text: string, tone: FeedbackTone) => {
-      if (anchor) showFeedback(text, tone, anchor.x, anchor.y);
+      showFeedback(text, tone);
     };
     if (actionId === 'close') {
       setSelectedTentId(null);
@@ -6954,10 +6943,8 @@ export default function App() {
   ];
 
   const handleCauldronAction = (hearthId: string, actionId: string) => {
-    const anchor =
-      cauldronAnchors.find((a) => a.cauldron.hearthId === hearthId) ?? null;
     const say = (text: string, tone: FeedbackTone) => {
-      if (anchor) showFeedback(text, tone, anchor.x, anchor.y);
+      showFeedback(text, tone);
     };
     if (actionId === 'close') {
       setSelectedCauldronHearthId(null);
@@ -7300,14 +7287,6 @@ export default function App() {
   // never vanish silently. Hoisted from handlePileAction
   // so the home handler shares it verbatim (moved, not
   // re-authored — same body, same call sites).
-  const sayAt = (x: number, z: number, text: string, tone: FeedbackTone) => {
-    const player = playerRef.current;
-    const anchor =
-      projectAnchor(x, z, 'scatter') ??
-      (player ? projectAnchor(player.x, player.z, 'ground') : null);
-    if (anchor) showFeedback(text, tone, anchor.x, anchor.y);
-  };
-
   const handlePileAction = (pile: PileTarget, actionId: string) => {
     if (actionId === 'close') {
       selectedPileIdRef.current = null;
@@ -7331,10 +7310,7 @@ export default function App() {
       );
       if (!outcome.found) return;
       if (outcome.granted <= 0) {
-        sayAt(
-          outcome.x,
-          outcome.z,
-          `Pack full — no room for ${displayNameFor(outcome.item)}.`,
+        showFeedback(`Pack full — no room for ${displayNameFor(outcome.item)}.`,
           'blocked',
         );
         return;
@@ -7358,10 +7334,7 @@ export default function App() {
       refreshInventory();
       saveNow();
       refreshPilesFromState();
-      sayAt(
-        outcome.x,
-        outcome.z,
-        outcome.granted === outcome.requested
+      showFeedback(outcome.granted === outcome.requested
           ? `Picked up ${outcome.granted} ${displayNameFor(outcome.item)}.`
           : `Picked up ${outcome.granted} of ${outcome.requested} ${displayNameFor(outcome.item)}.`,
         'gain',
@@ -7383,17 +7356,11 @@ export default function App() {
         refreshInventory();
         saveNow();
         refreshPilesFromState();
-        sayAt(
-          record.x,
-          record.z,
-          `Deposited ${record.quantity} ${displayNameFor(record.item)}.`,
+        showFeedback(`Deposited ${record.quantity} ${displayNameFor(record.item)}.`,
           'gain',
         );
       } catch (error) {
-        sayAt(
-          pile.x,
-          pile.z,
-          error instanceof Error ? error.message : 'Could not deposit that.',
+        showFeedback(error instanceof Error ? error.message : 'Could not deposit that.',
           'blocked',
         );
       }
@@ -7405,9 +7372,8 @@ export default function App() {
   // handlePileAction (verb:kind); the menu STAYS OPEN
   // after every press except Close — entries re-render
   // from live inventory + store, so counts update in
-  // place. Notes go through sayAt at the house (the
-  // panel's storageNote is the panel's surface, not the
-  // menu's). Single transfers mirror the panel's
+  // place. Notes join the message feed (the panel's
+  // storageNote is the panel's surface, not the menu's). Single transfers mirror the panel's
   // add-first atomicity per unit; all-transfers loop
   // singles until the source is exhausted or the
   // destination throws, and partial results stand. One
@@ -7429,10 +7395,7 @@ export default function App() {
     const house = shelterState.snapshot().find((h) => h.id === shelterHouseId);
     const player = playerRef.current;
     const sayHouse = (text: string) =>
-      sayAt(
-        house?.x ?? player?.x ?? 0,
-        house?.z ?? player?.z ?? 0,
-        text,
+      showFeedback(text,
         'blocked',
       );
     if (!store) {
@@ -9176,10 +9139,8 @@ export default function App() {
   };
 
   // The travel press: compose Background's validated
-  // travel functions from the faced winner. The faced
-  // anchor's position is re-derived for the refusal's
-  // feedback chip (the winner union carries ids, not
-  // positions — the placed-kind pattern).
+  // travel functions from the faced winner. A refusal
+  // joins the message feed like every spoken line.
   const handleCaveTravel = (winner: {
     kind: 'cave-enter' | 'cave-exit' | 'cave-descend' | 'cave-climb';
     id: string;
@@ -9188,39 +9149,19 @@ export default function App() {
     const renderer = rendererRef.current;
     const gen = genRef.current;
     if (!player || !renderer || !gen) return;
-    let anchorPos: { x: number; z: number } | null = null;
     let outcome: TravelOutcome;
     if (winner.kind === 'cave-enter') {
-      const mouth = caveMouthsNear(
-        String(gen.seed),
-        gen.findSpawn(),
-        (x, z) => gen.weightsAt(x, z),
-        player.x,
-        player.z,
-        HARVEST_RANGE,
-      ).find((m) => m.id === winner.id);
-      anchorPos = mouth?.spot ?? null;
       outcome = enterCave(renderer, player, gen, winner.id);
     } else if (winner.kind === 'cave-exit') {
-      anchorPos = caveLayoutForKey(seed, dimensionState.activeKey()).entryAnchor;
       outcome = exitCave(renderer, player);
     } else if (winner.kind === 'cave-descend') {
-      anchorPos =
-        caveLayoutForKey(seed, dimensionState.activeKey()).layers[0]
-          ?.shaftAnchor ?? null;
       outcome = descend(player);
     } else {
-      anchorPos =
-        caveLayoutForKey(seed, dimensionState.activeKey()).layers[1]
-          ?.entryAnchor ?? null;
       outcome = ascend(player);
     }
     if (outcome.ok === false) {
       const line = CAVE_TRAVEL_REFUSALS[outcome.reason] ?? 'The way is blocked.';
-      if (anchorPos) {
-        const anchor = projectAnchor(anchorPos.x, anchorPos.z, 'scatter');
-        if (anchor) showFeedback(line, 'blocked', anchor.x, anchor.y);
-      }
+      showFeedback(line, 'blocked');
     }
   };
 
@@ -10835,21 +10776,36 @@ export default function App() {
               : `Pick up ${displayNameFor(desktopPilePickup.item)} × ${desktopPilePickup.quantity}`}
           </button>
         ) : null}
-        {/* PILL FIX: pickup feedback lives HERE, last in the
-          z-40 overlay (after the buttons + pile button), so
-          it paints ABOVE the menu instead of under it (it
-          used to sit in the z-30 overlay, where the z-40
-          column painted over it near screen-middle).
-          Still below z-50 modals. WorldAnchor positions
-          by % in any absolute inset-0 parent, so the move
-          changes layering only, not placement. */}
-        {feedbacks.map((feedback) => (
-          <Fragment key={feedback.id}>
-            <WorldAnchor x={feedback.x} y={feedback.y}>
-              <ObjectFeedback text={feedback.text} tone={feedback.tone} />
-            </WorldAnchor>
-          </Fragment>
-        ))}
+        {/* THE MESSAGE FEED (Adam, 2026-10-31): the spoken
+          lines' ONE seat — a reserved stack in the same
+          z-40 overlay (above the world buttons, below z-50
+          modals), bottom-center, clear of the pill column
+          (upper-center), the HUD (left), the seed bar
+          (bottom-left) and the controls hint (bottom-right).
+          The stack is bottom-anchored, so it grows UPWARD:
+          the newest line (last in the list) sits at the
+          fixed bottom seat and older lines ride up, fading
+          in their last ~0.6 s before they expire from the
+          top. Pointer-events-none: speech never takes a
+          tap. */}
+        <div
+          aria-live="polite"
+          className="pointer-events-none absolute inset-x-0 bottom-28 flex flex-col items-center justify-end gap-1.5 px-2"
+        >
+          {feedbacks.map((feedback) => (
+            <Fragment key={feedback.id}>
+              <ObjectFeedback
+                text={feedback.text}
+                tone={feedback.tone}
+                className={
+                  feedback.fading
+                    ? 'opacity-0 transition-opacity duration-500'
+                    : 'transition-opacity duration-500'
+                }
+              />
+            </Fragment>
+          ))}
+        </div>
       </div>
 
       {/* HUD shell: needs row (awaiting survival systems) + HUD block. */}
