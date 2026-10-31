@@ -454,10 +454,16 @@ export function buildKindGeometry(spec: MeshSpec, kind: ScatterKind): THREE.Buff
     // chimney at +2.3 x — the hearth house's chimney is the
     // smoke anchor sites.ts names (every standing house
     // has one; only the hearth house's smokes).
+    // PITCH SIGNS (roof family fix, 2026-10-31): a slab over
+    // -Z takes r.x = -slope, over +Z takes +slope (the barn
+    // pairing) — the family's original pairing was inverted,
+    // so the ridge dipped to a valley and the eaves flew up
+    // ("buildings with wings"). Same fix in farmRoof,
+    // chapelRoof, storeRoof, millRoof below.
     const slope = 0.68;
     return merge([
-      part(box(7.6, 0.09, 4.3), c, { p: [0, 1.28, -1.78], r: [slope, 0, 0] }),
-      part(box(7.6, 0.09, 4.3), c, { p: [0, 1.28, 1.78], r: [-slope, 0, 0] }),
+      part(box(7.6, 0.09, 4.3), c, { p: [0, 1.28, -1.78], r: [-slope, 0, 0] }),
+      part(box(7.6, 0.09, 4.3), c, { p: [0, 1.28, 1.78], r: [slope, 0, 0] }),
       part(box(7.7, 0.15, 0.22), shade(c, 1.1), { p: [0, 2.42, 0] }),
       part(box(0.55, 1.15, 0.55), 0x7d7668, { p: [2.3, 2.2, 0] }),
       part(box(0.7, 0.12, 0.7), 0x6e6a5e, { p: [2.3, 2.8, 0] }),
@@ -505,8 +511,8 @@ export function buildKindGeometry(spec: MeshSpec, kind: ScatterKind): THREE.Buff
     // the hearth end (local -X, where sites.ts puts it).
     const slope = 0.62;
     return merge([
-      part(box(10.6, 0.09, 4.9), c, { p: [0, 1.42, -2.0], r: [slope, 0, 0] }),
-      part(box(10.6, 0.09, 4.9), c, { p: [0, 1.42, 2.0], r: [-slope, 0, 0] }),
+      part(box(10.6, 0.09, 4.9), c, { p: [0, 1.42, -2.0], r: [-slope, 0, 0] }),
+      part(box(10.6, 0.09, 4.9), c, { p: [0, 1.42, 2.0], r: [slope, 0, 0] }),
       part(box(10.7, 0.15, 0.22), shade(c, 1.12), { p: [0, 2.62, 0] }),
       part(box(0.55, 1.25, 0.55), e, { p: [-3.6, 2.35, 0] }),
       part(box(0.7, 0.12, 0.7), shade(e, 0.9), { p: [-3.6, 3.0, 0] }),
@@ -553,8 +559,8 @@ export function buildKindGeometry(spec: MeshSpec, kind: ScatterKind): THREE.Buff
     // stay open (the farm/village precedent).
     const slope = 0.98;
     return merge([
-      part(box(11.6, 0.09, 3.9), c, { p: [0, 1.55, -1.35], r: [slope, 0, 0] }),
-      part(box(11.6, 0.09, 3.9), c, { p: [0, 1.55, 1.35], r: [-slope, 0, 0] }),
+      part(box(11.6, 0.09, 3.9), c, { p: [0, 1.55, -1.35], r: [-slope, 0, 0] }),
+      part(box(11.6, 0.09, 3.9), c, { p: [0, 1.55, 1.35], r: [slope, 0, 0] }),
       part(box(11.7, 0.16, 0.2), shade(e, 1.0), { p: [0, 2.95, 0] }),
     ]);
   }
@@ -668,8 +674,8 @@ export function buildKindGeometry(spec: MeshSpec, kind: ScatterKind): THREE.Buff
     // Gabled pair (the farm roof's shape, the store's
     // span) + the stove's pipe toward the back.
     return merge([
-      part(box(13.1, 0.09, 4.6), c, { p: [0, 1.35, -1.95], r: [0.6, 0, 0] }),
-      part(box(13.1, 0.09, 4.6), c, { p: [0, 1.35, 1.95], r: [-0.6, 0, 0] }),
+      part(box(13.1, 0.09, 4.6), c, { p: [0, 1.35, -1.95], r: [-0.6, 0, 0] }),
+      part(box(13.1, 0.09, 4.6), c, { p: [0, 1.35, 1.95], r: [0.6, 0, 0] }),
       part(cyl(0.09, 0.11, 0.9, 6), shade(e, 1.0), { p: [-1.5, 2.6, -0.9] }),
     ]);
   }
@@ -737,8 +743,11 @@ export function buildKindGeometry(spec: MeshSpec, kind: ScatterKind): THREE.Buff
   if (kind === 'millRoof') {
     // ONE slope (over local +Z) + the ridge beam — the
     // water slope is gone; the open side is the ruin.
+    // Pitch sign flipped (roof family fix, 2026-10-31): a
+    // +Z slab takes +slope so it DESCENDS from the ridge
+    // beam outward; it rose outward before.
     return merge([
-      part(box(9.6, 0.09, 4.3), c, { p: [0, 1.32, 1.9], r: [-0.62, 0, 0] }),
+      part(box(9.6, 0.09, 4.3), c, { p: [0, 1.32, 1.9], r: [0.62, 0, 0] }),
       part(box(9.6, 0.16, 0.22), e, { p: [0, 2.4, 0] }),
     ]);
   }
