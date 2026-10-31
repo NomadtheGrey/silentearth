@@ -4,7 +4,11 @@
  * 'Bats, i like that'). At dusk, cave mouths near her
  * POUR their bats: a staggered stream that climbs,
  * wheels wide over the mouth, and dives home when the
- * window closes. Weather with wings — no interaction
+ * window closes. DAWN is the bookend (Adam-approved): a
+ * thinner in-flight — the night's hunters already out on
+ * their circuits when the window opens, wheeling a
+ * little, then turning home one by one. Weather with
+ * wings — no interaction
  * surface, nothing to catch or fight, and NO discovery
  * semantics (a 'cave known' fact, if one ever rides
  * this, is Systems' cousin, named in the claim and not
@@ -31,13 +35,21 @@ export const EXODUS_WHEEL_MIN_M = 18;
 export const EXODUS_WHEEL_MAX_M = 30;
 export const EXODUS_ALT_MIN_M = 10;
 export const EXODUS_ALT_MAX_M = 16;
+/** The dawn return (Adam-approved bookend, 2026-10-31):
+ * a THINNER in-flight — the night's hunters coming home. */
+export const EXODUS_DAWN_COUNT = 6;
+export const EXODUS_DAWN_SPAWN_SPAN_S = 8;
+/** A dawn bat wheels this long (s) before turning home. */
+export const EXODUS_DAWN_WHEEL_MIN_S = 10;
+export const EXODUS_DAWN_WHEEL_MAX_S = 20;
 
 export type ExodusPhase = 'emerge' | 'wheel' | 'return';
 
 export interface ExodusBat {
   instance: AnimalInstance;
   phase: ExodusPhase;
-  /** Its mouth (the blend's home end). */
+  /** Its mouth's id + point (the blend's home end). */
+  mouthId: string;
   mx: number;
   mz: number;
   /** 0..1 blend along the current leg (mouth <-> circuit). */
@@ -50,12 +62,15 @@ export interface ExodusBat {
   angle: number;
   angSpeed: number;
   bobPhase: number;
+  /** Dawn bats: the exodusT at which this one turns home. */
+  returnAt: number;
 }
 
 interface Emitter {
   mouthId: string;
   x: number;
   z: number;
+  mode: 'dusk' | 'dawn';
   spawned: number;
   spawnT: number;
 }
@@ -77,11 +92,14 @@ export interface ExodusStepContext {
   playerZ: number;
   /** The dusk window (renderer, from the sky clock). */
   duskOpen: boolean;
+  /** The dawn window (the return's bookend). */
+  dawnOpen: boolean;
   /** Cave mouths near a point (renderer ground truth). */
   mouthsNear: (x: number, z: number, r: number) => { id: string; x: number; z: number }[];
 }
 
 function spawnBat(e: Emitter, i: number): void {
+  const dawn = e.mode === 'dawn';
   const id = `exodus:${e.mouthId}:${i}`;
   const instance = makeCompanionInstance(id, 'bat', e.x, e.z);
   instance.flying = true;
@@ -89,10 +107,14 @@ function spawnBat(e: Emitter, i: number): void {
   const cd = 8 + Math.random() * 10;
   bats.set(id, {
     instance,
-    phase: 'emerge',
+    // A dawn bat starts OUT on its circuit (it was hunting
+    // all night) and turns home on its own clock; a dusk
+    // bat emerges from the mouth.
+    phase: dawn ? 'wheel' : 'emerge',
+    mouthId: e.mouthId,
     mx: e.x,
     mz: e.z,
-    blend: 0,
+    blend: dawn ? 1 : 0,
     cx: e.x + Math.cos(ang) * cd,
     cz: e.z + Math.sin(ang) * cd,
     radius: EXODUS_WHEEL_MIN_M + Math.random() * (EXODUS_WHEEL_MAX_M - EXODUS_WHEEL_MIN_M),
@@ -100,6 +122,9 @@ function spawnBat(e: Emitter, i: number): void {
     angle: Math.random() * Math.PI * 2,
     angSpeed: (0.25 + Math.random() * 0.2) * (Math.random() < 0.5 ? -1 : 1),
     bobPhase: Math.random() * Math.PI * 2,
+    returnAt: dawn
+      ? exodusT + EXODUS_DAWN_WHEEL_MIN_S + Math.random() * (EXODUS_DAWN_WHEEL_MAX_S - EXODUS_DAWN_WHEEL_MIN_S)
+      : Number.POSITIVE_INFINITY,
   });
 }
 
@@ -122,22 +147,23 @@ let exodusT = 0;
  */
 export function stepExodus(dt: number, ctx: ExodusStepContext): void {
   exodusT += dt;
+  const activeMode: 'dusk' | 'dawn' | null = ctx.duskOpen ? 'dusk' : ctx.dawnOpen ? 'dawn' : null;
 
-  if (ctx.duskOpen) {
+  if (activeMode) {
     for (const m of ctx.mouthsNear(ctx.playerX, ctx.playerZ, EXODUS_RANGE_M)) {
       if (!emitters.has(m.id)) {
-        emitters.set(m.id, { mouthId: m.id, x: m.x, z: m.z, spawned: 0, spawnT: 0 });
+        emitters.set(m.id, { mouthId: m.id, x: m.x, z: m.z, mode: activeMode, spawned: 0, spawnT: 0 });
       }
     }
   }
   for (const [id, e] of [...emitters]) {
     const inRange = Math.hypot(e.x - ctx.playerX, e.z - ctx.playerZ) <= EXODUS_RANGE_M;
-    if (!ctx.duskOpen || !inRange) {
+    if (e.mode !== activeMode || !inRange) {
       // Recall: this mouth's bats fly home; the emitter
       // dies when the last one lands.
       let any = false;
       for (const b of bats.values()) {
-        if (b.instance.id.startsWith(`exodus:${id}:`)) {
+        if (b.mouthId === id) {
           b.phase = 'return';
           any = true;
         }
@@ -145,10 +171,12 @@ export function stepExodus(dt: number, ctx: ExodusStepContext): void {
       if (!any) emitters.delete(id);
       continue;
     }
-    if (e.spawned < EXODUS_COUNT) {
+    const count = e.mode === 'dawn' ? EXODUS_DAWN_COUNT : EXODUS_COUNT;
+    const span = e.mode === 'dawn' ? EXODUS_DAWN_SPAWN_SPAN_S : EXODUS_SPAWN_SPAN_S;
+    if (e.spawned < count) {
       e.spawnT += dt;
-      const due = Math.floor((e.spawnT / EXODUS_SPAWN_SPAN_S) * EXODUS_COUNT);
-      while (e.spawned < Math.min(EXODUS_COUNT, due + 1) && e.spawned < EXODUS_COUNT) {
+      const due = Math.floor((e.spawnT / span) * count);
+      while (e.spawned < Math.min(count, due + 1) && e.spawned < count) {
         spawnBat(e, e.spawned);
         e.spawned++;
       }
@@ -159,6 +187,9 @@ export function stepExodus(dt: number, ctx: ExodusStepContext): void {
     const inst = b.instance;
     b.angle += b.angSpeed * dt;
     const target = circuitPos(b, exodusT);
+    if (b.phase === 'wheel' && exodusT >= b.returnAt) {
+      b.phase = 'return'; // a dawn bat turns for home
+    }
     if (b.phase === 'emerge') {
       b.blend = Math.min(1, b.blend + dt / 3);
       if (b.blend >= 1) b.phase = 'wheel';

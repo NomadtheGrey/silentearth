@@ -1097,7 +1097,7 @@ export class WorldRenderer {
     return t >= f - w && t <= f;
   }
 
-  /** The dusk band alone (the guide's second window; the bat exodus's only one). */
+  /** The dusk band alone (the guide's second window; the bat exodus's pour). */
   private duskOpen(): boolean {
     const sky = this.sky;
     if (!sky) return false;
@@ -1105,6 +1105,13 @@ export class WorldRenderer {
     const w = 2 / 24;
     const f = dayFraction(SEASON_START_MONTH);
     return t >= f - w && t <= f;
+  }
+
+  /** The dawn band (the guide's first window; the exodus's return). */
+  private dawnOpen(): boolean {
+    const sky = this.sky;
+    if (!sky) return false;
+    return sky.cycleT <= 2 / 24;
   }
 
   /** The nearest real tree point (the guide's perches), generateChunk ground truth, memoized per chunk. */
@@ -2794,6 +2801,7 @@ export class WorldRenderer {
         playerX: this.player.x,
         playerZ: this.player.z,
         duskOpen: this.duskOpen() && !this.gen.dimensionKey,
+        dawnOpen: this.dawnOpen() && !this.gen.dimensionKey,
         mouthsNear: (x, z, r) => {
           if (this.gen.dimensionKey) return [];
           // The mouth scan is worldgen-priced; refresh it
