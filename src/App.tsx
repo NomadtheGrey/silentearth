@@ -1792,7 +1792,11 @@ import {
   CHAR_INPUT_ITEM,
   cook,
 } from './systems/fire';
-import { HomeStorage } from './systems/shelter';
+import {
+  HomeStorage,
+  consumeHomeUpgradePrice,
+  nextHomeUpgrade,
+} from './systems/shelter';
 import {
   clearSave,
   loadSave,
@@ -2198,6 +2202,17 @@ const HOUSE_TYPE_TO_ITEM: Record<HouseType, string> = {
   thatchHut: ITEMS.thatchHut,
   wovenCottage: ITEMS.wovenCottage,
   smallWoodenHut: ITEMS.smallWoodenHut,
+};
+
+/** Systems' home-ladder rungs (recipe ids) back to the
+ * engine's house types — the home-screen Upgrade press
+ * consumes the price in Systems' rung terms, then runs
+ * the engine's in-place upgrade in its type terms. */
+const HOME_RUNG_TO_TYPE: Record<string, HouseType> = {
+  'primitive-lean-to': 'leanTo',
+  'thatch-hut': 'thatchHut',
+  'woven-cottage': 'wovenCottage',
+  'small-wooden-hut': 'smallWoodenHut',
 };
 
 /**
@@ -8007,6 +8022,36 @@ export default function App() {
       saveNow();
       return;
     }
+    if (actionId === 'upgrade') {
+      // HOME-SCREEN UPGRADE (Adam's principle, 2026-10-31):
+      // Systems' helper takes the price from her pack
+      // (nothing consumed on a refusal); the engine's
+      // in-place upgrade then climbs the standing house
+      // — the same composition tail as the placement
+      // pill's press, minus the carried house item.
+      if (!house) return;
+      const result = consumeHomeUpgradePrice(store.houseType(), inventory);
+      if (result.ok === false) {
+        if (result.code === 'missing' && result.missing) {
+          sayHouse(
+            `Not enough — ${result.missing
+              .map(
+                (m) => `${displayNameFor(m.item)} (${m.held}/${m.needed})`,
+              )
+              .join(' · ')}`,
+          );
+        }
+        return;
+      }
+      const newType = HOME_RUNG_TO_TYPE[result.to];
+      if (newType === undefined) return;
+      if (!shelterState.upgradeHouse(house.id, newType)) return;
+      store.setHouse(result.to as ItemId);
+      applyShelterHouse(house.id);
+      refreshInventory();
+      saveNow();
+      return;
+    }
     const sep = actionId.indexOf(':');
     if (sep < 0) return;
     const verb = actionId.slice(0, sep);
@@ -8183,6 +8228,40 @@ export default function App() {
         disabledNote: isNight ? undefined : 'Night only',
       },
     ];
+    // UPGRADE (Adam's home-screen principle, 2026-10-31:
+    // an upgrade needs no station, so its button lives
+    // on the home screen, paying the next rung's recipe
+    // price from her pack right there). Systems'
+    // nextHomeUpgrade prices the row — null at the top
+    // rung (no row: menus don't carry tombstones) — and
+    // its ingredients, counted against her pack, are
+    // the row's countsText and its disabled note.
+    const upgrade = store ? nextHomeUpgrade(store.houseType()) : null;
+    if (upgrade !== null) {
+      const price = upgrade.recipe.ingredients.map((ingredient) => {
+        const item = normalizeItemId(ingredient.item);
+        return {
+          name: displayNameFor(item),
+          held: inventory.count(item),
+          needed: ingredient.quantity,
+        };
+      });
+      const short = price.filter((part) => part.held < part.needed);
+      actions.push({
+        id: 'upgrade',
+        label: `Upgrade to ${upgrade.recipe.name}`,
+        countsText: price
+          .map((part) => `${part.name} ${part.held}/${part.needed}`)
+          .join(' · '),
+        disabled: short.length > 0,
+        disabledNote:
+          short.length > 0
+            ? `Missing: ${short
+                .map((part) => `${part.name} (${part.held}/${part.needed})`)
+                .join(' · ')}`
+            : undefined,
+      });
+    }
     for (const stack of inventory.stacksSnapshot()) {
       if (wornGear.ids.has(normalizeItemId(stack.item as ItemId))) continue;
       const name = displayNameFor(stack.item);
