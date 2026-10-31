@@ -79,8 +79,8 @@ export function installGuideProbes(probes: { groveDiscovered: () => boolean }): 
 
 /**
  * Stage the guide's world (the renderer, per surface
- * gen). Idempotent; a new world clears via seedSet and
- * the renderer re-stages.
+ * gen). Idempotent; re-seating to a new world is the
+ * renderer's explicit clearGuide + stageGuide.
  */
 export function stageGuide(x: number, z: number): void {
   grovePoint = { x, z };
@@ -257,8 +257,8 @@ export function stepGuide(dt: number, ctx: GuideStepContext): void {
   stepAnimalAnimation(inst, dt, true);
 }
 
-// A new world clears the guide; the renderer re-stages
-// it at the new world's Grove.
-bus.on('world:seedSet', () => {
-  clearGuide();
-});
+// No bus clear here (the cat's lesson, 2026-10-31): the
+// shell emits 'world:seedSet' AFTER the renderer installs
+// and stages, so a seedSet listener clears what staging
+// just built. The RENDERER owns re-seating explicitly —
+// clearGuide + stageGuide on every surface-gen install.

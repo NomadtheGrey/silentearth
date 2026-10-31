@@ -161,9 +161,8 @@ let cat: CatActor | null = null;
 /**
  * Stage the cat at a hearth spot. Idempotent: an existing
  * cat keeps its life (a chunk stream or a dimension swap
- * must never reset it). A new world clears via the
- * seedSet listener below and the renderer re-stages from
- * the new village.
+ * must never reset it). Re-seating to a NEW world is the
+ * renderer's explicit clearCat + ensureCat (stageCat).
  */
 export function ensureCat(hearthX: number, hearthZ: number): CatActor {
   if (cat) return cat;
@@ -552,9 +551,10 @@ export function stepCat(dt: number, ctx: CatStepContext): CatSignal[] {
   return signals;
 }
 
-// The cat's existence is the seed's, never a save's: a new
-// world clears the actor and the renderer re-stages it at
-// the new village's hearth.
-bus.on('world:seedSet', () => {
-  clearCat();
-});
+// The cat's existence is the seed's, never a save's. The
+// RENDERER owns re-seating: its stageCat clears and
+// re-stages on every surface-gen install. (No bus clear
+// here — the shell emits 'world:seedSet' AFTER the
+// renderer installs, so a listener on it staged-then-
+// cleared on every boot: the composition defect UI found
+// 2026-10-31. Fix shape (a), DEV-approved.)

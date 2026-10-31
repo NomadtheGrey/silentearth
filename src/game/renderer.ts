@@ -36,8 +36,8 @@ import {
   installCompanionResolvers,
   stepActors,
 } from './companionRuntime';
-import { catActor, catGlowOn, ensureCat, installCatPreyAccess, stepCat } from './catRuntime';
-import { guideActor, guideVisible, stageGuide, stepGuide } from './guideRuntime';
+import { catActor, catGlowOn, clearCat, ensureCat, installCatPreyAccess, stepCat } from './catRuntime';
+import { clearGuide, guideActor, guideVisible, stageGuide, stepGuide } from './guideRuntime';
 import { exodusBats, stepExodus } from './exodusRuntime';
 import { crowGlowIntensity, CROW_GLOW_EMISSIVE } from './crow';
 import type { CrowTier } from './crow';
@@ -1061,17 +1061,20 @@ export class WorldRenderer {
    */
   /**
    * Stage the world's one cat at its village hearth
-   * (Build 2). The cat's existence is the seed's: the
-   * village derivation is memoized, ensureCat is
-   * idempotent, and a new world clears the actor through
-   * the seedSet listener in catRuntime — so calling this
-   * on every surface-gen install is both safe and
-   * sufficient. Dimension gens never stage (the cat lives
-   * on the surface; the familiar crosses by re-seat, not
-   * by re-staging).
+   * (Build 2) and the guide at its Grove. The renderer
+   * OWNS re-seating (fix shape (a), 2026-10-31): every
+   * surface-gen install clears both actors and re-stages
+   * them from THIS gen's seats — explicitly, here, not
+   * via a bus listener (the shell emits 'world:seedSet'
+   * after install, which staged-then-cleared them on
+   * every boot). Dimension gens never stage (the cat
+   * lives on the surface; the familiar crosses by
+   * re-seat, not by re-staging).
    */
   private stageCat(gen: WorldGen): void {
     if (gen.dimensionKey) return;
+    clearCat();
+    clearGuide();
     const village = villageSite(String(gen.seed), gen.findSpawn(), (x, z) => gen.weightsAt(x, z));
     ensureCat(village.hearthHouse.hearthSpot.x, village.hearthHouse.hearthSpot.z);
     const grove = groveSite(String(gen.seed), gen.findSpawn(), (x, z) => gen.weightsAt(x, z).dominant);
