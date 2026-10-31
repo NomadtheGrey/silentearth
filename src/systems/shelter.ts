@@ -83,6 +83,20 @@ export const HOME_STORAGE_CAPACITY: Readonly<Record<string, number>> = {
  * Shelter exposure multiplier at the house (1 = unsheltered;
  * lower = more protected). LANE-DECIDED starting tunables for
  * Adam's pin pass, in Background's ShelterQuery shape.
+ *
+ * STAGED, NOT DEAD (Adam, 2026-10-31, answering the code
+ * audit): this protection half — SHELTER_PROTECTION,
+ * SHELTER_RADIUS, shelterMultiplierFor, createShelterQuery,
+ * shelterMultiplierAt — is NOT YET CALLED because cold and
+ * wet are not implemented yet; it is the staged shelter
+ * side of the cold/wet build, not an orphan. The live
+ * shelter evaluation today is the engine's (game/shelter.ts,
+ * HOUSE_DEFS), whose numbers DIFFER from these (multipliers
+ * and radius). That divergence is a known, open pin-pass
+ * item: when the cold/wet build wires this half, the two
+ * sets are settled as ONE decision — one set of numbers
+ * per fact — not before, and neither table is edited to
+ * match the other in the meantime.
  */
 export const SHELTER_PROTECTION: Readonly<Record<string, number>> = {
   [ITEMS.primitiveLeanTo]: 0.7,
