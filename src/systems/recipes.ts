@@ -1200,7 +1200,7 @@ const DRAFT_RECIPES: Recipe[] = [
     name: 'Writing Desk',
     status: 'draft',
     output: { item: ITEMS.writingDesk, quantity: 1 },
-    ingredients: [i(ITEMS.snapWood, 6)],
+    ingredients: [i(ITEMS.snapWood, 6), i(ITEMS.downedOak, 2)],
     station: 'workstation',
     notes:
       'DRAFT. A desk for the big book, built at the stump ' +
