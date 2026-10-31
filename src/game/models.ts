@@ -201,6 +201,32 @@ export function buildKindGeometry(spec: MeshSpec, kind: ScatterKind): THREE.Buff
     }
     return merge([part(flatDisc(DISC_RADIUS[kind] ?? 1.0, 12), c, { p: [0, DISC_GROUND_LIFT_M, 0] }), ...mounds]);
   }
+  // Kind override (the lady slipper shares the 'flowerPouch'
+  // shape slot, but the generic pouch — an upright ball with
+  // two discs behind — never reads as the orchid; Models,
+  // 2026-10-31): the bespoke build follows the real flower:
+  // TWO broad basal leaves at the ground (the species' pair),
+  // a leafless stem leaning into a NOD, the inflated pouch
+  // tilted forward with its dark opening and pale staminode
+  // on the top face, two TWISTED petals dangling at the
+  // sides, and a dorsal sepal arching over the top. The
+  // flowerPouch shape case stays in the switch below,
+  // riderless. Disposition untouched: scenery only, rarity
+  // preserved (the source def is not part of this landing).
+  if (kind === 'ladySlipper') {
+    return merge([
+      part(sphere(0.5, 8, 6), shade(STEM_GREEN, 0.9), { p: [0.11, 0.015, 0], s: [0.3, 0.04, 0.14], r: [0, -0.35, 0.1] }),
+      part(sphere(0.5, 8, 6), shade(STEM_GREEN, 0.9), { p: [-0.11, 0.015, 0], s: [0.3, 0.04, 0.14], r: [0, 0.35, -0.1] }),
+      part(cyl(0.014, 0.022, 0.34, 5), STEM_GREEN, { p: [0, 0.17, 0], r: [0.1, 0, 0] }),
+      part(box(0.045, 0.1, 0.016), shade(STEM_GREEN, 1.05), { p: [0, 0.375, -0.045], r: [-0.35, 0, 0] }),
+      part(sphere(0.09, 10, 8), c, { p: [0, 0.335, 0.05], s: [0.85, 0.98, 1.3], r: [0.5, 0, 0] }),
+      part(cyl(0.03, 0.03, 0.012, 8), shade(c, 0.35), { p: [0, 0.422, 0.093], r: [0.5, 0, 0] }),
+      part(sphere(0.016, 6, 5), 0xf2e6ee, { p: [0, 0.428, 0.096], r: [0.5, 0, 0] }),
+      part(box(0.02, 0.17, 0.034), shade(c, 0.5), { p: [0.062, 0.285, 0.015], r: [0.15, 0.55, 0.42] }),
+      part(box(0.02, 0.17, 0.034), shade(c, 0.5), { p: [-0.062, 0.285, 0.015], r: [0.15, -0.55, -0.42] }),
+      part(box(0.055, 0.15, 0.018), shade(c, 0.62), { p: [0, 0.445, -0.005], r: [-0.5, 0, 0] }),
+    ]);
+  }
   // Kind override (oak tree shares the 'tree' shape slot with
   // the common tree, but an oak must READ differently in the
   // canopy — Adam, 2026-10-30): a stouter trunk and a broader,
