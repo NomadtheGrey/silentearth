@@ -8429,6 +8429,12 @@ export default function App() {
   // staged, a fire's lighting keeps running. The pile's
   // old 2.5 m feed-clear is absorbed into this rule.
   const WALK_AWAY_LEASH = HARVEST_RANGE + 2;
+  // SITE WINDOW SEAT (Adam, 2026-10-31: 'lower that
+  // window a smidge' — the anchored site window's top
+  // crowded the screen edge): the hub and the altar
+  // panel drop this far below their standard seat.
+  // DRAFT — tunable at his sighting.
+  const SITE_WINDOW_DROP_PX = 24;
   useEffect(() => {
     const anyOpen =
       selectedPileId !== null ||
@@ -10577,6 +10583,7 @@ export default function App() {
             x={selectedSiteAnchor.x}
             y={selectedSiteAnchor.y}
             interactive
+            dropPx={SITE_WINDOW_DROP_PX}
           >
             {/* STUMP HUB (Adam's ruling, 2026-10-31):
               the stump's anchored window is one hub of
@@ -10800,6 +10807,7 @@ export default function App() {
             x={selectedSiteAnchor.x}
             y={selectedSiteAnchor.y}
             interactive
+            dropPx={SITE_WINDOW_DROP_PX}
           >
             <RitualPanel theme={lookThemes.world}
               siteLabel={selectedSiteLabel}
