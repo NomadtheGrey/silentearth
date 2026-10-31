@@ -8574,71 +8574,11 @@ export default function App() {
       saveNow();
       return;
     }
-    const sep = actionId.indexOf(':');
-    if (sep < 0) return;
-    const verb = actionId.slice(0, sep);
-    const kind = actionId.slice(sep + 1);
-    const name = displayNameFor(kind);
-    const syncWorn = () => {
-      inventory.setWorn(wardrobe.wornItemIds());
-      setWornGarments(wardrobe.wornGarments());
-    };
-    const storeOne = (): boolean => {
-      try {
-        store.add(kind as ItemId, 1);
-        inventory.remove(kind as ItemId, 1);
-        homeStoreItemsRef.current.get(shelterHouseId)?.add(kind);
-        syncWorn();
-        return true;
-      } catch {
-        return false;
-      }
-    };
-    const takeOne = (): boolean => {
-      try {
-        inventory.add(kind as ItemId, 1);
-        store.remove(kind as ItemId, 1);
-        if (store.count(kind as ItemId) === 0) {
-          homeStoreItemsRef.current.get(shelterHouseId)?.delete(kind);
-        }
-        syncWorn();
-        return true;
-      } catch {
-        return false;
-      }
-    };
-    if (verb === 'store-one') {
-      if (!storeOne()) {
-        sayHouse(`Home storage full — no room for ${name}.`);
-      }
-    } else if (verb === 'store-all') {
-      const carried = inventory.count(kind as ItemId);
-      let stored = 0;
-      while (inventory.count(kind as ItemId) > 0) {
-        if (!storeOne()) break;
-        stored += 1;
-      }
-      if (stored < carried) {
-        sayHouse(
-          `Stored ${stored} of ${carried} ${name} — home storage full.`,
-        );
-      }
-    } else if (verb === 'take-one') {
-      if (!takeOne()) {
-        sayHouse(`Pack full — no room for ${name}.`);
-      }
-    } else if (verb === 'take-all') {
-      while (store.count(kind as ItemId) > 0) {
-        if (!takeOne()) {
-          sayHouse(`Pack full — no room for ${name}.`);
-          break;
-        }
-      }
-    } else {
-      return;
-    }
-    refreshInventory();
-    saveNow();
+    // No transfer arms remain (landing 2, 2026-10-31):
+    // the menu offers no Store/Take ids anymore, so
+    // nothing dispatches past the upgrade arm. The
+    // panel's Deposit/Withdraw handlers are the
+    // transfers now, and they are separate functions.
   };
 
   const handleRemove = (target: HarvestTarget) => {
@@ -8736,14 +8676,12 @@ export default function App() {
         }
       : undefined;
 
-  // Home menu actions (Adam, 2026-10-28): Rest + Store +
-  // Take kind-entries for the sheltering house. Entries
-  // derive per render from live inventory + store, so the
-  // menu re-renders in place after every press (pile
-  // precedent) and never auto-closes — not even when the
-  // store empties. Store entries skip worn-gear kinds
-  // (never droppable; the worn-gear landing's set); Take
-  // entries do not skip (recovery).
+  // Home menu actions (Adam, 2026-10-28; transfers
+  // retired 2026-10-31, landing 2 — see the note at the
+  // close push below): Sleep + Upgrade + Close for the
+  // sheltering house. The Upgrade row derives per render
+  // from the live store, so the menu re-renders in place
+  // after a press and never auto-closes.
   const homeMenuActions = (): ContextAction[] => {
     if (!shelterHouseId) return [];
     const store = openHomeStore;
@@ -8789,51 +8727,14 @@ export default function App() {
             : undefined,
       });
     }
-    for (const stack of inventory.stacksSnapshot()) {
-      if (wornGear.ids.has(normalizeItemId(stack.item as ItemId))) continue;
-      const name = displayNameFor(stack.item);
-      const stored = store?.count(stack.item as ItemId) ?? 0;
-      actions.push({
-        id: `store-kind:${stack.item}`,
-        label: name,
-        countsText: `carried ×${stack.quantity} · stored ×${stored}`,
-        arrows: [
-          {
-            id: `store-one:${stack.item}`,
-            glyph: '↓',
-            ariaLabel: `Store one ${name}`,
-          },
-          {
-            id: `store-all:${stack.item}`,
-            glyph: '↓↓',
-            ariaLabel: `Store all ${name}`,
-          },
-        ],
-      });
-    }
-    for (const id of openHomeIds) {
-      const held = store?.count(id as ItemId) ?? 0;
-      if (held <= 0) continue;
-      const name = displayNameFor(id);
-      const carried = inventory.count(id as ItemId);
-      actions.push({
-        id: `take-kind:${id}`,
-        label: name,
-        countsText: `stored ×${held} · carried ×${carried}`,
-        arrows: [
-          {
-            id: `take-one:${id}`,
-            glyph: '↑',
-            ariaLabel: `Take one ${name}`,
-          },
-          {
-            id: `take-all:${id}`,
-            glyph: '↑↑',
-            ariaLabel: `Take all ${name}`,
-          },
-        ],
-      });
-    }
+    // NO TRANSFER ROWS (Inventory Unification landing 2,
+    // Adam's ruling 2026-10-31 — 'a good streamline'):
+    // the Store/Take kind entries that used to derive
+    // here are RETIRED; the home menu is Sleep /
+    // Upgrade / Close, and transfers live only in the
+    // unified surfaces (her pack panel's Deposit /
+    // Withdraw, one tap away at home). Revisit only on
+    // Adam's word.
     actions.push({ id: 'close', label: 'Close' });
     return actions;
   };
@@ -12005,9 +11906,6 @@ export default function App() {
                         // both pans of the scale on the
                         // screen where she weighs them.
                         `Stored ${formatLb(openHomeStore.used())} of ${formatLb(openHomeStore.capacity())} lb · Carrying ${formatLb(inventory.usedLb())} lb`}
-                  </p>
-                  <p className="text-xs text-stone-400">
-                    ↑ Take one · ↑↑ Take all · ↓ Store one · ↓↓ Store all
                   </p>
                 </>
               }
