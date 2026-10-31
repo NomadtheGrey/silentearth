@@ -227,6 +227,42 @@ export function buildKindGeometry(spec: MeshSpec, kind: ScatterKind): THREE.Buff
       part(box(0.055, 0.15, 0.018), shade(c, 0.62), { p: [0, 0.445, -0.005], r: [-0.5, 0, 0] }),
     ]);
   }
+  // Kind override (human remains, pre-built for the village
+  // beats build — Models, 2026-10-31): weathered old bones
+  // in the primitive register, lying as they settled — a
+  // rib arc over a spine line, pelvis, long bones trailed
+  // out with their knee knobs, arm bones at the sides, two
+  // loose fragments. The skull is suggested by form: a
+  // cranium, a jaw, and the one detail that says skull, its
+  // sockets. Restraint is the brief — nothing stands,
+  // nothing is posed; the tallest point is a rib's arc.
+  // The fire-side bones (+X) and the pelvis carry the ash
+  // tone (extraColor): one set of remains, partially
+  // charred, the village's story. The nominal 'disc' shape
+  // slot is never reached.
+  if (kind === 'humanRemains') {
+    return merge([
+      part(cyl(0.014, 0.014, 0.3, 5), shade(c, 0.92), { p: [0, 0.028, 0.12], r: [Math.PI / 2, 0, 0] }),
+      part(new THREE.TorusGeometry(0.105, 0.0115, 5, 10, Math.PI), c, { p: [0, 0.004, 0.03] }),
+      part(new THREE.TorusGeometry(0.115, 0.0115, 5, 10, Math.PI), c, { p: [0, 0.004, 0.1] }),
+      part(new THREE.TorusGeometry(0.11, 0.0115, 5, 10, Math.PI), shade(c, 0.94), { p: [0, 0.004, 0.17] }),
+      part(new THREE.TorusGeometry(0.095, 0.0115, 5, 10, Math.PI), shade(c, 0.94), { p: [0, 0.004, 0.235] }),
+      part(sphere(0.085, 9, 7), c, { p: [0.02, 0.058, 0.42], s: [0.92, 0.82, 1.05] }),
+      part(sphere(0.016, 6, 5), shade(c, 0.3), { p: [0.05, 0.066, 0.493] }),
+      part(sphere(0.016, 6, 5), shade(c, 0.3), { p: [-0.01, 0.066, 0.493] }),
+      part(box(0.068, 0.028, 0.05), shade(c, 0.88), { p: [0.02, 0.018, 0.465] }),
+      part(sphere(0.5, 8, 6), e, { p: [0, 0.026, -0.055], s: [0.23, 0.085, 0.145] }),
+      part(cyl(0.016, 0.012, 0.36, 5), c, { p: [-0.055, 0.016, -0.27], r: [Math.PI / 2, 0, 0] }),
+      part(sphere(0.021, 6, 5), c, { p: [-0.055, 0.018, -0.45] }),
+      part(cyl(0.016, 0.012, 0.36, 5), e, { p: [0.075, 0.016, -0.29], r: [Math.PI / 2, 0, 0] }),
+      part(sphere(0.021, 6, 5), e, { p: [0.075, 0.018, -0.47] }),
+      part(cyl(0.011, 0.009, 0.27, 5), shade(c, 0.95), { p: [-0.155, 0.013, 0.13], r: [Math.PI / 2, 0, 0] }),
+      part(cyl(0.009, 0.008, 0.2, 5), shade(c, 0.95), { p: [-0.185, 0.012, -0.06], r: [Math.PI / 2, 0, 0] }),
+      part(cyl(0.011, 0.009, 0.27, 5), e, { p: [0.175, 0.013, 0.05], r: [Math.PI / 2, 0, 0] }),
+      part(cyl(0.01, 0.008, 0.11, 5), shade(c, 0.85), { p: [0.14, 0.012, -0.18], r: [0, 0.6, Math.PI / 2] }),
+      part(sphere(0.02, 6, 5), shade(c, 0.8), { p: [-0.13, 0.014, -0.33] }),
+    ]);
+  }
   // Kind override (oak tree shares the 'tree' shape slot with
   // the common tree, but an oak must READ differently in the
   // canopy — Adam, 2026-10-30): a stouter trunk and a broader,

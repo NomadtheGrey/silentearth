@@ -118,6 +118,12 @@ export type ScatterKind =
   | 'villageRoofFallen'
   | 'villageWell'
   | 'ashPatch'
+  // Placement-pass kind (the village beats build, pre-built
+  // 2026-10-31): weathered human remains — emitted ONLY by
+  // the beats build's boneSpots placement, never in biome
+  // mixes (its source def carries no biomes). Scenery: there
+  // is nothing to harvest from the dead.
+  | 'humanRemains'
   // Site-pass kinds (the Farmhouse, sites.ts — same rule):
   // wall segments, the gable roof, the composed porch, and
   // the hearth stone (hearth block + the Great Stone).
