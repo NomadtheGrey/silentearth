@@ -37,13 +37,13 @@
 import { deriveSeed } from './seed';
 
 /**
- * The 20 tier-1 Waking bone kinds, in RITUAL_RECIPES order
+ * The 21 tier-1 Waking bone kinds, in RITUAL_RECIPES order
  * (day, night, twilight, moon, independent). Mirror of
  * Systems' list — see header. Shrew skull absent
  * deliberately (outright, no ritual). Muskrat, opossum,
- * and vole joined 2026-10-31 (Systems' registry first,
- * this mirror second — the bones-for-the-boneless build);
- * a squirrel kind is expected to follow the same way.
+ * vole, and squirrel joined 2026-10-31 (Systems' registry
+ * first, this mirror second — the bones-for-the-boneless
+ * build).
  */
 export const BONE_KINDS: readonly string[] = [
   // DAY (sun).
@@ -51,6 +51,7 @@ export const BONE_KINDS: readonly string[] = [
   'snake-vertebra',
   'turtle-shell-fragment',
   'crow-beak',
+  'squirrel-tail-bone',
   // NIGHT.
   'owl-talon',
   'bat-wing-bone',
