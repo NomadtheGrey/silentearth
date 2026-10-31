@@ -4,12 +4,14 @@
  *
  * Adam's shape: "feed them what they eat to earn their
  * trust, then their friendship. A familiar would be
- * more, requiring a ritual at the altar." This module
- * is the friendship build: diets, trust, the faced
- * OFFER, and the bond. The familiar's rite is build 2 —
- * the record carries its bond and origin fields from
- * day one so the rite arrives as a transition on this
- * shape, not a migration.
+ * more, requiring a ritual at the altar." Build 1 was
+ * the friendship: diets, trust, the faced OFFER, and
+ * the bond. Build 2 (2026-10-31) adds the rite on the
+ * same record shape — ELEVATE / RELINQUISH / SUPERSEDE
+ * at altar-grade ground — the cat's diet row and found
+ * record, and the provisioning catch set the cat's
+ * hunts read. No migration: build 1 carried the bond
+ * and origin fields from day one for exactly this.
  *
  * The laws this module keeps:
  * - Trust is PER-INDIVIDUAL (this crow, not crows) and
@@ -52,18 +54,19 @@ import type { HungerState } from './hunger';
 // ---------------------------------------------------------------------------
 //
 // Every entry is an item she can carry and give up.
-// Kinds with NO row are unfeedable in build 1, for
+// Kinds with NO row are unfeedable by design, for
 // stated reasons, not by omission:
 // - Insect-eaters with no insect item in the world:
 //   frog, bat, mole, shrew.
 // - Aquatic kinds a faced offer cannot reach:
 //   fish, eel, crayfish (fish meet her hand as prey —
 //   see the snatch rider below — not as companions).
-// The cat has no row in build 1: it is a singular
-// kind (the hearth resident), and its diet row rides
-// build 2's claim with its record shape.
+// The cat's row arrived with build 2 and its found
+// record (seedFoundCat below): prey-shaped, like the
+// cat — fish and the small carcasses.
 
 export const DIETS: Readonly<Record<string, readonly ItemId[]>> = {
+  cat: ['fish-carcass', 'mouse-carcass', 'vole-carcass'],
   rabbit: ['grass', 'tender-vines', 'yellow-dandelion'],
   squirrel: ['acorns', 'edible-mushroom', 'tall-sunflower'],
   muskrat: ['grass', 'tender-vines', 'white-water-lily'],
@@ -149,7 +152,7 @@ export function isFeral(creatureId: string, origin: CompanionOrigin = 'wild'): b
 // Records — the persisted shape
 // ---------------------------------------------------------------------------
 
-/** Bond depth. Build 1 writes only 'none' | 'companion'. */
+/** Bond depth. Build 1 wrote 'none' | 'companion'; the rite adds 'familiar'. */
 export type CompanionBond = 'none' | 'companion' | 'familiar';
 
 export type CompanionStance = 'stay' | 'follow' | 'come';
@@ -207,6 +210,36 @@ export type StanceRefusalCode = 'unknown' | 'unbonded' | 'cat';
 
 export type StanceResult = { ok: true } | { ok: false; code: StanceRefusalCode };
 
+export type ElevateRefusalCode =
+  | 'unknown' // no record — she has never fed this one
+  | 'unbonded' // courtship only; the rite wants a companion
+  | 'already-familiar' // this one already stands as the familiar
+  | 'ground' // the rite wants altar-grade ground (siteGrade 2)
+  | 'one-standing'; // another familiar stands — relinquish or supersede
+
+export type ElevateResult =
+  | { ok: true }
+  // On 'one-standing', `standing` names the standing
+  // familiar's creatureId, so the shell's refusal can
+  // point at Relinquish / Supersede by name.
+  | { ok: false; code: ElevateRefusalCode; standing?: string };
+
+export type RelinquishRefusalCode =
+  | 'unknown'
+  | 'not-familiar' // only a standing familiar can step down
+  | 'ground';
+
+export type RelinquishResult = { ok: true } | { ok: false; code: RelinquishRefusalCode };
+
+export type SupersedeRefusalCode =
+  | 'unknown'
+  | 'unbonded'
+  | 'already-familiar' // the target IS the standing familiar
+  | 'ground'
+  | 'no-standing'; // nothing stands to be superseded — plain elevate's job
+
+export type SupersedeResult = { ok: true } | { ok: false; code: SupersedeRefusalCode };
+
 // ---------------------------------------------------------------------------
 // The state — records by creature id
 // ---------------------------------------------------------------------------
@@ -235,14 +268,47 @@ export class CompanionState {
     return [...this.records.values()].map((record) => ({ ...record }));
   }
 
-  /** The standing familiar, if one stands (build 2's rite reads this). */
+  /** The standing familiar, if one stands (the rite reads this). */
   familiar(): SavedCompanion | undefined {
+    const standing = this.standingFamiliarRecord();
+    return standing ? { ...standing } : undefined;
+  }
+
+  /** The STORED standing-familiar record (transitions mutate it). */
+  private standingFamiliarRecord(): SavedCompanion | undefined {
     for (const record of this.records.values()) {
       if (record.bond === 'familiar') {
-        return { ...record };
+        return record;
       }
     }
     return undefined;
+  }
+
+  /**
+   * Seed the FOUND cat's record (build 2): the
+   * hearthHouse resident, met through its seat, not
+   * the wild road. Idempotent — an existing record
+   * (whatever its trust or bond) is returned
+   * unchanged. The found origin carries its laws with
+   * it: feral-exempt by construction (isFeral), and
+   * stance null — the cat takes no commands.
+   */
+  seedFoundCat(creatureId: string): SavedCompanion {
+    const existing = this.records.get(creatureId);
+    if (existing) {
+      return { ...existing };
+    }
+    const record: SavedCompanion = {
+      creatureId,
+      kind: 'cat',
+      trust: 0,
+      bond: 'none',
+      origin: 'found',
+      stance: null,
+      lastFedDay: null,
+    };
+    this.records.set(creatureId, record);
+    return { ...record };
   }
 
   /**
@@ -263,7 +329,7 @@ export class CompanionState {
     day: number,
   ): FeedResult {
     const existing = this.records.get(creatureId);
-    const origin = existing?.origin ?? 'wild';
+    const origin = existing?.origin ?? (kind === 'cat' ? 'found' : 'wild');
     if (isFeral(creatureId, origin)) {
       return { ok: false, code: 'feral' };
     }
@@ -287,7 +353,11 @@ export class CompanionState {
       kind,
       trust: 0,
       bond: 'none',
-      origin: 'wild',
+      // The cat is singular — the hearth resident — so
+      // even a record born at the feeding hand carries
+      // the found origin (seedFoundCat is the usual
+      // door; this keeps the law if she feeds first).
+      origin: kind === 'cat' ? 'found' : 'wild',
       stance: kind === 'cat' ? null : 'follow',
       lastFedDay: null,
     };
@@ -318,7 +388,12 @@ export class CompanionState {
     if (record.trust < TRUST_FOR_BOND) {
       return { ok: false, code: 'trust' };
     }
-    if (!nameKnown) {
+    // The name gate guards the WILD road: a stranger's
+    // name must be awakened and spoken. The FOUND cat
+    // is waived through it — she knows the resident's
+    // name the way you know the name of what lives at
+    // your hearth; there is no cat bone to awaken.
+    if (!nameKnown && record.origin !== 'found') {
       return { ok: false, code: 'name' };
     }
     record.bond = 'companion';
@@ -360,6 +435,118 @@ export class CompanionState {
     record.stance = stance;
     return { ok: true };
   }
+
+  // -------------------------------------------------------------------------
+  // The rite (build 2) — familiar transitions at altar-grade ground.
+  // `grade` is the caller's fact (stumpy-altar's siteGrade: the rite
+  // wants 2). One familiar stands at a time; the transitions are the
+  // only doors between 'companion' and 'familiar', and supersede is
+  // the atomic pair of the other two.
+  // -------------------------------------------------------------------------
+
+  /**
+   * ELEVATE: companion -> familiar, at altar-grade
+   * ground, while no other familiar stands. The
+   * one-standing refusal names the standing familiar,
+   * so the shell can point at Relinquish / Supersede.
+   */
+  elevate(creatureId: string, grade: number): ElevateResult {
+    const record = this.records.get(creatureId);
+    if (!record) {
+      return { ok: false, code: 'unknown' };
+    }
+    if (record.bond === 'familiar') {
+      return { ok: false, code: 'already-familiar' };
+    }
+    if (record.bond !== 'companion') {
+      return { ok: false, code: 'unbonded' };
+    }
+    if (grade < 2) {
+      return { ok: false, code: 'ground' };
+    }
+    const standing = this.standingFamiliarRecord();
+    if (standing) {
+      return { ok: false, code: 'one-standing', standing: standing.creatureId };
+    }
+    record.bond = 'familiar';
+    return { ok: true };
+  }
+
+  /**
+   * RELINQUISH: familiar -> companion, at altar-grade
+   * ground (Adam's guarded verb). The friendship
+   * survives whole — trust and stance untouched; only
+   * the glow dies — and the familiar slot frees as
+   * this lands.
+   */
+  relinquish(creatureId: string, grade: number): RelinquishResult {
+    const record = this.records.get(creatureId);
+    if (!record) {
+      return { ok: false, code: 'unknown' };
+    }
+    if (record.bond !== 'familiar') {
+      return { ok: false, code: 'not-familiar' };
+    }
+    if (grade < 2) {
+      return { ok: false, code: 'ground' };
+    }
+    record.bond = 'companion';
+    return { ok: true };
+  }
+
+  /**
+   * SUPERSEDE: the standing familiar steps down to
+   * companion and the target rises, as ONE act. Every
+   * check runs before either record moves — a refused
+   * rite leaves both bonds exactly as they stood. (The
+   * step-down itself is the DRAFT default; Adam's pin
+   * pass owns step-down-vs-departs.)
+   */
+  supersede(creatureId: string, grade: number): SupersedeResult {
+    const record = this.records.get(creatureId);
+    if (!record) {
+      return { ok: false, code: 'unknown' };
+    }
+    if (record.bond === 'familiar') {
+      return { ok: false, code: 'already-familiar' };
+    }
+    if (record.bond !== 'companion') {
+      return { ok: false, code: 'unbonded' };
+    }
+    if (grade < 2) {
+      return { ok: false, code: 'ground' };
+    }
+    const standing = this.standingFamiliarRecord();
+    if (!standing) {
+      return { ok: false, code: 'no-standing' };
+    }
+    standing.bond = 'companion';
+    record.bond = 'familiar';
+    return { ok: true };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Provisioning — the catch set (build 2 rider)
+// ---------------------------------------------------------------------------
+//
+// Provisioning is the CAT's service alone (the settled
+// reconciliation: every other kind's catch set folds
+// to empty). This table is the data authority for WHAT
+// a hunting familiar may bring home — existing carcass
+// items only, delivered to home storage by Background's
+// engine. The hunt's cadence, the travelling-together
+// condition, and the real-prey consumption are the
+// engine's; the guard trade-off (an excursioning hunter
+// is not guarding) is the panel's to voice.
+
+export const PROVISIONING_CATCHES: Readonly<Record<string, readonly ItemId[]>> = {
+  cat: [ITEMS.fishCarcass, ITEMS.mouseCarcass, ITEMS.voleCarcass],
+};
+
+/** What a kind may bring home from a hunt (empty for non-provisioners). */
+export function provisioningCatchesFor(kind: string): readonly ItemId[] {
+  return PROVISIONING_CATCHES[kind] ?? [];
 }
 
 // ---------------------------------------------------------------------------
