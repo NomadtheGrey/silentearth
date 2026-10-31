@@ -57,6 +57,8 @@ import {
 } from './animals';
 import type { AnimalInstance, AnimalKind } from './animals';
 import { bus } from './events';
+import { makeDartState, stepSettleDart } from './settleDart';
+import type { DartState } from './settleDart';
 
 /** Follow band: inside FOLLOW_IDLE_M she is close enough; beyond FOLLOW_HURRY_M the actor hurries. */
 export const FOLLOW_IDLE_M = 2.5;
@@ -87,6 +89,15 @@ export interface CompanionActor {
   departDz: number;
   /** Idle/wander timer for the stay and follow pauses. */
   timer: number;
+  /**
+   * Movement model (Build 2): 'trail' is the build-1 band
+   * follow; 'settleDart' is the Clarissa cycle, for the
+   * FAMILIAR — the shell flips it at elevation / demotion
+   * (setMovementMode). STAY and COME override either.
+   */
+  moveMode: 'trail' | 'settleDart';
+  /** Settle/dart state (live only in settleDart mode). */
+  dart: DartState;
 }
 
 export interface CompanionStepContext {
@@ -106,6 +117,8 @@ export interface CompanionStepContext {
   speedAt?: (x: number, z: number) => number;
   /** Site-wall pushout, renderer-supplied: returns the corrected point. */
   pushWalls?: (x: number, z: number) => { x: number; z: number };
+  /** Nearest cover point (settle/dart watch points), renderer-supplied. */
+  coverNear?: (x: number, z: number, r: number) => { x: number; z: number } | null;
 }
 
 const actors = new Map<string, CompanionActor>();
@@ -200,6 +213,8 @@ export function promoteFromInstance(instance: AnimalInstance): PromoteResult {
     departDx: 0,
     departDz: 0,
     timer: 0,
+    moveMode: 'trail',
+    dart: makeDartState(),
   });
   return 'promoted';
 }
@@ -228,7 +243,26 @@ export function restoreActor(
     departDx: 0,
     departDz: 0,
     timer: 0,
+    moveMode: 'trail',
+    dart: makeDartState(),
   });
+}
+
+/**
+ * Flip an actor's movement model (Build 2): elevation to
+ * familiar sets 'settleDart' (the Clarissa cycle);
+ * demotion restores 'trail'. The shell calls it off
+ * Systems' bond transitions; a saved familiar restores as
+ * 'trail' and the shell re-flips from the record at boot
+ * (the record is the truth, this is only its motion).
+ * Returns false for an unknown id.
+ */
+export function setMovementMode(id: string, mode: 'trail' | 'settleDart'): boolean {
+  const actor = actors.get(id);
+  if (!actor) return false;
+  actor.moveMode = mode;
+  actor.dart = makeDartState();
+  return true;
 }
 
 /**
@@ -386,6 +420,13 @@ export function stepActors(dt: number, ctx: CompanionStepContext): void {
         actor.stance = 'follow';
         bus.emit('companion:stance', { id: a.id, stance: 'follow' });
       }
+    } else if (actor.moveMode === 'settleDart' && actor.mode === 'follow') {
+      // The familiar's cycle (Build 2): settle at a
+      // watching point, dart cover to cover — replaces the
+      // band follow wholesale while it lasts. STAY (above)
+      // and COME and DEPART keep their build-1 meanings.
+      stepSettleDart(a, actor.dart, dt, ctx);
+      continue;
     } else if (actor.mode === 'stay') {
       // Resident life: a small local wander around the
       // anchor, long pauses — present, not frozen.

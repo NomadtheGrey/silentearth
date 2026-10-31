@@ -36,6 +36,7 @@ import {
   installCompanionResolvers,
   stepActors,
 } from './companionRuntime';
+import { catActor, catGlowOn, ensureCat, stepCat } from './catRuntime';
 import { crowGlowIntensity, CROW_GLOW_EMISSIVE } from './crow';
 import type { CrowTier } from './crow';
 import { ProximityTracker } from './proximity';
@@ -576,6 +577,17 @@ export class WorldRenderer {
    */
   private companionGroup: THREE.Group | null = null;
   private companionMeshes = new Map<string, THREE.Group>();
+  /**
+   * The cat's layer (Build 2): a group of its own — the cat
+   * is not a companion-registry actor — carrying its posed
+   * mesh and, when familiar, the fungus-register glow
+   * light. The mesh rebuilds only when its pose changes.
+   */
+  private catGroup: THREE.Group | null = null;
+  private catMeshPose: string | null = null;
+  private catGlowLight: THREE.PointLight | null = null;
+  /** Cover points (trees / bushes) per chunk, for settle/dart watch points. */
+  private coverMemo = new Map<string, { x: number; z: number }[]>();
   /** Memo for the site-walls query's cave-instance spawn (see siteWallsAt). */
   private wallsSpawnMemo: { seed: string; spawn: { x: number; z: number } } | null = null;
   /**
@@ -629,6 +641,7 @@ export class WorldRenderer {
     // loadChunk). The outcome listener (shell-owned, see
     // harvest.ts) marks state in the shared harvestState.
     this.gen = wrapGenWithState(gen);
+    this.stageCat(gen);
     // The river course is a pure function of seed + spawn, so it
     // is computed once per world (here and in setWorldGen) rather
     // than per chunk.
@@ -1011,8 +1024,62 @@ export class WorldRenderer {
    * No App.tsx touch: the shell polls this getter and renders
    * its own tag.
    */
-  getVisibleAnimals(): { kind: AnimalKind; x: number; z: number; y: number; id: string; companion?: boolean }[] {
-    const out: { kind: AnimalKind; x: number; z: number; y: number; id: string; companion?: boolean }[] = [];
+  /**
+   * Stage the world's one cat at its village hearth
+   * (Build 2). The cat's existence is the seed's: the
+   * village derivation is memoized, ensureCat is
+   * idempotent, and a new world clears the actor through
+   * the seedSet listener in catRuntime — so calling this
+   * on every surface-gen install is both safe and
+   * sufficient. Dimension gens never stage (the cat lives
+   * on the surface; the familiar crosses by re-seat, not
+   * by re-staging).
+   */
+  private stageCat(gen: WorldGen): void {
+    if (gen.dimensionKey) return;
+    const village = villageSite(String(gen.seed), gen.findSpawn(), (x, z) => gen.weightsAt(x, z));
+    ensureCat(village.hearthHouse.hearthSpot.x, village.hearthHouse.hearthSpot.z);
+  }
+
+  /**
+   * The nearest cover point (a tree's or bush's spot) to a
+   * position, within r — the settle/dart watch-point taste.
+   * Same ground truth as collectWaterDiscs (generateChunk
+   * is pure), memoized per chunk: darts are rare, and the
+   * memo keeps even those cheap.
+   */
+  private coverPointNear(x: number, z: number, r: number): { x: number; z: number } | null {
+    const pcx = Math.floor(x / CHUNK_SIZE);
+    const pcz = Math.floor(z / CHUNK_SIZE);
+    let best: { x: number; z: number } | null = null;
+    let bestD = r;
+    for (let cx = pcx - 1; cx <= pcx + 1; cx++) {
+      for (let cz = pcz - 1; cz <= pcz + 1; cz++) {
+        const key = `${cx},${cz}`;
+        let pts = this.coverMemo.get(key);
+        if (!pts) {
+          pts = [];
+          for (const obj of this.gen.generateChunk(cx, cz).objects) {
+            if (obj.kind === 'tree' || obj.kind === 'oakTree' || obj.kind === 'bush') {
+              pts.push({ x: obj.x, z: obj.z });
+            }
+          }
+          this.coverMemo.set(key, pts);
+        }
+        for (const p of pts) {
+          const d = Math.hypot(p.x - x, p.z - z);
+          if (d < bestD) {
+            bestD = d;
+            best = p;
+          }
+        }
+      }
+    }
+    return best;
+  }
+
+  getVisibleAnimals(): { kind: AnimalKind; x: number; z: number; y: number; id: string; companion?: boolean; cat?: boolean }[] {
+    const out: { kind: AnimalKind; x: number; z: number; y: number; id: string; companion?: boolean; cat?: boolean }[] = [];
     for (const loaded of this.chunks.values()) {
       for (const pair of loaded.animals) {
         out.push({ kind: pair.instance.kind, x: pair.instance.x, z: pair.instance.z, y: pair.instance.y, id: pair.instance.id });
@@ -1025,6 +1092,14 @@ export class WorldRenderer {
     for (const actor of allActors()) {
       const a = actor.instance;
       out.push({ kind: a.kind, x: a.x, z: a.z, y: a.y, id: a.id, companion: true });
+    }
+    // The cat (Build 2): a persistent actor of its own —
+    // flagged `cat`, NOT companion, so no stance verb ever
+    // attaches to it; the faced OFFER is its door.
+    const c = catActor();
+    if (c) {
+      const a = c.instance;
+      out.push({ kind: a.kind, x: a.x, z: a.z, y: a.y, id: a.id, cat: true });
     }
     return out;
   }
@@ -1193,6 +1268,7 @@ export class WorldRenderer {
     trapState.clear();
     this.rebuildTrapGroup();
     this.gen = wrapGenWithState(gen);
+    this.stageCat(gen);
     this.riverParams = riverParamsFor(String(gen.seed), gen.findSpawn());
     // The new world's sites (sites.ts) — the site-wall query the
     // constructor wired reads this field dynamically.
@@ -2501,6 +2577,7 @@ export class WorldRenderer {
       dimensionActive: !!this.gen.dimensionKey,
       speedAt: (x, z) => this.companionSpeedAt(x, z),
       pushWalls: (x, z) => pushOutOfWalls(x, z, this.siteWallsAt(x, z), 0.3),
+      coverNear: (x, z, r) => this.coverPointNear(x, z, r),
     });
     if (!this.companionGroup) {
       this.companionGroup = new THREE.Group();
@@ -2525,6 +2602,51 @@ export class WorldRenderer {
           this.companionGroup.remove(g);
           this.companionMeshes.delete(id);
         }
+      }
+    }
+    // The cat (Build 2): stepped after the companions, in
+    // its own layer. Its mesh rebuilds only on a pose
+    // change (Models bakes the pose into the geometry);
+    // the glow light exists exactly while it is familiar.
+    // Visibility: hidden inside a dimension unless it is
+    // the familiar — the familiar crosses, the rest wait.
+    {
+      const c = catActor();
+      if (c) {
+        stepCat(dt, {
+          playerX: this.player.x,
+          playerZ: this.player.z,
+          night,
+          dimensionActive: !!this.gen.dimensionKey,
+          speedAt: (x, z) => this.companionSpeedAt(x, z),
+          pushWalls: (x, z) => pushOutOfWalls(x, z, this.siteWallsAt(x, z), 0.3),
+          coverNear: (x, z, r) => this.coverPointNear(x, z, r),
+        });
+        if (!this.catGroup) {
+          this.catGroup = new THREE.Group();
+          this.scene.add(this.catGroup);
+        }
+        this.catGroup.visible = !this.gen.dimensionKey || c.bond === 'familiar';
+        if (this.catMeshPose !== c.pose) {
+          this.catMeshPose = c.pose;
+          this.catGroup.clear();
+          if (this.catGlowLight) {
+            this.catGlowLight = null;
+          }
+          const mesh = buildAnimal('cat', c.pose);
+          this.catGroup.add(mesh);
+        }
+        if (catGlowOn() && !this.catGlowLight) {
+          // The fungus register: a faint green pool, the
+          // witch-sight shimmer made visible (DRAFT values).
+          this.catGlowLight = new THREE.PointLight(0x9fe8b0, 2.2, 5, 1.6);
+          this.catGlowLight.position.set(0, 0.5, 0);
+          this.catGroup.add(this.catGlowLight);
+        } else if (!catGlowOn() && this.catGlowLight) {
+          this.catGroup.remove(this.catGlowLight);
+          this.catGlowLight = null;
+        }
+        this.poseAnimal(c.instance, this.catGroup);
       }
     }
     this.stream();
