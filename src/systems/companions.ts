@@ -540,19 +540,26 @@ export class CompanionState {
 // Provisioning is the CAT's service alone (the settled
 // reconciliation: every other kind's catch set folds
 // to empty). This table is the data authority for WHAT
-// a hunting familiar may bring home — existing carcass
-// items only, delivered to home storage by Background's
+// a hunting familiar may hunt — named as PREY KINDS
+// (the roster's own words, colony kinds included:
+// 'mice', 'voles'), because the hunt speaks kinds, not
+// carcasses. The carcass a catch arrives as derives
+// from the prey kind through the ONE kind->carcass
+// authority (trap-catch's catchItemFor, which already
+// maps the colony kinds) — this table never names an
+// item, so no shell adapter inverts or aliases it.
+// Catches are delivered to home storage by Background's
 // engine. The hunt's cadence, the travelling-together
 // condition, and the real-prey consumption are the
 // engine's; the guard trade-off (an excursioning hunter
 // is not guarding) is the panel's to voice.
 
-export const PROVISIONING_CATCHES: Readonly<Record<string, readonly ItemId[]>> = {
-  cat: [ITEMS.fishCarcass, ITEMS.mouseCarcass, ITEMS.voleCarcass],
+export const PROVISIONING_CATCHES: Readonly<Record<string, readonly string[]>> = {
+  cat: ['fish', 'mice', 'voles'],
 };
 
-/** What a kind may bring home from a hunt (empty for non-provisioners). */
-export function provisioningCatchesFor(kind: string): readonly ItemId[] {
+/** The prey kinds a kind may hunt (empty for non-provisioners). */
+export function provisioningCatchesFor(kind: string): readonly string[] {
   return PROVISIONING_CATCHES[kind] ?? [];
 }
 
