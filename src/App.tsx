@@ -7833,10 +7833,44 @@ export default function App() {
     selectedFireId === null
       ? undefined
       : placedFires.find((f) => f.id === selectedFireId);
+  // ANCHOR RETENTION (Adam's look-up bug, hunted
+  // 2026-10-31): an OPEN anchored window used to vanish
+  // when its anchor's projection dropped — the 'scatter'
+  // rule returns null off-screen, the anchors arrays skip
+  // nulls, and the render gate unmounted the window
+  // (looking up from a stump dropped its window off the
+  // bottom edge). The SELECTION never closed; only the
+  // projection did. So: while a window's entity exists,
+  // its last projected anchor is RETAINED and the window
+  // stays where it was until the entity projects again
+  // or the selection closes (leash, E, Esc, a new
+  // selection — unchanged). A vanished ENTITY (a picked-
+  // up torch, an emptied pile's kin) still closes its
+  // window: retention applies only while the entity
+  // resolves. Prompts and chips for unselected things
+  // keep the scatter rule — vanishing off-screen is
+  // correct for them; only open windows freeze.
+  const retainedAnchorsRef = useRef(
+    new Map<string, { x: number; y: number }>(),
+  );
+  const retainAnchor = (
+    key: string | null,
+    live: { x: number; y: number } | null,
+  ): { x: number; y: number } | null => {
+    if (key === null) return null;
+    if (live !== null) {
+      retainedAnchorsRef.current.set(key, live);
+      return live;
+    }
+    return retainedAnchorsRef.current.get(key) ?? null;
+  };
   const selectedFireAnchor =
     selectedFire === undefined
       ? null
-      : (fireAnchors.find((a) => a.fire.id === selectedFire.id) ?? null);
+      : retainAnchor(
+          `fire:${selectedFire.id}`,
+          fireAnchors.find((a) => a.fire.id === selectedFire.id) ?? null,
+        );
 
   // The cauldron whose menu is open, with its anchor —
   // the fire pattern, over Background's singleton: a
@@ -7848,9 +7882,12 @@ export default function App() {
   const selectedCauldronAnchor =
     selectedCauldron === undefined
       ? null
-      : (cauldronAnchors.find(
-          (a) => a.cauldron.hearthId === selectedCauldron.hearthId,
-        ) ?? null);
+      : retainAnchor(
+          `cauldron:${selectedCauldron.hearthId}`,
+          cauldronAnchors.find(
+            (a) => a.cauldron.hearthId === selectedCauldron.hearthId,
+          ) ?? null,
+        );
 
   // The torch whose menu is open, with its anchor — the
   // fire pattern, live: the menu renders from placedTorches,
@@ -7862,7 +7899,11 @@ export default function App() {
   const selectedTorchAnchor =
     selectedTorch === undefined
       ? null
-      : (torchAnchors.find((a) => a.torch.id === selectedTorch.id) ?? null);
+      : retainAnchor(
+          `torch:${selectedTorch.id}`,
+          torchAnchors.find((a) => a.torch.id === selectedTorch.id) ??
+            null,
+        );
   // The selected tent + its anchor — the torch pattern,
   // over the shell store (no entity yet).
   const selectedTent =
@@ -7872,7 +7913,10 @@ export default function App() {
   const selectedTentAnchor =
     selectedTent === undefined
       ? null
-      : (tentAnchors.find((a) => a.tent.id === selectedTent.id) ?? null);
+      : retainAnchor(
+          `tent:${selectedTent.id}`,
+          tentAnchors.find((a) => a.tent.id === selectedTent.id) ?? null,
+        );
 
   // The ritual site whose panel is open, with its anchor —
   // the torch pattern, live: the panel renders from the
@@ -7917,11 +7961,16 @@ export default function App() {
           : 'Stump'
         : 'Altar';
   const selectedSiteAnchor =
-    selectedSiteId === null
+    selectedSiteId === null || selectedSitePosition === null
       ? null
-      : selectedSiteId.startsWith('stump:')
-        ? (stumpAnchors.find((a) => a.siteId === selectedSiteId) ?? null)
-        : (altarAnchors.find((a) => a.altar.id === selectedSiteId) ?? null);
+      : retainAnchor(
+          `site:${selectedSiteId}`,
+          selectedSiteId.startsWith('stump:')
+            ? (stumpAnchors.find((a) => a.siteId === selectedSiteId) ??
+              null)
+            : (altarAnchors.find((a) => a.altar.id === selectedSiteId) ??
+              null),
+        );
   const selectedSiteStaged =
     selectedSiteId === null
       ? null
@@ -10613,6 +10662,18 @@ export default function App() {
                 )}
               </div>
               {stumpView === 'craft' ? (
+                // HUB CRAFT BOUND (Adam's scroll bug,
+                // hunted 2026-10-31): the Craft door was
+                // the hub's one UNBOUNDED seat — the menu
+                // grew taller than the screen and the
+                // wheel had no scrollable ancestor, so the
+                // top sections were unreachable. It wears
+                // the Upgrade door's bound now (the
+                // ContextMenu/RitualPanel pattern). Interim
+                // while the hub lives: the frame-fixed
+                // split + styled scrollbar belong to the
+                // surviving dialog seat (the fold claim).
+                <div className="w-72 max-w-[calc(100vw-1rem)] max-h-[70vh] overflow-y-auto rounded-2xl">
                 <CraftingMenu theme={lookThemes.dialog}
                   recipes={orderedCraftingRecipes}
                   sections={craftingSections}
@@ -10627,6 +10688,7 @@ export default function App() {
                     setRitualNote(null);
                   }}
                 />
+                </div>
               ) : stumpView === 'upgrade' ? (
                 <section
                   aria-label={`${selectedSiteLabel} upgrades`}
