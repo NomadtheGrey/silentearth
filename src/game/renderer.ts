@@ -27,7 +27,7 @@ import type { WorldGen } from './worldgen';
 import { PlayerController } from './player';
 import { marshWeight } from './biomes';
 import { SOURCE_FOR_KIND } from './objects';
-import { buildAltarGroup, buildAnimal, buildCampArrow, buildCandle, buildCauldronGroup, buildDeskGroup, buildEdgeArrow, buildKindGeometry, buildStagedBone, buildStumpDressing, buildSunflowerHeadGeometry, buildTorch, buildUmbrella, buildWitch, ALTAR_CANDLE_X, ALTAR_CANDLE_Z, CANDLE_FLAME_Y, DISC_RADIUS, STUMP_TOP_Y, sunflowerHeadMatrix, sunflowerHeadOrientation, TORCH_FLAME_Y, vertexLambert } from './models';
+import { buildAltarGroup, buildAnimal, buildCampArrow, buildCandle, buildCatchProp, buildCauldronGroup, buildDeskGroup, buildEdgeArrow, buildKindGeometry, buildStagedBone, buildStumpDressing, buildSunflowerHeadGeometry, buildTorch, buildUmbrella, buildWitch, ALTAR_CANDLE_X, ALTAR_CANDLE_Z, CANDLE_FLAME_Y, DISC_RADIUS, STUMP_TOP_Y, sunflowerHeadMatrix, sunflowerHeadOrientation, TORCH_FLAME_Y, vertexLambert } from './models';
 import { spawnAnimalsForChunk, updateAnimal } from './animals';
 import type { AnimalInstance, AnimalKind } from './animals';
 import {
@@ -36,7 +36,7 @@ import {
   installCompanionResolvers,
   stepActors,
 } from './companionRuntime';
-import { catActor, catGlowOn, ensureCat, stepCat } from './catRuntime';
+import { catActor, catGlowOn, ensureCat, installCatPreyAccess, stepCat } from './catRuntime';
 import { crowGlowIntensity, CROW_GLOW_EMISSIVE } from './crow';
 import type { CrowTier } from './crow';
 import { ProximityTracker } from './proximity';
@@ -586,6 +586,9 @@ export class WorldRenderer {
   private catGroup: THREE.Group | null = null;
   private catMeshPose: string | null = null;
   private catGlowLight: THREE.PointLight | null = null;
+  /** The carried catch's mouth prop (Models' buildCatchProp), while carried standing. */
+  private catPropGroup: THREE.Group | null = null;
+  private catPropKind: string | null = null;
   /** Cover points (trees / bushes) per chunk, for settle/dart watch points. */
   private coverMemo = new Map<string, { x: number; z: number }[]>();
   /** Memo for the site-walls query's cave-instance spawn (see siteWallsAt). */
@@ -693,6 +696,29 @@ export class WorldRenderer {
     installCompanionResolvers({
       adopt: (id) => this.adoptChunkAnimal(id),
       peek: (id) => this.peekChunkAnimal(id),
+    });
+    // The cat's prey access (Build 2 landing B): live chunk
+    // animals, nothing minted — a catch despawns a real
+    // individual, and a stalk reads its live position.
+    installCatPreyAccess({
+      nearestPrey: (x, z, minR, maxR, kinds) => {
+        let best: { id: string; kind: AnimalKind; x: number; z: number } | null = null;
+        let bestD = maxR;
+        for (const a of this.getLoadedAnimalInstances()) {
+          if (!kinds.includes(a.kind)) continue;
+          const d = Math.hypot(a.x - x, a.z - z);
+          if (d >= minR && d <= bestD) {
+            bestD = d;
+            best = { id: a.id, kind: a.kind, x: a.x, z: a.z };
+          }
+        }
+        return best;
+      },
+      preyPos: (id) => {
+        const a = this.getLoadedAnimalInstances().find((i) => i.id === id);
+        return a ? { x: a.x, z: a.z } : null;
+      },
+      consumePrey: (id) => this.despawnChunkAnimal(id),
     });
     this.proximity = new ProximityTracker(this.gen, true, () => this.tents);
     // Chunk reload on harvest completion: the harvested chunk is
@@ -2633,8 +2659,26 @@ export class WorldRenderer {
           if (this.catGlowLight) {
             this.catGlowLight = null;
           }
+          this.catPropGroup = null;
+          this.catPropKind = null;
           const mesh = buildAnimal('cat', c.pose);
           this.catGroup.add(mesh);
+        }
+        // The catch in the mouth (landing B): Models' prop
+        // hangs at the stand-pose mouth offset; sit / curl
+        // take no prop (carrying is a travelling act).
+        const wantProp = c.carrying && c.propKind && c.pose === 'stand' ? c.propKind : null;
+        if (wantProp !== this.catPropKind) {
+          if (this.catPropGroup) {
+            this.catGroup.remove(this.catPropGroup);
+            this.catPropGroup = null;
+          }
+          this.catPropKind = wantProp;
+          if (wantProp) {
+            this.catPropGroup = buildCatchProp(wantProp);
+            this.catPropGroup.position.set(0, 0.3, 0.31);
+            this.catGroup.add(this.catPropGroup);
+          }
         }
         if (catGlowOn() && !this.catGlowLight) {
           // The fungus register: a faint green pool, the

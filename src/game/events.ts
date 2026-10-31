@@ -488,6 +488,22 @@ export interface EventMap {
   'companion:feral-snap': { id: string };
   'companion:stance': { id: string; stance: 'stay' | 'follow' };
   'animal:snatch-caught': { id: string; kind: string; x: number; z: number };
+  /**
+   * The cat (Build 2; catRuntime emits, the shell
+   * answers). 'cat:met' — the first meeting at the hearth
+   * (a feed-line door). 'cat:delivered' — a daytime catch
+   * reached the homed house: the shell writes the item
+   * into home storage (the cap governs there). 'cat:
+   * present' — a sleep-hunt catch left on the floor of
+   * the homed house (Adam's presentation, 2026-10-31):
+   * the shell drops a ground pile at (x, z). 'cat:gift' —
+   * a pre-bond catch left at the hearth: the shell drops
+   * a ground pile at (x, z), the doorstep gift.
+   */
+  'cat:met': { id: string };
+  'cat:delivered': { item: string };
+  'cat:present': { item: string; x: number; z: number };
+  'cat:gift': { item: string; x: number; z: number };
 }
 
 type Handler<E> = (payload: E) => void;
