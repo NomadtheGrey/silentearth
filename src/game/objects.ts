@@ -144,7 +144,8 @@ export type ItemId =
   | 'white-trillium'
   | 'wood-violet'
   | 'creek-iris'
-  | 'white-water-lily';
+  | 'white-water-lily'
+  | 'meadow-flower';
 
 /**
  * Tool ladder stages for tool-gated yields (the garden trowel and its
@@ -2031,12 +2032,14 @@ export const SOURCES: HarvestSourceDef[] = [
     kind: 'flower',
     name: 'Meadow Flower',
     description:
-      'Small bright flowers of the open meadow — pretty, and SCENERY ONLY ' +
-      '(meadow/forest landing, 2026-10-26): they yield nothing, and no new ' +
-      'item is invented for them. The meadow harvest is the brush and ' +
-      'snap-wood growing beside them.',
-    harvestable: false,
-    permitTier: null,
+      'Small bright flowers of the open meadow \u2014 pink petals around a ' +
+      'yellow heart. Picked by hand, taken whole as a meadow flower. ' +
+      '(Harvestable since Adam\u2019s ruling, 2026-10-31: a flower should ' +
+      'have a name and be harvestable \u2014 this supersedes the ' +
+      '2026-10-26 scenery-only note.)',
+    harvestable: true,
+    permitTier: 'hand',
+    primaryYield: 'meadow-flower',
     secondaryYields: [],
     provenance: 'draft',
     biomes: ['meadow', 'forest', 'oldfieldRise', 'creekBottom'],

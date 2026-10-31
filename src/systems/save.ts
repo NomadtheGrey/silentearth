@@ -544,6 +544,9 @@ export interface SaveData {
   /** The cave visit this save was written in (boot-at-the-mouth
    * fact); null for surface saves and old saves. */
   dimensionVisit: SavedDimensionVisit | null;
+  /** Acquisition order for the Recent sort (held kinds,
+   * most recently gained first); [] for old saves. */
+  acquisitionOrder: string[];
   /** Placed tents (portable shelters); [] for old saves. */
   tents: SavedTent[];
   /** Partial-true-name look counts; [] for old saves. */
@@ -695,6 +698,14 @@ export interface SaveDraft {
     key: string;
     mouthId: string | null;
   } | null;
+  /**
+   * Acquisition order, from PersonalInventory
+   * .acquisitionOrder() at save time (the Recent
+   * sort's memory). OPTIONAL, same trap-save pattern
+   * as cauldrons; absent = [] (the panel falls back
+   * to stack order until gains rebuild it).
+   */
+  acquisitionOrder?: readonly string[];
   /**
    * Placed tents from the placed-tent source
    * (Background's entity snapshot, once it lands).
@@ -973,6 +984,9 @@ export function serializeSave(draft: SaveDraft): SaveData {
           mouthId: draft.dimensionVisit.mouthId,
         }
       : null,
+    // Acquisition order: written AS-IS (held kinds,
+    // newest first — the inventory's own list).
+    acquisitionOrder: [...(draft.acquisitionOrder ?? [])],
     // Tents: written AS-IS (positions verbatim, id when
     // the entity provides one — no filtering, no
     // normalization). Invalid entries are restore()'s
@@ -1470,6 +1484,23 @@ export function deserializeSave(value: unknown): SaveData | null {
               : null,
         }
       : null;
+    // Acquisition order is optional on read: an old
+    // v1 save without it loads with acquisitionOrder:
+    // []. String entries are kept in order, deduped;
+    // anything else drops. The restore seed intersects
+    // with held stacks at read (PersonalInventory), so
+    // a stale id in the list is harmless.
+    const acquisitionOrder: string[] = [];
+    if (Array.isArray(value.acquisitionOrder)) {
+      for (const entry of value.acquisitionOrder) {
+        if (
+          typeof entry === 'string' &&
+          !acquisitionOrder.includes(entry)
+        ) {
+          acquisitionOrder.push(entry);
+        }
+      }
+    }
     // Tents are optional on read, same leniency as
     // altars: an old v1 save without them loads with
     // tents: []. Entries pass through UNVALIDATED —
@@ -1627,6 +1658,7 @@ export function deserializeSave(value: unknown): SaveData | null {
       desks,
       cauldrons,
       dimensionVisit,
+      acquisitionOrder,
       tents,
       nameSight,
       stagings,

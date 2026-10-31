@@ -52,6 +52,20 @@ import { CAVE_CELL_M } from './caves';
 import { sunDirection, sunElevationAtCycle } from './sky';
 import { dayFraction } from './weather';
 
+/**
+ * Ground discs (pond, standing water, silt, bog patch, ash,
+ * peat moss, cave pool) are zero-thickness circles authored
+ * at local y = 0, and their sources sit at baseY 0 — the disc
+ * plane IS the ground plane, and the pair z-fights (Adam's
+ * playtest, 2026-10-31: the grain silo's pad shimmered at its
+ * seam). Every ground-disc part is lifted by this much
+ * instead: 2 cm reads as nothing standing on it and breaks
+ * the coplanar pair everywhere the class occurs — scatter,
+ * sites, and cave floors alike. Same shape as the stump-top
+ * fix (merge #14): lift the disc, keep the silhouette.
+ */
+export const DISC_GROUND_LIFT_M = 0.02;
+
 /** Ground-cover disc radii per kind (disc-shaped sources only). */
 /** Ground-disc radii by scatter kind (shared with waterProximity's pond edge). */
 export const DISC_RADIUS: Partial<Record<ScatterKind, number>> = {
@@ -185,7 +199,7 @@ export function buildKindGeometry(spec: MeshSpec, kind: ScatterKind): THREE.Buff
     for (const [p, r] of spots) {
       mounds.push(part(sphere(r, 8, 6), shade(c, 1.15), { p, s: [1, 0.35, 1] }));
     }
-    return merge([part(flatDisc(DISC_RADIUS[kind] ?? 1.0, 12), c), ...mounds]);
+    return merge([part(flatDisc(DISC_RADIUS[kind] ?? 1.0, 12), c, { p: [0, DISC_GROUND_LIFT_M, 0] }), ...mounds]);
   }
   // Kind override (oak tree shares the 'tree' shape slot with
   // the common tree, but an oak must READ differently in the
@@ -1247,7 +1261,7 @@ export function buildKindGeometry(spec: MeshSpec, kind: ScatterKind): THREE.Buff
       ]);
     }
     case 'disc':
-      return merge([part(flatDisc(DISC_RADIUS[kind] ?? 1.0, 12), c)]);
+      return merge([part(flatDisc(DISC_RADIUS[kind] ?? 1.0, 12), c, { p: [0, DISC_GROUND_LIFT_M, 0] })]);
     case 'stone':
       if (kind === 'flint') {
         // Knapped shard: flat, elongated, angular — reads distinct

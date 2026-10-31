@@ -1745,7 +1745,11 @@ import {
   handlePilePickupRequest,
   handlePileTakeRequest,
 } from './systems/piles';
-import { executeCraft } from './systems/crafting-execution';
+import {
+  executeCraft,
+  executeCraftChain,
+  hasChainProducer,
+} from './systems/crafting-execution';
 import {
   HungerState,
   eat,
@@ -2758,6 +2762,21 @@ export default function App() {
   // and anchor source differ). Renamed from
   // selectedAltarId when stump sites gained panels.
   const [selectedSiteId, setSelectedSiteId] = useState<string | null>(null);
+  // STUMP HUB (Adam's ruling, 2026-10-31): at a stump
+  // the anchored window is a hub of three sibling
+  // doors — Craft (the default: E is Craft at a stump),
+  // Upgrade (the transformation acts, one pill per
+  // entry in the hoisted acts list), Ritual (the
+  // staging list). The view resets to Craft whenever
+  // the selection changes, so every fresh E at a stump
+  // lands on Craft. Altar sites never read this — their
+  // anchored panel is unchanged.
+  const [stumpView, setStumpView] = useState<
+    'craft' | 'upgrade' | 'ritual'
+  >('craft');
+  useEffect(() => {
+    setStumpView('craft');
+  }, [selectedSiteId]);
   // Stump ritual anchors (bone build): stumpPositions
   // at her feet, projected like altar anchors. State,
   // not memo — projection needs the live container +
@@ -5346,6 +5365,42 @@ export default function App() {
     executeCraftNow(recipeId);
   };
 
+  // PREREQUISITE CRAFTING (Adam, 2026-10-31): the button
+  // on a CraftingMenu ingredient row — craft the missing
+  // prerequisite (and ITS prerequisites) without leaving
+  // the open recipe. Systems' executeCraftChain plans the
+  // whole chain first (atomic: a refusal consumes NOTHING
+  // and throws the blocker's reason, executeCraft idiom)
+  // and crafts exactly the ingredient's shortfall; batch
+  // surplus stays in her pack. The menu and the selection
+  // never move — the note carries the outcome, and the
+  // refresh re-reads every row's counts in place. Station
+  // + hunger arguments mirror executeCraftNow exactly.
+  const handleCraftPrerequisite = (recipeId: string, item: string) => {
+    const recipe = RECIPES.find((candidate) => candidate.id === recipeId);
+    if (!recipe) return;
+    try {
+      const result = executeCraftChain(
+        recipe,
+        item,
+        inventory,
+        availableStations.length > 0 ? availableStations : null,
+        hunger,
+      );
+      setCraftNote(
+        result.crafted.quantity > 0
+          ? `Crafted ${result.crafted.item} × ${result.crafted.quantity}.`
+          : `You already have enough ${result.crafted.item}.`,
+      );
+    } catch (error) {
+      setCraftNote(
+        error instanceof Error ? error.message : 'Crafting failed.',
+      );
+    }
+    refreshInventory();
+    saveNow();
+  };
+
   const handleTrapConfirmYes = () => {
     const recipeId = pendingTrapRecipeId;
     setPendingTrapRecipeId(null);
@@ -7836,6 +7891,8 @@ export default function App() {
   // (grade 2 — a Stumpy Altar or a made Altar) while
   // the books are unlinked: the Linking. Grade-1 sites
   // (plain stumps) never show the Linking.
+  const selectedIsStump =
+    selectedSiteId !== null && selectedSiteId.startsWith('stump:');
   const selectedSiteActs: { id: string; label: string }[] = (() => {
     if (selectedSiteId === null || selectedSitePosition === null) {
       return [];
@@ -9029,16 +9086,36 @@ export default function App() {
       // panel's own render order, from the hoisted
       // lists the panel renders.
       const siteId = selectedSiteId;
+      // STUMP HUB (2026-10-31): digits follow the
+      // ACTIVE VIEW. Craft is click-driven (the
+      // CraftingMenu has no digit rows — digits wait);
+      // Upgrade's digits fire the act pills in list
+      // order; Ritual falls through to the lists below
+      // with NO acts offset (the acts live in Upgrade
+      // now, and the hub's RitualPanel isn't passed
+      // them, so its badges start at the kinds too).
+      if (siteId.startsWith('stump:')) {
+        if (stumpView === 'craft') return;
+        if (stumpView === 'upgrade') {
+          const act = selectedSiteActs[digit - 1];
+          if (act) handleSiteAct(siteId, act.id);
+          return;
+        }
+      }
       // TRANSFORMATION ACTS take the panel's first
       // digits (their render order — the panel badges
       // them first too); every later list shifts by the
-      // acts count, from this one hoisted list.
-      if (digit <= selectedSiteActs.length) {
+      // acts count, from this one hoisted list. At a
+      // stump the count is 0 (see above).
+      const actsInPanel = siteId.startsWith('stump:')
+        ? 0
+        : selectedSiteActs.length;
+      if (digit <= actsInPanel) {
         const act = selectedSiteActs[digit - 1];
         if (act) handleSiteAct(siteId, act.id);
         return;
       }
-      const panelDigit = digit - selectedSiteActs.length;
+      const panelDigit = digit - actsInPanel;
       if (selectedSiteStaged === null) {
         // Digits number the CARRIED rows only, in display
         // order — the panel badges by the same rule, so a
@@ -9713,6 +9790,23 @@ export default function App() {
         ...recipe.ingredients.map((ingredient) => ({
           name: ingredient.item,
           amountText: `${inventory.count(ingredient.item)} / ${ingredient.quantity}`,
+          // PREREQUISITE CRAFTING (Adam, 2026-10-31): the
+          // row carries its item id + the caller-decided
+          // chain flag — a chain producer exists for the
+          // item (Systems' hasChainProducer; trap/stump
+          // producers are excluded Systems-side, so the
+          // candidacy is honest) AND she holds fewer than
+          // this recipe needs. The button shows on the flag
+          // alone: a press may still refuse in planning
+          // (station, ingredients, weight) and the refusal
+          // IS the feedback — the shell never pre-walks
+          // the chain (exactly one chain-walk exists,
+          // Systems'). Dependency rows below carry neither
+          // field, so they never grow the button.
+          itemId: ingredient.item,
+          chainCraftable:
+            hasChainProducer(ingredient.item) &&
+            inventory.count(ingredient.item) < ingredient.quantity,
           icon:
             ingredient.item === UMBRELLA_ITEM_ID ? (
               <UmbrellaIcon />
@@ -10206,7 +10300,186 @@ export default function App() {
         ) : null}
         {selectedSiteId !== null &&
         selectedSiteLabel !== null &&
-        selectedSiteAnchor ? (
+        selectedSiteAnchor &&
+        selectedIsStump ? (
+          <WorldAnchor
+            x={selectedSiteAnchor.x}
+            y={selectedSiteAnchor.y}
+            interactive
+          >
+            {/* STUMP HUB (Adam's ruling, 2026-10-31):
+              the stump's anchored window is one hub of
+              three sibling doors. E lands on Craft (the
+              stump's primary job); Upgrade presents the
+              transformation acts — one pill per entry in
+              the hoisted acts list, so future additions
+              arrive as more pills with no hub changes;
+              Ritual keeps the staging list. Uniform
+              across stump grades. Door labels + the
+              empty-upgrade line are DRAFT copy. */}
+            <div className="flex w-72 flex-col gap-2">
+              <div
+                className={
+                  'flex items-center gap-1 rounded-2xl p-1.5 ' +
+                  UI_THEMES[lookThemes.world].panel
+                }
+                role="group"
+                aria-label={`${selectedSiteLabel} doors`}
+              >
+                {(['craft', 'upgrade', 'ritual'] as const).map(
+                  (view) => (
+                    <button
+                      key={view}
+                      type="button"
+                      aria-pressed={stumpView === view}
+                      onClick={() => setStumpView(view)}
+                      onTouchStart={(e) => {
+                        e.stopPropagation();
+                      }}
+                      className={
+                        'min-h-[44px] flex-1 rounded-xl px-2 py-1.5 text-sm ' +
+                        (stumpView === view
+                          ? UI_THEMES[lookThemes.world].button
+                          : 'text-stone-300 hover:bg-white/10')
+                      }
+                    >
+                      {view === 'craft'
+                        ? 'Craft'
+                        : view === 'upgrade'
+                          ? 'Upgrade'
+                          : 'Ritual'}
+                    </button>
+                  ),
+                )}
+              </div>
+              {stumpView === 'craft' ? (
+                <CraftingMenu theme={lookThemes.dialog}
+                  recipes={orderedCraftingRecipes}
+                  sections={craftingSections}
+                  stationNote={stationNote}
+                  comfortable={isTouch}
+                  selectedRecipeId={selectedRecipeId}
+                  onSelectRecipe={setSelectedRecipeId}
+                  onCraft={handleCraft}
+                  onCraftPrerequisite={handleCraftPrerequisite}
+                  onClose={() => {
+                    setSelectedSiteId(null);
+                    setRitualNote(null);
+                  }}
+                />
+              ) : stumpView === 'upgrade' ? (
+                <section
+                  aria-label={`${selectedSiteLabel} upgrades`}
+                  className={
+                    'w-72 max-h-[70vh] overflow-y-auto rounded-2xl p-2 ' +
+                    UI_THEMES[lookThemes.world].panel
+                  }
+                >
+                  <h3 className="text-sm font-medium">
+                    {selectedSiteLabel}
+                  </h3>
+                  {selectedSiteActs.length > 0 ? (
+                    <div className="mt-2 flex flex-col gap-1">
+                      {selectedSiteActs.map((act, i) => (
+                        <button
+                          key={act.id}
+                          type="button"
+                          onClick={() =>
+                            selectedSiteId !== null &&
+                            handleSiteAct(selectedSiteId, act.id)
+                          }
+                          onTouchStart={(e) => {
+                            e.stopPropagation();
+                          }}
+                          className={
+                            'min-h-[44px] rounded px-3 py-2 text-left text-sm ' +
+                            UI_THEMES[lookThemes.world].button
+                          }
+                        >
+                          {act.label}
+                          {!isTouch ? (
+                            <span
+                              aria-hidden="true"
+                              className={'ml-1 ' + KEY_BADGE_CLASS}
+                            >
+                              {i + 1}
+                            </span>
+                          ) : null}
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="mt-2 text-xs text-stone-300">
+                      Nothing to add here.
+                    </p>
+                  )}
+                </section>
+              ) : (
+              <RitualPanel theme={lookThemes.world}
+                siteLabel={selectedSiteLabel}
+                staged={
+                  selectedSiteStaged !== null &&
+                  selectedSiteStaging !== null &&
+                  selectedSiteRecipe !== null
+                    ? (() => {
+                        const facts = skyFacts();
+                        return {
+                          boneDisplay: boneDisplayFor(
+                            selectedSiteStaged.bone,
+                          ),
+                          bonePlaced: selectedSiteStaging.bonePlaced,
+                          offeringGiven: selectedSiteStaging.offeringGiven,
+                          nameSpoken: selectedSiteStaging.nameSpoken,
+                          looks: nameSightRef.current.looksAt(
+                            selectedSiteStaged.bone,
+                          ),
+                          minLooks: selectedSiteRecipe.spokenName.minLooks,
+                          sky: selectedSiteRecipe.sky,
+                          skyLabel: skyLabelFor(selectedSiteRecipe.sky),
+                          windowOpen:
+                            facts !== null &&
+                            windowOpen(selectedSiteRecipe.sky, facts),
+                          completed: selectedSiteStaging.completed,
+                        };
+                      })()
+                    : null
+                }
+                kindOptions={selectedSiteKindOptions}
+                foodOptions={selectedSiteFoodOptions}
+                note={ritualNote}
+                siteActs={undefined}
+                showKeyHints={!isTouch}
+                onStageBone={(kind) =>
+                  selectedSiteId !== null &&
+                  handleStageBone(selectedSiteId, kind)
+                }
+                onGiveOffering={(item) =>
+                  selectedSiteId !== null &&
+                  selectedSiteStaged !== null &&
+                  handleGiveOffering(
+                    selectedSiteId,
+                    selectedSiteStaged.bone,
+                    item,
+                  )
+                }
+                onSpeakName={() =>
+                  selectedSiteId !== null &&
+                  selectedSiteStaged !== null &&
+                  handleSpeakName(selectedSiteId, selectedSiteStaged.bone)
+                }
+                onClose={() => {
+                  setSelectedSiteId(null);
+                  setRitualNote(null);
+                }}
+              />
+              )}
+            </div>
+          </WorldAnchor>
+        ) : null}
+        {selectedSiteId !== null &&
+        selectedSiteLabel !== null &&
+        selectedSiteAnchor &&
+        !selectedIsStump ? (
           <WorldAnchor
             x={selectedSiteAnchor.x}
             y={selectedSiteAnchor.y}
@@ -10756,6 +11029,7 @@ export default function App() {
             selectedRecipeId={selectedRecipeId}
             onSelectRecipe={setSelectedRecipeId}
             onCraft={handleCraft}
+            onCraftPrerequisite={handleCraftPrerequisite}
             onClose={() => setCraftingOpen(false)}
           />
         ) : null}

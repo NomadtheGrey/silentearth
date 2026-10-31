@@ -229,6 +229,7 @@ export const ITEM_WEIGHT_LB: Readonly<Record<string, number>> = {
   [ITEMS.woodViolet]: 0.1,
   [ITEMS.creekIris]: 0.1,
   [ITEMS.whiteWaterLily]: 0.1,
+  [ITEMS.meadowFlower]: 0.1,
   // 0.25 lb
   [ITEMS.dryKindling]: 0.25,
   [ITEMS.charcoalStick]: 0.25,
@@ -562,6 +563,7 @@ export const ITEM_DISPLAY_NAMES: Readonly<Record<string, string>> = {
   'wood-violet': 'Wood Violet',
   'creek-iris': 'Creek Iris',
   'white-water-lily': 'White Water Lily',
+  'meadow-flower': 'Meadow Flower',
 };
 
 /**
@@ -721,6 +723,7 @@ export const ITEM_DESCRIPTIONS: Readonly<Record<string, string>> = {
   'wood-violet': 'A small edible flower. Eat it — a bite of food.',
   'creek-iris': 'A picked creek iris. No known use yet.',
   'white-water-lily': 'A picked white water lily. No known use yet.',
+  'meadow-flower': 'A picked meadow flower. No known use yet.',
 };
 
 /**
@@ -733,6 +736,204 @@ export const ITEM_DESCRIPTIONS: Readonly<Record<string, string>> = {
  */
 export function descriptionFor(item: ItemId): string | undefined {
   return ITEM_DESCRIPTIONS[normalizeItemId(item)];
+}
+
+// ---------------------------------------------------------------------------
+// Item categories — the Grouped sort (Adam, 2026-10-31)
+// ---------------------------------------------------------------------------
+//
+// The item registry's own grouping: the crafting group map
+// is recipe-keyed (harvested kinds have no recipes and would
+// land uncategorized), so the category source of truth
+// lives HERE, beside the names / descriptions / weights it
+// groups. EVERY known kind is assigned explicitly; anything
+// unlisted — a future item, an unknown id — falls back to
+// 'Other' rather than vanishing from the grouped panel.
+// The taxonomy itself is DRAFT for Adam's pin pass (the
+// three eaten flowers sit in Food, with their kind; moving
+// them to Flowers is a one-line pin-pass call). Within a
+// group, ordering is the panel's render choice — this table
+// provides the category and the group sequence only.
+
+export type ItemCategory =
+  | 'Food'
+  | 'Materials'
+  | 'Tools'
+  | 'Gear'
+  | 'Structures & Stations'
+  | 'Paper & Books'
+  | 'Bones'
+  | 'Carcasses'
+  | 'Flowers'
+  | 'Ritual'
+  | 'Other';
+
+/** The sequence the grouped panel renders its groups in. */
+export const ITEM_CATEGORY_ORDER: readonly ItemCategory[] = [
+  'Food',
+  'Materials',
+  'Tools',
+  'Gear',
+  'Structures & Stations',
+  'Paper & Books',
+  'Bones',
+  'Carcasses',
+  'Flowers',
+  'Ritual',
+  'Other',
+];
+
+export const ITEM_CATEGORIES: Readonly<Record<string, ItemCategory>> = {
+  // Food — eaten as gathered or once cooked. Poison
+  // mushrooms sit with their kind: grouping is for
+  // finding, not an edibility claim (the descriptor
+  // carries the warning).
+  acorns: 'Food',
+  'cooked-acorns': 'Food',
+  'bog-berries': 'Food',
+  elderberries: 'Food',
+  mushrooms: 'Food',
+  'edible-mushroom': 'Food',
+  'poison-mushrooms': 'Food',
+  'poison-mushroom': 'Food',
+  apple: 'Food',
+  honey: 'Food',
+  'yellow-dandelion': 'Food',
+  'tall-sunflower': 'Food',
+  'wood-violet': 'Food',
+  // Materials — the raws and refined working stock,
+  // vessels included (the pot is a crafting input, the
+  // jar carries for recipes).
+  'snap-wood': 'Materials',
+  'tender-vines': 'Materials',
+  grass: 'Materials',
+  'peat-moss': 'Materials',
+  'downed-oak': 'Materials',
+  'river-silt': 'Materials',
+  'river-stone': 'Materials',
+  'luminous-spores': 'Materials',
+  'dry-kindling': 'Materials',
+  'charcoal-stick': 'Materials',
+  beeswax: 'Materials',
+  tallow: 'Materials',
+  clay: 'Materials',
+  'clay-brick': 'Materials',
+  flint: 'Materials',
+  'salt-crystal': 'Materials',
+  dirt: 'Materials',
+  mud: 'Materials',
+  'twined-cordage': 'Materials',
+  'clay-pot': 'Materials',
+  'clay-jar': 'Materials',
+  'water-jar': 'Materials',
+  // Tools — the ladder (owning is using).
+  'garden-trowel': 'Tools',
+  'sharp-trowel': 'Tools',
+  spade: 'Tools',
+  'axe-trowel': 'Tools',
+  'spade-axe': 'Tools',
+  'trundle-tool': 'Tools',
+  // Gear — worn and carried capacity.
+  apron: 'Gear',
+  'hooded-cloak': 'Gear',
+  shawl: 'Gear',
+  'pointy-hat': 'Gear',
+  'mossy-mittens': 'Gear',
+  'bog-boots': 'Gear',
+  umbrella: 'Gear',
+  'small-basket': 'Gear',
+  'large-basket': 'Gear',
+  'sleeping-bag': 'Gear',
+  // Structures & Stations — placeables: homes, fires,
+  // stations, traps, torches, the tent.
+  'primitive-lean-to': 'Structures & Stations',
+  'thatch-hut': 'Structures & Stations',
+  'wattle-and-daub-hut': 'Structures & Stations',
+  'woven-cottage': 'Structures & Stations',
+  'small-wooden-hut': 'Structures & Stations',
+  'moss-cradle': 'Structures & Stations',
+  campfire: 'Structures & Stations',
+  hearth: 'Structures & Stations',
+  kiln: 'Structures & Stations',
+  'stumpy-workstation': 'Structures & Stations',
+  'crafted-workstation': 'Structures & Stations',
+  'potters-wheel': 'Structures & Stations',
+  loom: 'Structures & Stations',
+  cauldron: 'Structures & Stations',
+  'writing-desk': 'Structures & Stations',
+  altar: 'Structures & Stations',
+  tent: 'Structures & Stations',
+  torch: 'Structures & Stations',
+  'lit-torch': 'Structures & Stations',
+  'old-stump': 'Structures & Stations',
+  snare: 'Structures & Stations',
+  'fish-weir-trap': 'Structures & Stations',
+  'pot-trap': 'Structures & Stations',
+  pitfall: 'Structures & Stations',
+  deadfall: 'Structures & Stations',
+  // Paper & Books — the paper chain and its books.
+  'plant-pulp': 'Paper & Books',
+  'pressed-sheets': 'Paper & Books',
+  paper: 'Paper & Books',
+  grimoire: 'Paper & Books',
+  journal: 'Paper & Books',
+  // Bones — the primal bones (charms + the Waking),
+  // plus the unkinded 'bone' spelling.
+  bone: 'Bones',
+  'primal-bone-shrew-skull': 'Bones',
+  'primal-bone-pigeon-wing-bone': 'Bones',
+  'primal-bone-snake-vertebra': 'Bones',
+  'primal-bone-turtle-shell-fragment': 'Bones',
+  'primal-bone-crow-beak': 'Bones',
+  'primal-bone-owl-talon': 'Bones',
+  'primal-bone-bat-wing-bone': 'Bones',
+  'primal-bone-mouse-spine': 'Bones',
+  'primal-bone-raccoon-tooth': 'Bones',
+  'primal-bone-groundhog-tooth': 'Bones',
+  'primal-bone-fox-femur': 'Bones',
+  'primal-bone-deer-antler-tip': 'Bones',
+  'primal-bone-wolf-tooth': 'Bones',
+  'primal-bone-frog-pelvis': 'Bones',
+  'primal-bone-mole-paw': 'Bones',
+  'primal-bone-bear-claw': 'Bones',
+  'primal-bone-rabbit-jaw': 'Bones',
+  'primal-bone-beaver-incisor': 'Bones',
+  // Carcasses — trap catches.
+  'rabbit-carcass': 'Carcasses',
+  'squirrel-carcass': 'Carcasses',
+  'muskrat-carcass': 'Carcasses',
+  'fish-carcass': 'Carcasses',
+  'eel-carcass': 'Carcasses',
+  'crayfish-carcass': 'Carcasses',
+  'frog-carcass': 'Carcasses',
+  'opossum-carcass': 'Carcasses',
+  'groundhog-carcass': 'Carcasses',
+  'raccoon-carcass': 'Carcasses',
+  'mouse-carcass': 'Carcasses',
+  'vole-carcass': 'Carcasses',
+  // Flowers — the picked kinds (the three eaten ones
+  // sit in Food; see the header note).
+  'white-yarrow': 'Flowers',
+  'gold-coneflower': 'Flowers',
+  'purple-clover': 'Flowers',
+  'pink-milkweed': 'Flowers',
+  'red-poppy': 'Flowers',
+  'blue-aster': 'Flowers',
+  'white-trillium': 'Flowers',
+  'creek-iris': 'Flowers',
+  'white-water-lily': 'Flowers',
+  'meadow-flower': 'Flowers',
+  // Ritual — altar goods.
+  candle: 'Ritual',
+};
+
+/**
+ * The category an item sorts under in the grouped
+ * panel. Unknown / unlisted ids read 'Other' — the
+ * fallback group — never undefined.
+ */
+export function categoryFor(item: ItemId): ItemCategory {
+  return ITEM_CATEGORIES[normalizeItemId(item)] ?? 'Other';
 }
 
 /**
@@ -748,6 +949,14 @@ export interface PersonalInventoryOptions {
   initial?: Record<string, number>;
   /** Worn garment item ids (from Wardrobe); see setWorn(). */
   worn?: readonly ItemId[];
+  /**
+   * Acquisition order seed (restoration path; Adam,
+   * 2026-10-31 — the Recent sort): held kinds, most
+   * recently gained first, as persisted in the save.
+   * Absent for a legacy inventory — its order rebuilds
+   * from gains (see acquisitionOrder()).
+   */
+  acquisitionOrder?: readonly ItemId[];
 }
 
 /** All values in POUNDS (weight model, 2026-10-27). */
@@ -812,6 +1021,16 @@ export class PersonalInventory implements CraftingInventory {
   private readonly stacks = new Map<ItemId, number>();
   private readonly largeBasketMode: LargeBasketMode;
   private worn = new Set<ItemId>();
+  /**
+   * Acquisition order (Adam, 2026-10-31 — the Recent
+   * sort): held kinds, most recently gained first.
+   * Updated ONLY at the gain choke points (add /
+   * addPartial — every door into the pack flows through
+   * them, so no source can dodge it); consuming some of
+   * a kind never moves it, and consuming the last drops
+   * it, so the list always describes held kinds.
+   */
+  private order: ItemId[] = [];
 
   /**
    * Charm capacity bonus in pounds (bear, Track B):
@@ -836,6 +1055,32 @@ export class PersonalInventory implements CraftingInventory {
         }
       }
     }
+    if (options.acquisitionOrder) {
+      // Restore seed: normalized + deduped, newest first as
+      // persisted. Held-filtering happens at read
+      // (acquisitionOrder()), so a stale seed is harmless.
+      const seen = new Set<ItemId>();
+      for (const raw of options.acquisitionOrder) {
+        const id = normalizeItemId(raw);
+        if (!seen.has(id)) {
+          seen.add(id);
+          this.order.push(id);
+        }
+      }
+    }
+  }
+
+  /** Move a kind to the front of the acquisition order (a gain). */
+  private noteGain(id: ItemId): void {
+    const at = this.order.indexOf(id);
+    if (at >= 0) this.order.splice(at, 1);
+    this.order.unshift(id);
+  }
+
+  /** Drop a kind from the acquisition order (none held anymore). */
+  private dropFromOrder(id: ItemId): void {
+    const at = this.order.indexOf(id);
+    if (at >= 0) this.order.splice(at, 1);
   }
 
   /**
@@ -866,6 +1111,7 @@ export class PersonalInventory implements CraftingInventory {
       throw new InventoryCapacityError(id, quantity, this.free());
     }
     this.stacks.set(id, this.count(id) + quantity);
+    this.noteGain(id);
   }
 
   /**
@@ -917,6 +1163,7 @@ export class PersonalInventory implements CraftingInventory {
     }
     if (granted > 0) {
       this.stacks.set(id, this.count(id) + granted);
+      this.noteGain(id);
     }
     return { item: id, granted, remainder: quantity - granted };
   }
@@ -933,6 +1180,7 @@ export class PersonalInventory implements CraftingInventory {
     const remaining = held - quantity;
     if (remaining === 0) {
       this.stacks.delete(id);
+      this.dropFromOrder(id);
     } else {
       this.stacks.set(id, remaining);
     }
@@ -1121,6 +1369,19 @@ export class PersonalInventory implements CraftingInventory {
 
   // --- Inspection / cloning ---
 
+  /**
+   * Acquisition order (the Recent sort): held kinds,
+   * most recently gained first. Gains move a kind to
+   * the front; partial consumption never moves it;
+   * consuming the last of a kind drops it. Kinds held
+   * but absent here (a legacy inventory whose order was
+   * never recorded) are simply unlisted — the panel
+   * falls back to stack order for them.
+   */
+  acquisitionOrder(): ItemId[] {
+    return this.order.filter((id) => this.count(id) > 0);
+  }
+
   /** Snapshot of all stacks, in insertion order. */
   stacksSnapshot(): InventoryStack[] {
     return [...this.stacks.entries()].map(([item, quantity]) => ({
@@ -1138,6 +1399,10 @@ export class PersonalInventory implements CraftingInventory {
     for (const [item, quantity] of this.stacks) {
       copy.stacks.set(item, quantity);
     }
+    // The acquisition order copies too (chain planning
+    // simulates gains on clones; the copy must be whole —
+    // and the clone's later gains never leak back).
+    copy.order = [...this.order];
     return copy;
   }
 }

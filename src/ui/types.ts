@@ -107,6 +107,17 @@ export interface RecipeIngredient {
   amountText?: string;
   /** Caller-supplied glyph, rendered before the name. Optional. */
   icon?: ReactNode;
+  /** The ingredient's item id, caller-supplied — the chain-craft button's target. Optional. */
+  itemId?: string;
+  /**
+   * Caller-decided chain-craft flag (prerequisite crafting,
+   * Adam 2026-10-31): a recipe chain exists that makes this
+   * item AND she holds fewer than the open recipe needs. When
+   * true (with an itemId and the menu's onCraftPrerequisite),
+   * the row renders its Craft button. Decided by the caller —
+   * the menu never checks recipes or counts itself. Optional.
+   */
+  chainCraftable?: boolean;
 }
 
 /**

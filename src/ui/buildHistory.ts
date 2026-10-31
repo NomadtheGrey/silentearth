@@ -43,6 +43,14 @@ export interface BuildRecord {
 
 const ALL_RECORDS: BuildRecord[] = [
   {
+    merge: 'Merge #40',
+    pr: 79,
+    sha: '9d23d28',
+    date: '2026-10-31',
+    what: 'A full batch, most of it in her hands and panels. The meadow flower is pickable: the pink bloom of the open country has a name and comes away in her hand, where before it was scenery that yielded nothing. The stump gains its hub \u2014 its gathered functions in one place \u2014 and chains now execute: where a craft or working has prerequisites, they run as a chain, and the crafting panel carries the button that sets one going. Her pack now remembers the order things were gathered in, the groundwork the sorting will stand on. Two riders landed late and are named as such: underneath, every flat ground disc in the world \u2014 pond, silt bed, ash patch, cave pool, the grain silo\u2019s cracked pad \u2014 sat exactly in the ground\u2019s plane and shimmered where they met; the whole class now sits a breath above the earth, and the sorting data rode in on the same morning.',
+    why: 'Adam\u2019s advance word: merge these when they are done. Three of the pieces are his directly \u2014 the flower ruling from his own photographs (\u201Cshould have a name and be harvestable\u201D), the z-fighting he caught at the silo\u2019s pad on the library PC, and the words-and-chains work he has been steering all week. The batch lands together so the panel, the chain, and the ground she stands on all arrive in one walkable state.',
+  },
+  {
     merge: 'Merge #39',
     pr: 78,
     sha: '6b0f4df',
