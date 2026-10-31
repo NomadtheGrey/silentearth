@@ -1730,8 +1730,7 @@ import {
   type FontId,
 } from './ui/OptionsModal';
 import { IntroModal } from './ui/IntroModal';
-import { RemoveConfirm } from './ui/RemoveConfirm';
-import { LeaveConfirm } from './ui/LeaveConfirm';
+
 import {
   InventoryPanel,
   loadInventorySort,
@@ -10168,7 +10167,7 @@ export default function App() {
   // ritual/site panel, the world menus (home / torch /
   // tent / fire selections — they take clicks as well
   // as digits, so they are IN), the confirms
-  // (RemoveConfirm, trap-recipe, the four cloud
+  // (the remove confirm, trap-recipe, the four cloud
   // confirms), and the paused veil (its resume is a
   // click). Nothing re-locks on close — the standing
   // "Click the world to capture the mouse" legend line
@@ -12359,33 +12358,95 @@ export default function App() {
       {/* Remove confirm (PC keys, 2026-10-28): Shift+E arms
         a scatter target; Enter/Remove confirms (same
         handleRemove call as the button), Esc/backdrop/
-        Cancel aborts with nothing consumed. Standalone
-        dialog (not Popup) so its Enter/Esc is the single
-        path — the App Esc listener yields while it is open. */}
-      <RemoveConfirm theme={lookThemes.world}
+        Cancel aborts with nothing consumed. Folded into
+        Popup (the ONE confirm shell, dialog audit
+        2026-10-31): the shell's own listener is the
+        single key path — the App Esc listener yields
+        while it is open, as it did for the standalone. */}
+      <Popup theme={lookThemes.world}
         open={pendingRemoveTarget !== null}
-        targetName={pendingRemoveTarget?.name ?? ''}
+        title={`Remove ${pendingRemoveTarget?.name ?? ''}?`}
+        onClose={() => setPendingRemoveTarget(null)}
         onConfirm={() => {
           const target = pendingRemoveTarget;
           setPendingRemoveTarget(null);
           if (target) handleRemove(target);
         }}
-        onCancel={() => setPendingRemoveTarget(null)}
-      />
+        comfortable={isTouch}
+      >
+        <div className="flex flex-col gap-3 text-sm">
+          <p>This removes it permanently — it will not regrow.</p>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              className={
+                'rounded bg-moss-deep hover:bg-moss px-3 py-1 text-sm text-stone-100 ' +
+                (isTouch ? 'min-h-[44px] px-3 py-2' : '')
+              }
+              onClick={() => {
+                const target = pendingRemoveTarget;
+                setPendingRemoveTarget(null);
+                if (target) handleRemove(target);
+              }}
+            >
+              Remove
+            </button>
+            <button
+              type="button"
+              className={
+                'rounded bg-moss-deep hover:bg-moss px-3 py-1 text-sm text-stone-100 ' +
+                (isTouch ? 'min-h-[44px] px-3 py-2' : '')
+              }
+              onClick={() => setPendingRemoveTarget(null)}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      </Popup>
 
       {/* Leave confirm (back-button trap, 2026-10-29):
         shown by the popstate handler when a back press
         arrives with nothing open. Stay dismisses (the
         trap entry is already re-pushed); Leave arms the
-        one-shot pass and steps back for real. Same z-50
-        shell as RemoveConfirm; the App Esc listener
-        yields while it is open, and the dialog's own
-        listener maps Esc to Stay and Enter to Leave. */}
-      <LeaveConfirm theme={lookThemes.world}
+        one-shot pass and steps back for real. Folded
+        into Popup with the remove confirm (dialog audit
+        2026-10-31); the App Esc listener yields while
+        it is open, and the shell maps Esc to Stay and
+        Enter to Leave. */}
+      <Popup theme={lookThemes.world}
         open={leaveConfirmOpen}
-        onStay={() => setLeaveConfirmOpen(false)}
-        onLeave={handleLeaveGame}
-      />
+        title="Leave the game?"
+        onClose={() => setLeaveConfirmOpen(false)}
+        onConfirm={handleLeaveGame}
+        comfortable={isTouch}
+      >
+        <div className="flex flex-col gap-3 text-sm">
+          <p>Your progress is saved.</p>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              className={
+                'rounded bg-moss-deep hover:bg-moss px-3 py-1 text-sm text-stone-100 ' +
+                (isTouch ? 'min-h-[44px] px-3 py-2' : '')
+              }
+              onClick={() => setLeaveConfirmOpen(false)}
+            >
+              Stay
+            </button>
+            <button
+              type="button"
+              className={
+                'rounded bg-moss-deep hover:bg-moss px-3 py-1 text-sm text-stone-100 ' +
+                (isTouch ? 'min-h-[44px] px-3 py-2' : '')
+              }
+              onClick={handleLeaveGame}
+            >
+              Leave
+            </button>
+          </div>
+        </div>
+      </Popup>
 
       {/* First-run dialog: no save at boot — name + seed,
         both optional, Begin-only (no Cancel, no X, no
