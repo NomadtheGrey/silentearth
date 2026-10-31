@@ -1660,7 +1660,14 @@ import {
   setMovementMode,
   setStance as runtimeSetStance,
 } from './game/companionRuntime';
-import { CAT_ID, setCatBond } from './game/catRuntime';
+import {
+  CAT_ID,
+  catActor,
+  installCatCatchTable,
+  installCatProbes,
+  setCatBond,
+  type CatCatchTable,
+} from './game/catRuntime';
 import {
   collectTrapCatch,
   catchItemFor,
@@ -1922,6 +1929,7 @@ import {
   TRUST_FOR_BOND,
   dietFor,
   isFeedable,
+  provisioningCatchesFor,
   snatchFish,
   type CompanionStance,
   type SavedCompanion,
@@ -4754,6 +4762,18 @@ export default function App() {
           ? 'attending'
           : 'hearth',
     );
+    // CAT PROVISIONING INSTALLS (Piece 3): Systems'
+    // catch table + the home/sleep probes. The probes
+    // read refs and module singletons only, so this one
+    // install stays live for the session.
+    installCatCatchTable(buildCatCatchTable());
+    installCatProbes({
+      homeBase: () => {
+        const home = homedHouse();
+        return home ? { x: home.x, z: home.z } : null;
+      },
+      sleepingAtHome: catSleepingAtHome,
+    });
     // FIRST-CHARM BOOT GRANT (outright, tier 1,
     // GRANT-TO-LIST since Systems 9e9a9dd): runs
     // AFTER the CharmState restore above, so a loaded
@@ -5056,6 +5076,70 @@ export default function App() {
       );
       saveNow();
     });
+    // CAT PROVISIONING DELIVERIES (Piece 3): the hunt's
+    // goods land three ways, and the shell answers each.
+    // DELIVERED — a travel/sleep catch reaches the homed
+    // house: into its store, the pound cap governing (a
+    // full store leaves the catch as a pile at the
+    // house, the line naming it). PRESENT — a sleep
+    // catch left at the house point: a floor pile, the
+    // wake-up present. GIFT — a pre-bond catch at the
+    // hearth: a pile there always, but the discovery
+    // line only when she is near enough to see it land
+    // (~15 m, DRAFT) — no telepathy. All lines DRAFT.
+    const offCatDelivered = bus.on('cat:delivered', ({ item }) => {
+      const home = homedHouse();
+      const name = displayNameFor(item);
+      if (!home) {
+        // A pathological race (the probes read the same
+        // fact a step earlier): the goods land at her
+        // feet rather than vanish.
+        const player = playerRef.current;
+        if (player) {
+          pileState.spawnPile({ item, quantity: 1, x: player.x, z: player.z });
+          showFeedback(`The cat brought you a ${name}.`, 'gain');
+          saveNow();
+        }
+        return;
+      }
+      const store = getHomeStore(home.id);
+      let stored = false;
+      if (store) {
+        try {
+          store.add(item as ItemId, 1);
+          homeStoreItemsRef.current.get(home.id)?.add(item);
+          stored = true;
+        } catch {
+          stored = false;
+        }
+      }
+      if (stored) {
+        showFeedback(`The cat left a ${name} in your stores.`, 'gain');
+      } else {
+        pileState.spawnPile({ item, quantity: 1, x: home.x, z: home.z });
+        showFeedback(
+          `Your stores are full — the cat left a ${name} by the door.`,
+          'info',
+        );
+      }
+      saveNow();
+    });
+    const offCatPresent = bus.on('cat:present', ({ item, x, z }) => {
+      pileState.spawnPile({ item, quantity: 1, x, z });
+      showFeedback(`The cat left a ${displayNameFor(item)} for you.`, 'gain');
+      saveNow();
+    });
+    const offCatGift = bus.on('cat:gift', ({ item, x, z }) => {
+      pileState.spawnPile({ item, quantity: 1, x, z });
+      const player = playerRef.current;
+      if (player && Math.hypot(player.x - x, player.z - z) <= 15) {
+        showFeedback(
+          `The cat has left a ${displayNameFor(item)} at the hearth.`,
+          'info',
+        );
+      }
+      saveNow();
+    });
     // TRAP ROW (Adam, 2026-10-28): the shell owns trap
     // rolls + row refresh. 'trap:catch' (emitted by
     // setCatch, the shell's only catch writer) re-reads
@@ -5335,6 +5419,9 @@ export default function App() {
       offCompanionStance();
       offCompanionDeparted();
       offCatMet();
+      offCatDelivered();
+      offCatPresent();
+      offCatGift();
       offTrapCatch();
       offTrapPlaced();
       offTrapHour();
@@ -6215,6 +6302,17 @@ export default function App() {
       stance: record.stance,
       isCat: record.kind === 'cat',
     }));
+  // THE HUNT NOTE (Piece 3): while the cat is out, its
+  // panel row says so — a live read of the engine actor
+  // composed over the notes map (renders tick with her
+  // movement, so the note keeps pace with the hunt). It
+  // overrides a theater line on the same row: the fact
+  // of the hunt outranks the joke until the cat is back.
+  const catActorNow = catActor();
+  const companionPanelNotes =
+    catActorNow !== null && catActorNow.hunt.phase !== 'none'
+      ? { ...companionNotes, [CAT_ID]: 'Out hunting' }
+      : companionNotes;
   const charmEntries = listCharms(charmStateRef.current).map((charm) => ({
     ...charm,
     display: boneDisplayFor(charm.kind),
@@ -6291,6 +6389,91 @@ export default function App() {
   // the record; the panel only ever reads the mirror.
   const refreshCompanions = () => {
     setCompanionRecords(companionStateRef.current.snapshot());
+  };
+  // CAT PROVISIONING (Build 2, Piece 3): the shell's
+  // half of the hunt — Systems' catch data installed as
+  // the engine's table, the home/sleep facts installed
+  // as its probes (the boot effect installs both), and
+  // the delivery events answered by the boot listeners.
+  // Until the installs run the engine is armed but
+  // dark, by design.
+  //
+  // THE HOMED HOUSE (the reading, named): the house she
+  // is sheltered at when she is at one; else her sole
+  // house when exactly one stands; else none. No homed
+  // flag or last-slept record exists in the save — the
+  // pin pass can settle a truer fact later; this
+  // reading never invents one.
+  const homedHouse = () => {
+    const player = playerRef.current;
+    if (!player) return null;
+    const houses = shelterState.snapshot();
+    const shelteredId = shelterAt(player.x, player.z, houses).houseId;
+    if (shelteredId) {
+      return houses.find((house) => house.id === shelteredId) ?? null;
+    }
+    return houses.length === 1 ? houses[0] : null;
+  };
+  // THE SLEEP WINDOW (the reading, named): sleep itself
+  // is instant (request → dawn jump), so no asleep
+  // state spans any steps for a probe to read. The
+  // window reported here is the night she spends AT
+  // her home house — sheltered there while the sky is
+  // night — the only home-night the game has.
+  const catSleepingAtHome = (): boolean => {
+    const player = playerRef.current;
+    const home = homedHouse();
+    if (!player || !home) return false;
+    if (
+      shelterAt(player.x, player.z, shelterState.snapshot()).houseId !==
+      home.id
+    ) {
+      return false;
+    }
+    const sky = rendererRef.current?.snapshotSky();
+    if (!sky) return false;
+    return cycleSplit(sky.cycleT, SEASON_START_MONTH).isDay === false;
+  };
+  // Systems' catch set is the authority: the prey kinds
+  // derive by inverting its carcass items
+  // ('fish-carcass' → 'fish'); an item that ever breaks
+  // the -carcass pattern yields no kind, and the cat
+  // does not hunt what it cannot name.
+  const buildCatCatchTable = (): CatCatchTable => {
+    const itemByKind = new Map<string, string>();
+    for (const item of provisioningCatchesFor('cat')) {
+      if (item.endsWith('-carcass')) {
+        itemByKind.set(item.slice(0, -'-carcass'.length), item);
+      }
+    }
+    // COLONY ALIASES: the roster's colony kinds are
+    // plural ('mice', 'voles') where Systems' carcasses
+    // are singular — the same prey under its living
+    // name, yielding the same carcass. Without these
+    // the table would name kinds the world never spawns.
+    if (itemByKind.has('mouse')) itemByKind.set('mice', itemByKind.get('mouse')!);
+    if (itemByKind.has('vole')) itemByKind.set('voles', itemByKind.get('vole')!);
+    return {
+      // The cast is the seam: the derived kinds ride
+      // Systems' data, and 'vole' precedes its AnimalKind
+      // (Models' true vole is pending) — until the kind
+      // exists the prey access simply never matches it,
+      // and the day it exists the table works untouched.
+      kinds: [...itemByKind.keys()] as AnimalKind[],
+      itemFor: (kind) => itemByKind.get(kind) ?? null,
+      // The mouth prop: a vole rides the mouse prop as
+      // a DRAFT stand-in (DEV-approved; Models may add
+      // a true vole).
+      propFor: (kind) =>
+        kind === 'fish'
+          ? 'fish'
+          : (kind as string) === 'mouse' ||
+              (kind as string) === 'mice' ||
+              (kind as string) === 'vole' ||
+              (kind as string) === 'voles'
+            ? 'mouse'
+            : null,
+    };
   };
   // THE CAT'S LINES (Adam, 2026-10-31 — the theater):
   // a stance press at a cat comes back with Systems'
@@ -12604,7 +12787,7 @@ export default function App() {
             onStance={handleCompanionStance}
             onStanceAll={handleCompanionStanceAll}
             onRelease={handleCompanionRelease}
-            notes={companionNotes}
+            notes={companionPanelNotes}
             allNote={companionAllNote ?? undefined}
             onClose={() => setCompanionsOpen(false)}
             comfortable={isTouch}
