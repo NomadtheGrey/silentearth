@@ -2416,6 +2416,26 @@ function titleMetaFor(
 }
 
 /**
+ * The pile rows' titleMeta (PILE WEIGHTS, 2026-11-01 —
+ * Adam: "I don't see weights in the piles dialog"): the
+ * FORMAT PIN's typography over an explicit stack
+ * quantity, from weightOf — the same arithmetic as
+ * titleMetaFor WITHOUT its pack facts (carried-free and
+ * the owned-tool rule are statements about her pack,
+ * not about a pile). The caller appends the OTHER
+ * count (carried for a pile row, the pile's zero for a
+ * deposit row) as the appendix.
+ */
+function pileTitleMetaFor(item: string, quantity: number): string {
+  const id = item as ItemId;
+  const each = weightOf(id);
+  if (quantity <= 1) {
+    return `- 1 @ ${formatLb(each)} ${TITLE_WEIGHT_UNIT}`;
+  }
+  return `- ${quantity} @ ${formatLb(each)} ${TITLE_WEIGHT_UNIT} - ${formatLb(quantity * each)} ${TITLE_WEIGHT_UNIT}`;
+}
+
+/**
  * The one note rule for item rows (descriptor wiring,
  * 2026-10-29 — Adam ordered brief descriptors for pretty
  * much all items): a primal bone reads Systems' boneNote
@@ -9303,7 +9323,7 @@ export default function App() {
         id: stack.item,
         name,
         category: categoryFor(stack.item as ItemId),
-        titleMeta: `pile ×${stack.quantity} · carried ×${carried}`,
+        titleMeta: `${pileTitleMetaFor(stack.item, stack.quantity)} · carried ×${carried}`,
         note: noCarried ? `Needs carried ${name}` : undefined,
       });
       verbsByItem.set(stack.item, [
@@ -9345,7 +9365,7 @@ export default function App() {
         id: stack.item,
         name,
         category: categoryFor(stack.item as ItemId),
-        titleMeta: `pile ×0 · carried ×${stack.quantity}`,
+        titleMeta: `${pileTitleMetaFor(stack.item, stack.quantity)} · pile ×0`,
       });
       verbsByItem.set(stack.item, [
         {
@@ -14268,6 +14288,14 @@ export default function App() {
                     ? `${displayNameFor(selectedPile.stacks[0].item)} × ${selectedPile.stacks[0].quantity}`
                     : `Pile × ${selectedPile.stacks.reduce((sum, stack) => sum + stack.quantity, 0)} (${selectedPile.stacks.length} kinds)`
                 }
+                totalText={`Pile: ${formatLb(
+                  selectedPile.stacks.reduce(
+                    (sum, stack) =>
+                      sum + weightOf(stack.item as ItemId) * stack.quantity,
+                    0,
+                  ),
+                )} lb`}
+                carryingText={capacityText}
                 items={pileModel.items}
                 verbsFor={(item) => pileModel.verbsByItem.get(item.id) ?? []}
                 onVerb={(_itemId, verbId) =>

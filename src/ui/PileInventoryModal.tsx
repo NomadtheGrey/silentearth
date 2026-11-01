@@ -51,6 +51,20 @@ import {
 export interface PileInventoryModalProps {
   /** Title, mirroring the old menu's objectName rule. */
   title: string;
+  /**
+   * The pile's total weight line (PILE WEIGHTS,
+   * 2026-11-01), caller's words (e.g. "Pile: 7 lb"):
+   * renders under the header. Omitted = no line.
+   */
+  totalText?: string;
+  /**
+   * Her carrying line in the pack's own words (e.g.
+   * "Carrying 3 lb / 10 lb"), caller-supplied: renders
+   * beside the total under the header, so the modal
+   * answers "what's here" and "what am I holding"
+   * in one glance. Omitted = no line.
+   */
+  carryingText?: string;
   /** The pile's kinds + carried kinds, as unified item rows. */
   items: InventoryItem[];
   /** Per-row verbs (ids are the standing pile action ids). */
@@ -82,6 +96,8 @@ export interface PileInventoryModalProps {
 
 export function PileInventoryModal({
   title,
+  totalText,
+  carryingText,
   items,
   verbsFor,
   onVerb,
@@ -111,6 +127,14 @@ export function PileInventoryModal({
         </button>
       </div>
       <VineDivider className="mb-2" />
+      {totalText || carryingText ? (
+        <div className="mb-2 flex flex-wrap items-baseline gap-x-3 text-xs">
+          {totalText ? (
+            <span className={'font-semibold ' + t.heading}>{totalText}</span>
+          ) : null}
+          {carryingText ? <span className={t.muted}>{carryingText}</span> : null}
+        </div>
+      ) : null}
       <p className={'mb-2 text-xs ' + t.muted}>
         ↑ Pick up one · ↑↑ Pick up all · ↓ Drop one here · ↓↓ Drop all here
       </p>
