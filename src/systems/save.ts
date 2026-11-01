@@ -83,11 +83,14 @@
  *   import): same additive-field rule (old saves load
  *   desks: []) and the same leniency as altars on read
  *   (entries pass through, the placed-desk restore
- *   validates + drops bad records). Placed desks carry
- *   no grimoire state — the desk is the SITE; the
- *   grimoire's workings come later, so no working
- *   field is stored. Multiple desks are legitimate
- *   (a second camp wants a second desk).
+ *   validates + drops bad records). A placed desk
+ *   carries ONE state field: grimoire (boolean,
+ *   optional) — whether THE grimoire rests on it (the
+ *   seat, accepted 2026-11-01; one book ever, so a
+ *   boolean suffices). The book's workings still come
+ *   later — the seat stores presence, nothing more.
+ *   Multiple desks are legitimate (a second camp
+ *   wants a second desk).
  * - placed tents (position, id optional — no game
  *   import): same additive-field rule (old saves load
  *   tents: []) and the same leniency as altars on read
@@ -352,6 +355,8 @@ export interface SavedDesk {
   x: number;
   z: number;
   id?: string;
+  /** True when THE grimoire rests on this desk (the seat). */
+  grimoire?: boolean;
 }
 
 /**
@@ -541,7 +546,7 @@ export interface SaveData {
   torches: SavedTorch[];
   /** Placed altars (sites, no ritual state); [] for old saves. */
   altars: SavedAltar[];
-  /** Placed desks (sites, no grimoire state); [] for old saves. */
+  /** Placed desks (sites; grimoire = the seated book); [] for old saves. */
   desks: SavedDesk[];
   /** Placed cauldrons (keyed to their hearths); [] for old saves. */
   cauldrons: SavedCauldron[];
@@ -688,6 +693,7 @@ export interface SaveDraft {
     x: number;
     z: number;
     id?: string;
+    grimoire?: boolean;
   }>;
   /**
    * Placed cauldrons from the placed-cauldron source
@@ -999,12 +1005,13 @@ export function serializeSave(draft: SaveDraft): SaveData {
     // Desks: written AS-IS, same as altars (positions
     // verbatim, id when the entity provides one — no
     // filtering, no normalization). Invalid entries
-    // are restore()'s problem, not serialize's. No
-    // grimoire state is written — the desk is the SITE.
+    // are restore()'s problem, not serialize's. The
+    // seated-grimoire flag writes only when true.
     desks: (draft.desks ?? []).map((desk) => ({
       x: desk.x,
       z: desk.z,
       ...(desk.id !== undefined ? { id: desk.id } : {}),
+      ...(desk.grimoire === true ? { grimoire: true } : {}),
     })),
     // Cauldrons: written AS-IS, same as desks (hearth
     // id + positions verbatim, entity id when provided
@@ -1498,6 +1505,7 @@ export function deserializeSave(value: unknown): SaveData | null {
           ...(typeof entry.id === 'string'
             ? { id: entry.id as string }
             : {}),
+          ...(entry.grimoire === true ? { grimoire: true } : {}),
         });
       }
     }

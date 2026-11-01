@@ -204,8 +204,13 @@ export function craftingSection(recipe: Recipe): ItemCategory {
  * Singles (garments + apron + umbrella + journal +
  * clay jar + grimoire): held → already-owned. Worn ⊆
  * carried (wear never removes), and a dropped
- * garment's worn flag grants nothing, so inventory
- * presence is the ownership source. The journal is
+ * garment's worn flag grants nothing, so presence is
+ * the ownership source — the pack's presence, PLUS
+ * whatever the shell reports as owned OUT of the pack
+ * (the outOfPack input: the grimoire SEATED on a desk
+ * counts, Adam's one-book ruling 2026-11-01 — 'in
+ * play' means wherever it is). Callers that pass
+ * nothing get the inventory-only reading. The journal is
  * listed because the name-chain design implies ONE
  * (names live in it; a second would split the record
  * — DEV's call, 2026-10-30). The GRIMOIRE is listed
@@ -221,6 +226,7 @@ export function craftingSection(recipe: Recipe): ItemCategory {
 export function craftOwnershipStatus(
   recipe: Recipe,
   inventory: CraftingInventory,
+  outOfPack?: ReadonlySet<string> | null,
 ): CraftOwnership {
   const output = recipe.output.item;
 
@@ -281,10 +287,14 @@ export function craftOwnershipStatus(
       output === ITEMS.clayJar
         ? [ITEMS.clayJar, ITEMS.waterJar]
         : [output];
-    const held = forms.reduce(
-      (n, form) => n + inventory.count(form),
-      0,
-    );
+    const held =
+      forms.reduce((n, form) => n + inventory.count(form), 0) +
+      (outOfPack !== undefined && outOfPack !== null
+        ? forms.reduce(
+            (n, form) => n + (outOfPack.has(form) ? 1 : 0),
+            0,
+          )
+        : 0);
     return held >= 1 ? 'already-owned' : 'available';
   }
 
@@ -322,6 +332,7 @@ export function canCraft(
   station: StationContext = null,
   nearCreek: boolean | null = null,
   site: SiteFacts | null = null,
+  outOfPack?: ReadonlySet<string> | null,
 ): CanCraftResult {
   const missingIngredients = missingFor(recipe.ingredients, inventory);
   const missingRequirements = recipe.requires
@@ -385,7 +396,7 @@ export function canCraft(
 
   // No-recraft ownership: an already-owned or superseded
   // recipe is not craftable, whatever the materials say.
-  const ownership = craftOwnershipStatus(recipe, inventory);
+  const ownership = craftOwnershipStatus(recipe, inventory, outOfPack);
 
   const ok =
     missingIngredients.length === 0 &&

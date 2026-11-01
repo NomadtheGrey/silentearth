@@ -270,6 +270,7 @@ export function executeCraft(
   nearCreek: boolean | null = null,
   site: SiteFacts | null = null,
   aim: { x: number; z: number } | null = null,
+  outOfPack?: ReadonlySet<string> | null,
 ): CraftExecutionResult {
   // Ownership gate, FIRST (before hunger): an already-owned
   // or superseded recipe refuses with Adam's label and
@@ -277,7 +278,7 @@ export function executeCraft(
   // fact, not her state — it outranks the hunger message.
   // canCraft reports the same status (ok=false) for the
   // menu; this gate is the enforcement, never UI-only.
-  const ownership = craftOwnershipStatus(recipe, inventory);
+  const ownership = craftOwnershipStatus(recipe, inventory, outOfPack);
   if (ownership !== 'available') {
     throw new Error(
       `Cannot craft ${recipe.name}: ` +
@@ -587,6 +588,7 @@ interface ChainContext {
   hunger: HungerState | null;
   nearCreek: boolean | null;
   site: SiteFacts | null;
+  outOfPack?: ReadonlySet<string> | null;
 }
 
 interface PlanState {
@@ -646,7 +648,7 @@ function planProducerBatch(
   // The validated path itself: every remaining gate (station,
   // hunger, ownership, tool stage, creek, capacity) speaks
   // with executeCraft's own voice, against the simulation.
-  executeCraft(producer, s.sim, ctx.station, ctx.hunger, ctx.nearCreek, ctx.site);
+  executeCraft(producer, s.sim, ctx.station, ctx.hunger, ctx.nearCreek, ctx.site, null, ctx.outOfPack);
   return { sim: s.sim, batches: [...s.batches, producer] };
 }
 
@@ -721,6 +723,7 @@ export function executeCraftChain(
   hunger: HungerState | null = null,
   nearCreek: boolean | null = null,
   site: SiteFacts | null = null,
+  outOfPack?: ReadonlySet<string> | null,
 ): CraftChainResult {
   const wanted = normalizeItemId(item);
   const ingredient = recipe.ingredients.find((i) => i.item === wanted);
@@ -734,7 +737,7 @@ export function executeCraftChain(
   if (before >= ingredient.quantity) {
     return { steps: [], crafted: { item: wanted, quantity: 0 } };
   }
-  const ctx: ChainContext = { station, hunger, nearCreek, site };
+  const ctx: ChainContext = { station, hunger, nearCreek, site, outOfPack };
   const planned = planEnsure(
     wanted,
     ingredient.quantity,
@@ -744,7 +747,7 @@ export function executeCraftChain(
   );
   const steps: CraftChainStep[] = [];
   for (const batchRecipe of planned.batches) {
-    executeCraft(batchRecipe, inventory, station, hunger, nearCreek, site);
+    executeCraft(batchRecipe, inventory, station, hunger, nearCreek, site, null, outOfPack);
     const last = steps[steps.length - 1];
     if (last !== undefined && last.recipeId === batchRecipe.id) {
       last.batches += 1;
