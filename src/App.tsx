@@ -4724,7 +4724,7 @@ export default function App() {
         // strand a boot.
         const visit = saved.dimensionVisit ?? null;
         // PLURAL CAVES (2026-10-30): the resolution is by
-        // the saved key + mouthId — the designated cave's
+        // the saved key + mouthId — the debut cave's
         // key reads its two mouths as before; any other
         // key names an instance, honored only when the
         // instance's mouthId equals the saved one (for
@@ -10462,7 +10462,7 @@ export default function App() {
       const gen = genRef.current;
       if (gen) {
         // PLURAL CAVES (2026-10-30): mouths arrive in ONE
-        // list — the designated cave's two plus every
+        // list — the debut cave's two plus every
         // registered instance near her (instances keyed
         // by their cave key as the winner id; travel
         // routes by it).
@@ -11498,8 +11498,12 @@ export default function App() {
   //   hearth is lit (winner kind 'cauldron', the
   //   placed-cauldron build's UI half) — the cauldron
   //   goes on the Hearth, and facing the Cauldron is
-  //   different from facing the Hearth. The carried-
-  //   pot composition is dead; do not rebuild it.
+  //   different from facing the Hearth for the DOOR
+  //   (E is the pot's). For the FEED the host still
+  //   counts as what it is: 'fire' rides with
+  //   'cauldron' (the charring ruling at the feed
+  //   below). The carried-pot composition is dead;
+  //   do not rebuild it.
   // - a faced LOOM feeds 'loom' (winner kind 'loom' —
   //   looms joined the winner race in this landing; the
   //   loom's pill opens the Crafting panel, so the door
@@ -11531,6 +11535,15 @@ export default function App() {
     const hostFire = fireState.get(useWinner.id);
     if (hostFire?.lit === true) {
       availableStations.push('cauldron');
+      // ANY LIT FIRE (Adam's charring ruling, via the
+      // char-a-stick claim, 2026-11-01): the pot hangs
+      // on its hearth — facing the cauldron IS facing
+      // a lit fire, so the host feeds 'fire' too (fire-
+      // presence is the charcoal-stick recipe's only
+      // gate). The cauldron tie rule is untouched: the
+      // pot still owns the winner and E; the feed
+      // simply stops being blind to the fire under it.
+      availableStations.push('fire');
     }
   }
   // Header display names (stump-header fix, Adam-approved
