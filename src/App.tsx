@@ -1922,6 +1922,10 @@ import {
   HOMESTEAD_CLEAR_RADIUS_M,
   homesteadInstancesInRect,
 } from './game/homesteads';
+import {
+  FARMHOUSE_CLEAR_RADIUS_M,
+  farmhouseInstancesInRect,
+} from './game/farmhouses';
 import { fragmentCarriersHere as carriersHere } from './game/carriers';
 import {
   caveInstanceForKey,
@@ -12033,6 +12037,32 @@ export default function App() {
     )) {
       candidates.push({
         key: 'homestead',
+        x: instance.center.x,
+        z: instance.center.z,
+      });
+    }
+    // DISTRIBUTED FARMHOUSES (the homestead treatment):
+    // the recurring farmhouses join under the one
+    // generic name, standing or ransacked — a
+    // state-named tag would tell her the interior
+    // before she opens the door; the generic name
+    // keeps the discovery at the threshold. The
+    // SINGULAR keeps 'The Farmhouse' above; these
+    // ride their own candidate key.
+    const farmhouseReach = STRUCTURE_TAG_RANGE_M + FARMHOUSE_CLEAR_RADIUS_M;
+    for (const instance of farmhouseInstancesInRect(
+      gen.seed,
+      spawn,
+      weights,
+      {
+        minX: player.x - farmhouseReach,
+        maxX: player.x + farmhouseReach,
+        minZ: player.z - farmhouseReach,
+        maxZ: player.z + farmhouseReach,
+      },
+    )) {
+      candidates.push({
+        key: 'farmhouse-instance',
         x: instance.center.x,
         z: instance.center.z,
       });

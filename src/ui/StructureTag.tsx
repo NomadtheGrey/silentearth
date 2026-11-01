@@ -40,10 +40,16 @@ export const STRUCTURE_TAG_RANGE_M = 48;
  * (already named by its trees + the discovery beat) and
  * the cave mouths are absent (ENTER presentation, plural
  * instances). The village's houses share one fate and
- * one generic name. The DISTRIBUTED homesteads join
- * under one generic name too — standing or burnt alike,
- * because a burnt homestead carries a fragment and the
- * name must not mark its stone.
+ * one generic name. The DISTRIBUTED families join
+ * under generic names too — homesteads standing or
+ * burnt alike (a burnt homestead carries a fragment
+ * and the name must not mark its stone), farmhouses
+ * standing or ransacked alike (a state-named tag
+ * would tell her the interior before she opens the
+ * door — discovery belongs at the threshold). The
+ * singulars keep their articles: 'The Farmhouse' is
+ * the named place; 'Farmhouse' is a house of the
+ * family.
  */
 export const STRUCTURE_TAG_NAMES: Readonly<Record<string, string>> = {
   schoolhouse: 'The Schoolhouse',
@@ -58,6 +64,7 @@ export const STRUCTURE_TAG_NAMES: Readonly<Record<string, string>> = {
   'water-tower': 'The Water Tower',
   'village-house': 'Burnt House',
   homestead: 'Homestead',
+  'farmhouse-instance': 'Farmhouse',
 };
 
 export interface StructureTagProps {
