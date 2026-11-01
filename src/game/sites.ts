@@ -1597,6 +1597,24 @@ export function farmhouseContains(site: FarmSite, x: number, z: number): boolean
 }
 
 // ---------------------------------------------------------------------------
+// THE RECURRING FAMILIES — shared siting constants for the
+// distribution families (homesteads.ts and its successors).
+// The singulars above are FIRSTS, not onlys (Adam's
+// no-one-of-anything principle, 2026-11-01); the families
+// populate the same country on the seed, and their shared
+// rulers live here beside the firsts' own.
+// ---------------------------------------------------------------------------
+
+/** Wall segment length for homestead houses, meters
+ *  (DRAFT, proposal settled on Background's siting sheet,
+ *  build-out plan 2026-10-31): the one ruler Models'
+ *  homestead kit (homesteadWall / homesteadWallCharred /
+ *  homesteadRoof / homesteadRoofCharred /
+ *  homesteadRoofFallen) is built to, and the unit the
+ *  scatter integration lays homestead walls in. */
+export const HOMESTEAD_SEGMENT_M = 3.0;
+
+// ---------------------------------------------------------------------------
 // THE CHAPEL — site #5 (Adam, 2026-10-30; claim approved by
 // DEV with the spacing margin at the standing 60). Circle
 // ground: a tall, mostly-intact shell with a steeple, and

@@ -43,6 +43,14 @@ export interface BuildRecord {
 
 const ALL_RECORDS: BuildRecord[] = [
   {
+    merge: 'Merge #46',
+    pr: 85,
+    sha: '2866532',
+    date: '2026-11-01',
+    what: 'Four commits, and a fifth \u2014 this record \u2014 rides in the same merge. The phone can build again: in landscape the seed strip no longer paints across the ground where a shelter\u2019s ghost stands, and an armed placement on touch now carries its own Place here bar \u2014 before this, the phone showed the ghost and offered no reachable way to set it down, while the desktop worked all along. The picked flowers that feed no recipe now say what they are \u2014 \u2018Decorative\u2019 \u2014 instead of pretending a use is coming; the Poison Mushroom is pointedly NOT among them, because the cauldron has plans for it. The carriers\u2019 record is corrected to the ruling (Home stands at two singular seats by Adam\u2019s population law \u2014 the families carry the rest as the world populates), and the homestead sequence opens: the shared wall ruler the homestead builders work to is planted in the siting sheet, first step toward homestead houses standing in the country.',
+    why: 'Adam found the phone defect himself, on his own world, trying to place a lean-to \u2014 desktop/phone parity is his standing law, and this restores it where it actually broke. The flower tags are honesty in the item text: no-use things should say so, and the one exception was his call, made for the brew it will feed.',
+  },
+  {
     merge: 'Merge #45',
     pr: 84,
     sha: 'a7a7c37',

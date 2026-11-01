@@ -13203,8 +13203,18 @@ export default function App() {
         ) : null}
       </div>
 
-      {/* Seed controls */}
-      <div className="absolute bottom-0 left-0 z-30 flex items-center gap-2 p-4">
+      {/* Seed controls. PHONE STRIP (Adam's defect report,
+          2026-11-01): this row used to run ~450 px across the
+          bottom in one unwrapped line, so on a phone-landscape
+          screen its 'Current:' label painted across the armed
+          placement ghost at bottom-center and the row's box
+          swallowed the ground there. Now the strip wraps, the
+          Current line takes its OWN row at the far left (it
+          can no longer reach bottom-center at any width), the
+          input is narrower, and the container is
+          pointer-transparent except the real controls — the
+          label and the Current line never take a tap. */}
+      <div className="pointer-events-none absolute bottom-0 left-0 z-30 flex max-w-[100vw] flex-wrap items-center gap-2 p-4">
         <label htmlFor="seed-input" className="text-xs opacity-70">
           World seed:
         </label>
@@ -13215,15 +13225,15 @@ export default function App() {
           onKeyDown={(e) => {
             if (e.key === 'Enter') regenerate();
           }}
-          className="bg-[#1e241c] border border-moss-deep px-2 py-1 text-xs w-48 outline-none"
+          className="pointer-events-auto bg-[#1e241c] border border-moss-deep px-2 py-1 text-xs w-40 outline-none"
         />
         <button
           onClick={() => regenerate()}
-          className="bg-moss-deep hover:bg-moss px-3 py-1 text-xs"
+          className="pointer-events-auto bg-moss-deep hover:bg-moss px-3 py-1 text-xs"
         >
           Regenerate
         </button>
-        <span className="text-xs opacity-60">Current: {seed}</span>
+        <span className="w-full text-xs opacity-60">Current: {seed}</span>
       </div>
 
       {/* Controls help (desktop only — touch devices get the TouchControls cues). */}
@@ -13728,8 +13738,12 @@ export default function App() {
         (Adam's verb); the button IS the magic signal — no
         tutorial popup. Press shows the renderer arrows
         (Background's API, wired in CAMP ARROWS WIRING);
-        arrival-dismiss and regenerate hide them again. */}
+        arrival-dismiss and regenerate hide them again.
+        While a placement is armed, the touch placement bar
+        (next block) takes the bottom-center family and Scry
+        hides — one actor in the seat at a time. */}
       {scryVisible &&
+      placement === null &&
       !inventoryOpen &&
       !craftingOpen &&
       !charmsOpen &&
@@ -13740,6 +13754,63 @@ export default function App() {
       !paused ? (
         <div className="pointer-events-none absolute bottom-12 left-1/2 z-40 -translate-x-1/2">
           <ScryButton onPress={handleScry} showKeyHint={!isTouch} />
+        </div>
+      ) : null}
+
+      {/* TOUCH PLACEMENT BAR (Adam's phone defect, 2026-11-01):
+          the placement confirm card lives in the HudShell
+          stack, which on touch starts COLLAPSED (hudCollapsed
+          defaults to isTouch) and is unmounted while collapsed
+          — so an armed placement on the phone showed the ghost
+          but no reachable Place here, only a 'Show HUD' hunt.
+          This bar is the confirm's touch door: same handlers,
+          same one-confirm law (while the upgrade pill shows,
+          it is the confirm and the bar carries only Cancel),
+          seated in the bottom-center actor family above the
+          ghost's seat — Scry yields the family while a
+          placement is armed (its guard above). Shown only in
+          the collapsed state; expanded, the stack card is on
+          screen and is the door. Hidden with any panel/modal
+          open, like the rest of the seat family, so it never
+          paints over a bottom sheet. */}
+      {isTouch &&
+      hudCollapsed &&
+      placement !== null &&
+      !inventoryOpen &&
+      !craftingOpen &&
+      !charmsOpen &&
+      !companionsOpen &&
+      !journalOpen &&
+      !optionsOpen &&
+      !introOpen &&
+      !pendingTrapRecipe &&
+      pendingRemoveTarget === null &&
+      !paused ? (
+        <div className="pointer-events-auto absolute bottom-24 left-1/2 z-40 -translate-x-1/2 rounded bg-black/60 px-3 py-2 text-center">
+          <p className="text-sm text-stone-100">
+            Placing {placement.label} at your feet.
+          </p>
+          <div className="mt-1 flex justify-center gap-2">
+            {upgradePill ? null : (
+              <button
+                type="button"
+                onClick={handlePlaceConfirm}
+                className="min-h-[44px] rounded bg-moss-deep px-3 py-2 text-sm hover:bg-moss"
+              >
+                Place here
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={handlePlaceCancel}
+              className="min-h-[44px] rounded bg-moss-deep px-3 py-2 text-sm hover:bg-moss"
+            >
+              Cancel
+            </button>
+          </div>
+          {placementNote ? (
+            <p className="mt-1 text-xs text-red-300">{placementNote}</p>
+          ) : null}
         </div>
       ) : null}
 

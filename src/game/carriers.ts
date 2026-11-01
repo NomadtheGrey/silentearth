@@ -37,9 +37,12 @@
  * HUMAN BONE. No grave carrier mints for the founding
  * three — the chapel's inscription stone was minted as
  * Home's third seat for one landing (b8dbfae) and came
- * straight back out on this ruling. Home's third seat
- * re-mints from the non-grave classes on Adam's word
- * (held, not chosen, in this module).
+ * straight back out on this ruling. And Home gets no
+ * third SINGULAR seat at all: Adam's population ruling
+ * closed the question the same morning — the answer is
+ * the families, not a seat (other burnt villages'
+ * hearthstones carry Home as the world populates).
+ * Home stands at two singular carriers BY RULING.
  *
  * WHERE THE FACTS LIVE: plural instances carry the
  * field on their record beside fragmentSpot (homesteads
