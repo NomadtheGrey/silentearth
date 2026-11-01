@@ -47,6 +47,21 @@
  * Cooking does not use the crafting engine: cooking is not a
  * craft (see crafting-execution.ts docs), so cook() lives here,
  * not in RECIPES.
+ *
+ * ADOPTION LAW (DEV ruling, 2026-11-01, enforcing Adam's pins —
+ * lit fires consume nothing, and fire-presence is the only gate
+ * for fire work): the shell ALSO keeps one FireState vessel per
+ * ENGINE fire and mirrors the engine's state into it. Mirroring
+ * an engine-lit fire is BOOKKEEPING, never a lighting act: the
+ * lighting cost belongs to the LIGHT act alone, and light()'s
+ * prices bind only a genuine lighting act on the vessel itself.
+ * The bridge completes a lagging vessel through adoptLit() —
+ * cost-free, never throwing — so Cook and charring can never
+ * refuse at an honestly lit engine fire over a kindling the
+ * world never charged. (The defect this closed: the bridge
+ * completed vessels through the priced light(), so a friction-
+ * lit fire with no spare dry-kindling carried refused Cook/Char
+ * at a lit fire.)
  */
 
 import type { CraftingInventory } from './crafting';
@@ -200,6 +215,21 @@ export class FireState {
     if (this.secondsRemaining === 0) {
       this.status = 'lit';
     }
+  }
+
+  /**
+   * Adopt an engine fire's lit state (see the header's
+   * ADOPTION LAW): the engine fire IS lit in the world, so
+   * this vessel reads lit. Cost-free by law — no inventory
+   * contact, never throws — and idempotent: an already-lit
+   * vessel is untouched, and a mid-lighting vessel completes
+   * (the world's lighting already finished; that is the only
+   * way adoption is called). This is NOT a lighting act and
+   * pays none of light()'s prices.
+   */
+  adoptLit(): void {
+    this.status = 'lit';
+    this.secondsRemaining = 0;
   }
 
   /**
