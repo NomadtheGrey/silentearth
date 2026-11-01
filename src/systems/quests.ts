@@ -171,22 +171,51 @@ export interface QuestFacts {
 }
 
 /**
- * A survival thread — Act I's subgrouping (Adam's
- * approved frame, 2026-11-01). Ids are stable; names
- * are DRAFT for his pin pass.
+ * A thread within an act — the subgrouping (Adam's
+ * approved frame, 2026-11-01). The first five are Act
+ * I's survival threads; 'wakings' opens Act II's.
+ * Ids are stable; names are DRAFT for his pin pass.
  */
-export type QuestThread = 'food' | 'fire' | 'shelter' | 'tools' | 'land';
+export type QuestThread =
+  | 'food'
+  | 'fire'
+  | 'shelter'
+  | 'tools'
+  | 'land'
+  | 'wakings';
 
 /**
- * The five threads, in fold order (= first appearance
- * in the quest list's own priority order).
+ * A quest's act (Adam's frame): Act I, the survival
+ * act; Act II — Witchery (title PINNED, 2026-11-01),
+ * the magic thread. Acts are shelves, not locks (see
+ * the header): the act field groups, it never gates.
  */
-export const QUEST_THREADS: readonly { id: QuestThread; name: string }[] = [
-  { id: 'food', name: 'Food' },
-  { id: 'fire', name: 'Fire' },
-  { id: 'shelter', name: 'Shelter' },
-  { id: 'tools', name: 'Tools' },
-  { id: 'land', name: 'The Land' },
+export type QuestAct = 'survival' | 'witchery';
+
+/** The acts, with their display names. */
+export const QUEST_ACTS: readonly { id: QuestAct; name: string }[] = [
+  { id: 'survival', name: 'Act I — Survival' },
+  { id: 'witchery', name: 'Act II — Witchery' },
+];
+
+/**
+ * The threads, in fold order: Act I's five (= first
+ * appearance in the quest list's own priority order),
+ * then Act II's Wakings — the first Witchery thread,
+ * DRAFT, opened by its first quest; Witchery's full
+ * set comes with its subgrouping pass.
+ */
+export const QUEST_THREADS: readonly {
+  id: QuestThread;
+  name: string;
+  act: QuestAct;
+}[] = [
+  { id: 'food', name: 'Food', act: 'survival' },
+  { id: 'fire', name: 'Fire', act: 'survival' },
+  { id: 'shelter', name: 'Shelter', act: 'survival' },
+  { id: 'tools', name: 'Tools', act: 'survival' },
+  { id: 'land', name: 'The Land', act: 'survival' },
+  { id: 'wakings', name: 'Wakings', act: 'witchery' },
 ];
 
 /**
@@ -206,7 +235,9 @@ export interface QuestDefinition {
   id: string;
   title: string;
   isDone: (facts: QuestFacts) => boolean;
-  /** The quest's Act I thread (subgrouping; see header). */
+  /** The quest's act (grouping only — never a gate). */
+  act: QuestAct;
+  /** The quest's thread within its act (see header). */
   thread: QuestThread;
   /**
    * The quest's components — an EXACT decomposition of
@@ -234,6 +265,7 @@ export const QUEST_DEFINITIONS: readonly QuestDefinition[] = [
     id: 'collect-food',
     title: 'Collect Food',
     thread: 'food',
+    act: 'survival',
     isDone: (facts) =>
       FOOD_ITEMS.some((food) => facts.inventory.count(food) > 0),
     components: [
@@ -249,6 +281,7 @@ export const QUEST_DEFINITIONS: readonly QuestDefinition[] = [
     id: 'eat-when-hungry',
     title: 'Eat When Hungry',
     thread: 'food',
+    act: 'survival',
     isDone: (facts) => facts.flags.ateWhileHungry,
     components: [
       {
@@ -262,6 +295,7 @@ export const QUEST_DEFINITIONS: readonly QuestDefinition[] = [
     id: 'make-campfire',
     title: 'Make Campfire',
     thread: 'fire',
+    act: 'survival',
     isDone: (facts) =>
       facts.fires.some((fire) => fire.type === 'campfire'),
     components: [
@@ -277,6 +311,7 @@ export const QUEST_DEFINITIONS: readonly QuestDefinition[] = [
     id: 'light-campfire',
     title: 'Light Campfire',
     thread: 'fire',
+    act: 'survival',
     isDone: (facts) =>
       facts.fires.some((fire) => fire.type === 'campfire' && fire.lit),
     components: [
@@ -298,6 +333,7 @@ export const QUEST_DEFINITIONS: readonly QuestDefinition[] = [
     id: 'make-lean-to',
     title: 'Make Lean-To',
     thread: 'shelter',
+    act: 'survival',
     isDone: (facts) =>
       facts.houses.some((house) => house.type === 'leanTo'),
     components: [
@@ -315,6 +351,7 @@ export const QUEST_DEFINITIONS: readonly QuestDefinition[] = [
     // Shelter with its flag standing (see header): sleep
     // is its own system; rest is what shelter is for.
     thread: 'shelter',
+    act: 'survival',
     isDone: (facts) => facts.flags.slept,
     components: [
       {
@@ -330,6 +367,7 @@ export const QUEST_DEFINITIONS: readonly QuestDefinition[] = [
     // Fire as a flagged dual (see header): found by
     // gathering, but its only job is lighting fires.
     thread: 'fire',
+    act: 'survival',
     isDone: (facts) => facts.inventory.count('flint') > 0,
     components: [
       {
@@ -345,6 +383,7 @@ export const QUEST_DEFINITIONS: readonly QuestDefinition[] = [
     // Fire as a flagged dual (see header): crafted gear,
     // but a torch is carried fire.
     thread: 'fire',
+    act: 'survival',
     isDone: (facts) =>
       facts.inventory.count('torch') > 0 ||
       facts.inventory.count('lit-torch') > 0 ||
@@ -372,6 +411,7 @@ export const QUEST_DEFINITIONS: readonly QuestDefinition[] = [
     id: 'light-torch',
     title: 'Light Torch',
     thread: 'fire',
+    act: 'survival',
     isDone: (facts) =>
       facts.inventory.count('lit-torch') > 0 || facts.placedTorches > 0,
     componentsMode: 'any',
@@ -392,6 +432,7 @@ export const QUEST_DEFINITIONS: readonly QuestDefinition[] = [
     id: 'use-stump',
     title: 'Use the Stump',
     thread: 'tools',
+    act: 'survival',
     isDone: (facts) => facts.flags.craftedAtStump,
     components: [
       {
@@ -405,6 +446,7 @@ export const QUEST_DEFINITIONS: readonly QuestDefinition[] = [
     id: 'upgrade-tool',
     title: 'Upgrade Your Tool',
     thread: 'tools',
+    act: 'survival',
     isDone: (facts) => facts.ownedToolStage >= 1,
     components: [
       {
@@ -418,6 +460,7 @@ export const QUEST_DEFINITIONS: readonly QuestDefinition[] = [
     id: 'gather-clay',
     title: 'Gather Clay',
     thread: 'land',
+    act: 'survival',
     isDone: (facts) => facts.inventory.count('clay') > 0,
     components: [
       {
@@ -431,6 +474,7 @@ export const QUEST_DEFINITIONS: readonly QuestDefinition[] = [
     id: 'better-house',
     title: 'Build a Better House',
     thread: 'shelter',
+    act: 'survival',
     // ANY house beyond the lean-to (engine HouseType values):
     // a fresh-placed woven cottage completes this without
     // ever passing through thatch, and upgrades change a
@@ -468,6 +512,7 @@ export const QUEST_DEFINITIONS: readonly QuestDefinition[] = [
     id: 'find-bone',
     title: 'Find a Bone',
     thread: 'land',
+    act: 'survival',
     isDone: (facts) =>
       BONE_ITEM_IDS.some((bone) => facts.inventory.count(bone) > 0),
     components: [
@@ -482,14 +527,18 @@ export const QUEST_DEFINITIONS: readonly QuestDefinition[] = [
   {
     id: 'wake-charm',
     title: 'Wake a Charm',
-    // THE NAMED MISFIT (see header): the rite has no
-    // survival home; it rides The Land beside find-bone
-    // as the land's closing pair — the bone road into
-    // Act II. Its single component stays exact: the
+    // ACT II — WITCHERY'S FIRST QUEST (Adam's re-seat,
+    // 2026-11-01: 'let's put that into witchery'): the
+    // rite was Act I's named misfit for an hour; it has
+    // a home now, opening the Wakings fold. The bone
+    // road crosses the act line — find-bone stays in
+    // The Land, and acts are not gates, so the road
+    // walks fine. Its single component stays exact: the
     // bone step is find-bone's own quest, not a
     // component here, because a completed rite need not
     // still carry its bone.
-    thread: 'land',
+    thread: 'wakings',
+    act: 'witchery',
     isDone: (facts) => facts.flags.ritualCompleted,
     components: [
       {
@@ -509,12 +558,19 @@ export function isQuestDone(id: string, facts: QuestFacts): boolean {
 /** Done state of all v1 quests, in priority order. */
 export function evaluateQuests(
   facts: QuestFacts,
-): { id: string; title: string; done: boolean; thread: QuestThread }[] {
+): {
+  id: string;
+  title: string;
+  done: boolean;
+  thread: QuestThread;
+  act: QuestAct;
+}[] {
   return QUEST_DEFINITIONS.map((quest) => ({
     id: quest.id,
     title: quest.title,
     done: quest.isDone(facts),
     thread: quest.thread,
+    act: quest.act,
   }));
 }
 
