@@ -93,10 +93,15 @@
  * follow-up cleanup, not part of this position-only change.
  *
  * REMOVE OPTION (Adam, 2026-10-26): when the caller passes
- * onRemove, each SCATTER target also gets a RemoveButton stacked
- * under its Harvest button — totally remove the plant, more at
- * once, gone permanently. Ground targets never get one (no plant
- * to remove), and with no onRemove passed nothing extra renders.
+ * onRemove, each REMOVABLE scatter target also gets a
+ * RemoveButton stacked under its Harvest button — totally
+ * remove the plant, more at once, gone permanently. Ground
+ * targets never get one (no plant to remove), and neither
+ * do ground-class scatter (logs, stones, silt beds,
+ * anchors — the Remove offer's honesty, 2026-10-31: the
+ * offer itself was the defect; the engine's not-removable
+ * outcome is backstop only). With no onRemove passed
+ * nothing extra renders.
  * onRemove receives the target itself, not a bus payload — the
  * wiring caller maps the target to Background's documented
  * remove shape ('harvest:requested' with action 'remove',
@@ -272,6 +277,16 @@ export interface ProximityHarvestButtonsProps {
   /** Called with the creature id for a creature-row press. */
   onCreature?: (id: string) => void;
   /**
+   * The faced fragment carrier, caller-derived (null =
+   * no row). Renders LAST in the column (after the
+   * creature row), even with zero harvest targets. The
+   * id is the carrier's stable fragment id; the label
+   * is the transcribe verb (caller's wording).
+   */
+  fragment?: { id: string; label: string } | null;
+  /** Called with the fragment id for a fragment-row press. */
+  onTranscribe?: (id: string) => void;
+  /**
    * Show PC key badges on the keyed rows (trap row "E",
    * hive row "E", loom row "E", creature row "E" — USE dispatches to the faced target's
    * common action, Adam 2026-10-29). Caller passes
@@ -301,11 +316,13 @@ export function ProximityHarvestButtons({
   onWeave,
   creature,
   onCreature,
+  fragment,
+  onTranscribe,
   showKeyHints = false,
   theme = 'mire',
 }: ProximityHarvestButtonsProps) {
   const t = UI_THEMES[theme];
-  if (targets.length === 0 && !trap && !hive && !loom && !creature) {
+  if (targets.length === 0 && !trap && !hive && !loom && !creature && !fragment) {
     return null;
   }
   // Dirt-row suppression (Adam, 2026-10-28): the ground row
@@ -355,7 +372,7 @@ export function ProximityHarvestButtons({
       {lookNode}
       {visibleTargets.map((target) => (
         <Fragment key={target.id}>
-          {target.kind === 'scatter' && onRemove ? (
+          {target.kind === 'scatter' && target.removable && onRemove ? (
             <div className="flex flex-col items-center gap-1">
               {!harvestedIds?.has(target.id) ? (
                 <HarvestButton
@@ -464,6 +481,27 @@ export function ProximityHarvestButtons({
           }
         >
           <span className="font-medium">{creature.label}</span>
+          {showKeyHints ? (
+            <span
+              aria-hidden="true"
+              className={KEY_BADGE_CLASS}
+            >
+              E
+            </span>
+          ) : null}
+        </button>
+      ) : null}
+      {fragment && onTranscribe ? (
+        <button
+          type="button"
+          onClick={() => onTranscribe(fragment.id)}
+          aria-label={fragment.label}
+          className={
+            'flex min-h-[44px] items-center gap-2 rounded-full px-3 py-1.5 text-sm shadow-lg transition-transform hover:scale-105 ' +
+            t.panel
+          }
+        >
+          <span className="font-medium">{fragment.label}</span>
           {showKeyHints ? (
             <span
               aria-hidden="true"

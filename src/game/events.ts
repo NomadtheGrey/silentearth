@@ -487,7 +487,40 @@ export interface EventMap {
   'companion:departed': { id: string };
   'companion:feral-snap': { id: string };
   'companion:stance': { id: string; stance: 'stay' | 'follow' };
+  /**
+   * The familiar's rite (Build 2; the SHELL emits on
+   * Systems' bond transitions, after the transition
+   * lands — the fact on the bus, not a grant channel).
+   * Supersede carries the displaced familiar's id: the
+   * step-down is half the act.
+   */
+  'familiar:elevated': { id: string };
+  'familiar:relinquished': { id: string };
+  'familiar:superseded': { id: string; displaced: string };
   'animal:snatch-caught': { id: string; kind: string; x: number; z: number };
+  /**
+   * The cat (Build 2; catRuntime emits, the shell
+   * answers). 'cat:met' — the first meeting at the hearth
+   * (a feed-line door). 'cat:delivered' — a daytime catch
+   * reached the homed house: the shell writes the item
+   * into home storage (the cap governs there). 'cat:
+   * present' — a sleep-hunt catch left on the floor of
+   * the homed house (Adam's presentation, 2026-10-31):
+   * the shell drops a ground pile at (x, z). 'cat:gift' —
+   * a pre-bond catch left at the hearth: the shell drops
+   * a ground pile at (x, z), the doorstep gift.
+   */
+  'cat:met': { id: string };
+  'cat:delivered': { item: string };
+  'cat:present': { item: string; x: number; z: number };
+  'cat:gift': { item: string; x: number; z: number };
+  /**
+   * The raven guide (2026-10-31): the bird calls from its
+   * perch — the payload position lets the shell judge the
+   * call's reach by distance; its surface (a feed line, a
+   * sound) is the shell's.
+   */
+  'guide:call': { x: number; z: number };
 }
 
 type Handler<E> = (payload: E) => void;

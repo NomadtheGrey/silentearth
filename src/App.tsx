@@ -35,8 +35,10 @@
  * - Station presence: stationPresence (on the current
  *   generator at her position) carries TWO booleans —
  *   stump in range = workstation, placed loom in range =
- *   loom — and serves ONLY the StationPanel door and the
- *   station anchor now. Crafting's station feed is the
+ *   loom — and serves the station anchor (and, through
+ *   the memo below, availableStations) now; its HUD
+ *   presence card (StationPanel) retired 2026-10-31
+ *   (dialog audit claim 2). Crafting's station feed is the
  *   FACED target (the USE winner), not presence: Adam's
  *   station law retired the radius feed whole (see the
  *   derivation's own comment). Background's presence
@@ -65,14 +67,18 @@
  *   (2003619): a remove press is 'harvest:requested' with action
  *   'remove' — same event, not a second channel. The outcome
  *   grants primary base x 3 + bonus roll + all secondaries, and
- *   marks the plant removed permanently. The button renders on
- *   every scatter target (removability is outcome-time: plant-
- *   like sources only, so a remove press on a log, stone, bone,
- *   salt, silt, or anchor returns an honest 'not-removable'
- *   failure through the existing feedback path); ground targets
- *   never get one. The "Remove" label is the lane's pick,
- *   flagged, not pinned. Feedback for a remove completion shows
- *   the yields exactly as carried, like any harvest.
+ *   marks the plant removed permanently. The offer is
+ *   pre-judged at projection (the Remove offer's honesty,
+ *   2026-10-31, superseding the 2026-10-26 outcome-time
+ *   reading): HarvestTarget.removable is minted from
+ *   SOURCE_BY_ID, and no Remove renders or arms (pill, R,
+ *   Shift+E) for ground targets or ground-class scatter
+ *   (logs, stones, bone, salt, silt, anchors). The engine's
+ *   'not-removable' outcome stays as backstop and speaks
+ *   one honest line if it ever lands. The "Remove" label
+ *   is the lane's pick, flagged, not pinned. Feedback for
+ *   a remove completion shows the yields exactly as
+ *   carried, like any harvest.
  * - Owned tool (Adam correction, 2026-10-26 — owning is
  *   sufficient, no equipping): there is no held/equipped slot.
  *   The owned tool is the highest-stage ladder tool present in
@@ -495,7 +501,8 @@
  *   'workstation' id for canCraft; presence comes
  *   solely from stumps today, so the name is truthful).
  *   FOLLOW-UP, NOT CHANGED: when presence learns kinds,
- *   the header follows the kind per StationPanel's map.
+ *   the station naming follows the kind (the fold
+ *   dialog's heading carries stump naming today).
  * - STATION UI V1, LIVE (Adam, 2026-10-26): when she is at a
  *   stump, a station panel appears in the HUD stack naming it
  *   ("Tree stump") with one action: Craft, which opens the
@@ -514,6 +521,11 @@
  *   'stump' is the kind passed; the component maps all three
  *   brief-named kinds (stump / workstation / Stumpy) so the
  *   title follows from a prop when presence learns kinds.
+ *   RETIRED 2026-10-31 (dialog audit claim 2): the fold
+ *   (merge #41) gave the stump a better door — the dialog
+ *   E/K and the chip open — and this presence card's one
+ *   act duplicated it, so the card and StationPanel are
+ *   deleted; the stump's one door is the dialog.
  * - INVENTORY DROP, LIVE (Adam, 2026-10-26 — "for next
  *   pass", arrows 2026-10-28): every personal inventory
  *   row gains ↓ drop-one + ↓↓ drop-all arrows (storage
@@ -1645,8 +1657,18 @@ import {
   comeHere as runtimeComeHere,
   makeCompanionInstance,
   restoreActor,
+  setMovementMode,
   setStance as runtimeSetStance,
 } from './game/companionRuntime';
+import {
+  CAT_ID,
+  catActor,
+  installCatCatchTable,
+  installCatProbes,
+  setCatBond,
+  type CatCatchTable,
+} from './game/catRuntime';
+import { installGuideProbes } from './game/guideRuntime';
 import {
   collectTrapCatch,
   catchItemFor,
@@ -1700,7 +1722,7 @@ import { WitchHealth } from './ui/WitchHealth';
 import { HungerIndicator } from './ui/HungerIndicator';
 import { ForageHint } from './ui/ForageHint';
 import { ShelteredIndicator } from './ui/ShelteredIndicator';
-import { StationPanel } from './ui/StationPanel';
+
 import { WornList, type WornGarment } from './ui/WornList';
 import { UmbrellaIcon } from './ui/UmbrellaIcon';
 import { FireState, type FireChipStatus } from './ui/FireState';
@@ -1730,14 +1752,17 @@ import {
   type FontId,
 } from './ui/OptionsModal';
 import { IntroModal } from './ui/IntroModal';
-import { RemoveConfirm } from './ui/RemoveConfirm';
-import { LeaveConfirm } from './ui/LeaveConfirm';
+
 import {
   InventoryPanel,
   loadInventorySort,
   saveInventorySort,
   type InventorySortPreference,
 } from './ui/InventoryPanel';
+import type {
+  ItemListVerb,
+  ItemListVisibleVerb,
+} from './ui/ItemListSurface';
 import { CraftingMenu } from './ui/CraftingMenu';
 import { ProximityHarvestButtons } from './ui/ProximityHarvestButtons';
 import { ObjectFeedback } from './ui/ObjectFeedback';
@@ -1792,7 +1817,11 @@ import {
   CHAR_INPUT_ITEM,
   cook,
 } from './systems/fire';
-import { HomeStorage } from './systems/shelter';
+import {
+  HomeStorage,
+  consumeHomeUpgradePrice,
+  nextHomeUpgrade,
+} from './systems/shelter';
 import {
   clearSave,
   loadSave,
@@ -1870,7 +1899,22 @@ import {
   cauldronState,
   type PlacedCauldron as PlacedCauldronEntity,
 } from './game/cauldronState';
-import { groveContains, groveSite } from './game/sites';
+import {
+  barnSite,
+  chapelSite,
+  drownedMillSite,
+  farmhouseSite,
+  generalStoreSite,
+  groveContains,
+  groveSite,
+  railSidingSite,
+  schoolhouseSite,
+  siloSite,
+  sunkenRoadSite,
+  villageSite,
+  waterTowerSite,
+} from './game/sites';
+import { fragmentCarriersHere as carriersHere } from './game/carriers';
 import {
   caveInstanceForKey,
   caveLayoutForKey,
@@ -1905,10 +1949,13 @@ import {
   TRUST_FOR_BOND,
   dietFor,
   isFeedable,
+  provisioningCatchesFor,
   snatchFish,
   type CompanionStance,
   type SavedCompanion,
 } from './systems/companions';
+import { DiscoveryState } from './systems/discovery';
+import { FragmentState, markDisplayName } from './systems/fragments';
 import {
   CharmState,
   GroundhogRest,
@@ -1935,6 +1982,8 @@ import { RitualPanel } from './ui/RitualPanel';
 import { walkAwayShouldClose } from './ui/walkAway';
 import { CharmsPanel } from './ui/CharmsPanel';
 import { CompanionsPanel } from './ui/CompanionsPanel';
+import { JournalPanel, type JournalMarkRow } from './ui/JournalPanel';
+import { StructureTag, STRUCTURE_TAG_NAMES, STRUCTURE_TAG_RANGE_M } from './ui/StructureTag';
 import { StormWarning } from './ui/StormWarning';
 import { WakeNotice } from './ui/WakeNotice';
 
@@ -2192,12 +2241,34 @@ const FOOD_IDS: ReadonlySet<string> = new Set([
  */
 const TORCH_IDS: ReadonlySet<string> = new Set([ITEMS.torch]);
 
+/**
+ * Her books (First-Fragment Presentation, 2026-10-31):
+ * the journal and the grimoire both carry the Read verb
+ * — the linked-books law makes them one door to the
+ * journal's tally surface.
+ */
+const READABLE_BOOK_IDS: ReadonlySet<string> = new Set([
+  ITEMS.journal,
+  ITEMS.grimoire,
+]);
+
 /** Engine house type → Systems house item (for HomeStorage). */
 const HOUSE_TYPE_TO_ITEM: Record<HouseType, string> = {
   leanTo: ITEMS.primitiveLeanTo,
   thatchHut: ITEMS.thatchHut,
   wovenCottage: ITEMS.wovenCottage,
   smallWoodenHut: ITEMS.smallWoodenHut,
+};
+
+/** Systems' home-ladder rungs (recipe ids) back to the
+ * engine's house types — the home-screen Upgrade press
+ * consumes the price in Systems' rung terms, then runs
+ * the engine's in-place upgrade in its type terms. */
+const HOME_RUNG_TO_TYPE: Record<string, HouseType> = {
+  'primitive-lean-to': 'leanTo',
+  'thatch-hut': 'thatchHut',
+  'woven-cottage': 'wovenCottage',
+  'small-wooden-hut': 'smallWoodenHut',
 };
 
 /**
@@ -2353,6 +2424,27 @@ function toInventoryItem(
 
 
 
+/** One-shot localStorage key for the folded new-game
+ * flow (dialog audit claim 3, 2026-10-31): Begin in the
+ * new-game dialog stashes the entered name/seed here
+ * before the park + reload; the fresh boot consumes it
+ * in place of the first-run dialog. */
+const PENDING_NEW_WORLD_KEY = 'silent-earth-pending-new-world';
+
+function readPendingNewWorld(): { name: string; seed: string } | null {
+  try {
+    const raw = window.localStorage.getItem(PENDING_NEW_WORLD_KEY);
+    if (raw === null) return null;
+    const parsed = JSON.parse(raw) as { name?: unknown; seed?: unknown };
+    if (typeof parsed.name !== 'string' || typeof parsed.seed !== 'string') {
+      return null;
+    }
+    return { name: parsed.name, seed: parsed.seed };
+  } catch {
+    return null;
+  }
+}
+
 export default function App() {
   const containerRef = useRef<HTMLDivElement>(null);
   const rendererRef = useRef<WorldRenderer | null>(null);
@@ -2369,6 +2461,20 @@ export default function App() {
     bootSaveRef.current = loadSave();
   }
   const bootSave = bootSaveRef.current;
+
+  // Pending new world (claim 3): read once, lazily like
+  // bootSave. A non-null value means the folded new-game
+  // dialog was already seen and begun before the reload
+  // that produced this boot — its name/seed apply through
+  // the first-run Begin path (effect below) and the
+  // dialog never shows a second time.
+  const pendingNewWorldRef = useRef<
+    { name: string; seed: string } | null | undefined
+  >(undefined);
+  if (pendingNewWorldRef.current === undefined) {
+    pendingNewWorldRef.current = readPendingNewWorld();
+  }
+  const pendingNewWorld = pendingNewWorldRef.current;
 
   const genRef = useRef(createWorldGen(bootSave?.seed ?? DEFAULT_SEED));
 
@@ -2598,6 +2704,11 @@ export default function App() {
   // difference: its DOOR exists only while she has a
   // companion (see the button rows + hasBondedCompanion).
   const [companionsOpen, setCompanionsOpen] = useState(false);
+  // JOURNAL (First-Fragment Presentation, 2026-10-31):
+  // the tally panel — a radio-family member like its
+  // siblings, opened by the Read verb on her journal /
+  // grimoire rows (no HUD door of its own).
+  const [journalOpen, setJournalOpen] = useState(false);
   // The panel's mirror of CompanionState (records are
   // ref-state; the mirror is what renders). Refreshed at
   // boot and after every companion act.
@@ -2641,7 +2752,7 @@ export default function App() {
   // the tracker. Drives the touch USE fallback, the touch
   // PICK UP label, the desktop pickup button, and the pile
   // chips + menu (see handleUseInteract + the pile
-  // computations before return + pileMenuActions /
+  // computations before return + pileModalModel /
   // handlePileAction). Ref mirrors state so the
   // first-render recomputeAnchors closure sees piles fresh.
   const [piles, setPiles] = useState<PileTarget[]>([]);
@@ -2793,6 +2904,26 @@ export default function App() {
     companionStateRef.current = new CompanionState(
       bootSave?.companions ?? [],
     );
+  }
+  // DISCOVERY STATE (the Raven Guide wiring, 2026-10-31):
+  // the shell owns the one DiscoveryState (Systems'
+  // module), constructed from the boot save's record —
+  // the same ref-lazy pattern. The guide's probes read
+  // it live, grove entry flips it, and snapshot() rides
+  // every saveNow.
+  const discoveryStateRef = useRef<DiscoveryState | null>(null);
+  if (discoveryStateRef.current === null) {
+    discoveryStateRef.current = new DiscoveryState(bootSave?.discovery);
+  }
+  // FRAGMENT STATE (First-Fragment Presentation,
+  // 2026-10-31): the shell owns the one FragmentState
+  // (Systems' module), constructed from the boot save's
+  // records — the same ref-lazy pattern. Transcription
+  // writes it, the JournalPanel reads it, and snapshot()
+  // rides every saveNow.
+  const fragmentStateRef = useRef<FragmentState | null>(null);
+  if (fragmentStateRef.current === null) {
+    fragmentStateRef.current = new FragmentState(bootSave?.fragments);
   }
   // The ritual site whose panel is open, by SITE ID
   // ('altar:<n>' or 'stump:x,z' — one selection for
@@ -3112,6 +3243,15 @@ export default function App() {
   const [leaveConfirmOpen, setLeaveConfirmOpen] = useState(false);
   const leaveArmedRef = useRef(false);
   const selectedPileIdRef = useRef<string | null>(null);
+  // The pile modal's visible verb list, reported by its
+  // ItemListSurface (Inventory Unification, 2026-10-31):
+  // digit dispatch reads THIS — the verbs in the order
+  // the player sees them, search/sort/fold applied — so
+  // the badge numbers and the keys can never disagree.
+  const pileVisibleVerbsRef = useRef<{
+    pileId: string;
+    verbs: ItemListVisibleVerb[];
+  } | null>(null);
   const [placement, setPlacement] = useState<PlacementMode | null>(null);
   const [placementAnchor, setPlacementAnchor] = useState<{
     x: number;
@@ -3387,6 +3527,16 @@ export default function App() {
           // serialize writes them verbatim, load validates
           // and defaults []). Bonds survive refresh.
           companions: companionStateRef.current.snapshot(),
+          // DISCOVERY SAVE WIRING (the Raven Guide,
+          // 2026-10-31): the grove fact rides every save
+          // (the day she found it, or null while unfound).
+          discovery: discoveryStateRef.current.snapshot(),
+          // FRAGMENT SAVE WIRING (First-Fragment
+          // Presentation, 2026-10-31): the journal's
+          // mark progress rides every save as-is
+          // (Systems' SavedMarkProgress shape; serialize
+          // writes it verbatim, load validates).
+          fragments: fragmentStateRef.current.snapshot(),
           // QUEST SAVE WIRING: the live quest flags ride every
           // save (all-false serializes as all-false; absent on
           // old saves reads as all-false on load). Flags are
@@ -3870,13 +4020,39 @@ export default function App() {
     setCloudPendingNewGame({ local: current, parked: readParked() });
   };
 
-  const confirmNewGame = () => {
+  // Folded new-game Begin (claim 3): the dialog already
+  // collected the name + seed, so stash them for the
+  // post-reload boot to consume, then run the ordinary
+  // park + reload (runNewGame re-reads loadSave() at run
+  // time, so what parks is the last saved state, not the
+  // press-time snapshot). A failed stash degrades
+  // honestly: the fresh boot shows the plain first-run
+  // dialog and she enters the values again.
+  const beginFoldedNewGame = (name: string, seed: string) => {
+    try {
+      window.localStorage.setItem(
+        PENDING_NEW_WORLD_KEY,
+        JSON.stringify({ name, seed }),
+      );
+    } catch {
+      /* see above — the park + reload still run */
+    }
     setCloudPendingNewGame(null);
-    // runNewGame re-reads loadSave() at run time (the
-    // bring/restore freshness pattern), so what parks is
-    // the last saved state, not the press-time snapshot.
     runNewGame();
   };
+
+  // The folded dialog's Esc = its Back (the Popup shell
+  // that used to carry this confirm mapped Esc to its
+  // cancel; the fold keeps the key's meaning): close
+  // parking nothing.
+  useEffect(() => {
+    if (cloudPendingNewGame === null) return;
+    const onKeyDown = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') setCloudPendingNewGame(null);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [cloudPendingNewGame]);
 
   const cloudPanelProps = {
     sync: cloudSync,
@@ -4009,6 +4185,11 @@ export default function App() {
         sourceId: target.sourceId,
         name: target.name,
         kind: target.kind,
+        // The Remove offer's honesty (2026-10-31):
+        // removability is read from the source
+        // definition here, at projection, so no Remove
+        // is ever offered for ground-class scatter.
+        removable: SOURCE_BY_ID[target.sourceId]?.removable === true,
         anchorX: anchor.x,
         anchorY: anchor.y,
         worldX: target.x,
@@ -4634,7 +4815,53 @@ export default function App() {
         seatX,
         seatZ,
       );
+      // A saved familiar restores as 'trail' and is
+      // re-flipped from the record here (Build 2,
+      // Piece 1 — Background's restore contract: the
+      // record is the truth, the flip is only motion).
+      if (record.bond === 'familiar') {
+        setMovementMode(record.creatureId, 'settleDart');
+      }
     }
+    // THE CAT'S BOND SYNC (Piece 2): the engine's cat
+    // reads its bond level from the record — 'hearth'
+    // (no bond: the resident), 'attending' (a companion
+    // bond), 'familiar' (the rite's). This runs after
+    // the renderer's construction seated the cat at
+    // the village hearth (same effect, above), so the
+    // level lands on a living actor; setCatBond
+    // no-ops harmlessly if the cat is somehow absent.
+    const catRecord = companionStateRef.current
+      .snapshot()
+      .find((record) => record.creatureId === CAT_ID);
+    setCatBond(
+      catRecord?.bond === 'familiar'
+        ? 'familiar'
+        : catRecord?.bond === 'companion'
+          ? 'attending'
+          : 'hearth',
+    );
+    // CAT PROVISIONING INSTALLS (Piece 3): Systems'
+    // catch table + the home/sleep probes. The probes
+    // read refs and module singletons only, so this one
+    // install stays live for the session.
+    installCatCatchTable(buildCatCatchTable());
+    installCatProbes({
+      homeBase: () => {
+        const home = homedHouse();
+        return home ? { x: home.x, z: home.z } : null;
+      },
+      sleepingAtHome: catSleepingAtHome,
+    });
+    // GUIDE PROBES (Discovery wiring, 2026-10-31):
+    // Background's raven reads the one discovery fact
+    // through this seam and retires the moment it
+    // flips. The closure reads the ref live, so this
+    // one install stays live for the session (the cat
+    // probes' pattern).
+    installGuideProbes({
+      groveDiscovered: () => discoveryStateRef.current.groveDiscovered(),
+    });
     // FIRST-CHARM BOOT GRANT (outright, tier 1,
     // GRANT-TO-LIST since Systems 9e9a9dd): runs
     // AFTER the CharmState restore above, so a loaded
@@ -4728,6 +4955,32 @@ export default function App() {
           houses.length > 0 &&
           isNearStillWater(x, z, waters),
       );
+      // GROVE ENTRY DETECTION (Discovery wiring,
+      // 2026-10-31): the surface only (a cave visit's
+      // coordinates are not the world's), and only
+      // while the fact is unfound — markGroveDiscovered
+      // returns true ONLY on the flip, so the beat and
+      // the save fire exactly once, on entry. The site
+      // derives from the seed (memoized in sites.ts),
+      // so the per-tick test is a cache read + a
+      // distance check. DRAFT line.
+      if (
+        !dimensionState.isUnderground() &&
+        !discoveryStateRef.current.groveDiscovered()
+      ) {
+        const grove = groveSite(gen.seed, gen.findSpawn(), (gx, gz) =>
+          gen.weightsAt(gx, gz).dominant,
+        );
+        if (
+          groveContains(grove, x, z) &&
+          discoveryStateRef.current.markGroveDiscovered(
+            rendererRef.current?.snapshotSky()?.daysElapsed ?? 0,
+          )
+        ) {
+          showFeedback('The Grove — you have found it.', 'info');
+          saveNow();
+        }
+      }
     });
     const offLooked = bus.on('player:looked', () => {
       recomputeAnchors();
@@ -4917,6 +5170,110 @@ export default function App() {
     const offCompanionDeparted = bus.on('companion:departed', ({ id }) => {
       companionStateRef.current.release(id);
       setCompanionRecords(companionStateRef.current.snapshot());
+      saveNow();
+    });
+    // THE FOUND CAT'S MEETING (Build 2, Piece 2): the
+    // engine's first-meeting signal, once per world —
+    // the shell seeds the found record (Systems' usual
+    // door: acquaintance starts from the cat's own
+    // staging), speaks the discovery, and saves. From
+    // here the bond road is the ordinary faced
+    // OFFER/SPEAK path; Systems waives the true-name
+    // gate for found origin, so no cat bone is ever
+    // needed. DRAFT line.
+    const offCatMet = bus.on('cat:met', () => {
+      companionStateRef.current.seedFoundCat(CAT_ID);
+      setCompanionRecords(companionStateRef.current.snapshot());
+      showFeedback(
+        'Something watches from the hearth. A cat — alive, the one living thing the burning left.',
+        'info',
+      );
+      saveNow();
+    });
+    // GUIDE CALLS (Discovery wiring, 2026-10-31):
+    // feed-only for v1 — no audio engine, volume/mute
+    // setting, or gesture-unlock path exists in the
+    // tree, and a synthesized caw is a separate
+    // subsystem for Adam's word. The line is judged by
+    // her live distance to the bird (near / ahead /
+    // faint), and past the last band the call goes
+    // unvoiced; the engine's own cadence is the only
+    // throttle. The shell says 'raven' (Adam's word);
+    // the engine kind stays 'crow'. DRAFT lines.
+    const offGuideCall = bus.on('guide:call', ({ x, z }) => {
+      const player = playerRef.current;
+      if (!player) return;
+      const distance = Math.hypot(x - player.x, z - player.z);
+      if (distance <= 15) {
+        showFeedback('A raven calls from a nearby tree.', 'info');
+      } else if (distance <= 35) {
+        showFeedback('A raven calls ahead.', 'info');
+      } else if (distance <= 60) {
+        showFeedback('A raven calls, faintly.', 'info');
+      }
+    });
+    // CAT PROVISIONING DELIVERIES (Piece 3): the hunt's
+    // goods land three ways, and the shell answers each.
+    // DELIVERED — a travel/sleep catch reaches the homed
+    // house: into its store, the pound cap governing (a
+    // full store leaves the catch as a pile at the
+    // house, the line naming it). PRESENT — a sleep
+    // catch left at the house point: a floor pile, the
+    // wake-up present. GIFT — a pre-bond catch at the
+    // hearth: a pile there always, but the discovery
+    // line only when she is near enough to see it land
+    // (~15 m, DRAFT) — no telepathy. All lines DRAFT.
+    const offCatDelivered = bus.on('cat:delivered', ({ item }) => {
+      const home = homedHouse();
+      const name = displayNameFor(item);
+      if (!home) {
+        // A pathological race (the probes read the same
+        // fact a step earlier): the goods land at her
+        // feet rather than vanish.
+        const player = playerRef.current;
+        if (player) {
+          pileState.spawnPile({ item, quantity: 1, x: player.x, z: player.z });
+          showFeedback(`The cat brought you a ${name}.`, 'gain');
+          saveNow();
+        }
+        return;
+      }
+      const store = getHomeStore(home.id);
+      let stored = false;
+      if (store) {
+        try {
+          store.add(item as ItemId, 1);
+          homeStoreItemsRef.current.get(home.id)?.add(item);
+          stored = true;
+        } catch {
+          stored = false;
+        }
+      }
+      if (stored) {
+        showFeedback(`The cat left a ${name} in your stores.`, 'gain');
+      } else {
+        pileState.spawnPile({ item, quantity: 1, x: home.x, z: home.z });
+        showFeedback(
+          `Your stores are full — the cat left a ${name} by the door.`,
+          'info',
+        );
+      }
+      saveNow();
+    });
+    const offCatPresent = bus.on('cat:present', ({ item, x, z }) => {
+      pileState.spawnPile({ item, quantity: 1, x, z });
+      showFeedback(`The cat left a ${displayNameFor(item)} for you.`, 'gain');
+      saveNow();
+    });
+    const offCatGift = bus.on('cat:gift', ({ item, x, z }) => {
+      pileState.spawnPile({ item, quantity: 1, x, z });
+      const player = playerRef.current;
+      if (player && Math.hypot(player.x - x, player.z - z) <= 15) {
+        showFeedback(
+          `The cat has left a ${displayNameFor(item)} at the hearth.`,
+          'info',
+        );
+      }
       saveNow();
     });
     // TRAP ROW (Adam, 2026-10-28): the shell owns trap
@@ -5129,7 +5486,14 @@ export default function App() {
           ? `Pack full — ${p.yields.map((y) => `${y.item} × ${y.quantity}`).join(', ')} didn't fit.`
           : p.reason === 'below-permit'
             ? belowPermitText(p.sourceId)
-            : `Harvest failed: ${p.reason}.`;
+            : p.reason === 'not-removable'
+              ? // Backstop voice (2026-10-31): the offer
+                // chain no longer renders Remove for
+                // ground-class scatter, so this speaks
+                // only if a remove somehow still lands —
+                // in words, not the raw code. DRAFT line.
+                "That is the ground itself — it can't be taken up"
+              : `Harvest failed: ${p.reason}.`;
       showFeedback(text, 'blocked');
     });
     const offProgress = bus.on('harvest:progress', (p) => {
@@ -5190,6 +5554,11 @@ export default function App() {
       offFireLighting();
       offCompanionStance();
       offCompanionDeparted();
+      offCatMet();
+      offGuideCall();
+      offCatDelivered();
+      offCatPresent();
+      offCatGift();
       offTrapCatch();
       offTrapPlaced();
       offTrapHour();
@@ -5329,11 +5698,33 @@ export default function App() {
     setIntroOpen(true);
   };
 
+  // Consume the pending new world (claim 3): apply the
+  // folded dialog's collected name + seed through the
+  // ordinary Begin path. The stash clears FIRST, so no
+  // later boot can re-consume it; a stash riding a boot
+  // that somehow has a save is cleared and ignored (the
+  // folded flow only ever writes it alongside the park +
+  // clear + reload that guarantees a save-less boot).
+  useEffect(() => {
+    if (pendingNewWorld === null) return;
+    try {
+      window.localStorage.removeItem(PENDING_NEW_WORLD_KEY);
+    } catch {
+      /* a stuck stash is inert: firstRunDone already read it */
+    }
+    if (bootSave === null) {
+      handleFirstRunBegin(pendingNewWorld.name, pendingNewWorld.seed);
+    }
+    // Mount-only: bootSave and pendingNewWorld are
+    // first-render constants by construction.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Station presence from the real query at her position
   // (see the header): stump in range = workstation, placed
   // loom in range = loom — BOTH booleans, not one context.
-  // Its consumers are the StationPanel door (below) and
-  // the stationAnchor derivation — NOTHING ELSE: the
+  // Its consumers are availableStations and the
+  // stationAnchor derivation — NOTHING ELSE: the
   // crafting feed derives from the faced USE winner
   // (Adam's station law; see the derivation below
   // useWinner), and Background's presence cleanup
@@ -5462,6 +5853,26 @@ export default function App() {
   // yields while it is open (single Esc path).
   const [pendingRemoveTarget, setPendingRemoveTarget] =
     useState<HarvestTarget | null>(null);
+  // THE FAMILIAR'S RITE (Build 2, Piece 1): a rite act
+  // pressed at an altar-grade seat waits here for its
+  // confirm — the act, the animal, and the PRESS-TIME
+  // grade (the seat's grade when she asked; Systems
+  // re-checks it at execution). Null = no rite pending.
+  const [pendingRite, setPendingRite] = useState<{
+    act: 'elevate' | 'relinquish' | 'supersede';
+    creatureId: string;
+    grade: number;
+  } | null>(null);
+  // THE TEACHING BEAT (First-Fragment Presentation,
+  // 2026-10-31): a mark's first transcription waits
+  // here as a dismissible dialog (Popup family, no
+  // confirm — the dismissal is the lesson's end).
+  // First-ever and later-first carry different texts;
+  // the handler composes both. Null = no beat standing.
+  const [fragmentBeat, setFragmentBeat] = useState<{
+    title: string;
+    body: string;
+  } | null>(null);
 
   const executeCraftNow = (recipeId: string) => {
     const recipe = RECIPES.find((candidate) => candidate.id === recipeId);
@@ -6000,6 +6411,13 @@ export default function App() {
   const boneDisplayFor = (kind: string): string =>
     `Primal Bone - ${kind.replace(/-/g, ' ')}`;
 
+  // Companion kind label: the capitalized kind (the
+  // AnimalTag precedent — no name table invented). One
+  // helper: the panel rows and the rite's copy read the
+  // same spelling.
+  const companionKindLabel = (kind: string): string =>
+    kind.length > 0 ? kind.charAt(0).toUpperCase() + kind.slice(1) : kind;
+
   // Charm-list rows for the examination panel (charm-list
   // build, Systems 9e9a9dd): listCharms is the examination
   // contract — kind + tier + note in awakening order;
@@ -6014,16 +6432,34 @@ export default function App() {
     (record) => record.bond !== 'none',
   );
   const hasBondedCompanion = bondedCompanions.length > 0;
-  const companionRows = bondedCompanions.map((record) => ({
-    creatureId: record.creatureId,
-    kindLabel:
-      record.kind.length > 0
-        ? record.kind.charAt(0).toUpperCase() + record.kind.slice(1)
-        : record.kind,
-    bond: record.bond as 'companion' | 'familiar',
-    stance: record.stance,
-    isCat: record.kind === 'cat',
-  }));
+  // THE FAMILIAR LEADS (Build 2, Piece 4): the standing
+  // familiar's row seats first in the panel — the
+  // one-standing law made visible in the list's order.
+  // The sort is stable, so companions keep their record
+  // order behind it (at most one familiar can stand).
+  const companionRows = [...bondedCompanions]
+    .sort(
+      (a, b) =>
+        (a.bond === 'familiar' ? 0 : 1) - (b.bond === 'familiar' ? 0 : 1),
+    )
+    .map((record) => ({
+      creatureId: record.creatureId,
+      kindLabel: companionKindLabel(record.kind),
+      bond: record.bond as 'companion' | 'familiar',
+      stance: record.stance,
+      isCat: record.kind === 'cat',
+    }));
+  // THE HUNT NOTE (Piece 3): while the cat is out, its
+  // panel row says so — a live read of the engine actor
+  // composed over the notes map (renders tick with her
+  // movement, so the note keeps pace with the hunt). It
+  // overrides a theater line on the same row: the fact
+  // of the hunt outranks the joke until the cat is back.
+  const catActorNow = catActor();
+  const companionPanelNotes =
+    catActorNow !== null && catActorNow.hunt.phase !== 'none'
+      ? { ...companionNotes, [CAT_ID]: 'Out hunting' }
+      : companionNotes;
   const charmEntries = listCharms(charmStateRef.current).map((charm) => ({
     ...charm,
     display: boneDisplayFor(charm.kind),
@@ -6044,6 +6480,7 @@ export default function App() {
     setCraftingOpen(false);
     setCharmsOpen(false);
     setCompanionsOpen(false);
+    setJournalOpen(false);
   };
   const openCraftingPanel = () => {
     // THE FOLD: opening the dialog while a stump (plain
@@ -6063,6 +6500,7 @@ export default function App() {
     setInventoryOpen(false);
     setCharmsOpen(false);
     setCompanionsOpen(false);
+    setJournalOpen(false);
   };
   // E / touch USE / the name chip at a stump: open the
   // dialog on that stump's context, Craft door first.
@@ -6092,6 +6530,18 @@ export default function App() {
     setInventoryOpen(false);
     setCraftingOpen(false);
     setCharmsOpen(false);
+    setJournalOpen(false);
+  };
+  // The journal's door (First-Fragment Presentation):
+  // the Read verb on her journal / grimoire rows — the
+  // linked-books law makes them one door. A radio
+  // member: opening it closes its siblings.
+  const openJournalPanel = () => {
+    setJournalOpen(true);
+    setInventoryOpen(false);
+    setCraftingOpen(false);
+    setCharmsOpen(false);
+    setCompanionsOpen(false);
   };
 
   // COMPANION ACTS (build 1, 2026-10-31): the panel's
@@ -6101,6 +6551,79 @@ export default function App() {
   const refreshCompanions = () => {
     setCompanionRecords(companionStateRef.current.snapshot());
   };
+  // CAT PROVISIONING (Build 2, Piece 3): the shell's
+  // half of the hunt — Systems' catch data installed as
+  // the engine's table, the home/sleep facts installed
+  // as its probes (the boot effect installs both), and
+  // the delivery events answered by the boot listeners.
+  // Until the installs run the engine is armed but
+  // dark, by design.
+  //
+  // THE HOMED HOUSE (the reading, named): the house she
+  // is sheltered at when she is at one; else her sole
+  // house when exactly one stands; else none. No homed
+  // flag or last-slept record exists in the save — the
+  // pin pass can settle a truer fact later; this
+  // reading never invents one.
+  const homedHouse = () => {
+    const player = playerRef.current;
+    if (!player) return null;
+    const houses = shelterState.snapshot();
+    const shelteredId = shelterAt(player.x, player.z, houses).houseId;
+    if (shelteredId) {
+      return houses.find((house) => house.id === shelteredId) ?? null;
+    }
+    return houses.length === 1 ? houses[0] : null;
+  };
+  // THE SLEEP WINDOW (the reading, named): sleep itself
+  // is instant (request → dawn jump), so no asleep
+  // state spans any steps for a probe to read. The
+  // window reported here is the night she spends AT
+  // her home house — sheltered there while the sky is
+  // night — the only home-night the game has.
+  const catSleepingAtHome = (): boolean => {
+    const player = playerRef.current;
+    const home = homedHouse();
+    if (!player || !home) return false;
+    if (
+      shelterAt(player.x, player.z, shelterState.snapshot()).houseId !==
+      home.id
+    ) {
+      return false;
+    }
+    const sky = rendererRef.current?.snapshotSky();
+    if (!sky) return false;
+    return cycleSplit(sky.cycleT, SEASON_START_MONTH).isDay === false;
+  };
+  // Systems' catch set is the authority, and since
+  // Systems' cleanup (5c8143f) it names PREY KINDS
+  // verbatim ('fish', 'mice', 'voles' — roster kinds,
+  // colonies included), so this adapter is a
+  // pass-through now: the kinds read directly, and
+  // the carcass derives through trap-catch's
+  // catchItemFor — the ONE kind->carcass authority,
+  // whose colony mappings are already native. The
+  // inversion + colony alias table this function used
+  // to carry retired whole with the cleanup. The
+  // cast stays as the seam: the kinds ride Systems'
+  // strings, and a named kind the roster hasn't grown
+  // yet simply never matches live prey until it does.
+  const buildCatCatchTable = (): CatCatchTable => ({
+    kinds: provisioningCatchesFor('cat') as AnimalKind[],
+    itemFor: (kind) => catchItemFor(kind),
+    // The mouth prop: a vole rides the mouse prop as
+    // a DRAFT stand-in (DEV-approved; Models may add
+    // a true vole).
+    propFor: (kind) =>
+      kind === 'fish'
+        ? 'fish'
+        : (kind as string) === 'mouse' ||
+            (kind as string) === 'mice' ||
+            (kind as string) === 'vole' ||
+            (kind as string) === 'voles'
+          ? 'mouse'
+          : null,
+  });
   // THE CAT'S LINES (Adam, 2026-10-31 — the theater):
   // a stance press at a cat comes back with Systems'
   // typed 'cat' refusal, and the panel plays one of
@@ -6184,8 +6707,17 @@ export default function App() {
     // (the emitter-layering rule): the runtime hears
     // the release and starts the departure leg. Its
     // 'companion:departed' answer is met by the boot
-    // listener with Systems' idempotent clear.
-    bus.emit('companion:released', { id: creatureId });
+    // listener with Systems' idempotent clear. THE CAT
+    // is the exception (Piece 2): a found one does not
+    // depart — it returns to its hearth seat (Systems'
+    // law), the registry never held it, and no
+    // departure leg exists for it, so no released emit;
+    // its engine bond simply goes home.
+    if (removed.kind === 'cat') {
+      setCatBond('hearth');
+    } else {
+      bus.emit('companion:released', { id: creatureId });
+    }
     refreshCompanions();
     saveNow();
     // The last bond going closes the panel — its door
@@ -6354,6 +6886,10 @@ export default function App() {
         return;
       }
       bus.emit('companion:bonded', { id: winner.id, kind: winner.animalKind });
+      // The cat's bond arm (Piece 2): the registry
+      // never holds the cat — its engine bond lives in
+      // catRuntime, driven in from the record.
+      if (winner.animalKind === 'cat') setCatBond('attending');
       showFeedback(`The ${label} walks with you now.`, 'gain');
       refreshCompanions();
       saveNow();
@@ -6410,6 +6946,7 @@ export default function App() {
     setInventoryOpen(false);
     setCraftingOpen(false);
     setCompanionsOpen(false);
+    setJournalOpen(false);
     setSelectedCharmKind((current) =>
       charmEntries.some((charm) => charm.kind === current)
         ? current
@@ -6673,6 +7210,141 @@ export default function App() {
     refreshInventory();
     saveNow();
     refreshRitual();
+  };
+
+  // THE FAMILIAR'S RITE — PRESS + CONFIRM (Build 2,
+  // Piece 1). A press only ASKS: the pending rite waits
+  // for the Popup confirm (which names the animal, and
+  // for supersede names the displacement too). No
+  // presence gate in v1 (DEV ruling, 2026-10-31): she
+  // is the celebrant — staging already works the same
+  // way from her pack; Adam's playtest rules it later.
+  const handleRiteAct = (actId: string, grade: number | null) => {
+    const split = actId.indexOf(':');
+    if (split < 0) return;
+    const act = actId.slice(0, split);
+    const creatureId = actId.slice(split + 1);
+    if (act !== 'elevate' && act !== 'relinquish' && act !== 'supersede') {
+      return;
+    }
+    if (grade === null || grade < 2) {
+      // The seats never pass rows below grade; this is
+      // the backstop voice if one somehow speaks.
+      setRitualNote(RITUAL_ALTAR_REFUSAL);
+      return;
+    }
+    setPendingRite({ act, creatureId, grade });
+  };
+
+  // The engine arms of a landed bond change: the cat
+  // rides its own runtime's bond level; every other
+  // animal rides the registry's movement model (the
+  // familiar's settle-and-dart cycle vs the companion's
+  // trail). The record is the truth; these are only
+  // its motion and light.
+  const applyBondEngineArms = (
+    creatureId: string,
+    level: 'familiar' | 'companion',
+  ) => {
+    const record = companionStateRef.current
+      .snapshot()
+      .find((r) => r.creatureId === creatureId);
+    if (!record) return;
+    if (record.kind === 'cat') {
+      setCatBond(level === 'familiar' ? 'familiar' : 'attending');
+    } else {
+      setMovementMode(
+        creatureId,
+        level === 'familiar' ? 'settleDart' : 'trail',
+      );
+    }
+  };
+
+  // Rite refusal voices (all DRAFT, Adam's pin pass):
+  // one honest line per code, spoken through the
+  // ritual note like every altar refusal.
+  const riteRefusalNote = (
+    code: string,
+    targetKind: string,
+    standingKind?: string,
+  ): string => {
+    switch (code) {
+      case 'ground':
+        return RITUAL_ALTAR_REFUSAL;
+      case 'one-standing':
+        return `${standingKind ?? 'Another'} stands as your familiar — let them step down, or raise the ${targetKind} in their place.`;
+      case 'already-familiar':
+        return `The ${targetKind} already stands as your familiar.`;
+      case 'not-familiar':
+        return `The ${targetKind} does not stand as your familiar.`;
+      case 'no-standing':
+        return `No familiar stands — the ${targetKind} can simply be raised.`;
+      default:
+        return 'The rite wants a companion.';
+    }
+  };
+
+  const confirmRite = () => {
+    const rite = pendingRite;
+    setPendingRite(null);
+    if (!rite) return;
+    const state = companionStateRef.current;
+    const kindOf = (id: string): string => {
+      const record = state.snapshot().find((r) => r.creatureId === id);
+      return record ? companionKindLabel(record.kind) : 'animal';
+    };
+    const targetKind = kindOf(rite.creatureId);
+    if (rite.act === 'elevate') {
+      const result = state.elevate(rite.creatureId, rite.grade);
+      if (result.ok === false) {
+        setRitualNote(
+          riteRefusalNote(
+            result.code,
+            targetKind,
+            result.code === 'one-standing' && result.standing
+              ? kindOf(result.standing)
+              : undefined,
+          ),
+        );
+        return;
+      }
+      applyBondEngineArms(rite.creatureId, 'familiar');
+      bus.emit('familiar:elevated', { id: rite.creatureId });
+      setRitualNote(`The ${targetKind} stands as your familiar now.`);
+    } else if (rite.act === 'relinquish') {
+      const result = state.relinquish(rite.creatureId, rite.grade);
+      if (result.ok === false) {
+        setRitualNote(riteRefusalNote(result.code, targetKind));
+        return;
+      }
+      applyBondEngineArms(rite.creatureId, 'companion');
+      bus.emit('familiar:relinquished', { id: rite.creatureId });
+      setRitualNote(
+        `The ${targetKind} steps down — still your companion, still your friend.`,
+      );
+    } else {
+      const standingBefore = state.familiar();
+      const result = state.supersede(rite.creatureId, rite.grade);
+      if (result.ok === false) {
+        setRitualNote(riteRefusalNote(result.code, targetKind));
+        return;
+      }
+      if (standingBefore) {
+        applyBondEngineArms(standingBefore.creatureId, 'companion');
+      }
+      applyBondEngineArms(rite.creatureId, 'familiar');
+      bus.emit('familiar:superseded', {
+        id: rite.creatureId,
+        displaced: standingBefore?.creatureId ?? '',
+      });
+      setRitualNote(
+        standingBefore
+          ? `The ${targetKind} rises; the ${kindOf(standingBefore.creatureId)} steps down.`
+          : `The ${targetKind} stands as your familiar now.`,
+      );
+    }
+    setCompanionRecords(state.snapshot());
+    saveNow();
   };
 
   const handleGiveOffering = (
@@ -7786,8 +8458,21 @@ export default function App() {
     };
   })();
 
-  const pileMenuActions = (pile: PileTarget): ContextAction[] => {
-    const actions: ContextAction[] = [];
+  // The pile modal's model, as unified item rows + verbs
+  // (Inventory Unification, 2026-10-31 — this replaces the
+  // ContextAction dialect pileMenuActions used to build;
+  // the worn-gear and counts rules below are unchanged,
+  // only the shape moved). Verb ids stay the standing
+  // pile action ids ('take-one:<kind>' etc.) so
+  // handlePileAction dispatches them verbatim.
+  const pileModalModel = (
+    pile: PileTarget,
+  ): {
+    items: InventoryItem[];
+    verbsByItem: ReadonlyMap<string, ItemListVerb[]>;
+  } => {
+    const items: InventoryItem[] = [];
+    const verbsByItem = new Map<string, ItemListVerb[]>();
     const pileKinds = new Set(
       pile.stacks.map((stack) => normalizeItemId(stack.item as ItemId)),
     );
@@ -7795,46 +8480,47 @@ export default function App() {
       const name = displayNameFor(stack.item);
       const carried = inventory.count(stack.item as ItemId);
       const noCarried = carried <= 0;
-      // Worn gear is never droppable: deposit arrows are
+      // Worn gear is never droppable: deposit verbs are
       // GONE for worn-gear kinds (not disabled), while Take
-      // arrows stay as the recovery path.
+      // verbs stay as the recovery path.
       const isWornGear = wornGear.ids.has(
         normalizeItemId(stack.item as ItemId),
       );
-      actions.push({
-        id: `kind:${stack.item}`,
-        label: name,
-        counts: { pile: stack.quantity, carried },
-        disabledNote: noCarried ? `Needs carried ${name}` : undefined,
-        arrows: [
-          {
-            id: `take-one:${stack.item}`,
-            glyph: '↑',
-            ariaLabel: `Pick up one ${name}`,
-          },
-          {
-            id: `take-all:${stack.item}`,
-            glyph: '↑↑',
-            ariaLabel: `Pick up all ${name}`,
-          },
-          ...(isWornGear
-            ? []
-            : [
-                {
-                  id: `deposit-one:${stack.item}`,
-                  glyph: '↓',
-                  ariaLabel: `Drop one ${name} here`,
-                  disabled: noCarried,
-                },
-                {
-                  id: `deposit-all:${stack.item}`,
-                  glyph: '↓↓',
-                  ariaLabel: `Drop all ${name} here`,
-                  disabled: noCarried,
-                },
-              ]),
-        ],
+      items.push({
+        id: stack.item,
+        name,
+        category: categoryFor(stack.item as ItemId),
+        titleMeta: `pile ×${stack.quantity} · carried ×${carried}`,
+        note: noCarried ? `Needs carried ${name}` : undefined,
       });
+      verbsByItem.set(stack.item, [
+        {
+          id: `take-one:${stack.item}`,
+          glyph: '↑',
+          ariaLabel: `Pick up one ${name}`,
+        },
+        {
+          id: `take-all:${stack.item}`,
+          glyph: '↑↑',
+          ariaLabel: `Pick up all ${name}`,
+        },
+        ...(isWornGear
+          ? []
+          : [
+              {
+                id: `deposit-one:${stack.item}`,
+                glyph: '↓',
+                ariaLabel: `Drop one ${name} here`,
+                disabled: noCarried,
+              },
+              {
+                id: `deposit-all:${stack.item}`,
+                glyph: '↓↓',
+                ariaLabel: `Drop all ${name} here`,
+                disabled: noCarried,
+              },
+            ]),
+      ]);
     }
     for (const stack of inventory.stacksSnapshot()) {
       if (pileKinds.has(stack.item)) continue;
@@ -7842,26 +8528,26 @@ export default function App() {
       // entry at all (no deposit path, nothing to take).
       if (wornGear.ids.has(normalizeItemId(stack.item as ItemId))) continue;
       const name = displayNameFor(stack.item);
-      actions.push({
-        id: `kind:${stack.item}`,
-        label: name,
-        counts: { pile: 0, carried: stack.quantity },
-        arrows: [
-          {
-            id: `deposit-one:${stack.item}`,
-            glyph: '↓',
-            ariaLabel: `Drop one ${name} here`,
-          },
-          {
-            id: `deposit-all:${stack.item}`,
-            glyph: '↓↓',
-            ariaLabel: `Drop all ${name} here`,
-          },
-        ],
+      items.push({
+        id: stack.item,
+        name,
+        category: categoryFor(stack.item as ItemId),
+        titleMeta: `pile ×0 · carried ×${stack.quantity}`,
       });
+      verbsByItem.set(stack.item, [
+        {
+          id: `deposit-one:${stack.item}`,
+          glyph: '↓',
+          ariaLabel: `Drop one ${name} here`,
+        },
+        {
+          id: `deposit-all:${stack.item}`,
+          glyph: '↓↓',
+          ariaLabel: `Drop all ${name} here`,
+        },
+      ]);
     }
-    actions.push({ id: 'close', label: 'Close' });
-    return actions;
+    return { items, verbsByItem };
   };
 
   // Multi-kind pile menu press. The menu STAYS OPEN after a
@@ -8007,79 +8693,51 @@ export default function App() {
       saveNow();
       return;
     }
-    const sep = actionId.indexOf(':');
-    if (sep < 0) return;
-    const verb = actionId.slice(0, sep);
-    const kind = actionId.slice(sep + 1);
-    const name = displayNameFor(kind);
-    const syncWorn = () => {
-      inventory.setWorn(wardrobe.wornItemIds());
-      setWornGarments(wardrobe.wornGarments());
-    };
-    const storeOne = (): boolean => {
-      try {
-        store.add(kind as ItemId, 1);
-        inventory.remove(kind as ItemId, 1);
-        homeStoreItemsRef.current.get(shelterHouseId)?.add(kind);
-        syncWorn();
-        return true;
-      } catch {
-        return false;
-      }
-    };
-    const takeOne = (): boolean => {
-      try {
-        inventory.add(kind as ItemId, 1);
-        store.remove(kind as ItemId, 1);
-        if (store.count(kind as ItemId) === 0) {
-          homeStoreItemsRef.current.get(shelterHouseId)?.delete(kind);
+    if (actionId === 'upgrade') {
+      // HOME-SCREEN UPGRADE (Adam's principle, 2026-10-31):
+      // Systems' helper takes the price from her pack
+      // (nothing consumed on a refusal); the engine's
+      // in-place upgrade then climbs the standing house
+      // — the same composition tail as the placement
+      // pill's press, minus the carried house item.
+      if (!house) return;
+      const result = consumeHomeUpgradePrice(store.houseType(), inventory);
+      if (result.ok === false) {
+        if (result.code === 'missing' && result.missing) {
+          sayHouse(
+            `Not enough — ${result.missing
+              .map(
+                (m) => `${displayNameFor(m.item)} (${m.held}/${m.needed})`,
+              )
+              .join(' · ')}`,
+          );
         }
-        syncWorn();
-        return true;
-      } catch {
-        return false;
+        return;
       }
-    };
-    if (verb === 'store-one') {
-      if (!storeOne()) {
-        sayHouse(`Home storage full — no room for ${name}.`);
-      }
-    } else if (verb === 'store-all') {
-      const carried = inventory.count(kind as ItemId);
-      let stored = 0;
-      while (inventory.count(kind as ItemId) > 0) {
-        if (!storeOne()) break;
-        stored += 1;
-      }
-      if (stored < carried) {
-        sayHouse(
-          `Stored ${stored} of ${carried} ${name} — home storage full.`,
-        );
-      }
-    } else if (verb === 'take-one') {
-      if (!takeOne()) {
-        sayHouse(`Pack full — no room for ${name}.`);
-      }
-    } else if (verb === 'take-all') {
-      while (store.count(kind as ItemId) > 0) {
-        if (!takeOne()) {
-          sayHouse(`Pack full — no room for ${name}.`);
-          break;
-        }
-      }
-    } else {
+      const newType = HOME_RUNG_TO_TYPE[result.to];
+      if (newType === undefined) return;
+      if (!shelterState.upgradeHouse(house.id, newType)) return;
+      store.setHouse(result.to as ItemId);
+      applyShelterHouse(house.id);
+      refreshInventory();
+      saveNow();
       return;
     }
-    refreshInventory();
-    saveNow();
+    // No transfer arms remain (landing 2, 2026-10-31):
+    // the menu offers no Store/Take ids anymore, so
+    // nothing dispatches past the upgrade arm. The
+    // panel's Deposit/Withdraw handlers are the
+    // transfers now, and they are separate functions.
   };
 
   const handleRemove = (target: HarvestTarget) => {
     // Same shape as a harvest press, action 'remove' (Background's
     // documented shape, 2003619): the outcome listener resolves
-    // it into the bigger one-time yield or an honest failure
-    // ('not-removable' for logs, stones, and the like). Nothing
-    // here pre-judges removability or previews a yield.
+    // it into the bigger one-time yield or an honest failure.
+    // The doors pre-judge removability now (the offer's
+    // honesty, 2026-10-31) — this press is reachable only
+    // for removable targets; the outcome stays the
+    // backstop, and no yield is previewed here.
     bus.emit('harvest:requested', removeRequestFor(target));
   };
 
@@ -8143,6 +8801,9 @@ export default function App() {
                     // Same display rule as panel rows above:
                     // storage rows are panel rows too.
                     name: displayNameFor(id),
+                    // Category for the unified surface's
+                    // grouped order (2026-10-31).
+                    category: categoryFor(id as ItemId),
                     // Same note rule as personal rows (the
                     // one itemNoteFor helper — descriptor
                     // wiring, 2026-10-29).
@@ -8164,14 +8825,12 @@ export default function App() {
         }
       : undefined;
 
-  // Home menu actions (Adam, 2026-10-28): Rest + Store +
-  // Take kind-entries for the sheltering house. Entries
-  // derive per render from live inventory + store, so the
-  // menu re-renders in place after every press (pile
-  // precedent) and never auto-closes — not even when the
-  // store empties. Store entries skip worn-gear kinds
-  // (never droppable; the worn-gear landing's set); Take
-  // entries do not skip (recovery).
+  // Home menu actions (Adam, 2026-10-28; transfers
+  // retired 2026-10-31, landing 2 — see the note at the
+  // close push below): Sleep + Upgrade + Close for the
+  // sheltering house. The Upgrade row derives per render
+  // from the live store, so the menu re-renders in place
+  // after a press and never auto-closes.
   const homeMenuActions = (): ContextAction[] => {
     if (!shelterHouseId) return [];
     const store = openHomeStore;
@@ -8183,51 +8842,48 @@ export default function App() {
         disabledNote: isNight ? undefined : 'Night only',
       },
     ];
-    for (const stack of inventory.stacksSnapshot()) {
-      if (wornGear.ids.has(normalizeItemId(stack.item as ItemId))) continue;
-      const name = displayNameFor(stack.item);
-      const stored = store?.count(stack.item as ItemId) ?? 0;
+    // UPGRADE (Adam's home-screen principle, 2026-10-31:
+    // an upgrade needs no station, so its button lives
+    // on the home screen, paying the next rung's recipe
+    // price from her pack right there). Systems'
+    // nextHomeUpgrade prices the row — null at the top
+    // rung (no row: menus don't carry tombstones) — and
+    // its ingredients, counted against her pack, are
+    // the row's countsText and its disabled note.
+    const upgrade = store ? nextHomeUpgrade(store.houseType()) : null;
+    if (upgrade !== null) {
+      const price = upgrade.recipe.ingredients.map((ingredient) => {
+        const item = normalizeItemId(ingredient.item);
+        return {
+          name: displayNameFor(item),
+          held: inventory.count(item),
+          needed: ingredient.quantity,
+        };
+      });
+      const short = price.filter((part) => part.held < part.needed);
       actions.push({
-        id: `store-kind:${stack.item}`,
-        label: name,
-        countsText: `carried ×${stack.quantity} · stored ×${stored}`,
-        arrows: [
-          {
-            id: `store-one:${stack.item}`,
-            glyph: '↓',
-            ariaLabel: `Store one ${name}`,
-          },
-          {
-            id: `store-all:${stack.item}`,
-            glyph: '↓↓',
-            ariaLabel: `Store all ${name}`,
-          },
-        ],
+        id: 'upgrade',
+        label: `Upgrade to ${upgrade.recipe.name}`,
+        countsText: price
+          .map((part) => `${part.name} ${part.held}/${part.needed}`)
+          .join(' · '),
+        disabled: short.length > 0,
+        disabledNote:
+          short.length > 0
+            ? `Missing: ${short
+                .map((part) => `${part.name} (${part.held}/${part.needed})`)
+                .join(' · ')}`
+            : undefined,
       });
     }
-    for (const id of openHomeIds) {
-      const held = store?.count(id as ItemId) ?? 0;
-      if (held <= 0) continue;
-      const name = displayNameFor(id);
-      const carried = inventory.count(id as ItemId);
-      actions.push({
-        id: `take-kind:${id}`,
-        label: name,
-        countsText: `stored ×${held} · carried ×${carried}`,
-        arrows: [
-          {
-            id: `take-one:${id}`,
-            glyph: '↑',
-            ariaLabel: `Take one ${name}`,
-          },
-          {
-            id: `take-all:${id}`,
-            glyph: '↑↑',
-            ariaLabel: `Take all ${name}`,
-          },
-        ],
-      });
-    }
+    // NO TRANSFER ROWS (Inventory Unification landing 2,
+    // Adam's ruling 2026-10-31 — 'a good streamline'):
+    // the Store/Take kind entries that used to derive
+    // here are RETIRED; the home menu is Sleep /
+    // Upgrade / Close, and transfers live only in the
+    // unified surfaces (her pack panel's Deposit /
+    // Withdraw, one tap away at home). Revisit only on
+    // Adam's word.
     actions.push({ id: 'close', label: 'Close' });
     return actions;
   };
@@ -8374,17 +9030,21 @@ export default function App() {
       : piles.reduce((best, pile) =>
           pile.distance < best.distance ? pile : best,
         );
-  const nearbyPile =
+  // The nearby-pile section's rows, AS ITEM ROWS (the
+  // unified shape, 2026-10-31): the panel's surface
+  // wants the same InventoryItem contract as every
+  // other list — name, category, and the counts riding
+  // the meta slot ('pile ×N · carried ×M', the text the
+  // section has always shown).
+  const nearbyPileItems =
     nearestPile === undefined
       ? undefined
-      : {
-          kinds: nearestPile.stacks.map((stack) => ({
-            id: stack.item,
-            name: displayNameFor(stack.item),
-            pileQuantity: stack.quantity,
-            carriedQuantity: inventory.count(stack.item as ItemId),
-          })),
-        };
+      : nearestPile.stacks.map((stack) => ({
+          id: stack.item,
+          name: displayNameFor(stack.item),
+          category: categoryFor(stack.item as ItemId),
+          titleMeta: `pile ×${stack.quantity} · carried ×${inventory.count(stack.item as ItemId)}`,
+        }));
 
   // The fire whose lighting menu is open, with its anchor.
   const selectedFire =
@@ -8674,6 +9334,50 @@ export default function App() {
     return acts;
   })();
 
+  // THE FAMILIAR'S RITE ROWS (Build 2, Piece 1): one
+  // guarded act per bonded animal, derived from the
+  // records — the standing familiar offers its step
+  // down; a companion offers its raising, shaped by
+  // whether the familiar's place stands empty (raise)
+  // or filled (raise in their place). The seats pass
+  // these only at altar-grade ground (grade 2); the
+  // confirm + Systems' transitions re-check everything
+  // at execution, so a row gone stale refuses honestly
+  // through the note.
+  const standingFamiliarRecord = bondedCompanions.find(
+    (record) => record.bond === 'familiar',
+  );
+  // The pending rite's render facts (Piece 1): the
+  // confirm names the animal from its live record —
+  // and, for supersede, the standing familiar it would
+  // displace.
+  const pendingRiteRecord =
+    pendingRite === null
+      ? undefined
+      : companionRecords.find(
+          (record) => record.creatureId === pendingRite.creatureId,
+        );
+  const riteActs: { id: string; label: string }[] = bondedCompanions.map(
+    (record) => {
+      const label = companionKindLabel(record.kind);
+      if (record.bond === 'familiar') {
+        return {
+          id: `relinquish:${record.creatureId}`,
+          label: `Let the ${label} step down`,
+        };
+      }
+      return standingFamiliarRecord
+        ? {
+            id: `supersede:${record.creatureId}`,
+            label: `Raise the ${label} in the ${companionKindLabel(standingFamiliarRecord.kind)}'s place`,
+          }
+        : {
+            id: `elevate:${record.creatureId}`,
+            label: `Raise the ${label} as your familiar`,
+          };
+    },
+  );
+
   // The pile whose menu is open, with its anchor.
   // Live menu pile: the menu renders from piles state, not a
   // tap-time snapshot (see the state comment above).
@@ -8698,13 +9402,17 @@ export default function App() {
   // FIRST-RUN DIALOG (Adam, 2026-10-28): on a no-save
   // boot the dialog comes FIRST and the intro second.
   // firstRunDone starts true when a save exists (the
-  // dialog never shows) and flips true on dialog Begin;
+  // dialog never shows), when a pending new world rides
+  // the reload (the folded dialog was already begun),
+  // and flips true on dialog Begin;
   // introOpen's init reads it, so the intro cannot open
   // under the dialog. Declared BEFORE introOpen — an
   // initializer reading a later-declared const is a TDZ
   // crash (the #17 lesson), and the dialog predicate
   // below reads both.
-  const [firstRunDone, setFirstRunDone] = useState(bootSave !== null);
+  const [firstRunDone, setFirstRunDone] = useState(
+    bootSave !== null || pendingNewWorld !== null,
+  );
 
   // Intro modal: open on first run — no save at boot (a corrupt
   // save reads as null, so it reads as fresh too). Gated by
@@ -8747,12 +9455,15 @@ export default function App() {
       craftingOpen ||
       charmsOpen ||
       companionsOpen ||
+      journalOpen ||
       placement !== null ||
       selectedSiteId !== null ||
       optionsOpen ||
       introOpen ||
       pendingTrapRecipe ||
       pendingRemoveTarget !== null ||
+      pendingRite !== null ||
+      fragmentBeat !== null ||
       paused
     ) {
       return null;
@@ -8816,12 +9527,15 @@ export default function App() {
       craftingOpen ||
       charmsOpen ||
       companionsOpen ||
+      journalOpen ||
       placement !== null ||
       selectedSiteId !== null ||
       optionsOpen ||
       introOpen ||
       pendingTrapRecipe ||
       pendingRemoveTarget !== null ||
+      pendingRite !== null ||
+      fragmentBeat !== null ||
       paused
     ) {
       return null;
@@ -8904,6 +9618,8 @@ export default function App() {
         introOpen ||
         pendingTrapRecipe ||
         pendingRemoveTarget !== null ||
+        pendingRite !== null ||
+        fragmentBeat !== null ||
         leaveConfirmOpen
       ) {
         return;
@@ -8938,6 +9654,10 @@ export default function App() {
         setRitualNote(null);
         return;
       }
+      if (journalOpen) {
+        setJournalOpen(false);
+        return;
+      }
       if (companionsOpen) {
         setCompanionsOpen(false);
         return;
@@ -8963,6 +9683,8 @@ export default function App() {
     introOpen,
     pendingTrapRecipe,
     pendingRemoveTarget,
+    pendingRite,
+    fragmentBeat,
     placement,
     homeMenuOpen,
     selectedPileId,
@@ -8972,6 +9694,7 @@ export default function App() {
     selectedSiteId,
     charmsOpen,
     companionsOpen,
+    journalOpen,
     craftingOpen,
     inventoryOpen,
     firstRunDone,
@@ -9120,6 +9843,8 @@ export default function App() {
     const dialogUp =
       pendingTrapRecipeId !== null ||
       pendingRemoveTarget !== null ||
+      pendingRite !== null ||
+      fragmentBeat !== null ||
       leaveConfirmOpen ||
       cloudPendingBring !== null ||
       cloudPendingRemove !== null ||
@@ -9182,6 +9907,8 @@ export default function App() {
     craftContextSiteId,
     pendingTrapRecipeId,
     pendingRemoveTarget,
+    pendingRite,
+    fragmentBeat,
     leaveConfirmOpen,
     cloudPendingBring,
     cloudPendingRemove,
@@ -9234,6 +9961,8 @@ export default function App() {
     introOpen,
     pendingTrapRecipe,
     pendingRemoveTarget,
+    pendingRite,
+    fragmentBeat,
     placement,
     homeMenuOpen,
     selectedPileId,
@@ -9242,6 +9971,7 @@ export default function App() {
     selectedSiteId,
     charmsOpen,
     companionsOpen,
+    journalOpen,
     craftingOpen,
     inventoryOpen,
     firstRunDialogOpen,
@@ -9433,7 +10163,53 @@ export default function App() {
         verb: 'offer' | 'speak' | 'snatch';
         item?: ItemId;
         distance: number;
+      }
+    | {
+        kind: 'fragment';
+        fragmentId: string;
+        mark: string;
+        completeness: number;
+        distance: number;
       };
+
+  // A fragment carrier as the winner consumes it: the
+  // facts Background names on a faced inscription (its
+  // stable id, its mark, its weathering).
+  type FragmentCarrier = {
+    fragmentId: string;
+    mark: string;
+    completeness: number;
+    x: number;
+    z: number;
+  };
+
+  // FRAGMENT CARRIERS — THE SEAM, FILLED (First-
+  // Fragment Presentation, 2026-10-31; the fill rides
+  // #44 as its final inclusion, 2026-11-01): the
+  // carriers she can transcribe are Background's
+  // facts, and this function is the one place the
+  // shell reads them — Background's projection over
+  // all five carrier classes (carriers.ts, 3191082),
+  // asked for exactly the winner's own range; the
+  // challenger loop below applies facing + range on
+  // top, as it does for the trap and the hive. While
+  // the facts were unlanded this returned an empty
+  // list and the TRANSCRIBE verb stood armed but dark
+  // (the raven guide's dormancy pattern); on this
+  // fill the presentation goes live whole.
+  const fragmentCarriersHere = (): FragmentCarrier[] => {
+    const player = playerRef.current;
+    const gen = genRef.current;
+    if (!player || !gen) return [];
+    return carriersHere(
+      gen.seed,
+      gen.findSpawn(),
+      (x, z) => gen.weightsAt(x, z),
+      player.x,
+      player.z,
+      HARVEST_RANGE,
+    );
+  };
 
   // GROVE TREE FACT (Adam, 2026-10-30): a scatter target
   // is one of the Grove's own trees when its source fells
@@ -9557,6 +10333,23 @@ export default function App() {
           kind: 'hive',
           x: hiveRowHive.x,
           z: hiveRowHive.z,
+          distance: f.distance,
+        });
+      }
+    }
+    // FRAGMENT CARRIERS (First-Fragment Presentation):
+    // a faced carrier in range challenges like the
+    // trap and the hive (the seam above
+    // computeUseWinner reads Background's facts).
+    for (const carrier of fragmentCarriersHere()) {
+      const f = facingOf(carrier.x, carrier.z);
+      if (f.distance <= HARVEST_RANGE) anyCandidateInRange = true;
+      if (f.isFaced && f.distance <= HARVEST_RANGE) {
+        challengers.push({
+          kind: 'fragment',
+          fragmentId: carrier.fragmentId,
+          mark: carrier.mark,
+          completeness: carrier.completeness,
           distance: f.distance,
         });
       }
@@ -9811,6 +10604,73 @@ export default function App() {
   // range + permit, so a stale press fails safely). The
   // zero-arg player.pressUse() path is NOT used (its
   // shell query has no callers).
+  // TRANSCRIBE (First-Fragment Presentation,
+  // 2026-10-31): the pill/E press at a faced carrier.
+  // Systems' FragmentState judges (the journal gate,
+  // the already-noted gate) and records; the shell
+  // voices the outcome. A mark's FIRST copy raises the
+  // teaching beat (a dialog, not a feed line — the
+  // moment is the lesson); the threshold-reaching copy
+  // adds its completion line to the feed. All lines
+  // DRAFT. hasJournal reads the journal ITSELF (the
+  // build's standing reading of Systems' gate, flagged
+  // for Adam's pin pass: the grimoire mirrors the
+  // journal by the linked-books law but is not the
+  // carried book).
+  const handleTranscribe = (winner: {
+    fragmentId: string;
+    mark: string;
+    completeness: number;
+  }): void => {
+    const state = fragmentStateRef.current;
+    const day = rendererRef.current?.snapshotSky()?.daysElapsed ?? 0;
+    const result = state.inscribe(
+      winner.fragmentId,
+      winner.mark,
+      winner.completeness,
+      inventory.count(ITEMS.journal) >= 1,
+      day,
+    );
+    if (result.ok === false) {
+      if (result.code === 'no-journal') {
+        showFeedback('Wish I had a journal...', 'blocked');
+      } else {
+        showFeedback('Already in your journal.', 'info');
+      }
+      return;
+    }
+    const name = markDisplayName(winner.mark);
+    const tally = state.tallyFor(winner.mark);
+    showFeedback(
+      `Copied into your journal — the ${name} mark, ${result.count} of ${tally.needed}.` +
+        (result.bestImproved
+          ? ' A cleaner copy than the one you kept.'
+          : ''),
+      'gain',
+    );
+    if (result.first) {
+      // First-ever (the journal's only begun mark, at
+      // its first copy) teaches the whole pursuit; a
+      // later mark's first teaches the shorter form.
+      const firstEver =
+        state.snapshot().length === 1 && result.count === 1;
+      setFragmentBeat(
+        firstEver
+          ? {
+              title: `The ${name} mark`,
+              body: `A carved mark, copied into your journal. It is one piece of the ${name} mark — three fragments make its first tier whole. From now on you are looking for the rest, and your journal keeps the tally.`,
+            }
+          : {
+              title: `A new mark — ${name}`,
+              body: `The first piece of the ${name} mark, copied into your journal. Three fragments make its first tier whole.`,
+            },
+      );
+    } else if (result.tierComplete && result.count === tally.needed) {
+      showFeedback(`The ${name} mark — its first tier is whole.`, 'gain');
+    }
+    saveNow();
+  };
+
   const handleUseInteract = (): void => {
     const player = playerRef.current;
     if (!player) return;
@@ -9866,6 +10726,12 @@ export default function App() {
         // the same act the creature pill runs.
         handleCreatureInteract(winner);
         break;
+      case 'fragment':
+        // The faced carrier's verb (First-Fragment
+        // Presentation) — the same act the fragment
+        // pill runs.
+        handleTranscribe(winner);
+        break;
       case 'torch':
         // TORCH PICKUP ON E (Adam, 2026-10-31): E at a
         // faced placed torch picks it up — the same
@@ -9910,11 +10776,11 @@ export default function App() {
 
   // R — the winner's SECOND action (Adam, 2026-10-29,
   // tentative made real for the seconds that exist
-  // today): scatter → Remove (the SAME confirm Shift+E
-  // arms — R sits ALONGSIDE Shift+E, which stays as
-  // pinned; the difference is scope: Shift+E reaches
-  // the nearest scatter whatever the winner is, R acts
-  // on the winner); pile → pick up the WHOLE pile on
+  // today): removable scatter → Remove (the SAME confirm
+  // Shift+E arms — R sits ALONGSIDE Shift+E, which stays
+  // as pinned; the difference is scope: Shift+E reaches
+  // the nearest removable scatter whatever the winner is,
+  // R acts on the winner); pile → pick up the WHOLE pile on
   // the existing pickup path (Adam pinned: "R can pick
   // up the whole pile if possible" — the grant's own
   // capacity behavior, no second rule); torch → Pick
@@ -9928,7 +10794,12 @@ export default function App() {
     if (winner === null) return;
     switch (winner.kind) {
       case 'scatter':
-        setPendingRemoveTarget(winner.target);
+        // The Remove offer's honesty (2026-10-31): R
+        // arms the confirm only where Remove may be
+        // offered — ground-class scatter gets nothing.
+        if (winner.target.removable) {
+          setPendingRemoveTarget(winner.target);
+        }
         break;
       case 'pile':
         bus.emit('pile:pickup-requested', { pileId: winner.pile.id });
@@ -9979,11 +10850,16 @@ export default function App() {
       return;
     }
     if (selectedPile !== null) {
-      const target = flattenMenuTargets(pileMenuActions(selectedPile))[
-        digit - 1
-      ];
+      // The pile modal's verbs come from its surface's
+      // reported VISIBLE list (unification) — digits hit
+      // what the badges show, in visible order.
+      const visible = pileVisibleVerbsRef.current;
+      const target =
+        visible !== null && visible.pileId === selectedPile.id
+          ? visible.verbs[digit - 1]
+          : undefined;
       if (target && !target.disabled) {
-        handlePileAction(selectedPile, target.id);
+        handlePileAction(selectedPile, target.verbId);
       }
       return;
     }
@@ -10089,7 +10965,7 @@ export default function App() {
   // ritual/site panel, the world menus (home / torch /
   // tent / fire selections — they take clicks as well
   // as digits, so they are IN), the confirms
-  // (RemoveConfirm, trap-recipe, the four cloud
+  // (the remove confirm, trap-recipe, the four cloud
   // confirms), and the paused veil (its resume is a
   // click). Nothing re-locks on close — the standing
   // "Click the world to capture the mouse" legend line
@@ -10110,6 +10986,7 @@ export default function App() {
       craftingOpen ||
       charmsOpen ||
       companionsOpen ||
+      journalOpen ||
       optionsOpen ||
       introOpen ||
       firstRunDialogOpen ||
@@ -10119,6 +10996,8 @@ export default function App() {
       selectedFireId !== null ||
       selectedSiteId !== null ||
       pendingRemoveTarget !== null ||
+      pendingRite !== null ||
+      fragmentBeat !== null ||
       pendingTrapRecipe !== null ||
       cloudPendingBring !== null ||
       cloudPendingRemove !== null ||
@@ -10133,6 +11012,7 @@ export default function App() {
     craftingOpen,
     charmsOpen,
     companionsOpen,
+    journalOpen,
     optionsOpen,
     introOpen,
     firstRunDialogOpen,
@@ -10142,6 +11022,8 @@ export default function App() {
     selectedFireId,
     selectedSiteId,
     pendingRemoveTarget,
+    pendingRite,
+    fragmentBeat,
     pendingTrapRecipe,
     cloudPendingBring,
     cloudPendingRemove,
@@ -10188,6 +11070,8 @@ export default function App() {
         introOpen ||
         pendingTrapRecipe ||
         pendingRemoveTarget !== null ||
+        pendingRite !== null ||
+        fragmentBeat !== null ||
         firstRunDialogOpen
       ) {
         return;
@@ -10238,7 +11122,7 @@ export default function App() {
       // waits. (Before this, only the open panel's own
       // key did anything here — I then K was blocked
       // by the open Inventory. That was the bug.)
-      if (inventoryOpen || craftingOpen || charmsOpen || companionsOpen) {
+      if (inventoryOpen || craftingOpen || charmsOpen || companionsOpen || journalOpen) {
         if (key === 'i') toggleInventoryPanel();
         else if (key === 'k') toggleCraftingPanel();
         else if (key === 'l') toggleCharmsPanel();
@@ -10266,7 +11150,8 @@ export default function App() {
           handleUseInteract();
         } else if (inventoryOpen && key === 'e' && e.shiftKey) {
           const scatter = harvestTargets.find(
-            (candidate) => candidate.kind === 'scatter',
+            (candidate) =>
+              candidate.kind === 'scatter' && candidate.removable,
           );
           if (scatter) setPendingRemoveTarget(scatter);
         }
@@ -10276,7 +11161,8 @@ export default function App() {
         handleUseInteract();
       } else if (key === 'e' && e.shiftKey) {
         const scatter = harvestTargets.find(
-          (candidate) => candidate.kind === 'scatter',
+          (candidate) =>
+            candidate.kind === 'scatter' && candidate.removable,
         );
         if (scatter) setPendingRemoveTarget(scatter);
       } else if (key === 'r') {
@@ -10298,10 +11184,13 @@ export default function App() {
     introOpen,
     pendingTrapRecipe,
     pendingRemoveTarget,
+    pendingRite,
+    fragmentBeat,
     inventoryOpen,
     craftingOpen,
     charmsOpen,
     companionsOpen,
+    journalOpen,
     handleUseInteract,
     handleSecondInteract,
     openCharmsPanel,
@@ -10354,6 +11243,8 @@ export default function App() {
         introOpen ||
         pendingTrapRecipe ||
         pendingRemoveTarget !== null ||
+        pendingRite !== null ||
+        fragmentBeat !== null ||
         craftingOpen ||
         charmsOpen ||
         companionsOpen
@@ -10383,10 +11274,13 @@ export default function App() {
     introOpen,
     pendingTrapRecipe,
     pendingRemoveTarget,
+    pendingRite,
+    fragmentBeat,
     inventoryOpen,
     craftingOpen,
     charmsOpen,
     companionsOpen,
+    journalOpen,
     placement,
     handleUseInteract,
     handleWorldPlaceTorch,
@@ -10645,7 +11539,7 @@ export default function App() {
   // for the canCraft checks below. Workstation presence
   // comes solely from stumps today, so "tree stump" is
   // truthful now; when presence learns kinds later, this
-  // mapping follows the kind per StationPanel's map.
+  // mapping follows the kind.
   const stationNote =
     availableStations.length === 0
       ? 'No station nearby'
@@ -10965,6 +11859,94 @@ export default function App() {
                 : 'Snatch',
         }
       : null;
+  // THE FRAGMENT'S PILL (First-Fragment Presentation,
+  // 2026-10-31): the fragment winner presents its row —
+  // the creature shape — with the transcribe verb as
+  // its label (DRAFT). The press runs the stored
+  // pick's act, the very act E performs (the contract).
+  const presentedFragment =
+    useWinner?.kind === 'fragment'
+      ? { id: useWinner.fragmentId, label: 'Transcribe the mark' }
+      : null;
+  // THE STRUCTURE TAG (2026-10-31): the nearest FACED
+  // singular within the tag range, derived per render
+  // (structures are static; her position state rides
+  // the movement tick, so the derivation never sits
+  // stale — the scatter tag's shape; AnimalTag polls
+  // only because animals move). Facing is the winner's
+  // own rule (dot > √½; <1 m counts as faced). The
+  // site derivations are memoized; the village
+  // contributes its non-'gone' plots individually.
+  // Surface only (site centers are surface facts).
+  // Display only: no candidacy, no verb (a name is not
+  // a door — the grove-tree law).
+  const structureTag = ((): { name: string; x: number; y: number } | null => {
+    const player = playerRef.current;
+    if (!player || dimensionState.isUnderground()) return null;
+    const gen = genRef.current;
+    if (!gen) return null;
+    const spawn = gen.findSpawn();
+    const weights = (x: number, z: number) => gen.weightsAt(x, z);
+    const candidates: { key: string; x: number; z: number }[] = [
+      { key: 'schoolhouse', ...schoolhouseSite(gen.seed, spawn, weights).center },
+      { key: 'farmhouse', ...farmhouseSite(gen.seed, spawn, weights).center },
+      { key: 'chapel', ...chapelSite(gen.seed, spawn, weights).center },
+      { key: 'general-store', ...generalStoreSite(gen.seed, spawn, weights).center },
+      { key: 'drowned-mill', ...drownedMillSite(gen.seed, spawn, weights).center },
+      { key: 'sunken-road', ...sunkenRoadSite(gen.seed, spawn, weights).center },
+      { key: 'rail-siding', ...railSidingSite(gen.seed, spawn, weights).center },
+      { key: 'barn', ...barnSite(gen.seed, spawn, weights).center },
+      { key: 'silo', ...siloSite(gen.seed, spawn, weights).center },
+      { key: 'water-tower', ...waterTowerSite(gen.seed, spawn, weights).center },
+    ];
+    for (const plot of villageSite(gen.seed, spawn, weights).plots) {
+      if (plot.state !== 'gone') {
+        candidates.push({ key: 'village-house', x: plot.x, z: plot.z });
+      }
+    }
+    const forwardX = Math.sin(player.facing);
+    const forwardZ = Math.cos(player.facing);
+    let best: { name: string; x: number; y: number } | null = null;
+    let bestDistance = Infinity;
+    for (const candidate of candidates) {
+      const name = STRUCTURE_TAG_NAMES[candidate.key];
+      if (!name) continue;
+      const dx = candidate.x - player.x;
+      const dz = candidate.z - player.z;
+      const distance = Math.hypot(dx, dz);
+      if (distance > STRUCTURE_TAG_RANGE_M || distance >= bestDistance) continue;
+      const faced =
+        distance < 1 ||
+        (dx * forwardX + dz * forwardZ) / distance > Math.SQRT1_2;
+      if (!faced) continue;
+      const anchor = projectAnchor(candidate.x, candidate.z, 'scatter');
+      if (!anchor) continue;
+      best = { name, x: anchor.x, y: anchor.y };
+      bestDistance = distance;
+    }
+    return best;
+  })();
+  // THE JOURNAL'S ROWS (First-Fragment Presentation):
+  // one row per BEGUN mark (Systems' snapshot lists
+  // begun marks only — the panel invents nothing),
+  // composed from the tally; the kept-best weathering
+  // reads as a word on a DRAFT scale.
+  const fragmentBestWord = (best: number | null): string | null =>
+    best === null ? null : best >= 0.75 ? 'clear' : best >= 0.4 ? 'worn' : 'faint';
+  const journalRows: JournalMarkRow[] = fragmentStateRef.current
+    .snapshot()
+    .map((progress) => {
+      const tally = fragmentStateRef.current.tallyFor(progress.mark);
+      return {
+        mark: progress.mark,
+        name: markDisplayName(progress.mark),
+        count: tally.count,
+        needed: tally.needed,
+        complete: tally.complete,
+        bestWord: fragmentBestWord(tally.best),
+        seekingSinceDay: progress.seekingSinceDay,
+      };
+    });
 
   // DESKTOP PILE PICKUP (see the header): the mouse twin
   // of R's pile second — shown only when the faced
@@ -11033,9 +12015,11 @@ export default function App() {
                   : useWinner.verb === 'speak'
                     ? 'SPEAK'
                     : 'SNATCH'
-                : useWinner.kind === 'site' &&
-                  useWinner.siteId.startsWith('stump:')
-                ? 'KRAFT'
+                : useWinner.kind === 'fragment'
+                  ? 'TRANSCRIBE'
+                  : useWinner.kind === 'site' &&
+                    useWinner.siteId.startsWith('stump:')
+                  ? 'KRAFT'
                 : useWinner.kind === 'cauldron'
                   ? 'RENDER'
                   : useWinner.kind === 'fire'
@@ -11316,10 +12300,12 @@ export default function App() {
                       ? 'Home storage — empty until first deposit'
                       : // POUNDS (Adam, 2026-10-28): same
                         // unit as the panel header above.
-                        `Stored ${openHomeStore.used()} lb / ${openHomeStore.capacity()} lb`}
-                  </p>
-                  <p className="text-xs text-stone-400">
-                    ↑ Take one · ↑↑ Take all · ↓ Store one · ↓↓ Store all
+                        // CARRIED rides along (Adam's
+                        // amendment, 2026-10-31): storage
+                        // decisions are pound decisions —
+                        // both pans of the scale on the
+                        // screen where she weighs them.
+                        `Stored ${formatLb(openHomeStore.used())} of ${formatLb(openHomeStore.capacity())} lb · Carrying ${formatLb(inventory.usedLb())} lb`}
                   </p>
                 </>
               }
@@ -11375,6 +12361,8 @@ export default function App() {
               onSiteAct={(actId) =>
                 selectedSiteId !== null && handleSiteAct(selectedSiteId, actId)
               }
+              riteActs={selectedSiteGrade === 2 ? riteActs : undefined}
+              onRiteAct={(actId) => handleRiteAct(actId, selectedSiteGrade)}
               showKeyHints={!isTouch}
               onStageBone={(kind) =>
                 selectedSiteId !== null &&
@@ -11442,6 +12430,12 @@ export default function App() {
           onCreature={() => {
             if (useWinner?.kind === 'creature') {
               handleCreatureInteract(useWinner);
+            }
+          }}
+          fragment={presentedFragment}
+          onTranscribe={() => {
+            if (useWinner?.kind === 'fragment') {
+              handleTranscribe(useWinner);
             }
           }}
           showKeyHints={!isTouch}
@@ -11711,33 +12705,14 @@ export default function App() {
               houseName={shelterHouseName}
             />
           </div>
-          {stationPresenceValue.workstation ? (
-            <div className="mt-2">
-              {/* STATION TITLE FOLLOWS THE UPGRADE
-                  (stumpy shell, 2026-10-28): the panel
-                  names the station she stands at — a
-                  stump that already carries the
-                  workstation addition reads 'Workbench'
-                  (the panel's own 'workstation' kind),
-                  a plain stump reads 'Tree stump'. */}
-              <StationPanel theme={lookThemes.world}
-                stationKind={
-                  nearestStump !== null &&
-                  stumpState.isWorkbench(nearestStump.x, nearestStump.z)
-                    ? 'workstation'
-                    : 'stump'
-                }
-                actions={[
-                  {
-                    id: 'craft',
-                    label: 'Craft',
-                    onSelect: () => openCraftingPanel(),
-                  },
-                ]}
-                comfortable={isTouch}
-              />
-            </div>
-          ) : null}
+          {/* THE STUMP'S ONE DOOR (dialog audit claim 2,
+              2026-10-31): the StationPanel presence card
+              that stood here is retired — its one act
+              (Craft) opened the same fold dialog E/K and
+              the stump chip already open through
+              openCraftingPanel, so the stump keeps ONE
+              door, the dialog, which names the stump in
+              its own heading. StationPanel is deleted. */}
           {placement ? (
             <div className="mt-2 rounded bg-black/45 px-2 py-1 text-sm">
               <p>Placing {placement.label} at your feet.</p>
@@ -11877,20 +12852,38 @@ export default function App() {
         }
       >
         {selectedPile ? (
-          <PileInventoryModal theme={lookThemes.world}
-            title={
-              selectedPile.stacks.length === 1
-                ? `${displayNameFor(selectedPile.stacks[0].item)} × ${selectedPile.stacks[0].quantity}`
-                : `Pile × ${selectedPile.stacks.reduce((sum, stack) => sum + stack.quantity, 0)} (${selectedPile.stacks.length} kinds)`
-            }
-            actions={pileMenuActions(selectedPile)}
-            showKeyHints={!isTouch}
-            onSelect={(id) => handlePileAction(selectedPile, id)}
-            onClose={() => {
-              selectedPileIdRef.current = null;
-              setSelectedPileId(null);
-            }}
-          />
+          (() => {
+            const pileModel = pileModalModel(selectedPile);
+            return (
+              <PileInventoryModal theme={lookThemes.world}
+                title={
+                  selectedPile.stacks.length === 1
+                    ? `${displayNameFor(selectedPile.stacks[0].item)} × ${selectedPile.stacks[0].quantity}`
+                    : `Pile × ${selectedPile.stacks.reduce((sum, stack) => sum + stack.quantity, 0)} (${selectedPile.stacks.length} kinds)`
+                }
+                items={pileModel.items}
+                verbsFor={(item) => pileModel.verbsByItem.get(item.id) ?? []}
+                onVerb={(_itemId, verbId) =>
+                  handlePileAction(selectedPile, verbId)
+                }
+                onVisibleVerbs={(verbs) => {
+                  pileVisibleVerbsRef.current = {
+                    pileId: selectedPile.id,
+                    verbs,
+                  };
+                }}
+                showKeyHints={!isTouch}
+                sortMode={inventorySort.mode}
+                sortReversed={inventorySort.reversed}
+                onSortChange={handleInventorySortChange}
+                categoryOrder={ITEM_CATEGORY_ORDER}
+                onClose={() => {
+                  selectedPileIdRef.current = null;
+                  setSelectedPileId(null);
+                }}
+              />
+            );
+          })()
         ) : null}
         {inventoryOpen ? (
           <InventoryPanel theme={lookThemes.world}
@@ -11906,11 +12899,13 @@ export default function App() {
             onEatItem={handleEatItem}
             lightableIds={TORCH_IDS}
             onLightItem={handleLightTorchItem}
+            readableIds={READABLE_BOOK_IDS}
+            onReadItem={() => openJournalPanel()}
             storage={storageSection}
             onDepositItem={handleDepositItem}
             onDropItem={handleDropItem}
             onDropAllItem={handleDropAllItem}
-            nearbyPile={nearbyPile}
+            nearbyPileItems={nearbyPileItems}
             onTakeItem={(kind, quantity) =>
               nearestPile !== undefined
                 ? handlePileAction(
@@ -12086,6 +13081,8 @@ export default function App() {
                   foodOptions={selectedSiteFoodOptions}
                   note={ritualNote}
                   siteActs={undefined}
+                  riteActs={contextSiteGrade === 2 ? riteActs : undefined}
+                  onRiteAct={(actId) => handleRiteAct(actId, contextSiteGrade)}
                   showKeyHints={false}
                   onStageBone={(kind) =>
                     handleStageBone(craftContextSiteId, kind)
@@ -12141,9 +13138,16 @@ export default function App() {
             onStance={handleCompanionStance}
             onStanceAll={handleCompanionStanceAll}
             onRelease={handleCompanionRelease}
-            notes={companionNotes}
+            notes={companionPanelNotes}
             allNote={companionAllNote ?? undefined}
             onClose={() => setCompanionsOpen(false)}
+            comfortable={isTouch}
+          />
+        ) : null}
+        {journalOpen ? (
+          <JournalPanel theme={lookThemes.world}
+            marks={journalRows}
+            onClose={() => setJournalOpen(false)}
             comfortable={isTouch}
           />
         ) : null}
@@ -12275,33 +13279,185 @@ export default function App() {
       {/* Remove confirm (PC keys, 2026-10-28): Shift+E arms
         a scatter target; Enter/Remove confirms (same
         handleRemove call as the button), Esc/backdrop/
-        Cancel aborts with nothing consumed. Standalone
-        dialog (not Popup) so its Enter/Esc is the single
-        path — the App Esc listener yields while it is open. */}
-      <RemoveConfirm theme={lookThemes.world}
+        Cancel aborts with nothing consumed. Folded into
+        Popup (the ONE confirm shell, dialog audit
+        2026-10-31): the shell's own listener is the
+        single key path — the App Esc listener yields
+        while it is open, as it did for the standalone. */}
+      <Popup theme={lookThemes.world}
         open={pendingRemoveTarget !== null}
-        targetName={pendingRemoveTarget?.name ?? ''}
+        title={`Remove ${pendingRemoveTarget?.name ?? ''}?`}
+        onClose={() => setPendingRemoveTarget(null)}
         onConfirm={() => {
           const target = pendingRemoveTarget;
           setPendingRemoveTarget(null);
           if (target) handleRemove(target);
         }}
-        onCancel={() => setPendingRemoveTarget(null)}
-      />
+        comfortable={isTouch}
+      >
+        <div className="flex flex-col gap-3 text-sm">
+          <p>This removes it permanently — it will not regrow.</p>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              className={
+                'rounded bg-moss-deep hover:bg-moss px-3 py-1 text-sm text-stone-100 ' +
+                (isTouch ? 'min-h-[44px] px-3 py-2' : '')
+              }
+              onClick={() => {
+                const target = pendingRemoveTarget;
+                setPendingRemoveTarget(null);
+                if (target) handleRemove(target);
+              }}
+            >
+              Remove
+            </button>
+            <button
+              type="button"
+              className={
+                'rounded bg-moss-deep hover:bg-moss px-3 py-1 text-sm text-stone-100 ' +
+                (isTouch ? 'min-h-[44px] px-3 py-2' : '')
+              }
+              onClick={() => setPendingRemoveTarget(null)}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      </Popup>
+
+      {/* The teaching beat (First-Fragment
+        Presentation): a NON-confirm Popup — a mark's
+        first transcription is a lesson, not a choice,
+        so the dialog only dismisses (Keep looking,
+        the shell's Close, Esc, backdrop). Copy DRAFT. */}
+      <Popup theme={lookThemes.dialog}
+        open={fragmentBeat !== null}
+        title={fragmentBeat?.title ?? 'A mark'}
+        onClose={() => setFragmentBeat(null)}
+        comfortable={isTouch}
+      >
+        {fragmentBeat !== null ? (
+          <div className="flex flex-col gap-3 text-sm">
+            <p>{fragmentBeat.body}</p>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                className={
+                  'rounded bg-moss-deep hover:bg-moss px-3 py-1 text-sm text-stone-100 ' +
+                  (isTouch ? 'min-h-[44px] px-3 py-2' : '')
+                }
+                onClick={() => setFragmentBeat(null)}
+              >
+                Keep looking
+              </button>
+            </div>
+          </div>
+        ) : null}
+      </Popup>
+
+      {/* The familiar's rite confirm (Build 2, Piece 1):
+        Popup, the one confirm shell — the guard the
+        rite's verbs carry. It names the animal;
+        supersede names the displacement too. Enter
+        confirms (the shell's onConfirm), Esc / backdrop
+        / Cancel perform nothing. Copy DRAFT. */}
+      <Popup theme={lookThemes.dialog}
+        open={pendingRite !== null}
+        title={
+          pendingRite === null || pendingRiteRecord === undefined
+            ? 'The rite'
+            : pendingRite.act === 'elevate'
+              ? `Raise the ${companionKindLabel(pendingRiteRecord.kind)}?`
+              : pendingRite.act === 'relinquish'
+                ? `Let the ${companionKindLabel(pendingRiteRecord.kind)} step down?`
+                : `Raise the ${companionKindLabel(pendingRiteRecord.kind)} in the ${standingFamiliarRecord ? companionKindLabel(standingFamiliarRecord.kind) : 'familiar'}'s place?`
+        }
+        onClose={() => setPendingRite(null)}
+        onConfirm={confirmRite}
+        comfortable={isTouch}
+      >
+        {pendingRite !== null && pendingRiteRecord !== undefined ? (
+          <div className="flex flex-col gap-3 text-sm">
+            <p>
+              {pendingRite.act === 'elevate'
+                ? `The rite binds the ${companionKindLabel(pendingRiteRecord.kind)} as your familiar — the one who stands closest. What the altar makes, only the altar can unmake.`
+                : pendingRite.act === 'relinquish'
+                  ? `The ${companionKindLabel(pendingRiteRecord.kind)} stays your companion and your friend — only the familiar's place empties, and the glow dies.`
+                  : `The ${standingFamiliarRecord ? companionKindLabel(standingFamiliarRecord.kind) : 'familiar'} steps down to companion, and the ${companionKindLabel(pendingRiteRecord.kind)} rises as your familiar — one act, both or neither.`}
+            </p>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                className={
+                  'rounded bg-moss-deep hover:bg-moss px-3 py-1 text-sm text-stone-100 ' +
+                  (isTouch ? 'min-h-[44px] px-3 py-2' : '')
+                }
+                onClick={confirmRite}
+              >
+                {pendingRite.act === 'elevate'
+                  ? 'Raise as familiar'
+                  : pendingRite.act === 'relinquish'
+                    ? 'Step down'
+                    : 'Raise in their place'}
+              </button>
+              <button
+                type="button"
+                className={
+                  'rounded bg-moss-deep hover:bg-moss px-3 py-1 text-sm text-stone-100 ' +
+                  (isTouch ? 'min-h-[44px] px-3 py-2' : '')
+                }
+                onClick={() => setPendingRite(null)}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : null}
+      </Popup>
 
       {/* Leave confirm (back-button trap, 2026-10-29):
         shown by the popstate handler when a back press
         arrives with nothing open. Stay dismisses (the
         trap entry is already re-pushed); Leave arms the
-        one-shot pass and steps back for real. Same z-50
-        shell as RemoveConfirm; the App Esc listener
-        yields while it is open, and the dialog's own
-        listener maps Esc to Stay and Enter to Leave. */}
-      <LeaveConfirm theme={lookThemes.world}
+        one-shot pass and steps back for real. Folded
+        into Popup with the remove confirm (dialog audit
+        2026-10-31); the App Esc listener yields while
+        it is open, and the shell maps Esc to Stay and
+        Enter to Leave. */}
+      <Popup theme={lookThemes.world}
         open={leaveConfirmOpen}
-        onStay={() => setLeaveConfirmOpen(false)}
-        onLeave={handleLeaveGame}
-      />
+        title="Leave the game?"
+        onClose={() => setLeaveConfirmOpen(false)}
+        onConfirm={handleLeaveGame}
+        comfortable={isTouch}
+      >
+        <div className="flex flex-col gap-3 text-sm">
+          <p>Your progress is saved.</p>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              className={
+                'rounded bg-moss-deep hover:bg-moss px-3 py-1 text-sm text-stone-100 ' +
+                (isTouch ? 'min-h-[44px] px-3 py-2' : '')
+              }
+              onClick={() => setLeaveConfirmOpen(false)}
+            >
+              Stay
+            </button>
+            <button
+              type="button"
+              className={
+                'rounded bg-moss-deep hover:bg-moss px-3 py-1 text-sm text-stone-100 ' +
+                (isTouch ? 'min-h-[44px] px-3 py-2' : '')
+              }
+              onClick={handleLeaveGame}
+            >
+              Leave
+            </button>
+          </div>
+        </div>
+      </Popup>
 
       {/* First-run dialog: no save at boot — name + seed,
         both optional, Begin-only (no Cancel, no X, no
@@ -12311,6 +13467,43 @@ export default function App() {
       {firstRunDialogOpen ? (
         <FirstRunDialog theme={lookThemes.world}
           onBegin={handleFirstRunBegin}
+          comfortable={isTouch}
+        />
+      ) : null}
+
+      {/* New-game dialog (folded confirm, dialog audit
+        claim 3, 2026-10-31): the cloud New Game door opens
+        the first-run dialog's new-game mode over the live
+        session — the park warning (the press-time
+        snapshot's world, named) sits directly above
+        Begin, the commitment point, and Back returns to
+        the cloud panel parking nothing (Esc is Back too,
+        per the effect beside beginFoldedNewGame). Begin
+        stashes the entered name/seed, parks the current
+        save, and reloads; the fresh boot consumes the
+        stash instead of showing this dialog a second
+        time. The two dialogs never co-open: this seat
+        needs a live save, the first-run seat needs none. */}
+      {cloudPendingNewGame !== null ? (
+        <FirstRunDialog theme={lookThemes.world}
+          onBegin={beginFoldedNewGame}
+          onBack={() => setCloudPendingNewGame(null)}
+          warning={
+            <>
+              <p>
+                Start a fresh world? Your current world “
+                {cloudPendingNewGame.local.worldName ?? 'Main save'}”
+                will be parked, not deleted — the Restore parked
+                save door brings it back. Nothing carries over to
+                the new world.
+              </p>
+              {cloudPendingNewGame.parked !== null ? (
+                <p className="text-xs opacity-80">
+                  Your existing parked save will be replaced.
+                </p>
+              ) : null}
+            </>
+          }
           comfortable={isTouch}
         />
       ) : null}
@@ -12478,58 +13671,6 @@ export default function App() {
         ) : null}
       </Popup>
 
-      {/* New Game confirm: names the current save
-        (press-time snapshot) + the park warning when a
-        parked save will be replaced. Confirm parks the
-        current save, clears the save key, and reloads
-        into the first-run dialog; Cancel (or Esc)
-        changes nothing. */}
-      <Popup theme={lookThemes.dialog}
-        open={cloudPendingNewGame !== null}
-        title="Start a new game?"
-        onClose={() => setCloudPendingNewGame(null)}
-        comfortable={isTouch}
-      >
-        {cloudPendingNewGame !== null ? (
-          <div className="flex flex-col gap-3 p-3 text-sm">
-            <p>
-              Start a fresh world? Your current world “
-              {cloudPendingNewGame.local.worldName ?? 'Main save'}”
-              will be parked, not deleted — the Restore parked
-              save door brings it back. Nothing carries over to
-              the new world.
-            </p>
-            {cloudPendingNewGame.parked !== null ? (
-              <p className="text-xs opacity-80">
-                Your existing parked save will be replaced.
-              </p>
-            ) : null}
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                className={
-                  'rounded bg-moss-deep hover:bg-moss px-3 py-1 text-sm text-stone-100 ' +
-                  (isTouch ? 'min-h-[44px] px-3 py-2' : '')
-                }
-                onClick={confirmNewGame}
-              >
-                New Game
-              </button>
-              <button
-                type="button"
-                className={
-                  'rounded bg-moss-deep hover:bg-moss px-3 py-1 text-sm text-stone-100 ' +
-                  (isTouch ? 'min-h-[44px] px-3 py-2' : '')
-                }
-                onClick={() => setCloudPendingNewGame(null)}
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        ) : null}
-      </Popup>
-
       {/* Trap-craft confirm: Adam's words, verbatim, asked FIRST
         on trap Craft — Yes runs the existing execution, No or
         Close aborts with nothing consumed and no trap. The
@@ -12685,6 +13826,26 @@ export default function App() {
         derivation would go stale); App only gates it and
         hands it the feed, the live player position, and
         the 'scatter' projector. */}
+      {/* Structure identifier tag (2026-10-31): the
+        nearest faced singular's name — the creature
+        tag's seat and hiding set (plus the journal and
+        the teaching beat, the newer surfaces), with the
+        tag itself derived per render above (structures
+        are static, so no poll). Display only. */}
+      {!inventoryOpen &&
+      !craftingOpen &&
+      !charmsOpen &&
+      !companionsOpen &&
+      !journalOpen &&
+      !optionsOpen &&
+      !introOpen &&
+      !pendingTrapRecipe &&
+      pendingRemoveTarget === null &&
+      fragmentBeat === null &&
+      !paused ? (
+        <StructureTag theme={lookThemes.world} tag={structureTag} />
+      ) : null}
+
       {!inventoryOpen &&
       !craftingOpen &&
       !charmsOpen &&

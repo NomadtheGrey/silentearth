@@ -2792,6 +2792,109 @@ function catDetail(p: AnimalModelParams, pose: CatPose): CatDetail {
   return detail;
 }
 
+/**
+ * Catch props (build 2, priced by Models and built on
+ * Adam's word, 2026-10-31): the visible catch in the cat's
+ * mouth — the doorstep gift reads at the door before it
+ * reads in a list. Each prop is a Group whose ORIGIN IS
+ * THE GRIP POINT: the prey's geometry is baked hanging
+ * below it, limp — a catch hangs, it doesn't pose. The
+ * runtime adds the group as a child of the cat's group at
+ * the stand-pose mouth offset (0, 0.30, 0.31) and removes
+ * it on delivery; the cat's heading and bob carry it for
+ * free, and a pendulum sway is one rotation at the grip.
+ * Sit/curl take no prop — carrying is a travelling act.
+ * Kinds get their OWN forms, not one generic lump: a fish
+ * says the river, a rabbit says the meadow, and the catch
+ * sets are kinded, so the prop matches the carcass the
+ * delivery is about. Colors ride the roster kinds' own
+ * tints, muted a shade — the catch is dead, and duller
+ * for it. New catch-set kinds join by adding a case here
+ * (the same ~15-line shape each).
+ */
+export type CatchKind = 'mouse' | 'rabbit' | 'fish';
+
+interface CatchDetail {
+  parts: { geo: THREE.BufferGeometry; mat: THREE.MeshLambertMaterial }[];
+}
+
+const catchDetailCache = new Map<CatchKind, CatchDetail>();
+
+function propEllipsoid(
+  rx: number, ry: number, rz: number, x: number, y: number, z: number,
+): THREE.BufferGeometry {
+  const g = new THREE.SphereGeometry(1, 8, 6);
+  g.scale(rx, ry, rz);
+  g.translate(x, y, z);
+  return g;
+}
+
+function catchDetail(kind: CatchKind): CatchDetail {
+  const cached = catchDetailCache.get(kind);
+  if (cached) return cached;
+  const parts: { geo: THREE.BufferGeometry; mat: THREE.MeshLambertMaterial }[] = [];
+  const add = (geo: THREE.BufferGeometry, mat: THREE.MeshLambertMaterial): void => {
+    parts.push({ geo, mat });
+  };
+  if (kind === 'mouse') {
+    const coat = meshMat(shade(0x8a7a6a, 0.9));
+    const dark = meshMat(shade(0x8a7a6a, 0.7));
+    add(propEllipsoid(0.028, 0.024, 0.055, 0, -0.048, 0), coat);
+    add(propEllipsoid(0.019, 0.017, 0.022, 0, -0.088, 0.018), coat);
+    add(propEllipsoid(0.009, 0.011, 0.004, 0.013, -0.068, 0.026), dark);
+    add(propEllipsoid(0.009, 0.011, 0.004, -0.013, -0.068, 0.026), dark);
+    const tail = new THREE.TorusGeometry(0.045, 0.0035, 4, 10, 2.6);
+    tail.rotateZ(2.2);
+    tail.rotateX(0.4);
+    tail.translate(0, -0.115, -0.018);
+    add(tail, dark);
+  } else if (kind === 'rabbit') {
+    const coat = meshMat(shade(0x9a8a7a, 0.9));
+    const pale = meshMat(shade(0x9a8a7a, 1.15));
+    const body = propEllipsoid(0.05, 0.045, 0.105, 0, -0.072, -0.01);
+    body.rotateX(0.12);
+    add(body, coat);
+    add(propEllipsoid(0.036, 0.033, 0.038, 0, -0.128, 0.038), coat);
+    for (const sx of [-1, 1]) {
+      const ear = new THREE.BoxGeometry(0.014, 0.095, 0.006);
+      ear.rotateX(0.5);
+      ear.translate(sx * 0.02, -0.105, 0.052);
+      add(ear, coat);
+      add(propEllipsoid(0.02, 0.016, 0.042, sx * 0.032, -0.118, -0.095), coat);
+    }
+    add(propEllipsoid(0.016, 0.016, 0.016, 0, -0.045, -0.118), pale);
+  } else {
+    const coat = meshMat(shade(0x8a9aa4, 0.95));
+    const fin = meshMat(shade(0x8a9aa4, 0.72));
+    const body = propEllipsoid(0.027, 0.044, 0.112, 0, -0.068, 0);
+    body.rotateZ(0.15);
+    add(body, coat);
+    const tailFin = new THREE.BoxGeometry(0.005, 0.052, 0.034);
+    tailFin.rotateX(-0.35);
+    tailFin.translate(0.017, -0.062, -0.128);
+    add(tailFin, fin);
+    const dorsal = new THREE.BoxGeometry(0.004, 0.02, 0.05);
+    dorsal.rotateX(0.4);
+    dorsal.translate(0.008, -0.026, -0.018);
+    add(dorsal, fin);
+    const pectoral = new THREE.BoxGeometry(0.026, 0.03, 0.004);
+    pectoral.rotateY(0.5);
+    pectoral.translate(0.024, -0.078, 0.032);
+    add(pectoral, fin);
+  }
+  const detail: CatchDetail = { parts };
+  catchDetailCache.set(kind, detail);
+  return detail;
+}
+
+export function buildCatchProp(kind: CatchKind): THREE.Group {
+  const g = new THREE.Group();
+  for (const part of catchDetail(kind).parts) {
+    g.add(new THREE.Mesh(part.geo, part.mat));
+  }
+  return g;
+}
+
 export function buildAnimal(kind: AnimalKind, pose: CatPose = 'stand'): THREE.Group {
   const p = ANIMAL_MODEL_PARAMS[kind];
   if (kind === 'cat') {

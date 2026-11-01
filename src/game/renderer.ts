@@ -27,7 +27,7 @@ import type { WorldGen } from './worldgen';
 import { PlayerController } from './player';
 import { marshWeight } from './biomes';
 import { SOURCE_FOR_KIND } from './objects';
-import { buildAltarGroup, buildAnimal, buildCampArrow, buildCandle, buildCauldronGroup, buildDeskGroup, buildEdgeArrow, buildKindGeometry, buildStagedBone, buildStumpDressing, buildSunflowerHeadGeometry, buildTorch, buildUmbrella, buildWitch, ALTAR_CANDLE_X, ALTAR_CANDLE_Z, CANDLE_FLAME_Y, DISC_RADIUS, STUMP_TOP_Y, sunflowerHeadMatrix, sunflowerHeadOrientation, TORCH_FLAME_Y, vertexLambert } from './models';
+import { buildAltarGroup, buildAnimal, buildCampArrow, buildCandle, buildCatchProp, buildCauldronGroup, buildDeskGroup, buildEdgeArrow, buildKindGeometry, buildStagedBone, buildStumpDressing, buildSunflowerHeadGeometry, buildTorch, buildUmbrella, buildWitch, ALTAR_CANDLE_X, ALTAR_CANDLE_Z, CANDLE_FLAME_Y, DISC_RADIUS, STUMP_TOP_Y, sunflowerHeadMatrix, sunflowerHeadOrientation, TORCH_FLAME_Y, vertexLambert } from './models';
 import { spawnAnimalsForChunk, updateAnimal } from './animals';
 import type { AnimalInstance, AnimalKind } from './animals';
 import {
@@ -36,6 +36,9 @@ import {
   installCompanionResolvers,
   stepActors,
 } from './companionRuntime';
+import { catActor, catGlowOn, clearCat, ensureCat, installCatPreyAccess, stepCat } from './catRuntime';
+import { clearGuide, guideActor, guideVisible, stageGuide, stepGuide } from './guideRuntime';
+import { exodusBats, stepExodus } from './exodusRuntime';
 import { crowGlowIntensity, CROW_GLOW_EMISSIVE } from './crow';
 import type { CrowTier } from './crow';
 import { ProximityTracker } from './proximity';
@@ -50,7 +53,7 @@ import { standingInWater, terrainSpeedAt, WADING_FACTOR, type WaterDisc } from '
 import { treeKindAt } from './treeKind';
 import { riverParamsFor, riverRibbonForChunk } from './river';
 import { barnSite, caveMouthSite, chapelSite, drownedMillSite, farmhouseSite, generalStoreSite, groveSite, pushOutOfWalls, railSidingSite, schoolhouseSite, siloSite, sunkenRoadSite, villageSite, wallsNearSites, type SiteFootprint } from './sites';
-import { caveFootprintFor, caveInstancesInRect, caveLayoutForKey } from './caves';
+import { caveFootprintFor, caveInstancesInRect, caveLayoutForKey, caveMouthsNear } from './caves';
 import type { RiverParams } from './river';
 import { fireState } from './fireState';
 import { torchState } from './torchState';
@@ -69,7 +72,7 @@ import type { TrapType } from './traps';
 import { pauseState } from './pause';
 import { SkyRig } from './sky';
 import type { SkySnapshot } from './sky';
-import { SEASON_START_MONTH, seasonalWeatherAt } from './weather';
+import { SEASON_START_MONTH, dayFraction, seasonalWeatherAt } from './weather';
 import { createBiomeTexture, TEXTURE_REPEAT } from './terrain';
 import {
   CHUNK_SIZE,
@@ -576,6 +579,27 @@ export class WorldRenderer {
    */
   private companionGroup: THREE.Group | null = null;
   private companionMeshes = new Map<string, THREE.Group>();
+  /**
+   * The cat's layer (Build 2): a group of its own — the cat
+   * is not a companion-registry actor — carrying its posed
+   * mesh and, when familiar, the fungus-register glow
+   * light. The mesh rebuilds only when its pose changes.
+   */
+  private catGroup: THREE.Group | null = null;
+  private catMeshPose: string | null = null;
+  private catGlowLight: THREE.PointLight | null = null;
+  /** The carried catch's mouth prop (Models' buildCatchProp), while carried standing. */
+  private catPropGroup: THREE.Group | null = null;
+  private catPropKind: string | null = null;
+  /** Cover points (trees / bushes) per chunk, for settle/dart watch points. */
+  private coverMemo = new Map<string, { x: number; z: number }[]>();
+  /** The guide's layer (a single crow mesh) + its tree-point memo. */
+  private guideGroup: THREE.Group | null = null;
+  private treeMemo = new Map<string, { x: number; z: number }[]>();
+  /** The bat exodus layer: pooled bat meshes keyed by bat id. */
+  private exodusGroup: THREE.Group | null = null;
+  private exodusMeshes = new Map<string, THREE.Group>();
+  private exodusMouthCache: { at: number; list: { id: string; x: number; z: number }[] } | null = null;
   /** Memo for the site-walls query's cave-instance spawn (see siteWallsAt). */
   private wallsSpawnMemo: { seed: string; spawn: { x: number; z: number } } | null = null;
   /**
@@ -629,6 +653,7 @@ export class WorldRenderer {
     // loadChunk). The outcome listener (shell-owned, see
     // harvest.ts) marks state in the shared harvestState.
     this.gen = wrapGenWithState(gen);
+    this.stageCat(gen);
     // The river course is a pure function of seed + spawn, so it
     // is computed once per world (here and in setWorldGen) rather
     // than per chunk.
@@ -680,6 +705,29 @@ export class WorldRenderer {
     installCompanionResolvers({
       adopt: (id) => this.adoptChunkAnimal(id),
       peek: (id) => this.peekChunkAnimal(id),
+    });
+    // The cat's prey access (Build 2 landing B): live chunk
+    // animals, nothing minted — a catch despawns a real
+    // individual, and a stalk reads its live position.
+    installCatPreyAccess({
+      nearestPrey: (x, z, minR, maxR, kinds) => {
+        let best: { id: string; kind: AnimalKind; x: number; z: number } | null = null;
+        let bestD = maxR;
+        for (const a of this.getLoadedAnimalInstances()) {
+          if (!kinds.includes(a.kind)) continue;
+          const d = Math.hypot(a.x - x, a.z - z);
+          if (d >= minR && d <= bestD) {
+            bestD = d;
+            best = { id: a.id, kind: a.kind, x: a.x, z: a.z };
+          }
+        }
+        return best;
+      },
+      preyPos: (id) => {
+        const a = this.getLoadedAnimalInstances().find((i) => i.id === id);
+        return a ? { x: a.x, z: a.z } : null;
+      },
+      consumePrey: (id) => this.despawnChunkAnimal(id),
     });
     this.proximity = new ProximityTracker(this.gen, true, () => this.tents);
     // Chunk reload on harvest completion: the harvested chunk is
@@ -1011,8 +1059,132 @@ export class WorldRenderer {
    * No App.tsx touch: the shell polls this getter and renders
    * its own tag.
    */
-  getVisibleAnimals(): { kind: AnimalKind; x: number; z: number; y: number; id: string; companion?: boolean }[] {
-    const out: { kind: AnimalKind; x: number; z: number; y: number; id: string; companion?: boolean }[] = [];
+  /**
+   * Stage the world's one cat at its village hearth
+   * (Build 2) and the guide at its Grove. The renderer
+   * OWNS re-seating (fix shape (a), 2026-10-31): every
+   * surface-gen install clears both actors and re-stages
+   * them from THIS gen's seats — explicitly, here, not
+   * via a bus listener (the shell emits 'world:seedSet'
+   * after install, which staged-then-cleared them on
+   * every boot). Dimension gens never stage (the cat
+   * lives on the surface; the familiar crosses by
+   * re-seat, not by re-staging).
+   */
+  private stageCat(gen: WorldGen): void {
+    if (gen.dimensionKey) return;
+    clearCat();
+    clearGuide();
+    const village = villageSite(String(gen.seed), gen.findSpawn(), (x, z) => gen.weightsAt(x, z));
+    ensureCat(village.hearthHouse.hearthSpot.x, village.hearthHouse.hearthSpot.z);
+    const grove = groveSite(String(gen.seed), gen.findSpawn(), (x, z) => gen.weightsAt(x, z).dominant);
+    stageGuide(grove.center.x, grove.center.z);
+  }
+
+  /**
+   * The guide's windows (Adam-settled dawn + dusk, 2026-
+   * 10-31): the first and last ~2 game-hours of the day
+   * arc, read off the sky rig's own clock. The cycle
+   * starts at dawn; dusk ends where the day fraction
+   * ends (September's fraction — the calendar's month
+   * drift is not built, and September is the world's
+   * standing start). Width DRAFT.
+   */
+  private guideWindowOpen(): boolean {
+    const sky = this.sky;
+    if (!sky) return false;
+    const t = sky.cycleT;
+    const w = 2 / 24;
+    if (t <= w) return true;
+    const f = dayFraction(SEASON_START_MONTH);
+    return t >= f - w && t <= f;
+  }
+
+  /** The dusk band alone (the guide's second window; the bat exodus's pour). */
+  private duskOpen(): boolean {
+    const sky = this.sky;
+    if (!sky) return false;
+    const t = sky.cycleT;
+    const w = 2 / 24;
+    const f = dayFraction(SEASON_START_MONTH);
+    return t >= f - w && t <= f;
+  }
+
+  /** The dawn band (the guide's first window; the exodus's return). */
+  private dawnOpen(): boolean {
+    const sky = this.sky;
+    if (!sky) return false;
+    return sky.cycleT <= 2 / 24;
+  }
+
+  /** The nearest real tree point (the guide's perches), generateChunk ground truth, memoized per chunk. */
+  private treePointNear(x: number, z: number, r: number): { x: number; z: number } | null {
+    const pcx = Math.floor(x / CHUNK_SIZE);
+    const pcz = Math.floor(z / CHUNK_SIZE);
+    let best: { x: number; z: number } | null = null;
+    let bestD = r;
+    for (let cx = pcx - 1; cx <= pcx + 1; cx++) {
+      for (let cz = pcz - 1; cz <= pcz + 1; cz++) {
+        const key = `${cx},${cz}`;
+        let pts = this.treeMemo.get(key);
+        if (!pts) {
+          pts = [];
+          for (const obj of this.gen.generateChunk(cx, cz).objects) {
+            if (obj.kind === 'tree' || obj.kind === 'oakTree') pts.push({ x: obj.x, z: obj.z });
+          }
+          this.treeMemo.set(key, pts);
+        }
+        for (const p of pts) {
+          const d = Math.hypot(p.x - x, p.z - z);
+          if (d < bestD) {
+            bestD = d;
+            best = p;
+          }
+        }
+      }
+    }
+    return best;
+  }
+
+  /**
+   * The nearest cover point (a tree's or bush's spot) to a
+   * position, within r — the settle/dart watch-point taste.
+   * Same ground truth as collectWaterDiscs (generateChunk
+   * is pure), memoized per chunk: darts are rare, and the
+   * memo keeps even those cheap.
+   */
+  private coverPointNear(x: number, z: number, r: number): { x: number; z: number } | null {
+    const pcx = Math.floor(x / CHUNK_SIZE);
+    const pcz = Math.floor(z / CHUNK_SIZE);
+    let best: { x: number; z: number } | null = null;
+    let bestD = r;
+    for (let cx = pcx - 1; cx <= pcx + 1; cx++) {
+      for (let cz = pcz - 1; cz <= pcz + 1; cz++) {
+        const key = `${cx},${cz}`;
+        let pts = this.coverMemo.get(key);
+        if (!pts) {
+          pts = [];
+          for (const obj of this.gen.generateChunk(cx, cz).objects) {
+            if (obj.kind === 'tree' || obj.kind === 'oakTree' || obj.kind === 'bush') {
+              pts.push({ x: obj.x, z: obj.z });
+            }
+          }
+          this.coverMemo.set(key, pts);
+        }
+        for (const p of pts) {
+          const d = Math.hypot(p.x - x, p.z - z);
+          if (d < bestD) {
+            bestD = d;
+            best = p;
+          }
+        }
+      }
+    }
+    return best;
+  }
+
+  getVisibleAnimals(): { kind: AnimalKind; x: number; z: number; y: number; id: string; companion?: boolean; cat?: boolean }[] {
+    const out: { kind: AnimalKind; x: number; z: number; y: number; id: string; companion?: boolean; cat?: boolean }[] = [];
     for (const loaded of this.chunks.values()) {
       for (const pair of loaded.animals) {
         out.push({ kind: pair.instance.kind, x: pair.instance.x, z: pair.instance.z, y: pair.instance.y, id: pair.instance.id });
@@ -1025,6 +1197,14 @@ export class WorldRenderer {
     for (const actor of allActors()) {
       const a = actor.instance;
       out.push({ kind: a.kind, x: a.x, z: a.z, y: a.y, id: a.id, companion: true });
+    }
+    // The cat (Build 2): a persistent actor of its own —
+    // flagged `cat`, NOT companion, so no stance verb ever
+    // attaches to it; the faced OFFER is its door.
+    const c = catActor();
+    if (c) {
+      const a = c.instance;
+      out.push({ kind: a.kind, x: a.x, z: a.z, y: a.y, id: a.id, cat: true });
     }
     return out;
   }
@@ -1074,7 +1254,7 @@ export class WorldRenderer {
       : t;
   }
 
-  /** Live chunk-animal instances (the shell's snatch candidates — attemptSnatch reads positions off these). */
+  /** Live chunk-animal instances (the shell's snatch candidates — pickSnatchTarget reads positions off these). */
   getLoadedAnimalInstances(): AnimalInstance[] {
     const out: AnimalInstance[] = [];
     for (const loaded of this.chunks.values()) {
@@ -1193,6 +1373,7 @@ export class WorldRenderer {
     trapState.clear();
     this.rebuildTrapGroup();
     this.gen = wrapGenWithState(gen);
+    this.stageCat(gen);
     this.riverParams = riverParamsFor(String(gen.seed), gen.findSpawn());
     // The new world's sites (sites.ts) — the site-wall query the
     // constructor wired reads this field dynamically.
@@ -2501,6 +2682,7 @@ export class WorldRenderer {
       dimensionActive: !!this.gen.dimensionKey,
       speedAt: (x, z) => this.companionSpeedAt(x, z),
       pushWalls: (x, z) => pushOutOfWalls(x, z, this.siteWallsAt(x, z), 0.3),
+      coverNear: (x, z, r) => this.coverPointNear(x, z, r),
     });
     if (!this.companionGroup) {
       this.companionGroup = new THREE.Group();
@@ -2524,6 +2706,140 @@ export class WorldRenderer {
         if (!seen.has(id)) {
           this.companionGroup.remove(g);
           this.companionMeshes.delete(id);
+        }
+      }
+    }
+    // The cat (Build 2): stepped after the companions, in
+    // its own layer. Its mesh rebuilds only on a pose
+    // change (Models bakes the pose into the geometry);
+    // the glow light exists exactly while it is familiar.
+    // Visibility: hidden inside a dimension unless it is
+    // the familiar — the familiar crosses, the rest wait.
+    {
+      const c = catActor();
+      if (c) {
+        stepCat(dt, {
+          playerX: this.player.x,
+          playerZ: this.player.z,
+          night,
+          dimensionActive: !!this.gen.dimensionKey,
+          speedAt: (x, z) => this.companionSpeedAt(x, z),
+          pushWalls: (x, z) => pushOutOfWalls(x, z, this.siteWallsAt(x, z), 0.3),
+          coverNear: (x, z, r) => this.coverPointNear(x, z, r),
+        });
+        if (!this.catGroup) {
+          this.catGroup = new THREE.Group();
+          this.scene.add(this.catGroup);
+        }
+        this.catGroup.visible = !this.gen.dimensionKey || c.bond === 'familiar';
+        if (this.catMeshPose !== c.pose) {
+          this.catMeshPose = c.pose;
+          this.catGroup.clear();
+          if (this.catGlowLight) {
+            this.catGlowLight = null;
+          }
+          this.catPropGroup = null;
+          this.catPropKind = null;
+          const mesh = buildAnimal('cat', c.pose);
+          this.catGroup.add(mesh);
+        }
+        // The catch in the mouth (landing B): Models' prop
+        // hangs at the stand-pose mouth offset; sit / curl
+        // take no prop (carrying is a travelling act).
+        const wantProp = c.carrying && c.propKind && c.pose === 'stand' ? c.propKind : null;
+        if (wantProp !== this.catPropKind) {
+          if (this.catPropGroup) {
+            this.catGroup.remove(this.catPropGroup);
+            this.catPropGroup = null;
+          }
+          this.catPropKind = wantProp;
+          if (wantProp) {
+            this.catPropGroup = buildCatchProp(wantProp);
+            this.catPropGroup.position.set(0, 0.3, 0.31);
+            this.catGroup.add(this.catPropGroup);
+          }
+        }
+        if (catGlowOn() && !this.catGlowLight) {
+          // The fungus register: a faint green pool, the
+          // witch-sight shimmer made visible (DRAFT values).
+          this.catGlowLight = new THREE.PointLight(0x9fe8b0, 2.2, 5, 1.6);
+          this.catGlowLight.position.set(0, 0.5, 0);
+          this.catGroup.add(this.catGlowLight);
+        } else if (!catGlowOn() && this.catGlowLight) {
+          this.catGroup.remove(this.catGlowLight);
+          this.catGlowLight = null;
+        }
+        this.poseAnimal(c.instance, this.catGroup);
+      }
+    }
+    // The raven guide (2026-10-31): stepped after the cat,
+    // in its own one-mesh layer; visible only while it
+    // perches or flies, and never inside a dimension.
+    {
+      const g = guideActor();
+      if (g) {
+        stepGuide(dt, {
+          playerX: this.player.x,
+          playerZ: this.player.z,
+          windowOpen: this.guideWindowOpen(),
+          dimensionActive: !!this.gen.dimensionKey,
+          perchNear: (x, z, r) => this.treePointNear(x, z, r),
+        });
+        if (!this.guideGroup) {
+          this.guideGroup = new THREE.Group();
+          this.guideGroup.add(buildAnimal('crow'));
+          this.scene.add(this.guideGroup);
+        }
+        this.guideGroup.visible = guideVisible() && !this.gen.dimensionKey;
+        if (this.guideGroup.visible) {
+          this.poseAnimal(g.instance, this.guideGroup);
+        }
+      }
+    }
+    // The bat exodus (2026-10-31): stepped after the
+    // guide; meshes pool against the runtime's bats. A
+    // surface spectacle — hidden inside dimensions.
+    {
+      stepExodus(dt, {
+        playerX: this.player.x,
+        playerZ: this.player.z,
+        duskOpen: this.duskOpen() && !this.gen.dimensionKey,
+        dawnOpen: this.dawnOpen() && !this.gen.dimensionKey,
+        mouthsNear: (x, z, r) => {
+          if (this.gen.dimensionKey) return [];
+          // The mouth scan is worldgen-priced; refresh it
+          // at most every 2 s (the exodus reads a cached
+          // list between refreshes — mouths don't move).
+          const now = performance.now();
+          if (!this.exodusMouthCache || now - this.exodusMouthCache.at > 2000) {
+            const spawn = this.gen.findSpawn();
+            const list = caveMouthsNear(String(this.gen.seed), spawn, (wx, wz) => this.gen.weightsAt(wx, wz), x, z, r)
+              .map((m) => ({ id: m.id, x: m.spot.x, z: m.spot.z }));
+            this.exodusMouthCache = { at: now, list };
+          }
+          return this.exodusMouthCache.list;
+        },
+      });
+      if (!this.exodusGroup) {
+        this.exodusGroup = new THREE.Group();
+        this.scene.add(this.exodusGroup);
+      }
+      this.exodusGroup.visible = !this.gen.dimensionKey;
+      const seen = new Set<string>();
+      for (const b of exodusBats()) {
+        seen.add(b.instance.id);
+        let mesh = this.exodusMeshes.get(b.instance.id);
+        if (!mesh) {
+          mesh = buildAnimal('bat');
+          this.exodusMeshes.set(b.instance.id, mesh);
+          this.exodusGroup.add(mesh);
+        }
+        this.poseAnimal(b.instance, mesh);
+      }
+      for (const [id, mesh] of [...this.exodusMeshes]) {
+        if (!seen.has(id)) {
+          this.exodusGroup.remove(mesh);
+          this.exodusMeshes.delete(id);
         }
       }
     }

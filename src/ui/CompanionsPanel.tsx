@@ -28,6 +28,13 @@
  * the second confirms. The arm is panel-local state
  * and dies with the row. There is no release-all —
  * a guarded act stays singular.
+ *
+ * THE FAMILIAR READS (Build 2, Piece 4): a familiar's
+ * row carries a LIT badge — the theme's active fill,
+ * not muted text — the panel register of the glow the
+ * world side shows. Row ORDER is the caller's (the
+ * shell seats the familiar first); the panel renders
+ * the order it is given.
  */
 
 import { useState } from 'react';
@@ -40,7 +47,7 @@ export interface CompanionRow {
   creatureId: string;
   /** Display name for the kind (caller's wording). */
   kindLabel: string;
-  /** 'familiar' earns the row's Familiar marker. */
+  /** 'familiar' earns the row's lit Familiar badge. */
   bond: 'companion' | 'familiar';
   /** The standing stance; null = inapplicable (the cat). */
   stance: CompanionStanceLabel | null;
@@ -141,7 +148,14 @@ export function CompanionsPanel({
                 <span className="min-w-[8ch] flex-1 font-medium">
                   {row.kindLabel}
                   {row.bond === 'familiar' ? (
-                    <span className={'ml-2 text-xs ' + t.muted}>Familiar</span>
+                    <span
+                      className={
+                        'ml-2 rounded px-1.5 py-0.5 text-xs font-semibold ' +
+                        t.active
+                      }
+                    >
+                      Familiar
+                    </span>
                   ) : null}
                 </span>
                 {armedReleaseId === row.creatureId ? (

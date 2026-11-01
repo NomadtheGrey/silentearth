@@ -40,6 +40,14 @@ export interface PopupProps {
   showWitch?: boolean;
   /** Called when the dialog is dismissed. Optional. */
   onClose?: () => void;
+  /** Called when Enter is pressed while the dialog is
+   * open — the confirm half of the shell (the fold of
+   * the standalone confirm dialogs, 2026-10-31: Popup
+   * is the ONE confirm shell, so Enter lives here).
+   * Optional: dialogs without it ignore Enter. Enter
+   * typed into a text field never confirms (the typing
+   * law). */
+  onConfirm?: () => void;
   /** Thumb-sized controls on touch. Default false. */
   comfortable?: boolean;
   /** Look for the dialog. Default "hearth" (firelit). */
@@ -52,22 +60,36 @@ export function Popup({
   children,
   showWitch = false,
   onClose,
+  onConfirm,
   comfortable = false,
   theme = 'hearth',
 }: PopupProps) {
-  // Escape closes the dialog, but only while it is open:
-  // the listener is added only when open is true, so Esc
-  // never fires with no modal up. It acts on Escape alone
-  // (no preventDefault, no stopPropagation), so V/C camera
-  // cycling and WASD movement are untouched.
+  // Escape closes the dialog and Enter confirms it, but
+  // only while it is open: the listener is added only
+  // when open is true, so neither key fires with no
+  // modal up. The keys act alone (no preventDefault, no
+  // stopPropagation), so V/C camera cycling and WASD
+  // movement are untouched; Enter typed into a text
+  // field is the field's, never the dialog's.
   useEffect(() => {
     if (!open) return;
     const onKeyDown = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') onClose?.();
+      if (e.key === 'Escape') {
+        onClose?.();
+        return;
+      }
+      if (e.key === 'Enter' && onConfirm !== undefined) {
+        const target = e.target as HTMLElement | null;
+        const tag = target?.tagName;
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') {
+          return;
+        }
+        onConfirm();
+      }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [open, onClose]);
+  }, [open, onClose, onConfirm]);
 
   if (!open) {
     return null;
@@ -79,6 +101,13 @@ export function Popup({
       aria-modal="true"
       aria-label={title}
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+      onClick={(e) => {
+        // Backdrop tap dismisses (the folded confirms'
+        // law, now the shell's): only a tap on the
+        // backdrop itself, never a click inside the
+        // panel (those carry their own target).
+        if (e.target === e.currentTarget) onClose?.();
+      }}
     >
       <div className={'flex max-w-lg items-start gap-4 rounded-2xl p-4 ' + t.panel}>
         {showWitch ? <WitchPortrait size={84} /> : null}

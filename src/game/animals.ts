@@ -176,9 +176,8 @@ export const MAX_PER_CHUNK = 3;
 export const BIOME_WEIGHT_MIN = 0.15;
 export const PERCH_HEIGHT_M = 2.0;
 export const WATER_Y = 0.05;
-/** Hand-snatch (Adam 2026-10-31: no rod ever, the weir is law — this is her hand). All DRAFT. */
+/** Hand-snatch (Adam 2026-10-31: no rod ever, the weir is law — this is her hand). All DRAFT. The chance itself is Systems' SNATCH_CHANCE in companions.ts — the one dial. */
 export const SNATCH_RANGE_M = 2.5;
-export const SNATCH_CHANCE = 0.35;
 /** A missed snatch spooks the target and every fish within this radius of it. */
 export const SPOOK_RADIUS_M = 6;
 /** How long a spooked fish holds its dart (seconds). */
@@ -249,7 +248,7 @@ export interface AnimalInstance {
   /**
    * Seconds of spook-dart remaining (the hand-snatch's
    * failure, 2026-10-31): while > 0 the animal holds the
-   * dart target attemptSnatch set (its far anchor point)
+   * dart target applySnatchSpook set (its far anchor point)
    * at burst speed and the ordinary flee re-target stands
    * down. Zero for every unspooked animal.
    */
@@ -776,20 +775,6 @@ export function triggerSnap(a: AnimalInstance, playerX: number, playerZ: number)
   a.snapT = SNAP_LUNGE_S;
 }
 
-export interface SnatchInput {
-  playerX: number;
-  playerZ: number;
-  /** Success probability (default SNATCH_CHANCE). */
-  chance?: number;
-  /** Injectable roll in [0, 1) for probes; default Math.random(). */
-  roll?: number;
-}
-
-export interface SnatchOutcome {
-  outcome: 'caught' | 'missed';
-  instance: AnimalInstance;
-}
-
 /** Set one fish darting: its far anchor point from the player, spook timer armed. */
 function spookFish(f: AnimalInstance, playerX: number, playerZ: number): void {
   let tx = f.x + (f.x - playerX) * 4;
@@ -812,7 +797,18 @@ function spookFish(f: AnimalInstance, playerX: number, playerZ: number): void {
 }
 
 /**
- * The snatch's TARGET: the NEAREST 'fish' instance within
+ * HER HAND-SNATCH at a faced fish in the shallows (Adam
+ * 2026-10-31: E at a faced fish, chance-gated, spook on
+ * failure; no rod ever — the weir stays the law for
+ * traps) composes from three pieces, each owned once:
+ * THIS target pick (the world half), Systems' snatchFish
+ * (the roll, the hunger gate, the grant — its
+ * SNATCH_CHANCE is the one dial), and applySnatchSpook
+ * below (the failure's visible half). On a catch the
+ * shell consumes the instance (renderer despawn); on a
+ * 'slipped' the fish escapes into the spook, unconsumed.
+ *
+ * The target: the NEAREST 'fish' instance within
  * SNATCH_RANGE_M of her, or null when no fish is in reach
  * (the press was not a snatch at all). A fish in reach of
  * a wading / bank-side stance is a shallow fish by
@@ -858,29 +854,3 @@ export function applySnatchSpook(
   }
 }
 
-/**
- * HER HAND-SNATCH at a faced fish in the shallows (Adam
- * 2026-10-31: E at a faced fish, chance-gated, spook on
- * failure; no rod ever — the weir stays the law for traps).
- * The composed convenience over pickSnatchTarget +
- * applySnatchSpook with this module's own chance — the
- * LIVE game path composes differently: Systems'
- * snatchFish owns the roll, the hunger gate, and the
- * grant (its SNATCH_CHANCE 0.25 is the dial the shell
- * plays; this module's 0.35 stands only for standalone
- * callers, and the pin pass settles the number). On
- * 'caught' the caller consumes the instance (renderer
- * despawn).
- */
-export function attemptSnatch(
-  candidates: readonly AnimalInstance[],
-  input: SnatchInput,
-): SnatchOutcome | null {
-  const target = pickSnatchTarget(candidates, input.playerX, input.playerZ);
-  if (!target) return null;
-  const chance = input.chance ?? SNATCH_CHANCE;
-  const roll = input.roll ?? Math.random();
-  if (roll < chance) return { outcome: 'caught', instance: target };
-  applySnatchSpook(candidates, target, input.playerX, input.playerZ);
-  return { outcome: 'missed', instance: target };
-}

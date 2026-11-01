@@ -132,6 +132,17 @@ export interface HarvestTarget {
   name: string;
   /** 'scatter' for bushes/logs/etc., 'ground' for dirt/mud/grass. */
   kind: HarvestTargetKind;
+  /**
+   * Whether Remove may be OFFERED for this target
+   * (the Remove offer's honesty, 2026-10-31): minted by
+   * the caller at projection from the source definition
+   * (SOURCE_BY_ID.removable — plant-like sources only).
+   * Ground targets and ground-class scatter (logs,
+   * stones, silt beds, anchors) are never removable:
+   * no Remove renders or arms for them, and the engine's
+   * 'not-removable' outcome remains only as a backstop.
+   */
+  removable: boolean;
   /** Screen x of the target, in percent (0–100), caller-projected. */
   anchorX: number;
   /** Screen y of the target, in percent (0–100), caller-projected. */

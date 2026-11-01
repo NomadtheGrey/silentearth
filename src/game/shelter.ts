@@ -32,23 +32,26 @@
  * landing deliberately does NOT lazy-create one: a
  * never-deposited house needs no store update, and a future
  * first deposit creates its store from the new type).
- * Multiplier/footprint/capacity all read
+ * Multiplier/footprint all read
  * HOUSE_DEFS[type] at query/render time, so nothing else
  * needs updating on upgrade.
  *
  * NUMBERS — READ THE LABELS:
- * - Lean-to storage 50 is PINNED (Adam, 2026-10-25).
- * - Every other number below is a LANE-DECIDED starting tunable
- *   for Adam's pin pass, NOT pinned: storage per upgrade
- *   (100/200/400), shelter multipliers (0.7/0.5/0.35/0.2 — the
- *   fraction of harshness that REMAINS inside), footprints
- *   (2.5/3.5/5/6.5 m), and SHELTER_RADIUS (6 m: standing within
- *   this of a house center counts as sheltered AT that house).
- * - Storage capacities are DATA for Systems' home-storage
- *   system: no storage behavior is built here (Systems owns
- *   storage mechanics + recipes). The shelter query is the live
- *   engine side: shelterQuery() closes over this state, so
- *   houses placed later count without re-wiring.
+ * - Every number below is a LANE-DECIDED starting tunable
+ *   for Adam's pin pass, NOT pinned: shelter multipliers
+ *   (0.7/0.5/0.35/0.2 — the fraction of harshness that
+ *   REMAINS inside), footprints (2.5/3.5/5/6.5 m), and
+ *   SHELTER_RADIUS (6 m: standing within this of a house
+ *   center counts as sheltered AT that house).
+ * - Storage capacity is NOT carried here (audit fix,
+ *   2026-10-31): its ONE home is Systems'
+ *   HOME_STORAGE_CAPACITY (systems/shelter.ts), the table
+ *   the store gate enforces. This file carried a second,
+ *   readerless copy (200/400 against the enforced
+ *   175/250) until the audit removed it. The shelter
+ *   query is the live engine side: shelterQuery() closes
+ *   over this state, so houses placed later count
+ *   without re-wiring.
  *
  * "Sheltered = at her placed house, wherever placed" (Adam's
  * brief): the query takes the BEST (lowest multiplier) house
@@ -69,8 +72,6 @@ export interface HouseDef {
   id: HouseType;
   name: string;
   description: string;
-  /** Supplies held safe from the elements (Systems' storage data). */
-  storageCapacity: number;
   /** Fraction of harshness remaining when sheltered here (lower = safer). */
   shelterMultiplier: number;
   /** Footprint width in metres (render scale; grows up the ladder). */
@@ -82,7 +83,6 @@ export const HOUSE_DEFS: Record<HouseType, HouseDef> = {
     id: 'leanTo',
     name: 'Lean-To',
     description: 'A slanted roof on poles — the first roof over her head.',
-    storageCapacity: 50,
     shelterMultiplier: 0.7,
     footprint: 2.5,
   },
@@ -90,7 +90,6 @@ export const HOUSE_DEFS: Record<HouseType, HouseDef> = {
     id: 'thatchHut',
     name: 'Thatch Hut',
     description: 'A round hut under a thatch roof.',
-    storageCapacity: 100,
     shelterMultiplier: 0.5,
     footprint: 3.5,
   },
@@ -98,7 +97,6 @@ export const HOUSE_DEFS: Record<HouseType, HouseDef> = {
     id: 'wovenCottage',
     name: 'Woven Cottage',
     description: 'Wattle and daub, woven tight — a real cottage.',
-    storageCapacity: 200,
     shelterMultiplier: 0.35,
     footprint: 5,
   },
@@ -106,7 +104,6 @@ export const HOUSE_DEFS: Record<HouseType, HouseDef> = {
     id: 'smallWoodenHut',
     name: 'Small Wooden Hut',
     description: 'A proper wooden hut, built from cut logs.',
-    storageCapacity: 400,
     shelterMultiplier: 0.2,
     footprint: 6.5,
   },

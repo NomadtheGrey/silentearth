@@ -17,82 +17,86 @@
  * via the EXISTING refreshPilesFromState clear — no new
  * logic, no empty view.
  *
- * Rows STACK (Adam, 2026-10-31, from his screenshot —
- * the subgrid rows collided: a long name wrapped a word
- * per line over three lines while 'pile ×0' rode on it
- * and 'carried' collided mid-word; his words: 'let's
- * give the name and amounts more space'). Each arrow
- * row is three lines of its own: the NAME on a full-
- * width line (wraps naturally, truncates never), the
- * COUNTS on their own right-aligned line in the single-
- * line form ('pile ×0 · carried ×3'), and the ARROW
- * cluster on its own line, right-aligned, unchanged in
- * order, glyphs, disabled states, and digit badges —
- * the arrows keep their places (same cluster, side,
- * order; down a line, not away). One form at all widths:
- * the old 3-column subgrid (name | counts | arrows)
- * starved the name column to ~30 px at these seats
- * (~188 px of 44 px arrows + ~70 px of counts inside
- * ~296 px of content), and widening the panel is no
- * answer on the touch sheet. Legibility is bought with
- * height; the modal scrolls. Notes stack under names.
- * Actions are the SAME ContextAction[] pileMenuActions
- * emits, dispatched through the SAME handlePileAction —
- * zero new handlers. Deposits go into THIS pile at its
- * exact x/z (the handler's verbatim coords). Worn-gear
- * rules ride pileMenuActions (no deposit arrows for worn
- * kinds; carried-only worn kinds get no entry; Take
- * stays). Whole-pile take is not a modal action (it is
- * R's pile second action + the desktop pile button).
+ * THE UNIFIED SHAPE (Inventory Unification, 2026-10-31):
+ * the modal is a thin shell now — header, legend, Close —
+ * around the shared ItemListSurface, the same surface
+ * the pack panel renders. The ContextAction[] dialect
+ * this file used to render is RETIRED: the caller
+ * composes item rows + per-row verbs (the same verb ids
+ * handlePileAction has always dispatched — Take/Deposit
+ * arrows under 'take-one:kind' style ids), and digit
+ * dispatch reads the surface's reported VISIBLE verb
+ * list, so the numbers on the badges are the numbers
+ * the keys hit, in the order the player sees — search,
+ * sort, and folds included. The surface's rows stack at
+ * this seat's width by the shared container rule (the
+ * legibility the old stacked rows were built for, kept
+ * by the one shape). Deposits go into THIS pile at its
+ * exact x/z (the handler's verbatim coords). Whole-pile
+ * take is not a modal action (it is R's pile second
+ * action + the desktop pile button).
  */
 
-import type { ContextAction } from './types';
-import { KEY_BADGE_CLASS, UI_THEMES, type UiThemeName } from './themes';
+import type { InventoryItem } from './types';
+import { UI_THEMES, type UiThemeName } from './themes';
 import { VineDivider } from './WitchyArt';
+import {
+  ItemListSurface,
+  type InventorySortMode,
+  type InventorySortPreference,
+  type ItemListVerb,
+  type ItemListVisibleVerb,
+} from './ItemListSurface';
 
 export interface PileInventoryModalProps {
   /** Title, mirroring the old menu's objectName rule. */
   title: string;
-  /** Same ContextAction[] pileMenuActions emits. */
-  actions: ContextAction[];
-  /** Dispatches action ids through handlePileAction. */
-  onSelect: (id: string) => void;
+  /** The pile's kinds + carried kinds, as unified item rows. */
+  items: InventoryItem[];
+  /** Per-row verbs (ids are the standing pile action ids). */
+  verbsFor: (item: InventoryItem) => ItemListVerb[];
+  /** A verb press: the row's item id + the verb's action id. */
+  onVerb: (itemId: string, verbId: string) => void;
+  /**
+   * The surface's visible verb list, for the caller's
+   * digit dispatch (the badges are this list's order).
+   */
+  onVisibleVerbs?: (verbs: ItemListVisibleVerb[]) => void;
   /** Closes the modal (clears ref + state, menu parity). */
   onClose: () => void;
   /**
    * Show PC digit badges (beautification rider, 2026-10-29):
-   * every dispatchable target numbered in the shell's
-   * digit-dispatch flatten order (actions in order; an
-   * arrows row contributes its arrows in order), capped
-   * at 9 — the ContextMenu rule, so the modal and the
-   * menus tell the same story. Caller passes !isTouch.
-   * Hint only. Default false = no badges.
+   * verbs numbered in visible order, capped at 9 — the
+   * ContextMenu rule, so the modal and the menus tell the
+   * same story. Caller passes !isTouch. Hint only.
    */
   showKeyHints?: boolean;
+  /** The ONE shared sort preference (unification). */
+  sortMode?: InventorySortMode;
+  sortReversed?: boolean;
+  onSortChange?: (pref: InventorySortPreference) => void;
+  categoryOrder?: readonly string[];
   /** Look for the modal. Default "mire". */
   theme?: UiThemeName;
 }
 
 export function PileInventoryModal({
   title,
-  actions,
-  onSelect,
+  items,
+  verbsFor,
+  onVerb,
+  onVisibleVerbs,
   onClose,
   showKeyHints = false,
+  sortMode,
+  sortReversed = false,
+  onSortChange,
+  categoryOrder,
   theme = 'mire',
 }: PileInventoryModalProps) {
   const t = UI_THEMES[theme];
-  // Digit-badge counter, consumed in render order (see
-  // the prop doc): a plain action takes one number, an
-  // arrows row takes one per arrow. Beyond 9 there is
-  // no digit, so no badge.
-  let hintCount = 0;
-  const nextHint = (): number | null => {
-    hintCount += 1;
-    return showKeyHints && hintCount <= 9 ? hintCount : null;
-  };
   return (
-    <section aria-label={title} className={'rounded-2xl p-3 ' + t.panel}>
+    <section aria-label={title} className={'@container rounded-2xl p-3 ' + t.panel}>
       <div className="mb-1 flex items-center justify-between gap-2">
         <h2 className={'text-base font-semibold ' + t.heading}>{title}</h2>
         <button
@@ -110,89 +114,20 @@ export function PileInventoryModal({
       <p className={'mb-2 text-xs ' + t.muted}>
         ↑ Pick up one · ↑↑ Pick up all · ↓ Drop one here · ↓↓ Drop all here
       </p>
-      <ul className="flex flex-col gap-1">
-        {actions.map((action) => {
-          if (action.arrows) {
-            const countsLine =
-              action.countsText ??
-              (action.counts
-                ? `pile ×${action.counts.pile} · carried ×${action.counts.carried}`
-                : null);
-            return (
-              <li key={action.id} className="flex flex-col gap-1 py-1">
-                <span className="flex min-w-0 flex-col">
-                  <span className="text-sm">{action.label}</span>
-                  {action.disabledNote ? (
-                    <span className={'text-xs ' + t.muted}>
-                      {action.disabledNote}
-                    </span>
-                  ) : null}
-                </span>
-                {countsLine !== null ? (
-                  <span
-                    className={
-                      'whitespace-nowrap text-right text-sm tabular-nums ' +
-                      t.muted
-                    }
-                  >
-                    {countsLine}
-                  </span>
-                ) : null}
-                <span className="flex justify-end gap-1">
-                  {action.arrows.map((arrow) => {
-                    const hint = nextHint();
-                    return (
-                      <button
-                        key={arrow.id}
-                        type="button"
-                        disabled={arrow.disabled}
-                        onClick={() => onSelect(arrow.id)}
-                        aria-label={arrow.ariaLabel}
-                        className="relative min-h-[44px] min-w-[44px] rounded text-base disabled:cursor-not-allowed disabled:opacity-40 hover:bg-stone-800"
-                      >
-                        <span aria-hidden="true">{arrow.glyph}</span>
-                        {hint !== null ? (
-                          <span
-                            aria-hidden="true"
-                            className={
-                              'absolute -right-1 -top-1 ' + KEY_BADGE_CLASS
-                            }
-                          >
-                            {hint}
-                          </span>
-                        ) : null}
-                      </button>
-                    );
-                  })}
-                </span>
-              </li>
-            );
-          }
-          const hint = nextHint();
-          return (
-            <li key={action.id}>
-              <button
-                type="button"
-                disabled={action.disabled}
-                onClick={() => onSelect(action.id)}
-                className="w-full rounded px-2 py-2 text-left text-sm disabled:cursor-not-allowed disabled:opacity-40 hover:bg-stone-800"
-              >
-                {action.label}
-                {hint !== null ? (
-                  <span aria-hidden="true" className={'ml-1 ' + KEY_BADGE_CLASS}>
-                    {hint}
-                  </span>
-                ) : null}
-              </button>
-              {action.disabledNote ? (
-                <span className={'mt-0.5 block text-xs ' + t.muted}>
-                  {action.disabledNote}
-                </span>
-              ) : null}
-            </li>
-          );
-        })}
-      </ul>
+      <ItemListSurface
+        items={items}
+        verbsFor={verbsFor}
+        onVerb={onVerb}
+        sortMode={sortMode}
+        sortReversed={sortReversed}
+        onSortChange={onSortChange}
+        categoryOrder={categoryOrder}
+        emptyText="Nothing here."
+        searchLabel="Search pile items"
+        showKeyHints={showKeyHints}
+        onVisibleVerbs={onVisibleVerbs}
+        theme={theme}
+      />
     </section>
   );
 }

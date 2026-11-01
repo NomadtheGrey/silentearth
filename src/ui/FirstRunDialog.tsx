@@ -17,14 +17,27 @@
  * taps a field. Form submit (Enter in either field) is
  * Begin. Copy line under the heading is PROPOSED (Adam
  * pins wording at sighting).
+ *
+ * NEW-GAME MODE (dialog audit claim 3, 2026-10-31):
+ * the same dialog serves the cloud New Game door over
+ * a live session — the caller passes a `warning`
+ * (rendered directly above Begin, the commitment
+ * point) and an `onBack` (an explicit back-out that
+ * parks nothing). The first-run seat passes neither:
+ * Begin-only remains the law where there is nowhere
+ * to go back to.
  */
 
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { UI_THEMES, type UiThemeName } from './themes';
 
 export interface FirstRunDialogProps {
   /** Begin with the dialog's trimmed name + seed (blanks allowed). */
   onBegin: (name: string, seed: string) => void;
+  /** New-game mode: shown directly above Begin. */
+  warning?: ReactNode;
+  /** New-game mode: renders a Back button beside Begin. */
+  onBack?: () => void;
   /** Touch layout (bottom sheet) vs desktop (centered). */
   comfortable?: boolean;
   theme?: UiThemeName;
@@ -32,6 +45,8 @@ export interface FirstRunDialogProps {
 
 export function FirstRunDialog({
   onBegin,
+  warning,
+  onBack,
   comfortable = false,
   theme = 'mire',
 }: FirstRunDialogProps) {
@@ -98,17 +113,34 @@ export function FirstRunDialog({
               }
             />
           </label>
-          <button
-            type="submit"
-            className={
-              (comfortable
-                ? 'rounded px-3 py-2 text-sm min-h-[44px] ' + t.button
-                : 'rounded px-2 py-1 text-sm ' + t.button) +
-              ' self-start'
-            }
-          >
-            Begin
-          </button>
+          {warning ? (
+            <div className="flex flex-col gap-1 text-sm">{warning}</div>
+          ) : null}
+          <div className="flex gap-2">
+            <button
+              type="submit"
+              className={
+                comfortable
+                  ? 'rounded px-3 py-2 text-sm min-h-[44px] ' + t.button
+                  : 'rounded px-2 py-1 text-sm ' + t.button
+              }
+            >
+              Begin
+            </button>
+            {onBack ? (
+              <button
+                type="button"
+                onClick={onBack}
+                className={
+                  comfortable
+                    ? 'rounded px-3 py-2 text-sm min-h-[44px] ' + t.button
+                    : 'rounded px-2 py-1 text-sm ' + t.button
+                }
+              >
+                Back
+              </button>
+            ) : null}
+          </div>
         </form>
       </section>
     </div>
