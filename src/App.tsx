@@ -4357,12 +4357,36 @@ export default function App() {
     setPileAnchors(pileAnchorsNext);
     const mode = placementRef.current;
     if (mode) {
-      const player = playerRef.current;
+      // THE CROSSHAIR LAW GENERALIZED (Adam, 2026-11-01):
+      // the ghost anchors at the AIMED point — the
+      // crosshair's ground point inside the reach — for
+      // every armed placement; feet anchoring retired
+      // with feet placement. A groundless gaze carries
+      // no anchor (the ghost and its label hide until
+      // the gaze lands somewhere).
+      const aim = aimedPlacementPoint();
       setPlacementAnchor(
-        player ? projectAnchor(player.x, player.z, 'ground') : null,
+        aim ? projectAnchor(aim.x, aim.z, 'ground') : null,
+      );
+      // THE TERRAIN PAINT (joint with Background,
+      // 2026-11-01): Background's renderer paints the
+      // armed thing's own footprint outline at the same
+      // aimed point — the key is the placement's item id
+      // (the footprint table resolves shape game-side;
+      // house type spellings resolve there too), rotY 0
+      // because nothing in the placed family takes a
+      // rotation today, tint NEUTRAL standing (no real
+      // validity check exists for these placements — a
+      // green would be a lie). A groundless gaze clears
+      // the paint with the anchor.
+      rendererRef.current?.setPlacementPreview(
+        aim
+          ? { key: mode.itemId, x: aim.x, z: aim.z, rotY: 0, tint: 'neutral' }
+          : null,
       );
     } else {
       setPlacementAnchor(null);
+      rendererRef.current?.setPlacementPreview(null);
     }
   };
 
@@ -6445,7 +6469,22 @@ export default function App() {
   const handlePlaceAltar = () => {
     const player = playerRef.current;
     if (!player) return;
-    const outcome = grantPlaceAltar(inventory, player.x, player.z);
+    // THE CROSSHAIR LAW (Adam, 2026-11-01): the instant
+    // family places at the aim too — feet placement
+    // retires everywhere. A groundless gaze speaks the
+    // family's line, but only when she actually carries
+    // an altar (the grant's own refusal is the truer one
+    // for empty hands, the campfire pattern).
+    const target = aimedPlacementPoint();
+    if (target === null && inventory.count(ITEMS.altar) >= 1) {
+      setAltarNote('Nowhere to set it down.');
+      return;
+    }
+    const outcome = grantPlaceAltar(
+      inventory,
+      target?.x ?? player.x,
+      target?.z ?? player.z,
+    );
     // Equality check, not truthiness: non-strict tsc does
     // not narrow this union's boolean discriminant on
     // truthiness (see the torch Light button handler).
@@ -6469,7 +6508,20 @@ export default function App() {
   const handlePlaceDesk = () => {
     const player = playerRef.current;
     if (!player) return;
-    const outcome = grantPlaceDesk(inventory, player.x, player.z);
+    // THE CROSSHAIR LAW (Adam, 2026-11-01): the desk
+    // leaves her feet for the aim, like its altar twin —
+    // same groundless composition (the grant's refusal
+    // speaks for empty hands).
+    const target = aimedPlacementPoint();
+    if (target === null && inventory.count(ITEMS.writingDesk) >= 1) {
+      setDeskNote('Nowhere to set it down.');
+      return;
+    }
+    const outcome = grantPlaceDesk(
+      inventory,
+      target?.x ?? player.x,
+      target?.z ?? player.z,
+    );
     // Equality check, not truthiness: non-strict tsc does
     // not narrow this union's boolean discriminant on
     // truthiness (same note as handlePlaceAltar).
@@ -7670,13 +7722,23 @@ export default function App() {
       setPlacementAnchor(null);
       return;
     }
+    // THE CROSSHAIR LAW (Adam, 2026-11-01): the confirm
+    // places where the ghost stands — the aimed point at
+    // the press. A groundless gaze refuses in the instant
+    // family's line and the mode STAYS armed (she aims
+    // again); standing on the station as it lands is over.
+    const target = aimedPlacementPoint();
+    if (target === null) {
+      setPlacementNote('Nowhere to set it down.');
+      return;
+    }
     try {
       if (mode.fireType) {
-        fireState.placeFire(mode.fireType, player.x, player.z);
+        fireState.placeFire(mode.fireType, target.x, target.z);
       } else if (mode.houseType) {
-        shelterState.placeHouse(mode.houseType, player.x, player.z);
+        shelterState.placeHouse(mode.houseType, target.x, target.z);
       } else if (mode.loom) {
-        loomState.placeLoom(player.x, player.z);
+        loomState.placeLoom(target.x, target.z);
       }
       inventory.remove(mode.itemId, 1);
     } catch (error) {
@@ -7700,69 +7762,12 @@ export default function App() {
     setPlacementNote(null);
   };
 
-  // HOUSE-UPGRADE PRESS (Adam, 2026-10-28): mirrors
-  // handlePlaceConfirm (cost gate → act → consume →
-  // clear mode → refresh + save; catch → note, mode
-  // stays) with shelterState.upgradeHouse in place
-  // of placeHouse. setHouse ONLY if a store already
-  // exists (homeStoresRef.current.get — deliberately
-  // NOT getHomeStore, which lazy-creates: a
-  // never-deposited house needs no update, and a
-  // future first deposit creates its store from the
-  // new type — DEV-accepted refinement over the
-  // primitive doc's getHomeStore wording). Contents
-  // ride the preserved id (stores keyed by id;
-  // save/restore by id/order — nothing moves or
-  // drops). House visuals ride the primitive + the
-  // existing house render path (no new subscription
-  // — press-driven refresh covers it; the primitive
-  // emits 'shelter:upgraded', camp arrows are NOT
-  // subscribed). False from upgradeHouse (shouldn't
-  // happen — the pill shows only for upgradeable)
-  // → failure: note + mode stays.
-  const handleUpgradePress = (target: NonNullable<typeof upgradePill>) => {
-    const mode = placementRef.current;
-    if (!mode) return;
-    const player = playerRef.current;
-    if (!player) return;
-    if (inventory.count(mode.itemId) < 1) {
-      setPlacementNote(
-        'Nothing to place — that item is no longer carried.',
-      );
-      placementRef.current = null;
-      setPlacement(null);
-      setPlacementAnchor(null);
-      return;
-    }
-    try {
-      const upgraded = shelterState.upgradeHouse(
-        target.houseId,
-        target.carriedType,
-      );
-      if (!upgraded) {
-        setPlacementNote('That house cannot be upgraded.');
-        return;
-      }
-      homeStoresRef.current
-        .get(target.houseId)
-        ?.setHouse(HOUSE_TYPE_TO_ITEM[target.carriedType]);
-      inventory.remove(mode.itemId, 1);
-    } catch (error) {
-      setPlacementNote(
-        error instanceof Error ? error.message : 'Placement failed.',
-      );
-      return;
-    }
-    placementRef.current = null;
-    setPlacement(null);
-    setPlacementAnchor(null);
-    setPlacementNote(null);
-    if (shelterHouseId === target.houseId) {
-      applyShelterHouse(target.houseId);
-    }
-    refreshInventory();
-    saveNow();
-  };
+  // HOUSE UPGRADES ARE NOT PLACEMENTS (Adam, 2026-11-01):
+  // the armed-placement upgrade press that lived here is
+  // OUT — upgrading happens on the standing house where
+  // it stands, through the home menu's Upgrade row
+  // (handleHomeMenuAction's upgrade arm). A fresh
+  // placement is a fresh placement, whatever it faces.
 
   const handleEatItem = (itemId: string) => {
     // Raw cook-required food never reaches eat(): the press
@@ -9086,74 +9091,10 @@ export default function App() {
   const homeAnchor = homeChipAnchor ?? homeFallbackAnchor;
   const homeChipVisible = sheltered && homeAnchor !== null && !paused;
 
-  // HOUSE-UPGRADE PILL (Adam, 2026-10-28): while
-  // placing a house item, the faced upgradeable house
-  // gets an "Upgrade to {carried}" chip at the house
-  // (home-chip pattern, inline in the overlay).
-  // Candidates = placed houses with tier BELOW the
-  // carried tier (ANY-higher — woven over lean-to
-  // skips thatch; next-tier-only is a one-line
-  // narrowing, NOT built). RANGE = center distance
-  // ≤ SHELTER_RADIUS 6 m (footprints to 6.5 m wide,
-  // so HARVEST_RANGE 2.5 m would miss big houses).
-  // CONE = angle < 45° via dot product (forward =
-  // (sin facing, cos facing); dot > cos45° =
-  // Math.SQRT1_2); d = 0 counts as faced. NO
-  // hysteresis v1. Tie-break: nearest distance,
-  // exact tie → first in snapshot order. Same-or-
-  // higher → no pill, feet "Place here" stands. NO
-  // paused guard (buttons, not canvas taps —
-  // placement buttons work while paused today).
-  // Capacity: the pill shows NO capacity number —
-  // engine HOUSE_DEFS (woven 200 / smallWooden 400)
-  // vs Systems' table (175 / 250) diverges; pin
-  // pass reconciles the tables. Per-render derivation
-  // (home-chip precedent) — no new subscription.
-  const upgradePill = (() => {
-    const mode = placement;
-    const player = playerRef.current;
-    if (!mode?.houseType || !player) return null;
-    const carriedTier = HOUSE_LADDER.indexOf(mode.houseType);
-    if (carriedTier === -1) return null;
-    const facingX = Math.sin(player.facing);
-    const facingZ = Math.cos(player.facing);
-    let best: {
-      houseId: string;
-      carriedType: HouseType;
-      placedName: string;
-      carriedName: string;
-      x: number;
-      z: number;
-    } | null = null;
-    let bestDistance = Infinity;
-    for (const house of shelterState.snapshot()) {
-      const placedTier = HOUSE_LADDER.indexOf(house.type);
-      if (placedTier === -1 || placedTier >= carriedTier) continue;
-      const dx = house.x - player.x;
-      const dz = house.z - player.z;
-      const d = Math.hypot(dx, dz);
-      if (d > SHELTER_RADIUS) continue;
-      if (d > 0) {
-        const dot = (facingX * dx + facingZ * dz) / d;
-        if (dot <= Math.SQRT1_2) continue;
-      }
-      if (d < bestDistance) {
-        bestDistance = d;
-        best = {
-          houseId: house.id,
-          carriedType: mode.houseType,
-          placedName: HOUSE_DEFS[house.type].name,
-          carriedName: HOUSE_DEFS[mode.houseType].name,
-          x: house.x,
-          z: house.z,
-        };
-      }
-    }
-    return best;
-  })();
-  const upgradePillAnchor = upgradePill
-    ? projectAnchor(upgradePill.x, upgradePill.z, 'scatter')
-    : null;
+  // NO UPGRADE PILL (Adam, 2026-11-01): upgrades are not
+  // placements — the faced-house upgrade derivation that
+  // lived here is OUT. The home menu's Upgrade row is
+  // the one upgrade door.
 
   // Nearby pile for the Inventory modal's pickup section
   // (Adam, 2026-10-28): the NEAREST pile in range from
@@ -10273,7 +10214,8 @@ export default function App() {
   // behind her"). Candidates are in range (per-kind caps
   // as the rows use: HARVEST_RANGE; home via
   // shelterHouseId) AND faced — the game's existing faced
-  // definition, the upgrade pill's (46a617d): forward =
+  // definition (born with 46a617d's upgrade pill, retired
+  // 2026-11-01 — the definition stands): forward =
   // (sin facing, cos facing) from player.facing — one
   // read in every camera mode (first-person facing
   // tracks the look, third is travel direction, behind
@@ -12316,6 +12258,58 @@ export default function App() {
     </>
   );
 
+  // THE PLACEMENT CARD, HOISTED (the kiln defect,
+  // Adam + DEV, 2026-11-01): the card renders only while
+  // a placement is armed, and while armed it is the one
+  // live confirm in the game — so it takes the stack's
+  // FIRST seat on every pointer, above the meta block
+  // and the doors. The law: A CONFIRM NEVER SITS IN A
+  // SCROLL FOLD. (Measured cause: seated last, the card
+  // painted at y[753,805] on a desktop window — 'Place
+  // here' off-screen at 768 and 600 tall alike, while
+  // the armed ghost stood mute at her feet.) Unarmed,
+  // the stack renders exactly as before.
+  const placementCard = placement ? (
+    <div className="rounded bg-black/45 px-2 py-1 text-sm">
+      <p>Placing {placement.label} where you aim.</p>
+      <div className="mt-1 flex gap-2">
+        <button
+          type="button"
+          onClick={handlePlaceConfirm}
+          className={
+            isTouch
+              ? 'rounded bg-moss-deep px-3 py-2 text-sm min-h-[44px] hover:bg-moss'
+              : 'rounded bg-moss-deep px-2 py-0.5 text-xs hover:bg-moss'
+          }
+        >
+          Place there
+          {!isTouch ? (
+            <span
+              aria-hidden="true"
+              className={'ml-1 ' + KEY_BADGE_CLASS}
+            >
+              Enter
+            </span>
+          ) : null}
+        </button>
+        <button
+          type="button"
+          onClick={handlePlaceCancel}
+          className={
+            isTouch
+              ? 'rounded bg-moss-deep px-3 py-2 text-sm min-h-[44px] hover:bg-moss'
+              : 'rounded bg-moss-deep px-2 py-0.5 text-xs hover:bg-moss'
+          }
+        >
+          Cancel
+        </button>
+      </div>
+      {placementNote ? (
+        <p className="mt-1 text-xs text-red-300">{placementNote}</p>
+      ) : null}
+    </div>
+  ) : null;
+
   return (
     <div
       className={
@@ -12545,22 +12539,6 @@ export default function App() {
             </button>
           </WorldAnchor>
         ) : null}
-        {upgradePill && upgradePillAnchor ? (
-          <WorldAnchor
-            x={upgradePillAnchor.x}
-            y={upgradePillAnchor.y}
-            interactive
-          >
-            <button
-              type="button"
-              onClick={() => handleUpgradePress(upgradePill)}
-              aria-label={`Upgrade ${upgradePill.placedName} to ${upgradePill.carriedName}`}
-              className="flex min-h-[44px] items-center rounded-full bg-black/60 px-2 py-1 text-sm text-stone-100"
-            >
-              Upgrade to {upgradePill.carriedName}
-            </button>
-          </WorldAnchor>
-        ) : null}
         {homeMenuOpen && homeHouse !== undefined && homeAnchor ? (
           <WorldAnchor x={homeAnchor.x} y={homeAnchor.y} interactive>
             <ContextMenu theme={lookThemes.world}
@@ -12666,7 +12644,12 @@ export default function App() {
             x={placementAnchor.x}
             y={placementAnchor.y}
             label={placement.label}
-            valid
+            onConfirm={handlePlaceConfirm}
+            hint={
+              !isTouch
+                ? 'Enter or click to place · Esc to cancel'
+                : undefined
+            }
           />
         ) : null}
         {/* The world-anchored harvest progress bar RETIRED
@@ -12843,6 +12826,7 @@ export default function App() {
               : 'pointer-events-auto m-2 max-w-sm'
           }
         >
+          {placementCard}
           {!isTouch ? stackMeta : null}
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <button
@@ -13039,51 +13023,9 @@ export default function App() {
               openCraftingPanel, so the stump keeps ONE
               door, the dialog, which names the stump in
               its own heading. StationPanel is deleted. */}
-          {placement ? (
-            <div className="mt-2 rounded bg-black/45 px-2 py-1 text-sm">
-              <p>Placing {placement.label} at your feet.</p>
-              <div className="mt-1 flex gap-2">
-                {/* UPGRADE PILL: one confirm at a time —
-                    while the pill shows, feet placement
-                    hides (the pill IS the confirm). */}
-                {upgradePill ? null : (
-                  <button
-                    type="button"
-                    onClick={handlePlaceConfirm}
-                    className={
-                      isTouch
-                        ? 'rounded bg-moss-deep px-3 py-2 text-sm min-h-[44px] hover:bg-moss'
-                        : 'rounded bg-moss-deep px-2 py-0.5 text-xs hover:bg-moss'
-                    }
-                  >
-                    Place here
-                    {!isTouch ? (
-                      <span
-                        aria-hidden="true"
-                        className={'ml-1 ' + KEY_BADGE_CLASS}
-                      >
-                        Enter
-                      </span>
-                    ) : null}
-                  </button>
-                )}
-                <button
-                  type="button"
-                  onClick={handlePlaceCancel}
-                  className={
-                    isTouch
-                      ? 'rounded bg-moss-deep px-3 py-2 text-sm min-h-[44px] hover:bg-moss'
-                      : 'rounded bg-moss-deep px-2 py-0.5 text-xs hover:bg-moss'
-                  }
-                >
-                  Cancel
-                </button>
-              </div>
-              {placementNote ? (
-                <p className="mt-1 text-xs text-red-300">{placementNote}</p>
-              ) : null}
-            </div>
-          ) : null}
+          {/* The placement card's old seat stood here,
+              LAST in the stack — the kiln defect's fold
+              (see placementCard's hoisting note above). */}
           {/* Touch seat for the meta block: LAST in the
               stack (DEFECT 3 — the working parts lead). */}
           {isTouch ? stackMeta : null}
@@ -14159,8 +14101,6 @@ export default function App() {
           — so an armed placement on the phone showed the ghost
           but no reachable Place here, only a 'Show HUD' hunt.
           This bar is the confirm's touch door: same handlers,
-          same one-confirm law (while the upgrade pill shows,
-          it is the confirm and the bar carries only Cancel),
           seated in the bottom-center actor family above the
           ghost's seat — Scry yields the family while a
           placement is armed (its guard above). Shown only in
@@ -14205,18 +14145,16 @@ export default function App() {
       pendingRemoveTarget === null ? (
         <div className="pointer-events-auto absolute bottom-24 left-1/2 z-50 -translate-x-1/2 rounded bg-black/60 px-3 py-2 text-center">
           <p className="text-sm text-stone-100">
-            Placing {placement.label} at your feet.
+            Placing {placement.label} where you aim.
           </p>
           <div className="mt-1 flex justify-center gap-2">
-            {upgradePill ? null : (
-              <button
-                type="button"
-                onClick={handlePlaceConfirm}
-                className="min-h-[44px] rounded bg-moss-deep px-3 py-2 text-sm hover:bg-moss"
-              >
-                Place here
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={handlePlaceConfirm}
+              className="min-h-[44px] rounded bg-moss-deep px-3 py-2 text-sm hover:bg-moss"
+            >
+              Place there
+            </button>
             <button
               type="button"
               onClick={handlePlaceCancel}
