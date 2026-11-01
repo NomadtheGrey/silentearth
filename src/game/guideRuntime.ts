@@ -16,11 +16,14 @@
  * calls, and — when she follows — leads perch to perch
  * toward the Grove: settle, call, fly on, at HER pace. If
  * she loses it, it waits at its next perch calling. A
- * window closing mid-route dismisses it; the next window
- * re-stages near wherever she then is (the route is
- * computed from her position — no route state exists to
- * lose). At the Grove's edge it perches finally; when
- * Systems' discovery fact lands, it retires for good.
+ * window closing mid-route dismisses it by a departure
+ * flight home — unless the follow is live (attending),
+ * in which case the close is deferred and the road runs
+ * on; the next window re-stages near wherever she then
+ * is (the route is computed from her position — no route
+ * state exists to lose). At the Grove's edge it perches
+ * finally; when Systems' discovery fact lands, it
+ * retires for good.
  *
  * The discovery fact is Systems'; the shell installs it
  * (installGuideProbes). The Grove's point is staged by
@@ -82,6 +85,24 @@ export const GUIDE_DAWDLE_FLAP_S = 22;
 export const GUIDE_DAWDLE_ARC_S = 40;
 /** Closing this much (m) counts as following: the ladder resets. */
 export const GUIDE_CLOSING_RESET_M = 2;
+/** ENGAGEMENT (Adam's sentence, 2026-11-01: 'the raven
+ *  should be moving right along — he shouldn't hover
+ *  over this tree staring at me'). ATTENDING is the one
+ *  read both new laws share: she is inside this range
+ *  (m, DRAFT) and the follow is live — inside follow
+ *  range outright, or improving on her best distance
+ *  since the perch. The latch holds for a dawdle-scale
+ *  span (GUIDE_DAWDLE_ARC_S) after the last evidence.
+ *  While attending: road perches ADVANCE after the
+ *  dwell without waiting for follow range, and the
+ *  twilight window's close is DEFERRED — the road runs
+ *  past the window's edge. On genuine disengagement
+ *  with the window closed she leaves by a DEPARTURE
+ *  FLIGHT home, never a blink. */
+export const GUIDE_ATTEND_RANGE_M = 60;
+/** Improving on the best distance by this much (m)
+ *  counts as fresh evidence of attending. */
+export const GUIDE_ATTEND_EVIDENCE_M = 0.5;
 /** Perch fidgets: a hop along the branch on this
  *  cadence (s, DRAFT band), this far (m), GLIDED over
  *  this long (s) — a scoot, not a teleport: Adam's
@@ -149,7 +170,7 @@ export function guideBearing(dx: number, dz: number): { bearingDeg: number; comp
   return { bearingDeg, compass };
 }
 
-export type GuideState = 'absent' | 'perched' | 'flying' | 'retired';
+export type GuideState = 'absent' | 'perched' | 'flying' | 'departing' | 'retired';
 
 export interface GuideActor {
   instance: AnimalInstance;
@@ -187,6 +208,17 @@ export interface GuideActor {
   dawdleStage: number;
   /** Her distance at the last perched step (closing detection). */
   lastDistP: number;
+  /** ENGAGEMENT: the attending latch + its age (s since
+   *  the last evidence), the player's distance when the
+   *  current perch was taken, and the best (smallest)
+   *  distance since — the advance gate and the window
+   *  hold both read these. Anchored lazily on the first
+   *  perched step after a perch is taken (Infinity
+   *  until then, the lastDistP idiom). */
+  attending: boolean;
+  attendAgeS: number;
+  perchDistP: number;
+  bestDistP: number;
   /** Seconds to the next perch fidget hop. */
   fidgetT: number;
   /** Wing-flick / flap-display time remaining (drives instance.flying's pose). */
@@ -237,6 +269,10 @@ export function stageGuide(x: number, z: number, seatY?: number): void {
     waitT: 0,
     dawdleStage: 0,
     lastDistP: Number.POSITIVE_INFINITY,
+    attending: false,
+    attendAgeS: 0,
+    perchDistP: Number.POSITIVE_INFINITY,
+    bestDistP: Number.POSITIVE_INFINITY,
     fidgetT: GUIDE_FIDGET_MIN_S,
     flapT: 0,
     fidgetSign: 1,
@@ -249,7 +285,7 @@ export function guideActor(): GuideActor | null {
 
 /** The renderer shows the bird exactly in these states. */
 export function guideVisible(): boolean {
-  return guide !== null && (guide.state === 'perched' || guide.state === 'flying');
+  return guide !== null && (guide.state === 'perched' || guide.state === 'flying' || guide.state === 'departing');
 }
 
 export function clearGuide(): void {
@@ -303,7 +339,41 @@ function perchAt(
   g.dawdleStage = 0;
   g.flapT = 0;
   g.lastDistP = Number.POSITIVE_INFINITY;
+  // Engagement re-anchors at every perch: her distance
+  // then, and the best since, are the new perch's own.
+  g.perchDistP = Number.POSITIVE_INFINITY;
+  g.bestDistP = Number.POSITIVE_INFINITY;
   g.fidgetT = GUIDE_FIDGET_MIN_S + Math.random() * GUIDE_FIDGET_SPAN_S;
+}
+
+/**
+ * ENGAGEMENT bookkeeping (the attending read both new
+ * laws share): anchor the perch distances on the first
+ * step after a perch is taken; refresh the latch on
+ * evidence (follow range outright, or an improvement
+ * on the best distance within attend range); age it
+ * otherwise, lapsing at the dawdle ladder's full span.
+ */
+function noteAttending(g: GuideActor, dt: number, distP: number): void {
+  if (!Number.isFinite(g.perchDistP)) {
+    g.perchDistP = distP;
+    g.bestDistP = distP;
+  }
+  if (distP <= GUIDE_FOLLOW_RANGE_M) {
+    g.attending = true;
+    g.attendAgeS = 0;
+    if (distP < g.bestDistP) g.bestDistP = distP;
+  } else if (
+    distP <= GUIDE_ATTEND_RANGE_M &&
+    distP <= g.bestDistP - GUIDE_ATTEND_EVIDENCE_M
+  ) {
+    g.attending = true;
+    g.attendAgeS = 0;
+    g.bestDistP = distP;
+  } else {
+    g.attendAgeS += dt;
+    if (g.attendAgeS >= GUIDE_DAWDLE_ARC_S) g.attending = false;
+  }
 }
 
 /**
@@ -354,7 +424,9 @@ function beginFlight(
 /**
  * Step the guide one frame. Discovery is checked first
  * (she may find the Grove alone — the guide retires
- * unseen), then the window gates existence itself.
+ * unseen), then the window: it gates STAGING, holds
+ * for an attending follow, and dismisses the rest by
+ * a departure flight home — existence never blinks.
  */
 export function stepGuide(dt: number, ctx: GuideStepContext): void {
   if (!guide || !grovePoint) return;
@@ -371,9 +443,27 @@ export function stepGuide(dt: number, ctx: GuideStepContext): void {
     return;
   }
   if (!ctx.windowOpen) {
-    g.state = 'absent';
-    inst.flying = false;
-    return;
+    if (g.state === 'departing') {
+      // A departure already begun commits — fall
+      // through and fly it home.
+    } else if ((g.state === 'perched' || g.state === 'flying') && g.attending) {
+      // ENGAGEMENT HOLD: the window's close is deferred
+      // while the follow is live — the road runs past
+      // the twilight's edge. Fall through and step on.
+    } else if (g.state === 'perched' || g.state === 'flying') {
+      // Genuine disengagement at the close: she leaves
+      // by a DEPARTURE FLIGHT home, never a blink. The
+      // departure commits — re-engagement mid-flight
+      // does not recall her; the next window re-stages.
+      beginFlight(g, grovePoint.x, grovePoint.z, ctx.playerX, ctx.playerZ, GUIDE_PERCH_HEIGHT_M);
+      g.state = 'departing';
+      g.attending = false;
+      // Fall through to the flying step below.
+    } else {
+      g.state = 'absent';
+      inst.flying = false;
+      return;
+    }
   }
 
   const dxG = grovePoint.x - ctx.playerX;
@@ -477,39 +567,59 @@ export function stepGuide(dt: number, ctx: GuideStepContext): void {
       g.dawdleStage = 0;
     }
     g.lastDistP = distP;
+    noteAttending(g, dt, distP);
     stepAnimalAnimation(inst, dt, g.flapT > 0);
     if (distP > GUIDE_FOLLOW_RANGE_M) {
-      // THE DAWDLE LADDER — she escalates 'over here',
-      // she never leaves. (Runs at the final perch too:
-      // the audience is still owed a performance.)
-      g.waitT += dt;
-      if (g.dawdleStage < 1 && g.waitT >= GUIDE_DAWDLE_CALL_S) {
-        g.dawdleStage = 1;
-        call(g, ctx.playerX, ctx.playerZ);
-      } else if (g.dawdleStage < 2 && g.waitT >= GUIDE_DAWDLE_FLAP_S) {
-        g.dawdleStage = 2;
-        g.flapT = GUIDE_FLAP_DISPLAY_S;
-        call(g, ctx.playerX, ctx.playerZ);
-      } else if (g.dawdleStage < 3 && g.waitT >= GUIDE_DAWDLE_ARC_S) {
-        g.dawdleStage = 3;
-        // The display arc: up, across her view on the
-        // bow, and back to THIS perch; the landing calls.
-        beginFlight(g, g.homeX, g.homeZ, ctx.playerX, ctx.playerZ, g.homeY);
-        if (!g.hasVia) {
-          // Seated exactly on the target — force a loop:
-          // out toward her side, across, and back.
-          const toX = ctx.playerX - inst.x;
-          const toZ = ctx.playerZ - inst.z;
-          const toD = Math.hypot(toX, toZ) || 1;
-          g.viaX = inst.x + (toX / toD) * 3 - (toZ / toD) * 4;
-          g.viaZ = inst.z + (toZ / toD) * 3 + (toX / toD) * 4;
-          g.hasVia = true;
+      if (g.attending) {
+        // Attention is proven: the ladder's premise is
+        // its absence, so the dawdle clock holds at zero
+        // and she falls through to the advance gate.
+        g.waitT = 0;
+        g.dawdleStage = 0;
+      } else {
+        // THE DAWDLE LADDER — she escalates 'over here',
+        // she never leaves. (Runs at the final perch too:
+        // the audience is still owed a performance.)
+        g.waitT += dt;
+        if (g.dawdleStage < 1 && g.waitT >= GUIDE_DAWDLE_CALL_S) {
+          g.dawdleStage = 1;
+          call(g, ctx.playerX, ctx.playerZ);
+        } else if (g.dawdleStage < 2 && g.waitT >= GUIDE_DAWDLE_FLAP_S) {
+          g.dawdleStage = 2;
+          g.flapT = GUIDE_FLAP_DISPLAY_S;
+          call(g, ctx.playerX, ctx.playerZ);
+        } else if (g.dawdleStage < 3 && g.waitT >= GUIDE_DAWDLE_ARC_S) {
+          g.dawdleStage = 3;
+          // The display arc: up, across her view on the
+          // bow, and back to THIS perch; the landing calls.
+          beginFlight(g, g.homeX, g.homeZ, ctx.playerX, ctx.playerZ, g.homeY);
+          if (!g.hasVia) {
+            // Seated exactly on the target — force a loop:
+            // out toward her side, across, and back.
+            const toX = ctx.playerX - inst.x;
+            const toZ = ctx.playerZ - inst.z;
+            const toD = Math.hypot(toX, toZ) || 1;
+            g.viaX = inst.x + (toX / toD) * 3 - (toZ / toD) * 4;
+            g.viaZ = inst.z + (toZ / toD) * 3 + (toX / toD) * 4;
+            g.hasVia = true;
+          }
         }
+        return; // inattention: she waits at this perch
       }
-      return;
     }
     if (g.atFinalPerch) return; // the edge perch: it waits for her discovery
     if (g.perchT < GUIDE_PERCH_DWELL_S) return; // the staging beat
+    if (distP > GUIDE_FOLLOW_RANGE_M) {
+      // THE ADVANCE GATE (engagement): beyond follow
+      // range an attended follow still moves right
+      // along — she must be within attend range and
+      // have been closed on by the closing measure
+      // since this perch was taken. (Within follow
+      // range the hop below is the standing law.)
+      if (!g.attending) return;
+      if (distP > GUIDE_ATTEND_RANGE_M) return;
+      if (g.perchDistP - distP < GUIDE_CLOSING_RESET_M) return;
+    }
     // The next hop: toward the Grove, onto a real tree —
     // clamped so the flight ends AT the lead ring, never
     // deep inside it: the final perch is the Grove's edge.
@@ -556,7 +666,21 @@ export function stepGuide(dt: number, ctx: GuideStepContext): void {
   const dz = aimZ - inst.z;
   const dist = Math.hypot(dx, dz);
   const distTarget = Math.hypot(g.targetX - inst.x, g.targetZ - inst.z);
+  if (g.state === 'flying') {
+    // The follow stays live mid-flight too — the
+    // window hold reads this latch at the close.
+    noteAttending(g, dt, Math.hypot(ctx.playerX - inst.x, ctx.playerZ - inst.z));
+  }
   if (!g.hasVia && distTarget < 0.6) {
+    if (g.state === 'departing') {
+      // Home. Only NOW does she leave the world — the
+      // absence is an arrival, not a blink.
+      g.state = 'absent';
+      g.attending = false;
+      inst.flying = false;
+      stepAnimalAnimation(inst, dt, false);
+      return;
+    }
     perchAt(g, { x: g.targetX, z: g.targetZ }, g.targetY);
     g.state = 'perched';
     call(g, ctx.playerX, ctx.playerZ);
