@@ -126,6 +126,9 @@ export interface InventoryPanelProps {
   readableIds?: ReadonlySet<string>;
   /** Called when the player presses Read on an item. Optional. */
   onReadItem?: (id: string) => void;
+  /** The jar build: rows whose item carries a Dump verb (the water-jar), and its press. */
+  dumpableIds?: ReadonlySet<string>;
+  onDumpItem?: (id: string) => void;
   /**
    * Home-storage section, shown when the caller opens one
    * (sheltered at a placed house). Omitted = personal list
@@ -221,6 +224,8 @@ export function InventoryPanel({
   onLightItem,
   readableIds,
   onReadItem,
+  dumpableIds,
+  onDumpItem,
   storage,
   onDepositItem,
   onDropItem,
@@ -260,6 +265,9 @@ export function InventoryPanel({
     if ((readableIds?.has(item.id) ?? false) && onReadItem) {
       verbs.push({ id: 'read', label: 'Read', ariaLabel: `Read ${item.name}` });
     }
+    if ((dumpableIds?.has(item.id) ?? false) && onDumpItem) {
+      verbs.push({ id: 'dump', label: 'Dump', ariaLabel: `Dump ${item.name}` });
+    }
     if (storage !== undefined && onDepositItem) {
       verbs.push({
         id: 'deposit',
@@ -288,6 +296,7 @@ export function InventoryPanel({
     else if (verbId === 'eat') onEatItem?.(itemId);
     else if (verbId === 'light') onLightItem?.(itemId);
     else if (verbId === 'read') onReadItem?.(itemId);
+    else if (verbId === 'dump') onDumpItem?.(itemId);
     else if (verbId === 'deposit') onDepositItem?.(itemId);
     else if (verbId === 'drop-one') onDropItem?.(itemId);
     else if (verbId === 'drop-all') onDropAllItem?.(itemId);

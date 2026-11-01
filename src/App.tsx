@@ -1688,6 +1688,7 @@ import {
   pickupTrap,
   placeCarriedTrap,
 } from './systems/trap-place';
+import { fillJar, dumpJar } from './systems/clay-jar';
 import { placeTent, pickupTent } from './systems/camping';
 import { harvestHoney } from './systems/honey';
 import { harvestState } from './game/harvestState';
@@ -1750,7 +1751,7 @@ import { AltarChip } from './ui/AltarChip';
 import type { ContextAction } from './ui/types';
 import { TouchControls } from './ui/TouchControls';
 import { LocationChip } from './ui/LocationChip';
-import { ScryButton } from './ui/ScryButton';
+import { ScryButton, FillJarButton } from './ui/ScryButton';
 import { LookButton } from './ui/LookButton';
 import { PausedIndicator } from './ui/PausedIndicator';
 import { Popup } from './ui/Popup';
@@ -1902,6 +1903,7 @@ import {
 import { torchState, type PlacedTorch as PlacedTorchEntity } from './game/torchState';
 import { lightTorches, placeTorch as grantPlaceTorch, pickupTorch as grantPickupTorch } from './systems/torch';
 import { altarState, type PlacedAltar as PlacedAltarEntity } from './game/altarState';
+import { jarPatchState } from './game/jarPatchState';
 import { placeAltar as grantPlaceAltar } from './systems/altar';
 import {
   altarProgressFrom,
@@ -2304,6 +2306,11 @@ const TORCH_IDS: ReadonlySet<string> = new Set([ITEMS.torch]);
  * — the linked-books law makes them one door to the
  * journal's tally surface.
  */
+// The jar build: the water-jar row carries the Dump
+// verb (the pour's aim arm). The empty jar carries
+// none — filling lives on the water's own pill.
+const DUMPABLE_IDS: ReadonlySet<string> = new Set(['water-jar']);
+
 const READABLE_BOOK_IDS: ReadonlySet<string> = new Set([
   ITEMS.journal,
   ITEMS.grimoire,
@@ -2477,6 +2484,7 @@ function toInventoryItem(
     // its authored descriptor supersedes it.
     note: itemNoteFor(stack.item, charms),
   };
+
 }
 
 
@@ -3304,6 +3312,28 @@ export default function App() {
   // show/hide through renderer.setCampArrowsVisible.
   const divinationRef = useRef(new CampDivination());
   const [scryVisible, setScryVisible] = useState(false);
+  // JAR VERBS (the jar build's shell half): the FILL
+  // offer — she stands in water by the composed facts
+  // (siteWaterFacts at her feet: ponds, the creek, her
+  // own hauled patch; mud never answers) with an empty
+  // jar carried. State + ref on the scry idiom: the
+  // moved listener and every inventory refresh recompute
+  // it, the R handler reads the ref. Independent of the
+  // scry conditions — filling must not require a camp.
+  const [fillOffer, setFillOffer] = useState(false);
+  const fillOfferRef = useRef(false);
+  // The DUMP arm: armed from the water-jar row's Dump
+  // verb; while armed, recomputeAnchors certifies the
+  // crosshair's ground (patch first, then the composed
+  // water fact) into dumpAim on the anchor cadence, and
+  // the stack card + touch bar read it live.
+  const [dumpArmed, setDumpArmed] = useState(false);
+  const dumpArmedRef = useRef(false);
+  const [dumpAim, setDumpAim] = useState<{
+    x: number;
+    z: number;
+    cert: 'dry' | 'mud' | 'water';
+  } | null>(null);
   // LOOK action (Adam 2026-10-27 — DEV-approved claim +
   // target + content, Systems NameSight ccab7ff): the shell
   // owns one NameSight; a press looks closely at the
@@ -3411,6 +3441,7 @@ export default function App() {
   const [paused, setPaused] = useState(false);
 
   const refreshInventory = () => {
+    refreshFillOffer();
     setInventoryItems(
       inventory.stacksSnapshot().map((stack) =>
         toInventoryItem(stack, inventory, charmStateRef.current),
@@ -3441,6 +3472,110 @@ export default function App() {
       inventory.count(ITEMS.litTorch) > 0,
     );
   };
+
+  // The FILL offer recompute (the jar build): composed
+  // water facts at her feet + an empty jar carried.
+  const refreshFillOffer = (): void => {
+    const player = playerRef.current;
+    const offer =
+      player !== null &&
+      siteWaterFacts(genRef.current, player.x, player.z).inWater &&
+      inventory.count('clay-jar') > 0;
+    fillOfferRef.current = offer;
+    setFillOffer(offer);
+  };
+
+  // FILL (Adam's door set: the water's own pill reads
+  // 'Fill Jar [R]' beside Scry's E): the grant swaps
+  // clay-jar -> water-jar with the extra pound checked
+  // first; its refusals speak verbatim.
+  const runFillJar = (): void => {
+    const outcome = fillJar(inventory);
+    if (outcome.filled === false) {
+      showFeedback(outcome.reason, 'blocked');
+      return;
+    }
+    refreshInventory();
+    saveNow();
+    showFeedback('The jar fills.', 'gain');
+  };
+
+  // The DUMP certification (the jar build's contract):
+  // Background's patch disc at the point names the
+  // ground first; no patch — the composed water fact
+  // under the aim names real water; neither — dry.
+  const certifyDumpTarget = (
+    x: number,
+    z: number,
+  ): 'dry' | 'mud' | 'water' => {
+    const patch = jarPatchState.patchAt(x, z);
+    if (patch !== null) return patch.kind;
+    return siteWaterFacts(genRef.current, x, z).inWater
+      ? 'water'
+      : 'dry';
+  };
+
+  // The DUMP arm (the water-jar row's Dump verb): the
+  // pack closes, any placement arm yields (one armed
+  // aim at a time), and the crosshair takes over.
+  const handleDumpItem = (): void => {
+    if (inventory.count('water-jar') <= 0) return;
+    setInventoryOpen(false);
+    if (placementRef.current !== null) handlePlaceCancel();
+    dumpArmedRef.current = true;
+    setDumpArmed(true);
+    // The aim certifies NOW, not only on the next
+    // anchor pass — a still player arming the pour
+    // reads her ground immediately.
+    const aim = aimedPlacementPoint();
+    setDumpAim(
+      aim
+        ? { x: aim.x, z: aim.z, cert: certifyDumpTarget(aim.x, aim.z) }
+        : null,
+    );
+  };
+
+  const cancelDump = (): void => {
+    dumpArmedRef.current = false;
+    setDumpArmed(false);
+    setDumpAim(null);
+  };
+
+  // The pour: certify at the crosshair's ground point,
+  // run Systems' grant (a water certification refuses
+  // inside the grant, its sentence speaks, the jar is
+  // kept, and the arm STAYS up for a re-aim — the trap
+  // arm's refusal discipline), then seat the world's
+  // half: dry -> a mud patch at the point; mud -> that
+  // patch rises to water.
+  const confirmDump = (): void => {
+    const aim = aimedPlacementPoint();
+    if (aim === null) {
+      showFeedback('Nowhere to pour it.', 'blocked');
+      return;
+    }
+    const cert = certifyDumpTarget(aim.x, aim.z);
+    const outcome = dumpJar(
+      inventory,
+      cert as Parameters<typeof dumpJar>[1],
+    );
+    if (outcome.dumped === false) {
+      showFeedback(outcome.reason, 'blocked');
+      return;
+    }
+    if (outcome.patch === 'mud') {
+      jarPatchState.seat('mud', aim.x, aim.z);
+      showFeedback('The pour makes mud.', 'gain');
+    } else {
+      const patch = jarPatchState.patchAt(aim.x, aim.z);
+      if (patch !== null) jarPatchState.rise(patch.id);
+      showFeedback('The mud rises to water.', 'gain');
+    }
+    cancelDump();
+    refreshInventory();
+    saveNow();
+  };
+
 
   // Save meta mirror: seed / camera / position as of the latest
   // render, so saveNow() stays correct even when called from a
@@ -3613,6 +3748,11 @@ export default function App() {
           // (restore rebinds position from the fire).
           // Placed cauldrons survive refresh.
           cauldrons: cauldronState.snapshot(),
+          // Jar-made ground patches (the jar build's
+          // rider: the state landed with its save field
+          // but no shell wiring — the snapshot joins the
+          // draft here, beside its sibling states).
+          patches: jarPatchState.snapshot(),
           // RITUAL SAVE WIRING: stagings + awakenings ride
           // every save as-is (StagingBook / CharmState
           // snapshots; serialize writes them verbatim,
@@ -4407,6 +4547,13 @@ export default function App() {
       pileAnchorsNext.push({ pile, x: anchor.x, y: anchor.y });
     }
     setPileAnchors(pileAnchorsNext);
+    // The FILL offer rides the anchor cadence too: the
+    // boot's own recompute calls race the player's
+    // creation (playerRef still null), so the moved
+    // listener alone left a boot standing in water
+    // offer-less until her first step. The cadence is
+    // the standing recompute for exactly this class.
+    refreshFillOffer();
     const mode = placementRef.current;
     if (mode) {
       // THE CROSSHAIR LAW GENERALIZED (Adam, 2026-11-01):
@@ -4439,6 +4586,18 @@ export default function App() {
     } else {
       setPlacementAnchor(null);
       rendererRef.current?.setPlacementPreview(null);
+    }
+    // The DUMP aim (the jar build): while the pour is
+    // armed, the same cadence certifies the crosshair's
+    // ground point into dumpAim — the card reads it
+    // live, the pour re-certifies at press time.
+    if (dumpArmedRef.current) {
+      const aim = aimedPlacementPoint();
+      setDumpAim(
+        aim
+          ? { x: aim.x, z: aim.z, cert: certifyDumpTarget(aim.x, aim.z) }
+          : null,
+      );
     }
   };
 
@@ -4732,6 +4891,13 @@ export default function App() {
         // fires earlier in this block, so riding the
         // desk block's tail is safe. Silent.
         cauldronState.restore(bootSaved.cauldrons ?? []);
+        // Jar patches restore (the jar build's rider —
+        // boot never called it; a poured patch died at
+        // reload). Silent; unknown kinds drop inside.
+        jarPatchState.restore(bootSaved.patches ?? []);
+        // A boot standing in water with an empty jar
+        // shows the Fill offer before the first step.
+        refreshFillOffer();
         // RITUAL SAVE WIRING (same pre-construction pattern):
         // StagingBook + CharmState restore (pure systems,
         // boot-only, bad entries dropped). ritualSiteState
@@ -5158,6 +5324,10 @@ export default function App() {
           houses.length > 0 &&
           isNearStillWater(x, z, waters),
       );
+      // The jar's FILL offer rides the same tick (its
+      // own facts — the composed siteWaterFacts, not
+      // the scry still-water reading).
+      refreshFillOffer();
       // GROVE ENTRY DETECTION (Discovery wiring,
       // 2026-10-31): the surface only (a cave visit's
       // coordinates are not the world's), and only
@@ -10322,6 +10492,10 @@ export default function App() {
       handlePlaceCancel();
       return true;
     }
+    if (dumpArmed) {
+      cancelDump();
+      return true;
+    }
     if (homeMenuOpen) {
       setHomeMenuOpen(false);
       return true;
@@ -11475,6 +11649,15 @@ export default function App() {
   // R is a no-op there (hive Relocate is an unbuilt
   // seed, named not built).
   const handleSecondInteract = (): void => {
+    // The jar's FILL (Adam's door set): while she stands
+    // in water with an empty jar, the water's own pill
+    // reads 'Fill Jar [R]' — R belongs to the water
+    // while the offer stands, ahead of the winner's
+    // second act. Stepping out restores the winner's R.
+    if (fillOfferRef.current) {
+      runFillJar();
+      return;
+    }
     const winner = useWinnerRef.current;
     if (winner === null) return;
     switch (winner.kind) {
@@ -11777,6 +11960,12 @@ export default function App() {
       // listener above).
       if (placement !== null) {
         if (key === 'enter') handlePlaceConfirm();
+        return;
+      }
+      // The dump arm: Enter pours, every other action
+      // key waits (Esc cancels, in the Esc listener).
+      if (dumpArmed) {
+        if (key === 'enter') confirmDump();
         return;
       }
       // A world menu/panel is open: digits fire its
@@ -12924,6 +13113,58 @@ export default function App() {
     </div>
   ) : null;
 
+  // The DUMP card (the jar build): the placement card's
+  // sibling — the live certification at the crosshair
+  // reads in words, Pour confirms (or Enter), Cancel
+  // stands the arm down (or Esc). A water reading is
+  // not a dead end: Pour speaks the grant's refusal and
+  // the arm stays up for a re-aim.
+  const dumpCard = dumpArmed ? (
+    <div className="rounded bg-black/45 px-2 py-1 text-sm">
+      <p>
+        {dumpAim === null
+          ? 'Pour the water jar where you aim.'
+          : dumpAim.cert === 'dry'
+            ? 'Dry ground — the pour makes mud.'
+            : dumpAim.cert === 'mud'
+              ? 'Mud — the pour raises water.'
+              : 'Water — the pour adds nothing.'}
+      </p>
+      <div className="mt-1 flex gap-2">
+        <button
+          type="button"
+          onClick={confirmDump}
+          className={
+            isTouch
+              ? 'rounded bg-moss-deep px-3 py-2 text-sm min-h-[44px] hover:bg-moss'
+              : 'rounded bg-moss-deep px-2 py-0.5 text-xs hover:bg-moss'
+          }
+        >
+          Pour there
+          {!isTouch ? (
+            <span
+              aria-hidden="true"
+              className={'ml-1 ' + KEY_BADGE_CLASS}
+            >
+              Enter
+            </span>
+          ) : null}
+        </button>
+        <button
+          type="button"
+          onClick={cancelDump}
+          className={
+            isTouch
+              ? 'rounded bg-moss-deep px-3 py-2 text-sm min-h-[44px] hover:bg-moss'
+              : 'rounded bg-moss-deep px-2 py-0.5 text-xs hover:bg-moss'
+          }
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
+  ) : null;
+
   return (
     <div
       className={
@@ -13442,6 +13683,7 @@ export default function App() {
           }
         >
           {placementCard}
+          {dumpCard}
           {!isTouch ? stackMeta : null}
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <button
@@ -13900,6 +14142,8 @@ export default function App() {
             onLightItem={handleLightTorchItem}
             readableIds={READABLE_BOOK_IDS}
             onReadItem={() => openJournalPanel()}
+            dumpableIds={DUMPABLE_IDS}
+            onDumpItem={() => handleDumpItem()}
             storage={storageSection}
             onDepositItem={handleDepositItem}
             onDropItem={handleDropItem}
@@ -14769,8 +15013,9 @@ export default function App() {
         While a placement is armed, the touch placement bar
         (next block) takes the bottom-center family and Scry
         hides — one actor in the seat at a time. */}
-      {scryVisible &&
+      {(scryVisible || fillOffer) &&
       placement === null &&
+      !dumpArmed &&
       !inventoryOpen &&
       !craftingOpen &&
       !charmsOpen &&
@@ -14779,8 +15024,13 @@ export default function App() {
       !introOpen &&
       !pendingTrapRecipe &&
       !paused ? (
-        <div className="pointer-events-none absolute bottom-12 left-1/2 z-40 -translate-x-1/2">
-          <ScryButton onPress={handleScry} showKeyHint={!isTouch} />
+        <div className="pointer-events-none absolute bottom-12 left-1/2 z-40 flex -translate-x-1/2 gap-2">
+          {scryVisible ? (
+            <ScryButton onPress={handleScry} showKeyHint={!isTouch} />
+          ) : null}
+          {fillOffer ? (
+            <FillJarButton onPress={runFillJar} showKeyHint={!isTouch} />
+          ) : null}
         </div>
       ) : null}
 
@@ -14856,6 +15106,49 @@ export default function App() {
           {placementNote ? (
             <p className="mt-1 text-xs text-red-300">{placementNote}</p>
           ) : null}
+        </div>
+      ) : null}
+
+      {/* TOUCH DUMP BAR: the placement bar's sibling —
+          the dump card's touch door under the same law
+          (every armed + collapsed state, panels hide it). */}
+      {hudCollapsed &&
+      dumpArmed &&
+      !inventoryOpen &&
+      !craftingOpen &&
+      !charmsOpen &&
+      !companionsOpen &&
+      !journalOpen &&
+      !optionsOpen &&
+      !introOpen &&
+      !pendingTrapRecipe &&
+      pendingRemoveTarget === null ? (
+        <div className="pointer-events-auto absolute bottom-24 left-1/2 z-50 -translate-x-1/2 rounded bg-black/60 px-3 py-2 text-center">
+          <p className="text-sm text-stone-100">
+            {dumpAim === null
+              ? 'Pour the water jar where you aim.'
+              : dumpAim.cert === 'dry'
+                ? 'Dry ground — the pour makes mud.'
+                : dumpAim.cert === 'mud'
+                  ? 'Mud — the pour raises water.'
+                  : 'Water — the pour adds nothing.'}
+          </p>
+          <div className="mt-1 flex justify-center gap-2">
+            <button
+              type="button"
+              onClick={confirmDump}
+              className="min-h-[44px] rounded bg-moss-deep px-3 py-2 text-sm hover:bg-moss"
+            >
+              Pour there
+            </button>
+            <button
+              type="button"
+              onClick={cancelDump}
+              className="min-h-[44px] rounded bg-moss-deep px-3 py-2 text-sm hover:bg-moss"
+            >
+              Cancel
+            </button>
+          </div>
         </div>
       ) : null}
 
