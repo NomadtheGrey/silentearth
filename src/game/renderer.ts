@@ -54,6 +54,7 @@ import { treeKindAt } from './treeKind';
 import { riverParamsFor, riverRibbonForChunk } from './river';
 import { barnSite, caveMouthSite, chapelSite, drownedMillSite, farmhouseSite, generalStoreSite, groveSite, pushOutOfWalls, railSidingSite, schoolhouseSite, siloSite, sunkenRoadSite, villageSite, wallsNearSites, type SiteFootprint } from './sites';
 import { caveFootprintFor, caveInstancesInRect, caveLayoutForKey, caveMouthsNear } from './caves';
+import { isUpstairsKey, UPSTAIRS_BACKGROUND, UPSTAIRS_FOG_DENSITY } from './attics';
 import { homesteadInstancesInRect } from './homesteads';
 import { farmhouseInstancesInRect } from './farmhouses';
 import type { RiverParams } from './river';
@@ -302,6 +303,20 @@ const RIVER_MATERIAL = new THREE.MeshLambertMaterial({
   opacity: 0.75,
   side: THREE.DoubleSide,
 });
+
+/**
+ * The seat a surface-derived dimension arrives with
+ * (dimensionTravel passes it for upstairs zones): the
+ * zone's own footprint for the wall queries, and its
+ * light spots in the dimension frame. Dimensions that
+ * derive from their own key (the caves) pass nothing.
+ */
+export interface DimensionSeat {
+  footprint: SiteFootprint;
+  lightSpots?: { x: number; z: number }[];
+  lightColor?: number;
+  lightY?: number;
+}
 
 interface LoadedChunk {
   group: THREE.Group;
@@ -1422,11 +1437,17 @@ export class WorldRenderer {
    * return as they were. The river, the sky, and the fog
    * all gate off the generator's dimensionKey.
    */
-  setDimensionGen(gen: WorldGen): void {
+  setDimensionGen(gen: WorldGen, seat?: DimensionSeat): void {
     const underground = !!gen.dimensionKey;
+    const upstairs = !!gen.dimensionKey && isUpstairsKey(gen.dimensionKey);
     this.gen = wrapGenWithState(gen);
     this.riverParams = underground ? null : riverParamsFor(String(gen.seed), gen.findSpawn());
-    this.sites = computeSites(gen);
+    // A dimension whose facts derive from the SURFACE
+    // (an upstairs zone reads its house) arrives with its
+    // seat — footprint + light spots computed by travel
+    // from the surface generator. Caves derive their own
+    // from the key and pass nothing.
+    this.sites = seat ? [seat.footprint] : computeSites(gen);
     const showPlaced = !underground;
     if (this.placedGroup) this.placedGroup.visible = showPlaced;
     if (this.companionGroup) this.companionGroup.visible = showPlaced;
@@ -1438,12 +1459,20 @@ export class WorldRenderer {
     for (const light of [...this.fireLights, ...this.torchLights, ...this.altarCandleLights]) {
       light.visible = showPlaced;
     }
-    if (!this.disposed) this.sky?.setCaveMode(underground);
-    (this.scene.background as THREE.Color).set(underground ? 0x030303 : 0x1a2018);
-    if (this.scene.fog instanceof THREE.FogExp2) {
-      this.scene.fog.color.set(underground ? 0x030303 : 0x1a2018);
+    if (!this.disposed) {
+      // Cave dimensions take the true dark; upstairs
+      // zones take the GLOOM (attics.ts's register —
+      // dimmed warm light, never black); the surface
+      // takes neither.
+      this.sky?.setCaveMode(underground && !upstairs);
+      this.sky?.setGloomMode(upstairs);
     }
-    this.rebuildFungusLights(underground ? String(gen.seed) : null, gen.dimensionKey);
+    const bg = upstairs ? UPSTAIRS_BACKGROUND : underground ? 0x030303 : 0x1a2018;
+    (this.scene.background as THREE.Color).set(bg);
+    if (this.scene.fog instanceof THREE.FogExp2) {
+      this.scene.fog.color.set(bg);
+    }
+    this.rebuildFungusLights(underground ? String(gen.seed) : null, gen.dimensionKey, seat);
     this.proximity.setGen(this.gen);
     this.disposeGroundTextures();
     for (const [key, loaded] of this.chunks) {
@@ -1459,10 +1488,29 @@ export class WorldRenderer {
    * points at the layout's fungus spots — the entrance
    * glow Adam allowed, and nothing deeper.
    */
-  private rebuildFungusLights(seed: string | null, key?: string): void {
+  private rebuildFungusLights(seed: string | null, key?: string, seat?: DimensionSeat): void {
     for (const light of this.fungusLights) this.scene.remove(light);
     this.fungusLights = [];
     if (!seed) return;
+    if (seat?.lightSpots) {
+      // A seated dimension (upstairs): its spots arrive
+      // computed from the surface; they burn dim and warm
+      // at window height, in the same light rig (the
+      // flicker update reads this array + phase).
+      for (const spot of seat.lightSpots) {
+        const light = new THREE.PointLight(
+          seat.lightColor ?? 0xffd9a0,
+          FUNGUS_LIGHT_INTENSITY,
+          FUNGUS_LIGHT_DISTANCE,
+          FUNGUS_LIGHT_DECAY,
+        );
+        light.position.set(spot.x, seat.lightY ?? 1.6, spot.z);
+        light.userData.phase = flamePhase(spot.x, spot.z);
+        this.scene.add(light);
+        this.fungusLights.push(light);
+      }
+      return;
+    }
     for (const spot of caveLayoutForKey(seed, key ?? 'cave:main').fungusLights) {
       const light = new THREE.PointLight(
         FUNGUS_LIGHT_COLOR,
@@ -3044,8 +3092,11 @@ export class WorldRenderer {
     if (fog instanceof THREE.FogExp2) {
       if (this.gen.dimensionKey) {
         // Underground: the cave's own thick fog, whatever
-        // the surface night is doing.
-        fog.density = CAVE_FOG_DENSITY;
+        // the surface night is doing. An upstairs zone
+        // takes its own thinner gloom instead.
+        fog.density = isUpstairsKey(this.gen.dimensionKey)
+          ? UPSTAIRS_FOG_DENSITY
+          : CAVE_FOG_DENSITY;
       } else {
         const night = this.sky?.nightFactor ?? 0;
         fog.density = this.batNightWayfinding

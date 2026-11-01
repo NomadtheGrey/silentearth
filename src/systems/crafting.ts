@@ -63,6 +63,8 @@ import {
   type Ingredient,
   type ItemId,
   type Recipe,
+  type SiteFacts,
+  type SiteRequirement,
 } from './recipes';
 // The shelf rule reads the item registry's categories.
 // inventory.ts imports CraftingInventory from here as
@@ -120,6 +122,15 @@ export interface CanCraftResult {
    * false (gate off — see Recipe.requiresCreek).
    */
   creekMismatch: boolean;
+  /**
+   * True when the recipe states requiresSite and the
+   * supplied site facts say she stands wrong for it
+   * (fork B). A null site input leaves this false
+   * (gate off — see Recipe.requiresSite).
+   */
+  siteMismatch: boolean;
+  /** The site the recipe requires, when it states one. */
+  requiredSite?: SiteRequirement;
   /** The station the recipe requires, when it states one. */
   requiredStation?: CraftingStation;
   /**
@@ -309,6 +320,7 @@ export function canCraft(
   inventory: CraftingInventory,
   station: StationContext = null,
   nearCreek: boolean | null = null,
+  site: SiteFacts | null = null,
 ): CanCraftResult {
   const missingIngredients = missingFor(recipe.ingredients, inventory);
   const missingRequirements = recipe.requires
@@ -352,6 +364,16 @@ export function canCraft(
   const creekMismatch =
     recipe.requiresCreek === true && nearCreek === false;
 
+  // Site rule (fork B): a stated requiresSite mismatches only
+  // when the shell positively supplies where she stands and
+  // she stands wrong for it — 'in-water' wants inWater true,
+  // 'dry-land' wants it false. Null input leaves the gate off
+  // (transitional — see Recipe.requiresSite).
+  const siteMismatch =
+    site !== null &&
+    recipe.requiresSite !== undefined &&
+    (recipe.requiresSite === 'in-water' ? !site.inWater : site.inWater);
+
   // No-recraft ownership: an already-owned or superseded
   // recipe is not craftable, whatever the materials say.
   const ownership = craftOwnershipStatus(recipe, inventory);
@@ -363,6 +385,7 @@ export function canCraft(
     toolStageShortfall === undefined &&
     !stationMismatch &&
     !creekMismatch &&
+    !siteMismatch &&
     ownership === 'available';
 
   return {
@@ -373,6 +396,8 @@ export function canCraft(
     toolStageShortfall,
     stationMismatch,
     creekMismatch,
+    siteMismatch,
+    requiredSite: recipe.requiresSite,
     requiredStation: recipe.station,
     ownership,
   };

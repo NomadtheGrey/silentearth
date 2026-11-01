@@ -520,7 +520,7 @@ export interface EventMap {
    * call's reach by distance; its surface (a feed line, a
    * sound) is the shell's.
    */
-  'guide:call': { x: number; z: number };
+  'guide:call': { x: number; z: number; bearingDeg: number; compass: string };
 }
 
 type Handler<E> = (payload: E) => void;
