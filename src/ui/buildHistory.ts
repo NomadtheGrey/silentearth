@@ -43,6 +43,14 @@ export interface BuildRecord {
 
 const ALL_RECORDS: BuildRecord[] = [
   {
+    merge: 'Merge #53',
+    pr: 92,
+    sha: '43293b8',
+    date: '2026-11-01',
+    what: 'Five commits, and a sixth \u2014 this record \u2014 rides in the same merge. Its story is the raven, whole. She can be FOUND now: at dawn and dusk she stages where eyes land first \u2014 a tree ahead on the road, the grove\u2019s heart, her own ring only last \u2014 perched high enough to catch the light, and when her window opens she flies IN and calls as she lands, the call itself carrying where she is: its bearing rides every call she makes. And she performs for her audience of one. Her distances have come in to twilight range; her flights bow across her view instead of cutting behind it; on the perch she turns to face her, fidgets along the branch with little wing-flicks, and if she is kept waiting she climbs a ladder of reminders \u2014 a call, then a flap of wings in place, then a wide arc out and back to the same perch, calling as she settles. Riding named, honestly: the latch law\u2019s systems half \u2014 quest completion now latches where it is computed, curing the lean-to that un-completed itself, inert until the shell\u2019s fold-in lands in a later merge; the upstairs travel ENGINE \u2014 the climb and return as machinery, waiting on the shell half that makes the stairs a door; and the trap site-gate DATA \u2014 the five traps\u2019 site rules stated in the recipe book, read by a later trap merge where the setting actually happens.',
+    why: 'Adam\u2019s bird was written as a guide and played as a rumor: perched where no one looked, forty metres off, silent about where she waited. A guide\u2019s first duty is to be found, and her second \u2014 Adam\u2019s own word for it \u2014 is to be worth watching once she is: she works an audience of one, and the performance is how the leading feels like company instead of choreography. The riders ride because chunks ship whole stories now, and honest books name what is complete, what is machinery, and what is data \u2014 each waiting on its named other half, none of it mistaken for live.',
+  },
+  {
     merge: 'Merge #52',
     pr: 91,
     sha: '077d7bd',
