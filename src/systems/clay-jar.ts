@@ -102,7 +102,7 @@ export function emptyJar(
 // ---------------------------------------------------------------------------
 
 /** The ground the shell certifies at the pour point. */
-export type DumpTarget = 'dry' | 'mud' | 'water';
+export type DumpTarget = 'dry' | 'mud';
 
 /**
  * Dump outcome. `patch` names the ground the pour
@@ -121,22 +121,31 @@ export type DumpJarOutcome =
  * the jar itself returns to her pack empty — she
  * keeps the vessel. One jar = one stage (DRAFT): dry
  * ground becomes a mud patch, a mud patch becomes a
- * water patch. A pour onto a WATER patch also
- * consumes — it joins (saturates) the source, outcome
- * patch 'water'; saturation's meaning in the patch
- * state is Background's to define (the seam ruling,
- * 2026-11-01: refusing would strand their saturate
- * seat, grants being the consumption authority).
- * Ground outside the three named kinds refuses
- * plainly (the verb is not offered there; the guard
- * keeps the outcome honest regardless). No hunger
+ * water patch. A pour onto a WATER patch REFUSES:
+ * saturation means nothing in v1 (Background's word,
+ * 2026-11-01 — no growth, no depth; either would be
+ * a mechanic Adam never specced, smuggled in as a
+ * side effect), and eating a jar silently for
+ * nothing is the one dishonest outcome on the table.
+ * The refusal leaves her water hers to spend where
+ * it matters. (A 'water'-accepting widening lived
+ * for one interval and came back out on exactly
+ * this word.) Ground outside the named kinds refuses
+ * likewise; the guard keeps outcomes honest for
+ * targets the verb is never offered on. No hunger
  * gate (an inventory move, the module's idiom).
  */
 export function dumpJar(
   inventory: PersonalInventory,
   target: DumpTarget,
 ): DumpJarOutcome {
-  if (target !== 'dry' && target !== 'mud' && target !== 'water') {
+  if ((target as string) === 'water') {
+    return {
+      dumped: false,
+      reason: 'That ground is water already — the pour adds nothing.',
+    };
+  }
+  if (target !== 'dry' && target !== 'mud') {
     return { dumped: false, reason: 'Pouring it there does nothing.' };
   }
   if (inventory.count(ITEMS.waterJar) <= 0) {

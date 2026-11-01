@@ -382,6 +382,21 @@ export interface SavedCauldron {
 }
 
 /**
+ * A jar-made ground patch (Background's jarPatchState
+ * snapshot shape, seated 2026-11-01): the pour's work
+ * in the world — mud where water was dumped on dry
+ * ground, water where it was dumped on mud (Adam's
+ * water cycle). The patch is placed STATE, not an
+ * item; lifetime is the state's own ruling.
+ */
+export interface SavedPatch {
+  id: string;
+  kind: 'mud' | 'water';
+  x: number;
+  z: number;
+}
+
+/**
  * The boot-at-the-mouth fact: the cave visit a save
  * was written in, as handed over by Background's
  * dimensionState.snapshot() (the shell passes its
@@ -550,6 +565,8 @@ export interface SaveData {
   desks: SavedDesk[];
   /** Placed cauldrons (keyed to their hearths); [] for old saves. */
   cauldrons: SavedCauldron[];
+  /** Jar-made ground patches (mud/water); [] for old saves. */
+  patches: SavedPatch[];
   /** The cave visit this save was written in (boot-at-the-mouth
    * fact); null for surface saves and old saves. */
   dimensionVisit: SavedDimensionVisit | null;
@@ -705,6 +722,17 @@ export interface SaveDraft {
     x: number;
     z: number;
     id?: string;
+  }>;
+  /**
+   * Jar-made ground patches from the patch-state
+   * source (Background's jarPatchState snapshot).
+   * OPTIONAL, same trap-save pattern as cauldrons.
+   */
+  patches?: ReadonlyArray<{
+    id: string;
+    kind: 'mud' | 'water';
+    x: number;
+    z: number;
   }>;
   /**
    * The cave visit, from dimensionState.snapshot() at
@@ -1031,6 +1059,16 @@ export function serializeSave(draft: SaveDraft): SaveData {
       x: cauldron.x,
       z: cauldron.z,
       ...(cauldron.id !== undefined ? { id: cauldron.id } : {}),
+    })),
+    // Patches: written AS-IS, same as cauldrons (id +
+    // kind + position verbatim — no filtering, no
+    // normalization). The patch is placed state; its
+    // lifetime ruling lives with the state, not here.
+    patches: (draft.patches ?? []).map((patch) => ({
+      id: patch.id,
+      kind: patch.kind,
+      x: patch.x,
+      z: patch.z,
     })),
     // The visit fact: written AS-IS (dimension key +
     // entry mouth verbatim). Absent/null in the draft
@@ -1540,6 +1578,28 @@ export function deserializeSave(value: unknown): SaveData | null {
         });
       }
     }
+    // Patches are optional on read, same leniency as
+    // cauldrons: an old v1 save without them loads
+    // with patches: []. Entries pass through — the
+    // patch-state restore validates and drops bad
+    // records — except the KIND, which is this
+    // document's own vocabulary: an entry whose kind
+    // is neither 'mud' nor 'water' is not a patch and
+    // drops here, whole-record. A non-array patches
+    // field loads as [].
+    const patches: SavedPatch[] = [];
+    if (value.patches !== undefined && Array.isArray(value.patches)) {
+      for (const entry of value.patches) {
+        if (!isRecord(entry)) continue;
+        if (entry.kind !== 'mud' && entry.kind !== 'water') continue;
+        patches.push({
+          id: entry.id as string,
+          kind: entry.kind,
+          x: entry.x as number,
+          z: entry.z as number,
+        });
+      }
+    }
     // The visit fact is optional on read: an old v1
     // save without it loads with dimensionVisit: null.
     // A record passes with its key verbatim and its
@@ -1878,6 +1938,7 @@ export function deserializeSave(value: unknown): SaveData | null {
       altars,
       desks,
       cauldrons,
+      patches,
       dimensionVisit,
       acquisitionOrder,
       companions,
