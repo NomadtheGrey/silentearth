@@ -85,6 +85,13 @@
  * never gate completion — isDone stays the sole
  * authority, and the equivalence is probe-asserted.
  * Components exist for the HUD's active-task card.
+ * One named pattern inside the law: a ROAD STEP
+ * (wake-charm's bone and altar steps, Adam's ruling —
+ * 'the altar goes in there') derives as (completion)
+ * OR (its own fact), so a finished quest never shows
+ * an unfinished step even when the road was walked
+ * another way; before completion the step reads its
+ * own fact alone.
  *
  * THE ACTIVE MARK (2026-11-01): ONE quest may be marked
  * active; its id rides SavedQuestFlags.active in the
@@ -168,6 +175,15 @@ export interface QuestFacts {
   /** Placed-torch count, shell-mapped from torchState. */
   placedTorches: number;
   flags: QuestFlags;
+  /**
+   * Whether an altar stands — shell-mapped from the
+   * altar state (a stump whose additions carry 'altar';
+   * Systems' isStumpyAltar reads it). OPTIONAL: absent
+   * reads as none-standing for the one component that
+   * consults it (wake-charm's road step), and quest
+   * completion never depends on it — see that quest.
+   */
+  altarRaised?: boolean;
 }
 
 /**
@@ -533,17 +549,39 @@ export const QUEST_DEFINITIONS: readonly QuestDefinition[] = [
     // a home now, opening the Wakings fold. The bone
     // road crosses the act line — find-bone stays in
     // The Land, and acts are not gates, so the road
-    // walks fine. Its single component stays exact: the
-    // bone step is find-bone's own quest, not a
-    // component here, because a completed rite need not
-    // still carry its bone.
+    // walks fine.
     thread: 'wakings',
     act: 'witchery',
     isDone: (facts) => facts.flags.ritualCompleted,
+    // THE ROAD, AS COMPONENTS (Adam, 2026-11-01: 'the
+    // altar goes in there'): find a bone / raise an
+    // altar / wake the charm. The first two are ROAD
+    // STEPS, derived so the decomposition stays EXACT:
+    // each reads (the rite is done) OR (its own fact),
+    // because a completed rite need not still carry its
+    // bone, and a Waking can complete at a grade-1 site
+    // where no altar was raised — completion must imply
+    // every step, or the card would un-check a finished
+    // quest. Before completion each step reads its own
+    // fact honestly; the steps never gate (isDone is
+    // the flag alone, as it always was).
     components: [
       {
-        id: 'wake-charm',
-        label: 'Complete a Waking rite',
+        id: 'find-a-bone',
+        label: 'Find a bone',
+        isDone: (facts) =>
+          facts.flags.ritualCompleted ||
+          BONE_ITEM_IDS.some((bone) => facts.inventory.count(bone) > 0),
+      },
+      {
+        id: 'raise-an-altar',
+        label: 'Raise an altar',
+        isDone: (facts) =>
+          facts.flags.ritualCompleted || facts.altarRaised === true,
+      },
+      {
+        id: 'wake-the-charm',
+        label: 'Wake the charm',
         isDone: (facts) => facts.flags.ritualCompleted,
       },
     ],
