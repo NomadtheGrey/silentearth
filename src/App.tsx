@@ -8446,11 +8446,27 @@ export default function App() {
     );
   };
   const fireMenuActions = (fire: PlacedFire): ContextAction[] => {
+    // THE HEARTH-SIDE CAULDRON DOOR (the cauldron fix,
+    // 2026-11-01): the pack's Place press worked whole,
+    // but the hearth itself offered nothing — face an
+    // unoccupied hearth with the cauldron carried and
+    // its own menu now offers the setting. No lit gate
+    // (the grant has none — she sets the pot before she
+    // lights the hearth), so the row joins every list a
+    // hearth can show. Label DRAFT for Adam's pin pass
+    // ('Place cauldron' / 'Set cauldron' both ride).
+    const cauldronActions: ContextAction[] =
+      fire.type === 'hearth' &&
+      inventory.count(ITEMS.cauldron) > 0 &&
+      cauldronState.cauldronForHearth(fire.id) === undefined
+        ? [{ id: 'place-cauldron', label: 'Place cauldron' }]
+        : [];
     if (fire.lit) {
       const hasAcorns = inventory.count(FOOD_ACORNS) > 0;
       const hasSnapWood = inventory.count(CHAR_INPUT_ITEM) > 0;
       const unlitTorches = inventory.count(ITEMS.torch);
       return [
+        ...cauldronActions,
         ...(unlitTorches >= 1
           ? [
               {
@@ -8485,6 +8501,7 @@ export default function App() {
     }
     if (fire.lighting?.method === 'flint') {
       return [
+        ...cauldronActions,
         {
           id: 'click-flint',
           label: `Click flint (${fire.lighting.clicks} of 3)`,
@@ -8494,6 +8511,7 @@ export default function App() {
     }
     if (fire.lighting?.method === 'friction') {
       return [
+        ...cauldronActions,
         {
           id: 'rub',
           label:
@@ -8508,6 +8526,7 @@ export default function App() {
     }
     const hasFlint = inventory.count(ITEMS.flint) > 0;
     return [
+      ...cauldronActions,
       {
         id: 'light-flint',
         label: 'Light with flint',
@@ -8531,6 +8550,13 @@ export default function App() {
     };
     if (actionId === 'close') {
       setSelectedFireId(null);
+      return;
+    }
+    if (actionId === 'place-cauldron') {
+      // The EXISTING composition (the pack press's own):
+      // the grant reads the faced winner, which is this
+      // hearth while its menu stands open.
+      handlePlaceCauldron();
       return;
     }
     if (actionId === 'light-flint') {
