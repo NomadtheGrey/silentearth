@@ -16,8 +16,12 @@
  * through the rise — a dump inside a mud patch's disc
  * turns THAT patch to water (risePatch, same id — the
  * placeHouse upgrade idiom); a dump on dry ground seats
- * a new mud patch; on water it saturates (the record
- * already reads water — nothing changes). patchAt is
+ * a new mud patch. A dump aimed at a WATER patch is
+ * refused by Systems' grant (settled with Systems,
+ * 2026-11-01): saturation means nothing in v1 — no
+ * growth, no depth — and a jar is never eaten silently
+ * for nothing; risePatch's null on a water patch is the
+ * state-side guard behind that refusal. patchAt is
  * the pre-read the shell certifies the ground from:
  * the patch whose disc holds the point (nearest when
  * discs overlap — overlaps are allowed, the yard reads
