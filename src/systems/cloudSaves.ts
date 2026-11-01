@@ -1248,6 +1248,50 @@ async function checkShelfFreshness(
   return 'fresh';
 }
 
+/**
+ * MIRROR NOW — the Save button's mirror half (panel
+ * diagnosis, 2026-11-01). One act: pend the record and
+ * flush it immediately — the coalescing window is
+ * bypassed, the overwrite safeguard's freshness check
+ * is NOT (immediacy is not force; a forced write
+ * remains the dialog's overwrite act, a different
+ * door). The local write is the shell's; this is the
+ * copy-up only.
+ *
+ * Against the guard's states: CLEAN — the write lands
+ * at once (or the press itself raises the episode if
+ * the shelf advanced). UNRESOLVED conflict — nothing
+ * writes; the episode stands for the dialog, exactly
+ * as a routine save leaves it. DECIDED-KEEP — the one
+ * state a routine save cannot move: a deliberate
+ * press REOPENS the episode (resolvedKeep clears; the
+ * original stamps stand — it is the same episode,
+ * asked again once, default still keep) and nothing
+ * writes. Explicit-words calls are deliberate writes
+ * and skip the reopen, as they skip every gate.
+ */
+export async function mirrorNow(
+  baseUrl: string | undefined,
+  saveData: SaveData,
+  opts?: { words?: CloudWords; fetchFn?: CloudFetch } & MirrorTiming,
+): Promise<MirrorResult> {
+  if (opts?.words === undefined) {
+    const guard = readGuardBlob();
+    if (guard.conflict !== null) {
+      if (guard.conflict.resolvedKeep) {
+        writeGuardBlob({
+          basis: guard.basis,
+          conflict: { ...guard.conflict, resolvedKeep: false },
+        });
+      }
+      return { mirrored: false, ok: true };
+    }
+  }
+  const pended = await mirrorSave(baseUrl, saveData, opts);
+  const flushed = await flushPendingMirror();
+  return flushed ?? pended;
+}
+
 export async function flushPendingMirror(): Promise<MirrorResult | null> {
   const pending = pendingMirror;
   if (pending === null || mirrorFlushInFlight) return null;
@@ -1393,9 +1437,14 @@ export async function mirrorSave(
       // Already the mirrored record — nothing to send.
       // Any pending is superseded too: the player's latest
       // state IS what the cloud holds, so a queued older
-      // change must never land after it.
+      // change must never land after it. `mirrored` is
+      // false: no copy was sent by THIS call — the same
+      // reading flushPendingMirror's identical-key
+      // short-circuit returns, so a caller (a Save Now
+      // press, say) can phrase 'already on the shelf'
+      // from the result instead of claiming a fresh copy.
       if (pendingMirror !== null) cancelPendingMirror();
-      return { mirrored: true, ok: true };
+      return { mirrored: false, ok: true };
     }
     const now = opts?.now ?? Date.now;
     const pending: PendingMirror = {
