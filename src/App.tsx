@@ -13207,6 +13207,64 @@ export default function App() {
           {/* Touch seat for the meta block: LAST in the
               stack (DEFECT 3 — the working parts lead). */}
           {isTouch ? stackMeta : null}
+          {/* Seed controls. THE STRIP FOLLOWS THE
+              CONTENT (Adam's overlap defect + DEV's idiom,
+              2026-11-01): this row used to sit in an
+              absolute bottom-left seat outside the stack,
+              and the stack — whose height is its content,
+              unbounded on desktop — grew down into it: at
+              full wardrobe the wardrobe's last rows flowed
+              underneath the strip and it painted over them
+              (measured: stack content bottom y=668 at both
+              768 and 600 tall; the strip's top at 696 at
+              768 — 28 px of clearance — and at 528 at 600,
+              covering the stack's last ~140 px). Now the
+              strip takes the stack's LAST seat in flow,
+              after every working part on both pointers, so
+              it follows the content by construction and
+              can never overlap it at any window height.
+              PHONE STRIP history (Adam's defect report,
+              2026-11-01, preserved): the row wraps, the
+              Current line takes its OWN row (it can no
+              longer reach bottom-center at any width), the
+              input is narrower, and the container is
+              pointer-transparent except the real controls —
+              the label and the Current line never take a
+              tap. The label and the Current chip carry the
+              notes' black backdrop (bare text let the armed
+              ghost's poles paint straight across the
+              words). On touch the strip stands down while
+              a dialog is open (the takeover — its
+              'Current:' line collided with the sheet's
+              list headings in Adam's frame). */}
+          {!(isTouch && anyDialogOpen) ? (
+          <div className="pointer-events-none mt-3 flex max-w-[100vw] flex-wrap items-center gap-2">
+            <label
+              htmlFor="seed-input"
+              className="rounded bg-black/45 px-2 py-1 text-xs opacity-70"
+            >
+              World seed:
+            </label>
+            <input
+              id="seed-input"
+              value={seedInput}
+              onChange={(e) => setSeedInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') regenerate();
+              }}
+              className="pointer-events-auto bg-[#1e241c] border border-moss-deep px-2 py-1 text-xs w-40 outline-none"
+            />
+            <button
+              onClick={() => regenerate()}
+              className="pointer-events-auto bg-moss-deep hover:bg-moss px-3 py-1 text-xs"
+            >
+              Regenerate
+            </button>
+            <span className="w-full text-xs opacity-60">
+              <span className="rounded bg-black/45 px-2 py-1">Current: {seed}</span>
+            </span>
+          </div>
+          ) : null}
         </div>
         ) : null}
       </HudShell>
@@ -13705,52 +13763,6 @@ export default function App() {
         ) : null}
       </div>
 
-      {/* Seed controls. PHONE STRIP (Adam's defect report,
-          2026-11-01): this row used to run ~450 px across the
-          bottom in one unwrapped line, so on a phone-landscape
-          screen its 'Current:' label painted across the armed
-          placement ghost at bottom-center and the row's box
-          swallowed the ground there. Now the strip wraps, the
-          Current line takes its OWN row at the far left (it
-          can no longer reach bottom-center at any width), the
-          input is narrower, and the container is
-          pointer-transparent except the real controls — the
-          label and the Current line never take a tap. The
-          label and the Current chip carry the notes' black
-          backdrop (second defect, same report): bare text
-          let the armed ghost's poles paint straight across
-          the words; the controls win visually too. On touch
-          the strip stands down while a dialog is open (the
-          takeover — its 'Current:' line collided with the
-          sheet's list headings in Adam's frame). */}
-      {!(isTouch && anyDialogOpen) ? (
-      <div className="pointer-events-none absolute bottom-0 left-0 z-30 flex max-w-[100vw] flex-wrap items-center gap-2 p-4">
-        <label
-          htmlFor="seed-input"
-          className="rounded bg-black/45 px-2 py-1 text-xs opacity-70"
-        >
-          World seed:
-        </label>
-        <input
-          id="seed-input"
-          value={seedInput}
-          onChange={(e) => setSeedInput(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') regenerate();
-          }}
-          className="pointer-events-auto bg-[#1e241c] border border-moss-deep px-2 py-1 text-xs w-40 outline-none"
-        />
-        <button
-          onClick={() => regenerate()}
-          className="pointer-events-auto bg-moss-deep hover:bg-moss px-3 py-1 text-xs"
-        >
-          Regenerate
-        </button>
-        <span className="w-full text-xs opacity-60">
-          <span className="rounded bg-black/45 px-2 py-1">Current: {seed}</span>
-        </span>
-      </div>
-      ) : null}
 
       {/* Controls help (desktop only — touch devices get the TouchControls cues). */}
       {isTouch ? null : (
