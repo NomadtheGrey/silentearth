@@ -827,9 +827,19 @@ const RETIRED_FIRE_TYPES: ReadonlySet<string> = new Set([
  * and weigh the 1 lb default. Only that stack is lost.
  * - 'bloomery' — the item retired 2026-10-30 with its fire
  *   type (Adam's no-iron ruling); see RETIRED_FIRE_TYPES.
+ * - 'wattle-and-daub-hut' — retired 2026-11-01 on Adam's
+ *   word (audit F7): the wattle-and-daub STAGE merged into
+ *   the Woven Cottage in October (one ladder stage, one
+ *   recipe outputting woven-cottage), but the item record
+ *   lingered, produced nowhere and reachable only from
+ *   legacy saves. Adam held it as already retired; this
+ *   entry finishes the decision. Its registry rows stay
+ *   (the shelter tables key the shared woven rung by it);
+ *   only a saved stack drops here.
  */
 const RETIRED_ITEM_IDS: ReadonlySet<string> = new Set([
   'bloomery',
+  'wattle-and-daub-hut',
 ]);
 
 const SAVE_HOUSE_TYPES: ReadonlySet<string> = new Set([
