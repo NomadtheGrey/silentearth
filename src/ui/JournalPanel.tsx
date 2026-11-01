@@ -14,11 +14,21 @@
  *
  * Opened by the Read verb on her journal (and, by the
  * linked-books law, on her grimoire — the same book by
- * the other name). The panel owns NO rules: it renders
- * rows and reports a close.
+ * the other name), and — dialog audit #4, Adam's release
+ * 2026-11-01 — by its own doors: the J key and the panel
+ * buttons, live once she carries the journal. The panel
+ * owns NO rules: it renders rows and reports a close.
+ *
+ * The book also carries her QUEST LOG now (the audit's
+ * missing half: the log hid inside the Options modal
+ * though the journal is a carried item). The caller
+ * passes the same mapped quest rows it gives Options;
+ * Options keeps its own copy — the audit's complaint
+ * was hiding, not duplication.
  */
 
 import { UI_THEMES, type UiThemeName } from './themes';
+import { QuestLog, type QuestDisplay } from './QuestLog';
 
 export interface JournalMarkRow {
   /** The mark id (the caller's key). */
@@ -40,6 +50,12 @@ export interface JournalMarkRow {
 export interface JournalPanelProps {
   /** One row per begun mark, caller's order. */
   marks: JournalMarkRow[];
+  /**
+   * The quest log the book carries (dialog audit #4):
+   * the caller's mapped rows, rendered below the marks
+   * by the shared QuestLog. Omitted = marks only.
+   */
+  quests?: QuestDisplay[];
   /** Called when the player closes the panel. Optional. */
   onClose?: () => void;
   /** Thumb-sized close button (44 px target) on touch. Default false. */
@@ -50,6 +66,7 @@ export interface JournalPanelProps {
 
 export function JournalPanel({
   marks,
+  quests,
   onClose,
   comfortable = false,
   theme = 'mire',
@@ -107,6 +124,14 @@ export function JournalPanel({
           ))}
         </ul>
       )}
+      {quests ? (
+        <div className="mt-3">
+          <h3 className={'mb-2 text-sm font-semibold ' + t.heading}>
+            Quests
+          </h3>
+          <QuestLog quests={quests} theme={theme} />
+        </div>
+      ) : null}
     </section>
   );
 }
