@@ -1868,6 +1868,9 @@ import {
   QUEST_ACTS,
   evaluateQuests,
   emptyQuestFlags,
+  questById,
+  questComponentsFor,
+  type QuestFacts,
   type QuestFlags,
 } from './systems/quests';
 import {
@@ -1984,6 +1987,7 @@ import { walkAwayShouldClose } from './ui/walkAway';
 import { CharmsPanel } from './ui/CharmsPanel';
 import { CompanionsPanel } from './ui/CompanionsPanel';
 import { JournalPanel, type JournalMarkRow } from './ui/JournalPanel';
+import { QuestCard } from './ui/QuestCard';
 import { StructureTag, STRUCTURE_TAG_NAMES, STRUCTURE_TAG_RANGE_M } from './ui/StructureTag';
 import { StormWarning } from './ui/StormWarning';
 import { WakeNotice } from './ui/WakeNotice';
@@ -2675,6 +2679,24 @@ export default function App() {
     const next = { ...questFlagsRef.current, [key]: true };
     questFlagsRef.current = next;
     setQuestFlags(next);
+  };
+
+  // THE ACTIVE MARK (HUD-card chunk, 2026-11-01): the
+  // one quest she has marked active — SavedQuestFlags'
+  // `active`, Systems' data ("the mark is data, not a
+  // gate"). Shell-owned state + ref on the setQuestFlag
+  // pattern: the ref is what saveNow merges into the
+  // quests record; the boot restore seats it from the
+  // saved record (stripped out of the flags spread there
+  // so the flags never carry a stale second copy). The
+  // toggle is the journal log's mark control.
+  const [activeQuestId, setActiveQuestId] = useState<string | null>(null);
+  const activeQuestIdRef = useRef<string | null>(null);
+  const toggleActiveQuestMark = (questId: string) => {
+    const next = activeQuestIdRef.current === questId ? null : questId;
+    activeQuestIdRef.current = next;
+    setActiveQuestId(next);
+    saveNow();
   };
 
   const [seedInput, setSeedInput] = useState(bootSave?.seed ?? DEFAULT_SEED);
@@ -3551,7 +3573,12 @@ export default function App() {
           // save (all-false serializes as all-false; absent on
           // old saves reads as all-false on load). Flags are
           // set by the wiring follow-up; the tab only reads.
-          quests: { ...questFlagsRef.current },
+          quests: {
+            ...questFlagsRef.current,
+            ...(activeQuestIdRef.current
+              ? { active: activeQuestIdRef.current }
+              : {}),
+          },
           // LOOK SAVE WIRING: the live look counts ride
           // every save (snapshot as-is, first-look order;
           // serialize writes them verbatim, restore
@@ -4595,13 +4622,22 @@ export default function App() {
         charmStateRef.current.restore(bootSaved.awakenings ?? []);
         // QUEST SAVE WIRING: flags restore (all-false when the
         // field is absent — old saves). Set by the wiring
-        // follow-up; the tab only reads.
+        // follow-up; the tab only reads. The saved ACTIVE
+        // MARK leaves the flags here — it seats in the
+        // shell's mark state (one source), so the flags
+        // record never carries a stale second copy.
+        const { active: savedActiveQuest, ...savedQuestFlagFields } =
+          bootSaved.quests ?? {};
         const questFlagsInit = {
           ...emptyQuestFlags(),
-          ...bootSaved.quests,
+          ...savedQuestFlagFields,
         };
         questFlagsRef.current = questFlagsInit;
         setQuestFlags(questFlagsInit);
+        if (savedActiveQuest && questById(savedActiveQuest)) {
+          activeQuestIdRef.current = savedActiveQuest;
+          setActiveQuestId(savedActiveQuest);
+        }
         ritualSiteState.restore(
           (bootSaved.stagings ?? []).flatMap((entry) => {
             if (!entry.bonePlaced || entry.completed) return [];
@@ -5817,8 +5853,12 @@ export default function App() {
   // on the 1 s tick, refreshInventory, and bus listeners like
   // everything else. Hints are draft one-liners for Adam's
   // pin pass; titles + completion come from Systems.
-  const questDisplay = inventory
-    ? evaluateQuests({
+  // ONE FACTS OBJECT (HUD-card chunk): the predicates'
+  // input, built once and read by both evaluateQuests
+  // (the log) and questComponentsFor (the card) so the
+  // two surfaces can never disagree about the world.
+  const questFacts: QuestFacts | undefined = inventory
+    ? {
         inventory,
         ownedToolStage: ownedStage(inventory),
         fires: fireState.snapshot().map((fire) => ({
@@ -5830,14 +5870,37 @@ export default function App() {
         })),
         placedTorches: torchState.snapshot().length,
         flags: questFlags,
-      }).map((quest) => ({
+        // THE ALTAR FACT (Systems' wiring note, consumed
+        // here by the card): any standing stumpy altar —
+        // wake-charm's road reads it mid-road.
+        altarRaised: stumpState
+          .snapshot()
+          .some((stump) => isStumpyAltar(stump.additions)),
+      }
+    : undefined;
+  const questDisplay = questFacts
+    ? evaluateQuests(questFacts).map((quest) => ({
         ...quest,
         hint: QUEST_HINTS[quest.id] ?? '',
         act:
           QUEST_ACTS.find((act) => act.id === quest.act)?.name ??
           'Act I — Survival',
+        active: quest.id === activeQuestId,
       }))
     : undefined;
+  // THE CARD'S QUEST: the MARKED quest while it stands
+  // incomplete; otherwise (no mark, or the mark's quest
+  // done) the current quest — the card is never dead
+  // space, and a finished mark quietly hands it over.
+  // All quests done = no card.
+  const cardQuestRow =
+    questDisplay?.find(
+      (quest) => quest.id === activeQuestId && !quest.done,
+    ) ?? questDisplay?.find((quest) => !quest.done);
+  const cardQuestComponents =
+    cardQuestRow && questFacts
+      ? questComponentsFor(cardQuestRow.id, questFacts)
+      : [];
   // CRAFTING DERIVATION RELOCATED (2026-10-30): the
   // availableStations -> craftingSections block lives
   // BELOW the useWinner call in this component — the
@@ -12746,6 +12809,17 @@ export default function App() {
               flash={deerWarningFlash}
             />
           </div>
+          {cardQuestRow ? (
+            <div className="mt-2">
+              <QuestCard
+                title={cardQuestRow.title}
+                hint={cardQuestRow.hint}
+                components={cardQuestComponents}
+                marked={cardQuestRow.id === activeQuestId}
+                theme={lookThemes.world}
+              />
+            </div>
+          ) : null}
           <ForageHint stage={hungerStage} />
           <div className="mt-2">
             <WornList
@@ -13220,6 +13294,7 @@ export default function App() {
           <JournalPanel theme={lookThemes.world}
             marks={journalRows}
             quests={questDisplay}
+            onMarkQuest={toggleActiveQuestMark}
             onClose={() => setJournalOpen(false)}
             comfortable={isTouch}
           />

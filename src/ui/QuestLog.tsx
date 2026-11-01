@@ -35,6 +35,13 @@ export interface QuestDisplay {
    * act. Options' flat list ignores the field.
    */
   act?: string;
+  /**
+   * True when this quest carries her ACTIVE MARK (the
+   * HUD card's quest). The title names it (' — active',
+   * ahead of the current suffix); with a mark control
+   * wired, its button reads as the clear.
+   */
+  active?: boolean;
 }
 
 /** The act unassigned rows belong to (Adam's frame: the survival act). */
@@ -68,9 +75,21 @@ export interface QuestLogProps {
   quests: QuestDisplay[];
   /** Look for the list. Default "mire" (the world outside). */
   theme?: UiThemeName;
+  /**
+   * The MARK CONTROL (the HUD-card chunk): when wired,
+   * each incomplete row carries its mark toggle — 'Mark
+   * active', or '✓ Active — clear mark' on the marked
+   * row. The journal wires it; Options' list does not
+   * (the book is the quest home).
+   */
+  onMarkQuest?: (questId: string) => void;
 }
 
-export function QuestLog({ quests, theme = 'mire' }: QuestLogProps) {
+export function QuestLog({
+  quests,
+  theme = 'mire',
+  onMarkQuest,
+}: QuestLogProps) {
   const t = UI_THEMES[theme];
   const currentIndex = quests.findIndex((quest) => !quest.done);
   if (quests.length === 0) {
@@ -94,9 +113,26 @@ export function QuestLog({ quests, theme = 'mire' }: QuestLogProps) {
             >
               {quest.done ? '✓ ' : ''}
               {quest.title}
-              {isCurrent ? ' — current' : ''}
+              {quest.active
+                ? ' — active'
+                : isCurrent
+                  ? ' — current'
+                  : ''}
             </p>
             <p className={'mt-0.5 text-sm ' + t.muted}>{quest.hint}</p>
+            {onMarkQuest && !quest.done ? (
+              <button
+                type="button"
+                onClick={() => onMarkQuest(quest.id)}
+                aria-pressed={!!quest.active}
+                className={
+                  'mt-1 text-xs underline ' +
+                  (quest.active ? t.heading : t.muted)
+                }
+              >
+                {quest.active ? '✓ Active — clear mark' : 'Mark active'}
+              </button>
+            ) : null}
           </li>
         );
       })}
