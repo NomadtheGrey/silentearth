@@ -576,16 +576,53 @@ export function enterWords(input: string): CloudAction {
 export function adoptWords(input: string): CloudAction {
   const canonical = canonicalizeWords(input);
   if (canonical.ok === false) return { ok: false, reason: canonical.reason };
+  return adoptCanonical(canonical.words);
+}
+
+/**
+ * ADOPT a word set directly (the tuple form of
+ * adoptWords) — the LOAD-ADOPTS door (Adam, 2026-11-01:
+ * "the words I entered to get the save downloaded and
+ * loaded" are the device's words). The shell calls this
+ * with the typed lookup words AHEAD of a typed-words
+ * bring: the identity flips first, so the bring lands
+ * under the device's own identity — bringHere seats
+ * the basis to the brought copy's stamp, and from the
+ * next save the brought world mirrors under the words
+ * it was fetched with. The fetch/identity split is
+ * abolished: a successful typed-words load and an
+ * adoption are one act.
+ */
+export function adoptWordSet(words: CloudWords): CloudAction {
+  if (
+    words.length !== 3 ||
+    words.some((w) => typeof w !== 'string' || !CLOUD_WORD_SET.has(w))
+  ) {
+    return { ok: false, reason: 'Those words are not a cloud phrase.' };
+  }
+  return adoptCanonical(words);
+}
+
+/** The shared adoption act: store the identity unheld
+ * and run the identity-change hygiene — a pending
+ * mirror under the old identity dies here, the dedupe
+ * key resets (nothing has mirrored to THIS shelf),
+ * the guard resets (no basis for the new shelf until
+ * a bring or a PUT seats one), and the old shelf's
+ * sync note clears. Adopting the set this browser
+ * already holds (and has enabled) is a no-op success:
+ * no state is touched. */
+function adoptCanonical(words: CloudWords): CloudAction {
   const stored = getWords();
   if (
     stored !== null &&
     isCloudEnabled() &&
-    stored.join(' ') === canonical.words.join(' ')
+    stored.join(' ') === words.join(' ')
   ) {
     return { ok: true };
   }
   const wrote = writeWordsBlob({
-    words: [canonical.words[0], canonical.words[1], canonical.words[2]],
+    words: [words[0], words[1], words[2]],
     enabled: true,
     mirrorHeld: false,
   });
