@@ -103,6 +103,25 @@
  * Whether a quest LISTS before she's touched its
  * system is an open pin-pass question; this data shape
  * takes no position on listing.
+ *
+ * THE LATCH LAW (Adam's acceptance via DEV, 2026-11-01):
+ * completion is a fact about the world, and once true
+ * it STAYS true. Predicates read present-tense facts —
+ * a house's current type, what she carries now — and
+ * legitimate later acts erase those facts (an upgrade
+ * rewrites the house's type in place; the rite spends
+ * the bone; supper eats the food). So done-ness has
+ * two sources: the predicate, read live, OR the LATCH —
+ * SavedQuestFlags.completed, the ids that have ever
+ * read true, folded in by the shell at save time
+ * (newlyCompleted names them). evaluateQuests and
+ * isQuestDone take the latched set and read done =
+ * predicate OR latched. Components are NOT latched:
+ * they decompose the predicate, as ever — the latch
+ * governs the quest's done state, not its steps.
+ * No heal is invented: a quest whose predicate never
+ * read true completes by its one legitimate path,
+ * done once, and latches forever.
  */
 
 import type { PersonalInventory } from './inventory';
@@ -164,6 +183,15 @@ export interface SavedQuestFlags {
    * an unknown or stale id reads as no mark.
    */
   active?: string;
+  /**
+   * THE LATCH (the latch law, see header): the ids of
+   * quests that have EVER read complete. Folded in by
+   * the shell at save time; validated on save read
+   * exactly like the mark (unknown ids drop, duplicates
+   * dedupe) — a corrupt entry reads as not-latched,
+   * never as a corrupt save.
+   */
+  completed?: string[];
 }
 
 /** Everything a predicate reads, shell-supplied. */
@@ -195,6 +223,15 @@ export interface QuestFacts {
    * raise-an-altar quest alone.
    */
   altarAdditions?: readonly string[];
+  /**
+   * How many Wakings stand recorded (the awakenings
+   * record's length) — shell-mapped. OPTIONAL: absent
+   * reads as none. wake-charm's completion derives from
+   * it as well as from its flag: the flag was a cache
+   * of this persisted world fact, and a Waking worked
+   * before the flag existed still stands in the record.
+   */
+  awakenings?: number;
 }
 
 /**
@@ -292,6 +329,16 @@ const BONE_ITEM_IDS: readonly string[] = [
 ];
 
 /** The 15 v1 quests, in priority order. */
+/**
+ * wake-charm's completion, one expression read by its
+ * predicate and every road step: the shell's flag OR
+ * any Waking standing in the awakenings record (the
+ * latch law's derivation — the flag caches the record;
+ * either source is the same fact).
+ */
+const wakingDone = (facts: QuestFacts): boolean =>
+  facts.flags.ritualCompleted || (facts.awakenings ?? 0) > 0;
+
 export const QUEST_DEFINITIONS: readonly QuestDefinition[] = [
   {
     id: 'collect-food',
@@ -616,7 +663,7 @@ export const QUEST_DEFINITIONS: readonly QuestDefinition[] = [
     // walks fine.
     thread: 'wakings',
     act: 'witchery',
-    isDone: (facts) => facts.flags.ritualCompleted,
+    isDone: (facts) => wakingDone(facts),
     // THE ROAD, AS COMPONENTS (Adam, 2026-11-01: 'the
     // altar goes in there'): find a bone / raise an
     // altar / wake the charm. The first two are ROAD
@@ -634,32 +681,55 @@ export const QUEST_DEFINITIONS: readonly QuestDefinition[] = [
         id: 'find-a-bone',
         label: 'Find a bone',
         isDone: (facts) =>
-          facts.flags.ritualCompleted ||
+          wakingDone(facts) ||
           BONE_ITEM_IDS.some((bone) => facts.inventory.count(bone) > 0),
       },
       {
         id: 'raise-an-altar',
         label: 'Raise an altar',
         isDone: (facts) =>
-          facts.flags.ritualCompleted || facts.altarRaised === true,
+          wakingDone(facts) || facts.altarRaised === true,
       },
       {
         id: 'wake-the-charm',
         label: 'Wake the charm',
-        isDone: (facts) => facts.flags.ritualCompleted,
+        isDone: (facts) => wakingDone(facts),
       },
     ],
   },
 ];
 
-/** Done state of one quest id (unknown id → false). */
-export function isQuestDone(id: string, facts: QuestFacts): boolean {
-  return QUEST_DEFINITIONS.find((quest) => quest.id === id)?.isDone(facts) ?? false;
+/** Normalize a latched-set argument (set or list). */
+function latchedSet(
+  latched?: ReadonlySet<string> | readonly string[],
+): ReadonlySet<string> {
+  if (!latched) return new Set();
+  return latched instanceof Set ? latched : new Set(latched);
 }
 
-/** Done state of all v1 quests, in priority order. */
+/**
+ * Done state of one quest id (unknown id → false):
+ * the predicate, OR the latch (the latch law — see
+ * header) when the latched set is supplied.
+ */
+export function isQuestDone(
+  id: string,
+  facts: QuestFacts,
+  latched?: ReadonlySet<string> | readonly string[],
+): boolean {
+  const quest = QUEST_DEFINITIONS.find((candidate) => candidate.id === id);
+  if (!quest) return false;
+  return quest.isDone(facts) || latchedSet(latched).has(id);
+}
+
+/**
+ * Done state of all quests, in priority order. With
+ * the latched set supplied, done reads predicate OR
+ * latched (the latch law); without it, predicate only.
+ */
 export function evaluateQuests(
   facts: QuestFacts,
+  latched?: ReadonlySet<string> | readonly string[],
 ): {
   id: string;
   title: string;
@@ -667,13 +737,31 @@ export function evaluateQuests(
   thread: QuestThread;
   act: QuestAct;
 }[] {
+  const latchedIds = latchedSet(latched);
   return QUEST_DEFINITIONS.map((quest) => ({
     id: quest.id,
     title: quest.title,
-    done: quest.isDone(facts),
+    done: quest.isDone(facts) || latchedIds.has(quest.id),
     thread: quest.thread,
     act: quest.act,
   }));
+}
+
+/**
+ * The shell's latch fold-in: the ids whose predicate
+ * reads true NOW and are not yet latched — exactly the
+ * additions to fold into SavedQuestFlags.completed at
+ * save time. Predicate-only by construction (a latched
+ * id's predicate may read false; it is already in).
+ */
+export function newlyCompleted(
+  facts: QuestFacts,
+  latched?: ReadonlySet<string> | readonly string[],
+): string[] {
+  const latchedIds = latchedSet(latched);
+  return QUEST_DEFINITIONS.filter(
+    (quest) => !latchedIds.has(quest.id) && quest.isDone(facts),
+  ).map((quest) => quest.id);
 }
 
 /** The definition for an id (unknown id → undefined). */
