@@ -142,6 +142,24 @@ export type ScatterKind =
   | 'farmRoof'
   | 'farmPorch'
   | 'hearthStone'
+  // Site-pass kinds (the Farmhouse FAMILY, 2026-10-31 —
+  // same rule; the two-story variant-kind kit: upper-story
+  // wall segments in two window rhythms, an interior stair
+  // run, and the second-floor slab tile. The landed farm
+  // set above is untouched — the family builds beside it.)
+  | 'farmWallUpper'
+  | 'farmWallUpperB'
+  | 'farmStairs'
+  | 'farmFloorSlab'
+  // Site-pass kinds (the Farmhouse FAMILY, second wave —
+  // the slot pieces the table landing fills in): the
+  // ground story's rhythm twin, the gable width family,
+  // the seatable chimney brick, the cellar bulkhead.
+  | 'farmWallB'
+  | 'farmGableEnd'
+  | 'farmGableEndWide'
+  | 'farmChimney'
+  | 'farmCellarDoor'
   // Site-pass kinds (the Chapel, sites.ts — same rule):
   // tall wall segments, the steep roof, the steeple, and
   // the graveyard's two stone shapes.

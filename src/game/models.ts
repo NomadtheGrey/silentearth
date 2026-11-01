@@ -1235,6 +1235,125 @@ export function buildKindGeometry(spec: MeshSpec, kind: ScatterKind): THREE.Buff
       part(cyl(0.22, 0.22, 6.8, 8), e, { p: [0.2, -0.6, 2.6], r: [0, 0, Math.PI / 2] }),
     ]);
   }
+  // Kind overrides (the Farmhouse FAMILY kit, 2026-10-31 —
+  // Adam's ruling: variant KINDS are the randomization
+  // machine; the parametric shell was declined). The landed
+  // farm set is untouched — the family builds beside it.
+  if (kind === 'farmWallUpper' || kind === 'farmWallUpperB') {
+    // The ground story's grammar carried up — same segment,
+    // same 2.6 height (the marriage is probe-asserted),
+    // same boards — plus the story's own marks: a heavy
+    // floor-band beam at the base (the floor line reads
+    // from the road) and the window rhythm that makes the
+    // variant: A seats it left like the ground floor; B
+    // seats it right and adds a narrow vent opposite.
+    const winX = kind === 'farmWallUpper' ? -0.6 : 0.6;
+    const upperParts = [
+      part(box(FARM_SEGMENT_M, 2.6, 0.3), c),
+      part(box(FARM_SEGMENT_M + 0.06, 0.24, 0.4), shade(c, 0.82), { p: [0, -1.18, 0] }),
+      part(box(FARM_SEGMENT_M, 0.14, 0.36), shade(c, 0.85), { p: [0, 1.16, 0] }),
+      part(box(0.62, 0.8, 0.06), e, { p: [winX, 0.15, -0.16] }),
+      part(box(0.74, 0.09, 0.08), shade(c, 0.8), { p: [winX, 0.6, -0.16] }),
+    ];
+    if (kind === 'farmWallUpperB') {
+      upperParts.push(part(box(0.3, 0.5, 0.06), e, { p: [-winX, 0.3, -0.16] }));
+    }
+    return merge(upperParts);
+  }
+  if (kind === 'farmStairs') {
+    // The interior stair run (DRAFT run 0.9 wide × 3.6,
+    // 2026-10-31 — Background's siting sheet may move it;
+    // the numbers live here in one place). Origin at the
+    // floor, climbing toward +Z: nine treads on two
+    // stringers, a handrail on the open (+X) side.
+    // Geometry only — the climb's collision is the site's.
+    const stairParts: THREE.BufferGeometry[] = [];
+    for (let i = 0; i < 9; i++) {
+      stairParts.push(part(box(0.9, 0.07, 0.42), c, { p: [0, 0.16 + i * 0.29, 0.21 + i * 0.4] }));
+    }
+    stairParts.push(part(box(0.08, 0.34, 3.95), shade(c, 0.8), { p: [-0.41, 1.32, 1.81], r: [-0.627, 0, 0] }));
+    stairParts.push(part(box(0.08, 0.34, 3.95), shade(c, 0.8), { p: [0.41, 1.32, 1.81], r: [-0.627, 0, 0] }));
+    stairParts.push(part(box(0.09, 1.0, 0.09), e, { p: [0.44, 0.5, 0.15] }));
+    stairParts.push(part(box(0.06, 0.08, 3.95), e, { p: [0.44, 2.2, 1.81], r: [-0.627, 0, 0] }));
+    return merge(stairParts);
+  }
+  if (kind === 'farmFloorSlab') {
+    // One tile of the upper floor: walking surface at
+    // local 0, the slab's body below it, two beams under
+    // that — boards and beams from the ground floor, a
+    // floor from above. Sites tile the grid.
+    return merge([
+      part(box(FARM_SEGMENT_M, 0.14, FARM_SEGMENT_M), c, { p: [0, -0.07, 0] }),
+      part(box(0.2, 0.22, FARM_SEGMENT_M), e, { p: [-0.85, -0.25, 0] }),
+      part(box(0.2, 0.22, FARM_SEGMENT_M), e, { p: [0.85, -0.25, 0] }),
+      part(box(FARM_SEGMENT_M, 0.012, 0.04), shade(c, 0.78), { p: [0, 0, -0.83] }),
+      part(box(FARM_SEGMENT_M, 0.012, 0.04), shade(c, 0.78), { p: [0, 0, 0] }),
+      part(box(FARM_SEGMENT_M, 0.012, 0.04), shade(c, 0.78), { p: [0, 0, 0.83] }),
+    ]);
+  }
+  // Kind overrides (the Farmhouse FAMILY, second wave —
+  // the table landing's slot pieces, 2026-11-01).
+  if (kind === 'farmWallB') {
+    // The ground story's rhythm twin: farmWall's exact
+    // build with the window seated the other way. The
+    // marriage (span/height) is probe-asserted against
+    // farmWall itself.
+    return merge([
+      part(box(FARM_SEGMENT_M, 2.6, 0.3), c),
+      part(box(FARM_SEGMENT_M, 0.18, 0.36), shade(c, 1.1), { p: [0, 1.18, 0] }),
+      part(box(FARM_SEGMENT_M, 0.05, 0.33), shade(c, 0.85), { p: [0, -0.5, 0] }),
+      part(box(0.62, 0.85, 0.34), e, { p: [0.6, 0.1, 0] }),
+    ]);
+  }
+  if (kind === 'farmGableEnd' || kind === 'farmGableEndWide') {
+    // The gable width family: a triangular prism filling
+    // the end wall (barnRoofEnd's extrude idiom — span
+    // along Z, thickness along X), peak from the farm
+    // roof's own slope (0.62). Origin at the wall top.
+    // One brace line across the boards.
+    const w = kind === 'farmGableEnd' ? 5.0 : 7.5;
+    const peak = (w / 2) * Math.tan(0.62);
+    const shape = new THREE.Shape();
+    shape.moveTo(-w / 2, 0);
+    shape.lineTo(w / 2, 0);
+    shape.lineTo(0, peak);
+    shape.closePath();
+    const gable = new THREE.ExtrudeGeometry(shape, { depth: 0.3, bevelEnabled: false });
+    gable.rotateY(Math.PI / 2);
+    gable.translate(-0.15, 0, 0);
+    return merge([
+      part(gable, c),
+      part(box(0.34, 0.12, w - 0.4), shade(c, 0.85), { p: [0, 0.5, 0] }),
+    ]);
+  }
+  if (kind === 'farmChimney') {
+    // The chimney BRICK (Adam's Lego framing): one stack
+    // seatable anywhere along a ridge — origin AT the
+    // seat, a base skirt sunk 0.65 below it so any slope
+    // swallows the joint, the stack standing 1.1 above,
+    // shoulder + cap + the dark flue.
+    return merge([
+      part(box(0.84, 0.6, 0.84), shade(c, 0.85), { p: [0, -0.35, 0] }),
+      part(box(0.55, 1.5, 0.55), c, { p: [0, 0.35, 0] }),
+      part(box(0.68, 0.14, 0.68), shade(c, 0.92), { p: [0, 1.12, 0] }),
+      part(box(0.62, 0.1, 0.62), shade(c, 0.78), { p: [0, 1.24, 0] }),
+      part(box(0.3, 0.08, 0.3), e, { p: [0, 1.3, 0] }),
+    ]);
+  }
+  if (kind === 'farmCellarDoor') {
+    // The cellar's outside mouth: slanted double doors
+    // (the bulkhead lean, front edge low) on a stone
+    // curb, back frame tall where the doors meet the
+    // house wall.
+    return merge([
+      part(box(0.12, 0.5, 1.7), e, { p: [-0.69, 0.25, 0] }),
+      part(box(0.12, 0.5, 1.7), e, { p: [0.69, 0.25, 0] }),
+      part(box(1.5, 1.0, 0.12), e, { p: [0, 0.5, -0.79] }),
+      part(box(0.66, 0.07, 1.62), c, { p: [-0.34, 0.62, 0], r: [0.42, 0, 0] }),
+      part(box(0.66, 0.07, 1.62), c, { p: [0.34, 0.62, 0], r: [0.42, 0, 0] }),
+      part(box(0.05, 0.08, 1.62), shade(c, 0.8), { p: [0, 0.63, 0], r: [0.42, 0, 0] }),
+    ]);
+  }
   if (kind === 'pumpShed') {
     return merge([
       part(box(2.6, 2.1, 2.0), c),
