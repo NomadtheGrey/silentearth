@@ -29,6 +29,15 @@ import { marshWeight } from './biomes';
 import { SOURCE_FOR_KIND } from './objects';
 import { buildAltarGroup, buildAnimal, buildCampArrow, buildCandle, buildCatchProp, buildCauldronGroup, buildDeskGroup, buildEdgeArrow, buildKindGeometry, buildStagedBone, buildStumpDressing, buildSunflowerHeadGeometry, buildTorch, buildUmbrella, buildWitch, ALTAR_CANDLE_X, ALTAR_CANDLE_Z, CANDLE_FLAME_Y, DISC_RADIUS, STUMP_TOP_Y, sunflowerHeadMatrix, sunflowerHeadOrientation, TORCH_FLAME_Y, vertexLambert } from './models';
 import { placementFootprintFor, type PlacementPreview, type PlacementTint } from './placementFootprints';
+import {
+  markerStateFor,
+  markerStateKey,
+  trustFactsFor,
+  TRUST_MARKER_FADE_START_M,
+  TRUST_MARKER_LIFT_M,
+  TRUST_MARKER_RANGE_M,
+  type MarkerState,
+} from './trustMarkers';
 import { spawnAnimalsForChunk, updateAnimal } from './animals';
 import type { AnimalInstance, AnimalKind } from './animals';
 import {
@@ -608,6 +617,21 @@ export class WorldRenderer {
   private previewGroup: THREE.Group | null = null;
   private previewMesh: THREE.Mesh | null = null;
   private previewShapeKey = '';
+  /**
+   * Trust markers (2026-11-01): one sprite per marked
+   * individual's group, keyed by the GROUP (a WeakMap —
+   * chunk groups die with their chunk and take their
+   * entry with them; companion groups are reconciled by
+   * the same path). Textures are shared per painted
+   * state; materials are per-marker (the range fade is
+   * per-marker opacity).
+   */
+  private trustMarkerByGroup = new WeakMap<
+    THREE.Group,
+    { sprite: THREE.Sprite; key: string }
+  >();
+  private trustMarkerTextures = new Map<string, THREE.Texture>();
+  private animalHeightCache = new Map<string, number>();
   /**
    * Companion layer (Companions Build 1, 2026-10-31):
    * promoted actors from companionRuntime — persistent,
@@ -2793,6 +2817,134 @@ export class WorldRenderer {
    * right], inner edge at the body, so rotation.z flaps them
    * around the body edge — left negative, right positive).
    */
+  /** One animal kind's standing height, measured once
+   *  off its built geometry (the marker's seat needs it;
+   *  no height table exists to read instead). */
+  private animalHeightFor(kind: AnimalKind): number {
+    let h = this.animalHeightCache.get(kind);
+    if (h === undefined) {
+      const probe = buildAnimal(kind);
+      const box = new THREE.Box3().setFromObject(probe);
+      h = Math.max(0.2, box.max.y - Math.min(0, box.min.y));
+      this.animalHeightCache.set(kind, h);
+    }
+    return h;
+  }
+
+  /** The marker texture for one painted state, drawn
+   *  once and shared (canvas pips — see trustMarkers.ts
+   *  for the state table this paints). */
+  private trustMarkerTexture(state: MarkerState): THREE.Texture {
+    const key = markerStateKey(state);
+    let tex = this.trustMarkerTextures.get(key);
+    if (tex) return tex;
+    const canvas = document.createElement('canvas');
+    canvas.width = 264;
+    canvas.height = 88;
+    const ctx = canvas.getContext('2d')!;
+    const pip = (cx: number, fill: string | null, ring: string | null, lw = 6): void => {
+      ctx.beginPath();
+      ctx.arc(cx, 44, 25, 0, Math.PI * 2);
+      if (fill) {
+        ctx.fillStyle = fill;
+        ctx.fill();
+      }
+      if (ring) {
+        ctx.strokeStyle = ring;
+        ctx.lineWidth = lw;
+        ctx.stroke();
+      }
+    };
+    const diamond = (fill: string, ring: string | null): void => {
+      ctx.beginPath();
+      ctx.moveTo(132, 12);
+      ctx.lineTo(164, 44);
+      ctx.lineTo(132, 76);
+      ctx.lineTo(100, 44);
+      ctx.closePath();
+      ctx.fillStyle = fill;
+      ctx.fill();
+      if (ring) {
+        ctx.beginPath();
+        ctx.arc(132, 44, 40, 0, Math.PI * 2);
+        ctx.strokeStyle = ring;
+        ctx.lineWidth = 4;
+        ctx.stroke();
+      }
+    };
+    if (state.kind === 'pips') {
+      const spent = !state.open;
+      for (let i = 0; i < 3; i++) {
+        const cx = 44 + i * 88;
+        if (i < state.filled) {
+          pip(cx, spent ? 'rgba(154,143,118,0.9)' : '#e8d9a8', null);
+        } else if (i === state.filled && state.open) {
+          pip(cx, 'rgba(255,243,196,0.16)', '#fff3c4', 7);
+        } else {
+          pip(cx, null, spent ? 'rgba(160,150,130,0.45)' : 'rgba(232,217,168,0.5)', 5);
+        }
+      }
+    } else if (state.kind === 'ready') {
+      for (let i = 0; i < 3; i++) pip(44 + i * 88, '#f2c14e', 'rgba(242,193,78,0.45)');
+    } else if (state.kind === 'companion') {
+      diamond('#e8d9a8', null);
+    } else {
+      diamond('#f2c14e', 'rgba(242,193,78,0.8)');
+    }
+    tex = new THREE.CanvasTexture(canvas);
+    this.trustMarkerTextures.set(key, tex);
+    return tex;
+  }
+
+  /**
+   * Reconcile one individual's trust marker (Adam,
+   * 2026-11-01): the facts resolve through the installed
+   * seam (Systems' records — null for untouched and
+   * feral alike), the state derives in trustMarkers.ts,
+   * and the sprite rides the animal's own group above
+   * its head. Beyond the range the marker hides; inside
+   * the fade band it dims. Facts are queried ONLY in
+   * range (the resolver's cost assumption).
+   */
+  private updateTrustMarker(instance: AnimalInstance, group: THREE.Group): void {
+    const entry = this.trustMarkerByGroup.get(group);
+    const dist = Math.hypot(instance.x - this.player.x, instance.z - this.player.z);
+    if (dist > TRUST_MARKER_RANGE_M) {
+      if (entry) entry.sprite.visible = false;
+      return;
+    }
+    const state = markerStateFor(trustFactsFor(instance.id));
+    if (!state) {
+      if (entry) entry.sprite.visible = false;
+      return;
+    }
+    const key = markerStateKey(state);
+    let sprite = entry?.sprite;
+    if (!sprite) {
+      sprite = new THREE.Sprite(
+        new THREE.SpriteMaterial({
+          map: this.trustMarkerTexture(state),
+          transparent: true,
+          depthWrite: false,
+        }),
+      );
+      sprite.scale.set(1.05, 0.35, 1);
+      sprite.position.set(0, this.animalHeightFor(instance.kind) + TRUST_MARKER_LIFT_M, 0);
+      group.add(sprite);
+      this.trustMarkerByGroup.set(group, { sprite, key });
+    } else if (entry && entry.key !== key) {
+      (sprite.material as THREE.SpriteMaterial).map = this.trustMarkerTexture(state);
+      (sprite.material as THREE.SpriteMaterial).needsUpdate = true;
+      entry.key = key;
+    }
+    const fade =
+      dist <= TRUST_MARKER_FADE_START_M
+        ? 1
+        : 1 - ((dist - TRUST_MARKER_FADE_START_M) / (TRUST_MARKER_RANGE_M - TRUST_MARKER_FADE_START_M)) * 0.75;
+    (sprite.material as THREE.SpriteMaterial).opacity = fade;
+    sprite.visible = true;
+  }
+
   private poseAnimal(instance: AnimalInstance, group: THREE.Group): void {
     group.position.set(instance.x, instance.y + instance.bob, instance.z);
     // Squirrel cling (2026-10-31): while a squirrel climbs
@@ -2843,6 +2995,7 @@ export class WorldRenderer {
           night,
         });
         this.poseAnimal(pair.instance, pair.group);
+        this.updateTrustMarker(pair.instance, pair.group);
       }
     }
     // Companions (Build 1): persistent actors step after
@@ -2878,6 +3031,7 @@ export class WorldRenderer {
           this.companionGroup.add(g);
         }
         this.poseAnimal(a, g);
+        this.updateTrustMarker(a, g);
       }
       for (const [id, g] of [...this.companionMeshes]) {
         if (!seen.has(id)) {
