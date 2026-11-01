@@ -47,7 +47,10 @@
  * sync note 'silentearth.cloudLastSync.v1' { at, ok, reason? },
  * park 'silentearth.savePark.v1' (displaced local on
  * bring-down, single slot, overwritten each bring-down —
- * the :prev analog). All storage access is guarded and
+ * the :prev analog), guard 'silentearth.cloudGuard.v1'
+ * { basis, conflict } (the overwrite safeguard's state:
+ * the shelf stamp this device last knew + any standing
+ * conflict). All storage access is guarded and
  * never throws; a missing or corrupt blob reads as off.
  *
  * BOUNDARIES (read before wiring): this module NEVER writes
@@ -134,15 +137,48 @@ export interface CloudSyncState {
   /** True while an adopted identity's mirroring is held (adoptWords). */
   mirrorHeld: boolean;
   lastMirror: CloudSyncNote | null;
+  /**
+   * A standing overwrite-safeguard conflict (Adam,
+   * 2026-11-01), or null. The dialog surface reads
+   * this; resolvedKeep marks an episode the player
+   * already decided (keep the newer copy) — mirroring
+   * stays suppressed until a bring or a forced write.
+   */
+  mirrorConflict: MirrorConflict | null;
+}
+
+/**
+ * A mirror conflict raised by the overwrite safeguard:
+ * the shelf holds a copy NEWER than this device's
+ * basis (the shelf stamp it last knew — its own PUT
+ * or a bring-down), so a routine mirror would displace
+ * content this device has never seen. While one
+ * stands, no routine PUT happens.
+ */
+export interface MirrorConflict {
+  /** The shelf envelope's updatedAt when raised (ISO). */
+  shelfUpdatedAt: string;
+  /** The basis it was compared against; null = this
+   * device had never known the shelf (no basis). */
+  basisUpdatedAt: string | null;
+  /** The local record's savedAt at raise time. */
+  localSavedAt: number;
+  /** When the conflict raised (epoch ms, this device). */
+  at: number;
+  /** True once the player chose KEEP (the newer copy);
+   * the episode is decided and mirroring suppresses
+   * silently until a bring or a forced overwrite. */
+  resolvedKeep: boolean;
 }
 
 /**
  * Mirror outcome. mirrored:false + ok:true = no PUT was
  * needed/performed by this call and nothing failed: cloud
- * off, an adoption hold not yet armed, the record already
- * mirrored identically, or the record coalesced into
- * the pending flush (see the coalescing note at
- * mirrorSave).
+ * off, an adoption hold not yet armed, a standing mirror
+ * conflict (the overwrite safeguard — no PUT while it
+ * stands), the record already mirrored identically, or
+ * the record coalesced into the pending flush (see the
+ * coalescing note at mirrorSave).
  */
 export interface MirrorResult {
   mirrored: boolean;
@@ -173,6 +209,7 @@ export type CloudFetch = (
 const CLOUD_WORDS_KEY = 'silentearth.cloudWords.v1';
 const CLOUD_SYNC_KEY = 'silentearth.cloudLastSync.v1';
 const CLOUD_PARK_KEY = 'silentearth.savePark.v1';
+const CLOUD_GUARD_KEY = 'silentearth.cloudGuard.v1';
 
 interface CloudWordsBlob {
   words: [string, string, string] | null;
@@ -277,6 +314,110 @@ function noteCloudSync(note: CloudSyncNote): void {
   }
 }
 
+// ---------------------------------------------------------------------------
+// The overwrite-safeguard guard (Adam, 2026-11-01)
+// ---------------------------------------------------------------------------
+
+/**
+ * The guard's persisted state: the BASIS (the shelf
+ * updatedAt this device last knew — set by its own
+ * successful PUT and by every bring-down under its
+ * identity) and any standing CONFLICT. Persisted
+ * because an in-memory conflict would clear on reload
+ * and the next save would PUT — the safeguard
+ * defeating itself. A wiped device (library PCs wipe
+ * localStorage at reservation end) loses the guard
+ * with the words and the save: it reads as a fresh
+ * identity, which is the safe read.
+ */
+interface CloudGuardBlob {
+  basis: string | null;
+  conflict: MirrorConflict | null;
+}
+
+function readGuardBlob(): CloudGuardBlob {
+  try {
+    const raw = globalThis.localStorage?.getItem(CLOUD_GUARD_KEY);
+    if (raw === null || raw === undefined) return { basis: null, conflict: null };
+    const parsed: unknown = JSON.parse(raw);
+    if (typeof parsed !== 'object' || parsed === null) {
+      return { basis: null, conflict: null };
+    }
+    const record = parsed as Record<string, unknown>;
+    const basis =
+      typeof record['basis'] === 'string' ? (record['basis'] as string) : null;
+    let conflict: MirrorConflict | null = null;
+    const rawConflict = record['conflict'];
+    if (typeof rawConflict === 'object' && rawConflict !== null) {
+      const c = rawConflict as Record<string, unknown>;
+      if (
+        typeof c['shelfUpdatedAt'] === 'string' &&
+        typeof c['localSavedAt'] === 'number' &&
+        typeof c['at'] === 'number'
+      ) {
+        conflict = {
+          shelfUpdatedAt: c['shelfUpdatedAt'] as string,
+          basisUpdatedAt:
+            typeof c['basisUpdatedAt'] === 'string'
+              ? (c['basisUpdatedAt'] as string)
+              : null,
+          localSavedAt: c['localSavedAt'] as number,
+          at: c['at'] as number,
+          resolvedKeep: c['resolvedKeep'] === true,
+        };
+      }
+    }
+    return { basis, conflict };
+  } catch {
+    return { basis: null, conflict: null };
+  }
+}
+
+function writeGuardBlob(blob: CloudGuardBlob): boolean {
+  try {
+    globalThis.localStorage?.setItem(CLOUD_GUARD_KEY, JSON.stringify(blob));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Identity changed (turn-on / adoption / turn-off):
+ * the guard belongs to the old shelf — reset it. */
+function resetGuard(): void {
+  try {
+    globalThis.localStorage?.removeItem(CLOUD_GUARD_KEY);
+  } catch {
+    // Best-effort; a stale guard under a new identity is
+    // re-based by that identity's first bring/PUT.
+  }
+}
+
+/** True when `words` are this device's stored identity. */
+function isStoredIdentity(words: CloudWords): boolean {
+  const stored = getWords();
+  return stored !== null && stored.join(' ') === words.join(' ');
+}
+
+/**
+ * Record that this device now knows the shelf stands
+ * at `updatedAt` (its own PUT wrote it, or a bring
+ * fetched it): the basis moves. A forced write also
+ * clears the conflict it resolved.
+ */
+function recordShelfKnown(
+  words: CloudWords,
+  updatedAt: string,
+  opts?: { forced?: boolean },
+): void {
+  if (!isStoredIdentity(words)) return;
+  const guard = readGuardBlob();
+  writeGuardBlob({
+    basis: updatedAt,
+    conflict: opts?.forced === true ? null : guard.conflict,
+  });
+}
+
 /**
  * Draw three words at random (crypto draw — no Math.random
  * for secrets; modulo bias negligible at this range).
@@ -342,6 +483,7 @@ export function turnOn(words: CloudWords): CloudAction {
     // hold belongs to adoption alone; see adoptWords).
     mirrorHeld: false,
   });
+  if (stored) resetGuard();
   return stored
     ? { ok: true }
     : { ok: false, reason: 'Could not store the words on this device.' };
@@ -355,6 +497,7 @@ export function turnOff(): CloudAction {
   // A pending coalesced mirror dies with the opt-in: it
   // must not PUT after the player turned cloud off.
   cancelPendingMirror();
+  resetGuard();
   const cleared = writeWordsBlob({
     words: null,
     enabled: false,
@@ -457,6 +600,7 @@ export function adoptWords(input: string): CloudAction {
     };
   }
   cancelPendingMirror();
+  resetGuard();
   try {
     globalThis.localStorage?.removeItem(CLOUD_SYNC_KEY);
   } catch {
@@ -509,7 +653,32 @@ export function syncState(): CloudSyncState {
     wordsStored: getWords() !== null,
     mirrorHeld: mirrorHeldNow(),
     lastMirror: readSyncNote(),
+    mirrorConflict: readGuardBlob().conflict,
   };
+}
+
+/**
+ * Resolve a standing mirror conflict as KEEP (the
+ * newer cloud copy stands — Adam's default). The
+ * episode is marked decided; mirroring stays
+ * suppressed (silently) until a bring-down refreshes
+ * the basis or a forced overwrite writes through —
+ * merely clearing would re-raise on the next save,
+ * because the basis has not moved. No-op success when
+ * no conflict stands or it is already decided.
+ */
+export function resolveMirrorConflictKeep(): CloudAction {
+  const guard = readGuardBlob();
+  if (guard.conflict === null || guard.conflict.resolvedKeep) {
+    return { ok: true };
+  }
+  const wrote = writeGuardBlob({
+    basis: guard.basis,
+    conflict: { ...guard.conflict, resolvedKeep: true },
+  });
+  return wrote
+    ? { ok: true }
+    : { ok: false, reason: 'Could not store the decision on this device.' };
 }
 
 /**
@@ -762,6 +931,16 @@ export async function bringHere(
       reason: 'Cloud save is damaged and was left untouched.',
     };
   }
+  if (slot === CLOUD_SLOT) {
+    // A bring-down under this device's own identity is
+    // a safeguard resolution (claim, 2026-11-01): the
+    // device now descends from the shelf — the basis
+    // refreshes to the fetched stamp and any standing
+    // conflict clears. Other slots are peeks, not
+    // lineage; recordShelfKnown itself checks the
+    // words are the stored identity.
+    recordShelfKnown(words, fetched.value.updatedAt, { forced: true });
+  }
   return { ok: true, value: save };
 }
 
@@ -834,6 +1013,11 @@ interface PendingMirror {
   fetchFn: CloudFetch;
   /** True when the caller passed words explicitly (manual sync / probes). */
   explicit: boolean;
+  /** True when the caller forced the write (the dialog's
+   * overwrite resolution): the flush skips the
+   * overwrite-safeguard check and clears the conflict
+   * on success. */
+  force: boolean;
   now: () => number;
   setTimer: (fn: () => void, ms: number) => unknown;
   clearTimer: (handle: unknown) => void;
@@ -939,6 +1123,99 @@ function registerHideFlush(): void {
  * — mirroring under a phrase the player replaced would be
  * wrong. Never throws.
  */
+type ShelfFreshness = 'fresh' | 'conflict' | 'unverifiable';
+
+/**
+ * The overwrite safeguard's check (Adam, 2026-11-01),
+ * run at the flush — the moment a PUT would actually
+ * displace the shelf. Compares the SHELF's own stamps:
+ * the envelope's updatedAt, fetched now, against this
+ * device's BASIS (the stamp it last knew — its own
+ * PUT or a bring-down; see the guard blob). The local
+ * record's own stamp is NEVER the basis: saveNow
+ * re-stamps it fresh at every write, so an idle tab's
+ * stale world would always read new — that comparison
+ * could never fire on the case the safeguard exists
+ * for (and it stays rejected). A shelf NEWER than the
+ * basis — or ANY shelf standing when the device has
+ * no basis at all — is a conflict: raise it (persisted,
+ * once per episode) rather than write. A check that
+ * cannot complete (fetch failure, unparseable stamp)
+ * is 'unverifiable': no PUT on an uncheckable
+ * overwrite; the caller keeps the pending.
+ *
+ * CLOCK SKEW, named in the claim and kept named here:
+ * every updatedAt is minted by whichever device PUTs,
+ * from that device's wall clock. Skew (seconds to
+ * minutes, realistically) can raise a conflict where
+ * lineage was sequential and mask one at the same
+ * margin. The asymmetry is the defense Adam chose: a
+ * false raise costs one dialog defaulting to safe; a
+ * false pass costs the overwrite. No tolerance window.
+ */
+async function checkShelfFreshness(
+  pending: PendingMirror,
+): Promise<ShelfFreshness> {
+  const guard = readGuardBlob();
+  if (guard.conflict !== null) return 'conflict';
+  const res = await requestJson(
+    pending.baseUrl,
+    `/save?slot=${encodeURIComponent(CLOUD_SLOT)}`,
+    pending.words.join(' '),
+    'GET',
+    undefined,
+    pending.fetchFn,
+  );
+  if (res.ok === false) {
+    // 404: no shelf stands — nothing to displace.
+    return res.status === 404 ? 'fresh' : 'unverifiable';
+  }
+  if (
+    !isRecord(res.json) ||
+    res.json['v'] !== 1 ||
+    res.json['slot'] !== CLOUD_SLOT ||
+    !isRecord(res.json['record']) ||
+    typeof res.json['updatedAt'] !== 'string'
+  ) {
+    return 'unverifiable';
+  }
+  const shelfMs = Date.parse(res.json['updatedAt'] as string);
+  if (Number.isNaN(shelfMs)) return 'unverifiable';
+  if (guard.basis === null) {
+    // No basis: this device has never known the shelf,
+    // yet a copy stands under its words. Writing
+    // sight-unseen is the overwrite the safeguard
+    // exists to question — raise it (basis null).
+    writeGuardBlob({
+      basis: null,
+      conflict: {
+        shelfUpdatedAt: res.json['updatedAt'] as string,
+        basisUpdatedAt: null,
+        localSavedAt: pending.saveData.savedAt,
+        at: pending.now(),
+        resolvedKeep: false,
+      },
+    });
+    return 'conflict';
+  }
+  const basisMs = Date.parse(guard.basis);
+  if (Number.isNaN(basisMs)) return 'unverifiable';
+  if (shelfMs > basisMs) {
+    writeGuardBlob({
+      basis: guard.basis,
+      conflict: {
+        shelfUpdatedAt: res.json['updatedAt'] as string,
+        basisUpdatedAt: guard.basis,
+        localSavedAt: pending.saveData.savedAt,
+        at: pending.now(),
+        resolvedKeep: false,
+      },
+    });
+    return 'conflict';
+  }
+  return 'fresh';
+}
+
 export async function flushPendingMirror(): Promise<MirrorResult | null> {
   const pending = pendingMirror;
   if (pending === null || mirrorFlushInFlight) return null;
@@ -960,11 +1237,51 @@ export async function flushPendingMirror(): Promise<MirrorResult | null> {
     return { mirrored: false, ok: true };
   }
   mirrorFlushInFlight = true;
+  if (!pending.explicit && !pending.force) {
+    // OVERWRITE SAFEGUARD: guard the actual PUT (every
+    // flush path — leading edge, window, pagehide —
+    // funnels through here; the phone's overwrite
+    // vector fires at pagehide, so the guard stands
+    // here and not at saveNow). Explicit-words and
+    // forced writes are deliberate and skip the check.
+    const freshness = await checkShelfFreshness(pending);
+    if (freshness === 'unverifiable') {
+      // Fail closed, gently: keep the record pending
+      // and retry at the next window, the same idiom
+      // as a failed PUT — the write waits for a
+      // verifiable moment.
+      if (pendingMirror === pending) {
+        scheduleMirrorFlush(pending, CLOUD_MIRROR_WINDOW_MS);
+      }
+      mirrorFlushInFlight = false;
+      return {
+        mirrored: true,
+        ok: false,
+        reason: 'Could not check the cloud copy before writing.',
+      };
+    }
+    if (freshness === 'conflict') {
+      // The conflict stands raised in the guard blob;
+      // this write does not happen. The pending drops
+      // (the dialog's overwrite, if chosen, writes the
+      // shell's CURRENT record, not this stale one).
+      if (pendingMirror === pending) pendingMirror = null;
+      clearMirrorTimer();
+      noteCloudSync({
+        at: pending.now(),
+        ok: false,
+        reason: 'A newer cloud copy stands — this device did not overwrite it.',
+      });
+      mirrorFlushInFlight = false;
+      return { mirrored: false, ok: true };
+    }
+  }
   try {
+    const envelope = buildCloudEnvelope(pending.saveData);
     const put = await putCloudSave(
       pending.baseUrl,
       pending.words,
-      buildCloudEnvelope(pending.saveData),
+      envelope,
       pending.fetchFn,
     );
     lastMirrorPutAt = pending.now();
@@ -972,6 +1289,12 @@ export async function flushPendingMirror(): Promise<MirrorResult | null> {
       lastMirroredKey = pending.key;
       if (pendingMirror === pending) pendingMirror = null;
       clearMirrorTimer();
+      // The device now knows the shelf's stamp: the one
+      // it just wrote (a forced write also clears the
+      // conflict it resolved).
+      recordShelfKnown(pending.words, envelope.updatedAt, {
+        forced: pending.force,
+      });
       noteCloudSync({ at: pending.now(), ok: true });
       return { mirrored: true, ok: true };
     }
@@ -1006,11 +1329,24 @@ export async function flushPendingMirror(): Promise<MirrorResult | null> {
 export async function mirrorSave(
   baseUrl: string = CLOUD_BASE_URL,
   saveData: SaveData,
-  opts?: { words?: CloudWords; fetchFn?: CloudFetch } & MirrorTiming,
+  opts?: { words?: CloudWords; fetchFn?: CloudFetch; force?: boolean } & MirrorTiming,
 ): Promise<MirrorResult> {
   try {
     const words = opts?.words ?? getWords();
     if (words === null || (opts?.words === undefined && !isCloudEnabled())) {
+      return { mirrored: false, ok: true };
+    }
+    if (
+      opts?.words === undefined &&
+      opts?.force !== true &&
+      readGuardBlob().conflict !== null
+    ) {
+      // OVERWRITE SAFEGUARD (Adam, 2026-11-01): a conflict
+      // stands — unresolved, or decided as keep. Routine
+      // mirroring no-ops (no pend, no PUT, no re-raise:
+      // once per episode) until a bring-down or a forced
+      // overwrite resolves it. Explicit-words calls are
+      // deliberate writes and pass, as at the hold gate.
       return { mirrored: false, ok: true };
     }
     if (opts?.words === undefined && mirrorHeldNow()) {
@@ -1045,6 +1381,7 @@ export async function mirrorSave(
       key,
       fetchFn,
       explicit: opts?.words !== undefined,
+      force: opts?.force === true,
       now,
       setTimer: opts?.setTimer ?? defaultSetTimer,
       clearTimer: opts?.clearTimer ?? defaultClearTimer,
@@ -1052,8 +1389,15 @@ export async function mirrorSave(
     pendingMirror = pending;
     registerHideFlush();
     const nowMs = now();
-    if (lastMirrorPutAt === null || nowMs - lastMirrorPutAt >= CLOUD_MIRROR_WINDOW_MS) {
-      // Leading edge: idle window — PUT now.
+    if (
+      pending.force ||
+      lastMirrorPutAt === null ||
+      nowMs - lastMirrorPutAt >= CLOUD_MIRROR_WINDOW_MS
+    ) {
+      // Leading edge: idle window — PUT now. A forced
+      // write (the conflict dialog's overwrite) also
+      // flushes at once: an explicit decision does not
+      // wait out the coalescing window.
       return (await flushPendingMirror()) ?? { mirrored: false, ok: true };
     }
     scheduleMirrorFlush(pending, lastMirrorPutAt + CLOUD_MIRROR_WINDOW_MS - nowMs);
