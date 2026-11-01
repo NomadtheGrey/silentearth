@@ -167,6 +167,15 @@ export type ScatterKind =
   | 'farmRoofSlab'
   | 'farmRoofSlabWide'
   | 'farmRidgeBeam'
+  // Site-pass kinds (the RANSACKED set — interior
+  // dressing for fled farmhouses: the occupants left in
+  // a hurry; the disorder is authored, never simulated.)
+  | 'farmTableToppled'
+  | 'farmChairToppled'
+  | 'farmShelfToppled'
+  | 'farmCrateOpen'
+  | 'farmDrawersOpen'
+  | 'farmBarrelSpilled'
   // Site-pass kinds (the Chapel, sites.ts — same rule):
   // tall wall segments, the steep roof, the steeple, and
   // the graveyard's two stone shapes.

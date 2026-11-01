@@ -1289,6 +1289,93 @@ export const SOURCES: HarvestSourceDef[] = [
     biomes: ['oldfieldRise'],
     mesh: { shape: 'stone', color: 0x4f4630, extraColor: 0x7d7668, baseY: 0 },
   },
+  // The RANSACKED set (2026-11-01 — interior dressing
+  // for fled farmhouses; site-pass only. Names and
+  // descriptions DRAFT.)
+  {
+    id: 'farmTableToppled',
+    kind: 'farmTableToppled',
+    name: 'Toppled Table',
+    description:
+      'A farmhouse table on its side (DRAFT, 2026-11-01), ' +
+      'one leg splintered, its drawer slid out on the floor.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['oldfieldRise'],
+    mesh: { shape: 'stone', color: 0x6e5136, extraColor: 0x59422a, baseY: 0 },
+  },
+  {
+    id: 'farmChairToppled',
+    kind: 'farmChairToppled',
+    name: 'Toppled Chair',
+    description:
+      'A chair on its back (DRAFT, 2026-11-01), legs to ' +
+      'the room — knocked going, not placed.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['oldfieldRise'],
+    mesh: { shape: 'stone', color: 0x6e5136, extraColor: 0x59422a, baseY: 0 },
+  },
+  {
+    id: 'farmShelfToppled',
+    kind: 'farmShelfToppled',
+    name: 'Toppled Shelf',
+    description:
+      'A shelf gone face-down (DRAFT, 2026-11-01), its ' +
+      'goods spilled in front of it.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['oldfieldRise'],
+    mesh: { shape: 'stone', color: 0x6e5136, extraColor: 0x59422a, baseY: 0 },
+  },
+  {
+    id: 'farmCrateOpen',
+    kind: 'farmCrateOpen',
+    name: 'Opened Crate',
+    description:
+      'A crate with its lid ajar and one board off ' +
+      '(DRAFT, 2026-11-01) — emptied in a hurry.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['oldfieldRise'],
+    mesh: { shape: 'stone', color: 0x77644c, extraColor: 0x59422a, baseY: 0 },
+  },
+  {
+    id: 'farmDrawersOpen',
+    kind: 'farmDrawersOpen',
+    name: 'Ransacked Dresser',
+    description:
+      'A dresser with its drawers pulled out and hanging ' +
+      '(DRAFT, 2026-11-01) — the fled-in-a-hurry read.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['oldfieldRise'],
+    mesh: { shape: 'stone', color: 0x6e5136, extraColor: 0x3d2c1c, baseY: 0 },
+  },
+  {
+    id: 'farmBarrelSpilled',
+    kind: 'farmBarrelSpilled',
+    name: 'Spilled Barrel',
+    description:
+      'A barrel on its side (DRAFT, 2026-11-01), its ' +
+      'contents long soaked into the floorboards.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['oldfieldRise'],
+    mesh: { shape: 'stone', color: 0x74604a, extraColor: 0x2a2018, baseY: 0 },
+  },
   {
     id: 'hearthStone',
     kind: 'hearthStone',
