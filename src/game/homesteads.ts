@@ -67,6 +67,7 @@ import {
 } from './distribution';
 import { deriveSeed, mulberry32 } from './seed';
 import { caveInstancesInRect } from './caves';
+import type { FragmentCarrier } from './carriers';
 
 /** Per-cell presence draw (DRAFT). */
 export const HOMESTEAD_CELL_PRESENCE = 0.45;
@@ -96,6 +97,13 @@ export interface HomesteadInstance {
   greatStone: { x: number; z: number };
   /** Where the fragment machinery reads: the stone, when one is carried. */
   fragmentSpot: { x: number; z: number } | null;
+  /**
+   * The carrier facts for Systems' inscribe() (the
+   * carriers.ts field set): minted iff carrying — the
+   * TRAVEL mark, completeness in the burnt band (the
+   * stone's inscription went through the fire).
+   */
+  fragmentCarrier: FragmentCarrier | null;
   /** Yard dressing richness 0..1 (the integration landing consumes). */
   dressing: number;
   clearRadius: number;
@@ -206,6 +214,18 @@ function homesteadInstanceAt(
         x: x + lx * Math.cos(theta) - lz * Math.sin(theta),
         z: z + lx * Math.sin(theta) + lz * Math.cos(theta),
       };
+      // The carrier facts (minted here to keep the
+      // derivation self-contained; the band mirrors
+      // carriers.ts CARRIER_BAND_BURNT).
+      let fragmentCarrier: FragmentCarrier | null = null;
+      if (carriesFragment) {
+        const crand = mulberry32(deriveSeed(worldSeed, `carrier:${key}`));
+        fragmentCarrier = {
+          fragmentId: `${key}:fragment`,
+          mark: 'travel',
+          completeness: 0.35 + crand() * 0.4,
+        };
+      }
       result = {
         key,
         cellX: cx,
@@ -217,6 +237,7 @@ function homesteadInstanceAt(
         burnt: carriesFragment,
         greatStone,
         fragmentSpot: carriesFragment ? greatStone : null,
+        fragmentCarrier,
         dressing,
         clearRadius: HOMESTEAD_CLEAR_RADIUS_M,
         bounds: {
