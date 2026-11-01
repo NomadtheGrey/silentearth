@@ -45,7 +45,7 @@
 
 import { deriveSeed, mulberry32 } from './seed';
 import type { BiomeWeights } from '../types';
-import { farmhouseSite, groveSite, villageSite } from './sites';
+import { chapelSite, farmhouseSite, groveSite, villageSite } from './sites';
 import { caveInstancesInRect, caveLayoutForKey } from './caves';
 import { homesteadInstancesInRect } from './homesteads';
 
@@ -88,6 +88,25 @@ export function farmhouseCarrier(
 ): CarrierHere {
   const farm = farmhouseSite(worldSeed, spawn, weightsAtPos);
   return { ...mintCarrier(worldSeed, 'farmhouse', 'home', CARRIER_BAND_STONE), x: farm.hearthStone.x, z: farm.hearthStone.z };
+}
+
+/**
+ * The chapel's inscription stone — the named gravestone
+ * nearest the door path (the site's own designation).
+ * The THIRD Home carrier: home is where your dead are,
+ * and without it the Home tier (3) could never complete
+ * — two carriers against a threshold of three is a
+ * capped pursuit, which the discovery principle forbids
+ * (UI's catch, 2026-11-01).
+ */
+export function chapelCarrier(
+  worldSeed: string,
+  spawn: { x: number; z: number },
+  weightsAtPos: (x: number, z: number) => BiomeWeights,
+): CarrierHere {
+  const chapel = chapelSite(worldSeed, spawn, weightsAtPos);
+  const spot = chapel.inscriptionStone;
+  return { ...mintCarrier(worldSeed, 'chapel', 'home', CARRIER_BAND_STONE), x: spot.x, z: spot.z };
 }
 
 /** The burnt village's hearth stone — a home that was. */
@@ -145,6 +164,7 @@ export function fragmentCarriersHere(
   };
   near(farmhouseCarrier(worldSeed, spawn, weightsAtPos));
   near(villageCarrier(worldSeed, spawn, weightsAtPos));
+  near(chapelCarrier(worldSeed, spawn, weightsAtPos));
   near(groveCarrier(worldSeed, spawn, weightsAtPos));
   const rect = { minX: x - r, maxX: x + r, minZ: z - r, maxZ: z + r };
   for (const inst of caveInstancesInRect(worldSeed, spawn, weightsAtPos, rect)) {
