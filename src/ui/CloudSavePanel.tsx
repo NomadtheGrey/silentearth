@@ -58,6 +58,15 @@
  * The module's mirrorConflict rides the sync prop
  * in display shape; resolutions are the caller's
  * handlers, like every other cloud act here.
+ * SAVE NOW (the rework's third pass, 2026-11-01;
+ * Adam's own order): the panel's FIRST row is a
+ * deliberate save button — before it, saving was
+ * something that merely happened to her (autosaves
+ * and the pagehide net), and mirroring deferred
+ * silently inside the module's window. The press
+ * is the caller's: saveNow writes local, mirrorNow
+ * flushes at once, and the note left behind is
+ * honest in every state, cloud-off included.
  * Sync mapping: enabled + mirrored ok → 'Synced';
  * enabled + never mirrored → 'Will sync on next save';
  * enabled + last mirror failed unreachable → 'Will sync
@@ -138,6 +147,10 @@ export interface CloudSavePanelProps {
    * the same handlers). */
   onResolveConflictKeep: () => void;
   onResolveConflictOverwrite: () => void;
+  /** SAVE NOW (the panel's first row): the
+   * deliberate save — the caller writes local and
+   * flushes the mirror at once. */
+  onSaveNow: () => void;
   onNewGame: () => void;
   theme?: UiThemeName;
   comfortable?: boolean;
@@ -170,6 +183,7 @@ export function CloudSavePanel({
   onRename,
   onResolveConflictKeep,
   onResolveConflictOverwrite,
+  onSaveNow,
   onNewGame,
   theme = 'mire',
   comfortable = false,
@@ -250,6 +264,21 @@ export function CloudSavePanel({
 
   return (
     <div className="flex flex-col gap-3 text-sm text-stone-200">
+      {/* SAVE NOW (Adam's order, the rework's third
+        pass): the panel's FIRST row. Saving stops
+        being weather and becomes an act with a
+        button; the note under the panel reports
+        what the press did, in every state. */}
+      <div>
+        <button
+          type="button"
+          className={buttonClass}
+          disabled={busy}
+          onClick={onSaveNow}
+        >
+          Save now
+        </button>
+      </div>
       <label className="flex items-center gap-2">
         <input
           type="checkbox"
