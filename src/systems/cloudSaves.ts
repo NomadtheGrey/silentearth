@@ -147,6 +147,44 @@ export interface CloudSyncState {
    * stays suppressed until a bring or a forced write.
    */
   mirrorConflict: MirrorConflict | null;
+  /**
+   * The last wake-offer probe's finding
+   * (probeShelfFreshness), or null when no probe has
+   * run this session or the last probe could not read
+   * the shelf. Session state: the offer is an at-open
+   * act, so a reload re-probes rather than resurrecting
+   * a stale finding.
+   */
+  shelfFresher: ShelfFresherFacts | null;
+}
+
+/**
+ * What one wake-offer probe found on the shelf (Adam,
+ * 2026-11-01: at open, a device whose shelf holds a
+ * fresher save OFFERS the load — an ask, never an
+ * auto-load). `fresher` is the whole verdict; the rest
+ * is the offer's wording. The verdict's legs: a shelf
+ * copy stands, its stamp differs from this device's
+ * BASIS (the stamp it last knew — its own PUT or a
+ * bring), and it postdates the local record. The basis
+ * leg is what keeps a device from being offered its
+ * OWN mirror: a PUT stamps the shelf AFTER the local
+ * save, so stamps alone would offer every device its
+ * own copy at every open.
+ */
+export interface ShelfFresherFacts {
+  fresher: boolean;
+  /** The shelf copy's stamp (the index entry's). */
+  shelfUpdatedAt: string;
+  shelfName: string | null;
+  shelfSeed: string | null;
+  /** This device's basis at probe time, echoed. */
+  basisUpdatedAt: string | null;
+  /** The local record's stamp the probe compared
+   * against, echoed; null when no local record. */
+  localSavedAt: number | null;
+  /** When the probe ran (ms since epoch). */
+  at: number;
 }
 
 /**
@@ -497,6 +535,7 @@ export function turnOff(): CloudAction {
   // A pending coalesced mirror dies with the opt-in: it
   // must not PUT after the player turned cloud off.
   cancelPendingMirror();
+  lastShelfProbe = null;
   resetGuard();
   const cleared = writeWordsBlob({
     words: null,
@@ -634,6 +673,7 @@ function adoptCanonical(words: CloudWords): CloudAction {
   }
   cancelPendingMirror();
   lastMirroredKey = null;
+  lastShelfProbe = null;
   resetGuard();
   try {
     globalThis.localStorage?.removeItem(CLOUD_SYNC_KEY);
@@ -663,6 +703,7 @@ export function armMirror(): CloudAction {
     return { ok: false, reason: 'No cloud words on this device.' };
   }
   lastMirroredKey = null;
+  lastShelfProbe = null;
   return { ok: true };
 }
 
@@ -674,7 +715,72 @@ export function syncState(): CloudSyncState {
     mirrorHeld: false,
     lastMirror: readSyncNote(),
     mirrorConflict: readGuardBlob().conflict,
+    shelfFresher: lastShelfProbe,
   };
+}
+
+/**
+ * The wake-offer probe (Adam, 2026-11-01): one index
+ * read under the stored identity, comparing the
+ * shelf's `main` stamp against this device's basis
+ * and the local record's stamp (passed in — the
+ * module does not read the local save). The finding
+ * seats in session state for syncState() and is also
+ * returned; null means no offer facts (cloud off, no
+ * shelf copy, or the read failed — unknown is not
+ * 'not fresher'). Never throws.
+ */
+export async function probeShelfFreshness(
+  baseUrl: string = CLOUD_BASE_URL,
+  localSavedAt: number | null,
+  fetchFn: CloudFetch = defaultFetch,
+): Promise<ShelfFresherFacts | null> {
+  const words = getWords();
+  if (words === null) {
+    lastShelfProbe = null;
+    return null;
+  }
+  const res = await requestJson(
+    baseUrl,
+    '/index',
+    words.join(' '),
+    'GET',
+    undefined,
+    fetchFn,
+  );
+  if (res.ok === false || !isRecord(res.json) || !Array.isArray(res.json['saves'])) {
+    lastShelfProbe = null;
+    return null;
+  }
+  let entry: Record<string, unknown> | null = null;
+  for (const candidate of res.json['saves'] as unknown[]) {
+    if (isRecord(candidate) && candidate["slot"] === CLOUD_SLOT) {
+      entry = candidate;
+      break;
+    }
+  }
+  if (entry === null || typeof entry['updatedAt'] !== 'string') {
+    lastShelfProbe = null;
+    return null;
+  }
+  const shelfUpdatedAt = entry['updatedAt'] as string;
+  const basisUpdatedAt = readGuardBlob().basis;
+  const shelfMs = Date.parse(shelfUpdatedAt);
+  const fresher =
+    shelfUpdatedAt !== basisUpdatedAt &&
+    (localSavedAt === null ||
+      (Number.isFinite(shelfMs) && shelfMs > localSavedAt));
+  const facts: ShelfFresherFacts = {
+    fresher,
+    shelfUpdatedAt,
+    shelfName: typeof entry['name'] === 'string' ? (entry['name'] as string) : null,
+    shelfSeed: typeof entry['seed'] === 'string' ? (entry['seed'] as string) : null,
+    basisUpdatedAt,
+    localSavedAt,
+    at: Date.now(),
+  };
+  lastShelfProbe = facts;
+  return facts;
 }
 
 /**
@@ -935,6 +1041,7 @@ export async function deleteCloudSave(
       // basis and conflict both clear. Deletes under
       // other words, and of other slots, touch nothing.
       writeGuardBlob({ basis: null, conflict: null });
+      lastShelfProbe = null;
     }
     return { ok: true };
   }
@@ -1058,6 +1165,14 @@ interface PendingMirror {
 let pendingMirror: PendingMirror | null = null;
 let lastMirrorPutAt: number | null = null;
 let lastMirroredKey: string | null = null;
+
+/**
+ * The last wake-offer probe's finding (session only —
+ * see ShelfFresherFacts). Identity changes clear it:
+ * facts about one word set say nothing about another's
+ * shelf.
+ */
+let lastShelfProbe: ShelfFresherFacts | null = null;
 let mirrorTimer: unknown = null;
 let mirrorTimerClear: ((handle: unknown) => void) | null = null;
 let mirrorFlushInFlight = false;
