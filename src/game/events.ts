@@ -404,6 +404,11 @@ export interface EventMap {
    */
   'trap:placed': { id: string; type: TrapType; x: number; z: number };
   'trap:removed': { id: string; type: TrapType };
+  /** A jar patch was seated (jarPatchState.seat, the shell's
+   *  write path after Systems' dumpJar names the kind). */
+  'patch:seated': { id: string; kind: 'mud' | 'water'; x: number; z: number };
+  /** A mud patch rose to water (jarPatchState.rise). */
+  'patch:risen': { id: string; x: number; z: number };
   /**
    * A trap's catch changed (trapState.setCatch, the shell's write path:
    * set on caught hour-roll, cleared on granted collection; kind null =

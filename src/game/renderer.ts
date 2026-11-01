@@ -27,7 +27,7 @@ import type { WorldGen } from './worldgen';
 import { PlayerController } from './player';
 import { marshWeight } from './biomes';
 import { SOURCE_FOR_KIND } from './objects';
-import { buildAltarGroup, buildAnimal, buildCampArrow, buildCandle, buildCatchProp, buildCauldronGroup, buildDeskGroup, buildEdgeArrow, buildKindGeometry, buildStagedBone, buildStumpDressing, buildSunflowerHeadGeometry, buildTorch, buildUmbrella, buildWitch, ALTAR_CANDLE_X, ALTAR_CANDLE_Z, CANDLE_FLAME_Y, DISC_RADIUS, STUMP_TOP_Y, sunflowerHeadMatrix, sunflowerHeadOrientation, TORCH_FLAME_Y, vertexLambert } from './models';
+import { buildAltarGroup, buildAnimal, buildCampArrow, buildCandle, buildCatchProp, buildCauldronGroup, buildDeskGroup, buildEdgeArrow, buildKindGeometry, buildStagedBone, buildStumpDressing, buildSunflowerHeadGeometry, buildTorch, buildUmbrella, buildWitch, ALTAR_CANDLE_X, ALTAR_CANDLE_Z, CANDLE_FLAME_Y, DISC_GROUND_LIFT_M, DISC_RADIUS, STUMP_TOP_Y, sunflowerHeadMatrix, sunflowerHeadOrientation, TORCH_FLAME_Y, vertexLambert } from './models';
 import { placementFootprintFor, type PlacementPreview, type PlacementTint } from './placementFootprints';
 import {
   markerStateFor,
@@ -80,6 +80,7 @@ import { shelterState, HOUSE_DEFS } from './shelter';
 import { loomState } from './loomState';
 import { pileState } from './pileState';
 import { trapState } from './trapState';
+import { jarPatchState, MUD_PATCH_COLOR, PATCH_R_M, WATER_PATCH_COLOR } from './jarPatchState';
 import { stumpState } from './stumpState';
 import type { TrapType } from './traps';
 import { pauseState } from './pause';
@@ -194,6 +195,18 @@ function collectWaterDiscs(gen: WorldGen, x: number, z: number): WaterDisc[] {
       for (const obj of gen.generateChunk(cx, cz).objects) {
         if (obj.kind !== 'pond' && obj.kind !== 'standingWater') continue;
         discs.push({ x: obj.x, z: obj.z, r: (DISC_RADIUS[obj.kind] ?? 1.0) * obj.scale });
+      }
+    }
+  }
+  // Placed jar patches (2026-11-01) slow her too — this
+  // set feeds SPEED only (the wading factor), where mud
+  // honestly belongs: mud is ground you sink in. The
+  // FACT channel (waterProximity's inWater) carries the
+  // water patches only. Surface gens only.
+  if (!gen.dimensionKey) {
+    for (const patch of jarPatchState.all()) {
+      if (Math.abs(patch.x - x) <= CHUNK_SIZE * 1.5 && Math.abs(patch.z - z) <= CHUNK_SIZE * 1.5) {
+        discs.push({ x: patch.x, z: patch.z, r: PATCH_R_M });
       }
     }
   }
@@ -674,6 +687,8 @@ export class WorldRenderer {
   private pileGroup: THREE.Group | null = null;
   /** Placed-trap markers, rebuilt on 'trap:placed' (below). */
   private trapGroup: THREE.Group | null = null;
+  /** Placed jar patches (mud/water discs), rebuilt on their events. */
+  private patchGroup: THREE.Group | null = null;
   /**
    * Staged-bone meshes (Adam 2026-10-27 — tier-1 Waking,
    * site side): one pale bone per staged site, NOT
@@ -750,6 +765,13 @@ export class WorldRenderer {
         }
         return standingInWater(this.riverParams, discMemo, x, z);
       });
+      // A patch seated or risen in her current chunk must
+      // slow her without waiting for a chunk crossing —
+      // drop the memo on the patch events (the closure
+      // owns the key; the companion memo clears in
+      // rebuildPatchGroup).
+      bus.on('patch:seated', () => { discMemoKey = ''; });
+      bus.on('patch:risen', () => { discMemoKey = ''; });
     }
     // Site walls (sites landing, 2026-10-30; generalized to the
     // registered sites with the Schoolhouse): the renderer owns
@@ -856,6 +878,11 @@ export class WorldRenderer {
     this.unsubPlaced.push(bus.on('trap:placed', rebuildTraps));
     this.unsubPlaced.push(bus.on('trap:removed', rebuildTraps));
     this.rebuildTrapGroup();
+    // Placed jar patches likewise (mud/water discs).
+    const rebuildPatches = (): void => this.rebuildPatchGroup();
+    this.unsubPlaced.push(bus.on('patch:seated', rebuildPatches));
+    this.unsubPlaced.push(bus.on('patch:risen', rebuildPatches));
+    this.rebuildPatchGroup();
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.setSize(container.clientWidth, container.clientHeight);
@@ -1537,6 +1564,10 @@ export class WorldRenderer {
     // Placed traps belong to the old world's map too.
     trapState.clear();
     this.rebuildTrapGroup();
+    // And jar patches (the shell restores the new
+    // world's state after install, as with the rest).
+    jarPatchState.clear();
+    this.rebuildPatchGroup();
     // An armed placement preview belongs to the old
     // world's aim too — never carry the outline across.
     this.setPlacementPreview(null);
@@ -2719,6 +2750,41 @@ export class WorldRenderer {
       add(new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.3, 0.3), lambert(0x78716c)), 0, 0.39, 0);
     }
     return g;
+  }
+
+  /** Rebuild the placed jar patches (mud/water discs at
+   *  the family's ground lift) from live jarPatchState. */
+  private rebuildPatchGroup(): void {
+    // A patch changed the ground underfoot — the
+    // companions' disc memo rebuilds on its next read.
+    this.companionDiscMemo = null;
+    if (this.patchGroup) {
+      this.scene.remove(this.patchGroup);
+      this.patchGroup.traverse((obj) => {
+        if (obj instanceof THREE.Mesh) {
+          obj.geometry.dispose();
+          const mat = obj.material;
+          if (Array.isArray(mat)) mat.forEach((m) => m.dispose());
+          else mat.dispose();
+        }
+      });
+      this.patchGroup = null;
+    }
+    const group = new THREE.Group();
+    for (const patch of jarPatchState.all()) {
+      const geo = new THREE.CircleGeometry(PATCH_R_M, 20);
+      geo.rotateX(-Math.PI / 2);
+      const mesh = new THREE.Mesh(
+        geo,
+        patch.kind === 'water'
+          ? lambert(WATER_PATCH_COLOR, 0.75)
+          : lambert(MUD_PATCH_COLOR),
+      );
+      mesh.position.set(patch.x, DISC_GROUND_LIFT_M, patch.z);
+      group.add(mesh);
+    }
+    this.scene.add(group);
+    this.patchGroup = group;
   }
 
   /** Rebuild the placed-trap markers from live trapState (pile-group pattern). */

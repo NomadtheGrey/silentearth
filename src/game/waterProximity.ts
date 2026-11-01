@@ -55,6 +55,7 @@ import { riverCenterAt, riverParamsFor, RIVER_STEP, RIVER_WIDTH, type RiverParam
 import { DISC_RADIUS } from './models';
 import { standingInWater, type WaterDisc } from './movement';
 import { CHUNK_SIZE } from '../constants';
+import { jarPatchState, PATCH_R_M } from './jarPatchState';
 import type { WorldGen } from './worldgen';
 
 /**
@@ -124,6 +125,16 @@ export function distanceToWater(gen: WorldGen, x: number, z: number): number {
       }
     }
   }
+  // Her hauled ponds count (the jar patches' composition,
+  // 2026-11-01): a placed WATER patch is water to this
+  // edge distance exactly as a pond is. Surface only.
+  if (!gen.dimensionKey) {
+    for (const patch of jarPatchState.all()) {
+      if (patch.kind !== 'water') continue;
+      const d = Math.hypot(patch.x - x, patch.z - z) - PATCH_R_M;
+      if (d < best) best = d;
+    }
+  }
   return best;
 }
 
@@ -164,6 +175,17 @@ export function stillWatersNear(gen: WorldGen, x: number, z: number, range: numb
       waters.push({ x: center.x, z: center.z, radius: RIVER_WIDTH / 2 });
     }
   }
+  // Placed WATER patches ride as still-water bodies of
+  // their own shape (the facing system's read — Scry and
+  // Fill Jar offer at her hauled pond as at wild water).
+  if (!gen.dimensionKey) {
+    for (const patch of jarPatchState.all()) {
+      if (patch.kind !== 'water') continue;
+      if (Math.hypot(patch.x - x, patch.z - z) <= range + PATCH_R_M) {
+        waters.push({ x: patch.x, z: patch.z, radius: PATCH_R_M });
+      }
+    }
+  }
   return waters;
 }
 
@@ -184,6 +206,19 @@ export function waterDiscsNear(gen: WorldGen, x: number, z: number): WaterDisc[]
       for (const obj of gen.generateChunk(cx, cz).objects) {
         if (obj.kind !== 'pond' && obj.kind !== 'standingWater') continue;
         discs.push({ x: obj.x, z: obj.z, r: (DISC_RADIUS[obj.kind] ?? 1.0) * obj.scale });
+      }
+    }
+  }
+  // Placed WATER patches are wading discs too — so
+  // siteWaterFacts' inWater (which reads this set through
+  // standingInWater) answers true inside her hauled pond.
+  // MUD patches are NOT here: mud slows (the renderer's
+  // movement set carries it) but never answers inWater.
+  if (!gen.dimensionKey) {
+    for (const patch of jarPatchState.all()) {
+      if (patch.kind !== 'water') continue;
+      if (Math.abs(patch.x - x) <= CHUNK_SIZE * 1.5 && Math.abs(patch.z - z) <= CHUNK_SIZE * 1.5) {
+        discs.push({ x: patch.x, z: patch.z, r: PATCH_R_M });
       }
     }
   }
