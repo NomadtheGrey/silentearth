@@ -1354,6 +1354,32 @@ export function buildKindGeometry(spec: MeshSpec, kind: ScatterKind): THREE.Buff
       part(box(0.05, 0.08, 1.62), shade(c, 0.8), { p: [0, 0.63, 0], r: [0.42, 0, 0] }),
     ]);
   }
+  // Kind overrides (the Farmhouse FAMILY ROOF, 2026-11-01
+  // — Background's integration ask): the chimney-free
+  // roof as TILED BRICKS on the farmRoof grammar (slope
+  // 0.62), not four fixed roofs. One segment of slope per
+  // depth, authored on the -Z side, origin at wall top;
+  // siting tiles along X for any length and seats the +Z
+  // side by rotY pi (the mirror flips the pitch sign
+  // correctly). Eave overhang 0.3 past the wall face;
+  // ridge edges meet at z ~ 0. The chimney is NOT here —
+  // it is the farmChimney brick, seated by chimneySeatU.
+  if (kind === 'farmRoofSlab' || kind === 'farmRoofSlabWide') {
+    const wide = kind === 'farmRoofSlabWide';
+    const slabLen = wide ? 5.0 : 3.47;
+    const cy = wide ? 1.47 : 1.03;
+    const cz = wide ? -2.015 : -1.39;
+    return merge([
+      part(box(FARM_SEGMENT_M, 0.09, slabLen), c, { p: [0, cy, cz], r: [-0.62, 0, 0] }),
+    ]);
+  }
+  if (kind === 'farmRidgeBeam') {
+    // One segment of ridge beam — depth-agnostic; the
+    // seat's height comes from the feature's y.
+    return merge([
+      part(box(FARM_SEGMENT_M, 0.15, 0.22), shade(c, 1.12)),
+    ]);
+  }
   if (kind === 'pumpShed') {
     return merge([
       part(box(2.6, 2.1, 2.0), c),

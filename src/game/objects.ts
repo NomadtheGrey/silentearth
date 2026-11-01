@@ -1246,6 +1246,50 @@ export const SOURCES: HarvestSourceDef[] = [
     mesh: { shape: 'stone', color: 0x6e5136, extraColor: 0x8a8578, baseY: 0 },
   },
   {
+    id: 'farmRoofSlab',
+    kind: 'farmRoofSlab',
+    name: 'Farmhouse Roof Slab',
+    description:
+      'One segment of a family farmhouse roof slope ' +
+      '(DRAFT, 2026-11-01), narrow depth — chimney-free; ' +
+      'the chimney is its own brick, seated by the roll.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['oldfieldRise'],
+    mesh: { shape: 'stone', color: 0x4f4630, extraColor: 0x7d7668, baseY: 0 },
+  },
+  {
+    id: 'farmRoofSlabWide',
+    kind: 'farmRoofSlabWide',
+    name: 'Farmhouse Roof Slab',
+    description:
+      'One segment of a family farmhouse roof slope ' +
+      '(DRAFT, 2026-11-01), wide depth — chimney-free; ' +
+      'the chimney is its own brick, seated by the roll.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['oldfieldRise'],
+    mesh: { shape: 'stone', color: 0x4f4630, extraColor: 0x7d7668, baseY: 0 },
+  },
+  {
+    id: 'farmRidgeBeam',
+    kind: 'farmRidgeBeam',
+    name: 'Ridge Beam',
+    description:
+      'One segment of ridge beam (DRAFT, 2026-11-01) ' +
+      'along a family farmhouse roof peak.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['oldfieldRise'],
+    mesh: { shape: 'stone', color: 0x4f4630, extraColor: 0x7d7668, baseY: 0 },
+  },
+  {
     id: 'hearthStone',
     kind: 'hearthStone',
     name: 'Hearth Stone',

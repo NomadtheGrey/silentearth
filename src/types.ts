@@ -160,6 +160,13 @@ export type ScatterKind =
   | 'farmGableEndWide'
   | 'farmChimney'
   | 'farmCellarDoor'
+  // Site-pass kinds (the Farmhouse FAMILY ROOF — the
+  // chimney-free roof as TILED BRICKS: one segment of
+  // slope per depth, plus the ridge beam tile. The
+  // landed farmRoof serves the singular only.)
+  | 'farmRoofSlab'
+  | 'farmRoofSlabWide'
+  | 'farmRidgeBeam'
   // Site-pass kinds (the Chapel, sites.ts — same rule):
   // tall wall segments, the steep roof, the steeple, and
   // the graveyard's two stone shapes.
