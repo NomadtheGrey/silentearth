@@ -180,7 +180,6 @@ import type { SavedRitualStaging } from './rituals';
 import type { SavedCompanion } from './companions';
 import type { SavedMarkProgress } from './fragments';
 import type { SavedDiscovery } from './discovery';
-import { FIRST_CHARM_ITEM, FIRST_CHARM_KIND } from './charms';
 import type { SavedAwakening } from './charms';
 import type { SavedQuestFlags } from './quests';
 import { questById } from './quests';
@@ -1895,22 +1894,16 @@ export function deserializeSave(value: unknown): SaveData | null {
       }
       if (Object.keys(parsed).length > 0) quests = parsed;
     }
-    // CHARM-LIST MIGRATION (2026-10-28, shrew-only):
-    // an existing save holding the grant's shrew item
-    // + its awakening moves the charm to the list: drop
-    // the item, keep the record (0.5 lb frees). Safe
-    // because the grant is the shrew's sole source
-    // (world excludes shrew) — no found bone is ever
-    // removed. Item-only saves keep the item (they
-    // self-heal: next boot's grant awakens, the
-    // following save migrates). Idempotent: re-save
-    // writes the cleaned inventory.
-    if (
-      awakenings.some((entry) => entry.kind === FIRST_CHARM_KIND) &&
-      inventory[FIRST_CHARM_ITEM] !== undefined
-    ) {
-      delete inventory[FIRST_CHARM_ITEM];
-    }
+    // THE CHARM-LIST MIGRATION IS RETIRED (2026-11-01):
+    // the 2026-10-28 migration dropped a carried shrew
+    // item on load when a shrew awakening stood —
+    // sound only while the grant was the shrew's sole
+    // source and the world excluded shrew. Both
+    // premises are gone (the gift retired; Adam's (a1)
+    // put the shrew in the position cycle): a carried
+    // shrew skull beside a standing awakening is now
+    // legitimate play (a found spare), and load takes
+    // no side against it. Nothing migrates here.
     // World name: optional string, additive (old saves load
     // without it). Non-string values drop — the name is a
     // display label, never load-bearing, so a bad value
