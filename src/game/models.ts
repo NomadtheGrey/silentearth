@@ -1555,6 +1555,108 @@ export function buildKindGeometry(spec: MeshSpec, kind: ScatterKind): THREE.Buff
       part(box(0.05, 0.07, 0.58), shade(c, 0.8), { p: [0.16, peak * 0.5 + 0.34, 0] }),
     ]);
   }
+  // Kind overrides (the UPPER-FLOOR interior bricks,
+  // 2026-11-01 — the full second story's rooms).
+  if (kind === 'farmWallInner') {
+    // The room divider: one segment, full story height,
+    // thin — boards finished both faces (the single slab
+    // reads the same from either side in this register),
+    // a cap and base line.
+    return merge([
+      part(box(FARM_SEGMENT_M, 2.6, 0.12), c),
+      part(box(FARM_SEGMENT_M, 0.09, 0.16), shade(c, 1.1), { p: [0, 1.24, 0] }),
+      part(box(FARM_SEGMENT_M, 0.09, 0.16), shade(c, 0.85), { p: [0, -1.24, 0] }),
+    ]);
+  }
+  if (kind === 'farmWallInnerDoor') {
+    // The doorway segment: two side panels, two posts,
+    // a lintel — the opening between is CLEAR (probe-
+    // asserted: no vertex in the passage). The game's
+    // door-is-a-gap law, indoors.
+    return merge([
+      part(box(0.75, 2.6, 0.12), c, { p: [-0.875, 0, 0] }),
+      part(box(0.75, 2.6, 0.12), c, { p: [0.875, 0, 0] }),
+      part(box(0.14, 2.6, 0.16), shade(c, 0.88), { p: [-0.46, 0, 0] }),
+      part(box(0.14, 2.6, 0.16), shade(c, 0.88), { p: [0.46, 0, 0] }),
+      part(box(1.06, 0.55, 0.12), c, { p: [0, 1.025, 0] }),
+    ]);
+  }
+  if (kind === 'farmDoorLeaf') {
+    // A door leaf whose ORIGIN IS ITS HINGE (floor, at
+    // the panel's edge): siting's rotY swings it around
+    // the hinge — closed or ajar from the one brick.
+    return merge([
+      part(box(0.8, 1.98, 0.05), c, { p: [0.4, 0.99, 0] }),
+      part(box(0.68, 0.1, 0.06), shade(c, 0.85), { p: [0.4, 1.55, 0] }),
+      part(box(0.68, 0.1, 0.06), shade(c, 0.85), { p: [0.4, 0.45, 0] }),
+      part(box(0.05, 0.05, 0.06), e, { p: [0.72, 1.0, 0.04] }),
+    ]);
+  }
+  if (kind === 'farmBed') {
+    // The bedroom's anchor: frame and headboard, a
+    // mattress, the blanket with its fold turned down,
+    // one pillow — made, and slept in, once.
+    return merge([
+      part(box(1.05, 0.22, 2.05), c, { p: [0, 0.26, 0] }),
+      part(box(1.05, 0.78, 0.08), shade(c, 0.9), { p: [0, 0.5, -1.0] }),
+      part(box(0.08, 0.16, 0.08), shade(c, 0.8), { p: [-0.45, 0.08, 0.95] }),
+      part(box(0.08, 0.16, 0.08), shade(c, 0.8), { p: [0.45, 0.08, 0.95] }),
+      part(box(0.98, 0.16, 1.95), e, { p: [0, 0.45, 0] }),
+      part(box(0.99, 0.07, 1.25), shade(e, 0.72), { p: [0, 0.5, 0.32] }),
+      part(box(0.99, 0.1, 0.26), shade(e, 0.85), { p: [0, 0.51, -0.3] }),
+      part(box(0.6, 0.12, 0.35), shade(e, 1.18), { p: [0, 0.55, -0.76] }),
+    ]);
+  }
+  if (kind === 'farmDresser') {
+    // The SETTLED twin of farmDrawersOpen: the same
+    // carcass numbers, the same palette — drawers
+    // CLOSED, fronts flush, one folded cloth on top.
+    // The twinship is probe-asserted by bbox.
+    return merge([
+      part(box(1.1, 1.0, 0.5), c, { p: [0, 0.5, 0] }),
+      part(box(1.14, 0.06, 0.54), shade(c, 1.1), { p: [0, 1.02, 0] }),
+      part(box(0.95, 0.22, 0.03), shade(c, 0.95), { p: [0, 0.72, 0.26] }),
+      part(box(0.95, 0.22, 0.03), shade(c, 0.92), { p: [0, 0.3, 0.26] }),
+      part(box(0.07, 0.05, 0.05), e, { p: [0, 0.72, 0.28] }),
+      part(box(0.07, 0.05, 0.05), e, { p: [0, 0.3, 0.28] }),
+      part(box(0.4, 0.08, 0.3), shade(c, 1.25), { p: [-0.25, 1.09, 0] }),
+    ]);
+  }
+  if (kind === 'farmBedsideTable') {
+    // A small two-shelf table — bedside, hall, wherever
+    // a small table stands (multi-seat Lego).
+    return merge([
+      part(box(0.5, 0.05, 0.4), c, { p: [0, 0.52, 0] }),
+      part(box(0.05, 0.5, 0.05), shade(c, 0.85), { p: [-0.2, 0.26, -0.15] }),
+      part(box(0.05, 0.5, 0.05), shade(c, 0.85), { p: [0.2, 0.26, -0.15] }),
+      part(box(0.05, 0.5, 0.05), shade(c, 0.85), { p: [-0.2, 0.26, 0.15] }),
+      part(box(0.05, 0.5, 0.05), shade(c, 0.85), { p: [0.2, 0.26, 0.15] }),
+      part(box(0.44, 0.04, 0.34), shade(c, 0.92), { p: [0, 0.15, 0] }),
+      part(box(0.22, 0.05, 0.16), e, { p: [0.05, 0.57, 0.02], r: [0, 0.3, 0] }),
+    ]);
+  }
+  if (kind === 'farmRug') {
+    // A flat rug brick: border inset, a worn center —
+    // three flat layers at zero height cost.
+    return merge([
+      part(box(1.6, 0.024, 2.2), c, { p: [0, 0.012, 0] }),
+      part(box(1.4, 0.027, 2.0), shade(c, 1.18), { p: [0, 0.013, 0] }),
+      part(box(0.9, 0.03, 1.4), shade(c, 0.82), { p: [0, 0.015, 0] }),
+    ]);
+  }
+  if (kind === 'farmLandingRail') {
+    // The landing read: posts and two rails along one
+    // segment — the piece that says "landing" before
+    // any room does, guarding the stair opening.
+    const railParts: THREE.BufferGeometry[] = [
+      part(box(FARM_SEGMENT_M, 0.07, 0.09), shade(c, 1.05), { p: [0, 0.87, 0] }),
+      part(box(FARM_SEGMENT_M, 0.05, 0.06), shade(c, 0.9), { p: [0, 0.45, 0] }),
+    ];
+    for (const px of [-1.2, -0.6, 0, 0.6, 1.2]) {
+      railParts.push(part(box(0.07, 0.85, 0.07), c, { p: [px, 0.425, 0] }));
+    }
+    return merge(railParts);
+  }
   if (kind === 'pumpShed') {
     return merge([
       part(box(2.6, 2.1, 2.0), c),

@@ -318,7 +318,15 @@ export function CraftingMenu({
   return (
     <section
       aria-label="Crafting"
-      className={'flex max-h-[70vh] flex-col rounded-2xl p-3 ' + t.panel}
+      className={
+        // Touch dialogs take the screen (Adam, 2026-11-01):
+        // the comfortable (touch) cap rises with the sheet
+        // to 92dvh so the recipe list is not clipped inside
+        // a taller sheet; desktop keeps its 70vh cap.
+        (comfortable
+          ? 'flex max-h-[92dvh] flex-col rounded-2xl p-3 '
+          : 'flex max-h-[70vh] flex-col rounded-2xl p-3 ') + t.panel
+      }
     >
       <div className="mb-2 flex items-center justify-between gap-2">
         <h2

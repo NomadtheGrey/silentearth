@@ -307,6 +307,45 @@ function farmhouseInstanceAt(
  *  0.3 thick; sites' own FARM_WALL_HALF_T is private. */
 export const FARMHOUSE_WALL_HALF_T = 0.15;
 
+/** The plan's dimensions for an instance, from its
+ *  slots on Models' manifest (the slots compose). */
+export function farmhousePlanDims(inst: FarmhouseInstance): { L: number; D: number } {
+  return {
+    L: FARMHOUSE_LENGTH_SEGMENTS[inst.slots.footprint] * FARM_SEGMENT_M,
+    D: FARMHOUSE_GABLE_WIDTHS_M[inst.slots.gableWidth],
+  };
+}
+
+/** The stair flight's seat in the house's LOCAL frame
+ *  — one source: the plan emits the flight here, and
+ *  the upstairs zones (attics.ts) read the same seat
+ *  for their stair-head anchor. The seat is FORM-AWARE
+ *  (zones-build amendment, 2026-11-01, geometry-forced):
+ *  a FLOOR house's flight climbs the north wall (full
+ *  height everywhere, no pinch); an ATTIC house's
+ *  flight runs ALONG THE RIDGE from the west end —
+ *  a 3.6 m run across a 5.0-deep attic would arrive
+ *  under 0.9 m of slope, while the ridge line carries
+ *  standing height the whole way. dir names the
+ *  climb's local direction ('z' north-wall, 'x' ridge). */
+export function farmhouseStairLocal(inst: FarmhouseInstance): { lx: number; lz: number; dir: 'x' | 'z' } {
+  const { L, D } = farmhousePlanDims(inst);
+  if (inst.upstairsForm === 'attic') return { lx: -L / 2 + 0.55, lz: -0.45, dir: 'x' };
+  return { lx: -L / 2 + 1.0, lz: -D / 2 + 0.55, dir: 'z' };
+}
+
+/** House-local -> world through the instance's
+ *  quarter-turn frame. */
+export function farmhouseLocalToWorld(
+  inst: FarmhouseInstance,
+  lx: number,
+  lz: number,
+): { x: number; z: number } {
+  return inst.theta !== 0
+    ? { x: inst.center.x + lz, z: inst.center.z - lx }
+    : { x: inst.center.x + lx, z: inst.center.z + lz };
+}
+
 /**
  * THE ROOF TABLE (settled with Models, 2026-11-01):
  * the family roof is TILED, not fixed — one slope
@@ -461,13 +500,16 @@ function buildFarmhousePlan(
     }
   }
 
-  // The stairs inside, against the north wall (the
-  // stairsDressing slot's one piece; dressing in v1 —
-  // the upstairs zones own their anchors later).
+  // The stairs inside (the stairsDressing slot's one
+  // piece) — seated at farmhouseStairLocal (form-aware:
+  // north wall for floor houses, along the ridge for
+  // attic houses), the seat the upstairs zones read
+  // for their stair-head anchor (one source).
   {
     const kind = FARMHOUSE_STAIRS_KINDS[inst.slots.stairsDressing] as ScatterKind;
-    const w = toWorld(-L / 2 + 1.0, -D / 2 + 0.55);
-    feat(kind, w.x, w.z, 0, 1, inst.theta);
+    const seat = farmhouseStairLocal(inst);
+    const w = toWorld(seat.lx, seat.lz);
+    feat(kind, w.x, w.z, 0, 1, inst.theta + (seat.dir === 'x' ? Math.PI / 2 : 0));
   }
 
   // The cellar bulkhead at the back foundation.
@@ -491,8 +533,9 @@ function buildFarmhousePlan(
   // authored set (Models' ransacked wave): toppled
   // table, chair, shelf, opened crate and drawers, the
   // spilled barrel — a plan-shuffled subset seated on
-  // the ground floor, east of the stair run, plus one
-  // rubble spill at the door where the flight went out.
+  // the ground floor, clear of the stair run (either
+  // form's), plus one rubble spill at the door where
+  // the flight went out.
   const rubbleAt = (lx: number, lz: number): void => {
     const w = toWorld(lx, lz);
     feat('rubble', w.x, w.z, 0, 0.7 + rand() * 0.6, rand() * Math.PI);

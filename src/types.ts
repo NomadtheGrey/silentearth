@@ -190,6 +190,18 @@ export type ScatterKind =
   | 'farmAtticDoor'
   | 'farmGableEndWindow'
   | 'farmGableEndWideWindow'
+  // Site-pass kinds (the UPPER-FLOOR interior bricks —
+  // the full second story's rooms: dividers, a doorway,
+  // a door leaf, the bedroom set in its settled states,
+  // and the landing rail at the stair head.)
+  | 'farmWallInner'
+  | 'farmWallInnerDoor'
+  | 'farmDoorLeaf'
+  | 'farmBed'
+  | 'farmDresser'
+  | 'farmBedsideTable'
+  | 'farmRug'
+  | 'farmLandingRail'
   // Site-pass kinds (the Chapel, sites.ts — same rule):
   // tall wall segments, the steep roof, the steeple, and
   // the graveyard's two stone shapes.

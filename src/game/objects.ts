@@ -1508,6 +1508,126 @@ export const SOURCES: HarvestSourceDef[] = [
     biomes: ['oldfieldRise'],
     mesh: { shape: 'stone', color: 0x7a6248, extraColor: 0x201812, baseY: 0 },
   },
+  // The UPPER-FLOOR interior bricks (2026-11-01 — the
+  // full second story's rooms; names/descriptions
+  // DRAFT.)
+  {
+    id: 'farmWallInner',
+    kind: 'farmWallInner',
+    name: 'Interior Wall',
+    description:
+      'A room divider inside a farmhouse (DRAFT, ' +
+      '2026-11-01): thin boards finished on both faces — ' +
+      'an interior wall has no weather side. Solid.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['oldfieldRise'],
+    mesh: { shape: 'stone', color: 0x77644c, extraColor: 0x59422a, baseY: 1.3 },
+  },
+  {
+    id: 'farmWallInnerDoor',
+    kind: 'farmWallInnerDoor',
+    name: 'Interior Doorway',
+    description:
+      'A room divider with a doorway in it (DRAFT, ' +
+      '2026-11-01): posts and a lintel, the opening ' +
+      'between — the door is a gap, indoors as out.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['oldfieldRise'],
+    mesh: { shape: 'stone', color: 0x77644c, extraColor: 0x59422a, baseY: 1.3 },
+  },
+  {
+    id: 'farmDoorLeaf',
+    kind: 'farmDoorLeaf',
+    name: 'Door',
+    description:
+      'A wooden door leaf (DRAFT, 2026-11-01), hung on ' +
+      'its hinge edge — closed, or ajar where it was left.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['oldfieldRise'],
+    mesh: { shape: 'stone', color: 0x6e5136, extraColor: 0x3d2c1c, baseY: 0 },
+  },
+  {
+    id: 'farmBed',
+    kind: 'farmBed',
+    name: 'Bed',
+    description:
+      'A farmhouse bed (DRAFT, 2026-11-01): frame, ' +
+      'mattress, a blanket with its fold turned down, ' +
+      'one pillow. Made, and slept in, once.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['oldfieldRise'],
+    mesh: { shape: 'stone', color: 0x6e5136, extraColor: 0x9a8f7a, baseY: 0 },
+  },
+  {
+    id: 'farmDresser',
+    kind: 'farmDresser',
+    name: 'Dresser',
+    description:
+      'A dresser with its drawers closed (DRAFT, ' +
+      '2026-11-01) — the same furniture as the ransacked ' +
+      'one, before the hurry.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['oldfieldRise'],
+    mesh: { shape: 'stone', color: 0x6e5136, extraColor: 0x3d2c1c, baseY: 0 },
+  },
+  {
+    id: 'farmBedsideTable',
+    kind: 'farmBedsideTable',
+    name: 'Bedside Table',
+    description:
+      'A small two-shelf table (DRAFT, 2026-11-01) — ' +
+      'bedside, hall, wherever a small table stands.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['oldfieldRise'],
+    mesh: { shape: 'stone', color: 0x6e5136, extraColor: 0x59422a, baseY: 0 },
+  },
+  {
+    id: 'farmRug',
+    kind: 'farmRug',
+    name: 'Rug',
+    description:
+      'A faded rug (DRAFT, 2026-11-01), bordered, worn ' +
+      'thin in the middle by feet that knew the way.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['oldfieldRise'],
+    mesh: { shape: 'stone', color: 0x7a4a3a, extraColor: 0x59422a, baseY: 0 },
+  },
+  {
+    id: 'farmLandingRail',
+    kind: 'farmLandingRail',
+    name: 'Landing Rail',
+    description:
+      'A railing segment guarding a stair opening ' +
+      '(DRAFT, 2026-11-01) — the piece that says landing ' +
+      'before any room does.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['oldfieldRise'],
+    mesh: { shape: 'stone', color: 0x6e5136, extraColor: 0x59422a, baseY: 0 },
+  },
   {
     id: 'hearthStone',
     kind: 'hearthStone',
