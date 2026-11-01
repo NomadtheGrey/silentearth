@@ -109,6 +109,7 @@ import type { PersonalInventory } from './inventory';
 import { FOOD_ITEMS } from './hunger';
 import { FIRST_CHARM_KIND, boneItemFor } from './charms';
 import { RITUAL_RECIPES } from './rituals';
+import { altarProgressFrom, isStumpyAltar } from './stumpy-altar';
 
 /**
  * One placed fire, shell-mapped from the fire snapshot.
@@ -184,12 +185,23 @@ export interface QuestFacts {
    * completion never depends on it — see that quest.
    */
   altarRaised?: boolean;
+  /**
+   * The additions of her MOST-PROGRESSED stump toward
+   * the altar transformation — shell-mapped from the
+   * stump snapshots (the stump whose altarProgressFrom
+   * counts the most steps; ties are indifferent, the
+   * steps are what reads). OPTIONAL: absent reads as
+   * no stump under transformation. Read by the
+   * raise-an-altar quest alone.
+   */
+  altarAdditions?: readonly string[];
 }
 
 /**
  * A thread within an act — the subgrouping (Adam's
  * approved frame, 2026-11-01). The first five are Act
- * I's survival threads; 'wakings' opens Act II's.
+ * I's survival threads; 'altar' and 'wakings' are
+ * Act II's first two.
  * Ids are stable; names are DRAFT for his pin pass.
  */
 export type QuestThread =
@@ -198,7 +210,8 @@ export type QuestThread =
   | 'shelter'
   | 'tools'
   | 'land'
-  | 'wakings';
+  | 'wakings'
+  | 'altar';
 
 /**
  * A quest's act (Adam's frame): Act I, the survival
@@ -217,9 +230,11 @@ export const QUEST_ACTS: readonly { id: QuestAct; name: string }[] = [
 /**
  * The threads, in fold order: Act I's five (= first
  * appearance in the quest list's own priority order),
- * then Act II's Wakings — the first Witchery thread,
- * DRAFT, opened by its first quest; Witchery's full
- * set comes with its subgrouping pass.
+ * then Act II's — The Altar before Wakings, matching
+ * their quests' order in the list (the altar stands
+ * before the rite). Witchery's threads are DRAFT and
+ * grow with its quests; its full set comes with its
+ * subgrouping pass.
  */
 export const QUEST_THREADS: readonly {
   id: QuestThread;
@@ -231,6 +246,7 @@ export const QUEST_THREADS: readonly {
   { id: 'shelter', name: 'Shelter', act: 'survival' },
   { id: 'tools', name: 'Tools', act: 'survival' },
   { id: 'land', name: 'The Land', act: 'survival' },
+  { id: 'altar', name: 'The Altar', act: 'witchery' },
   { id: 'wakings', name: 'Wakings', act: 'witchery' },
 ];
 
@@ -541,12 +557,60 @@ export const QUEST_DEFINITIONS: readonly QuestDefinition[] = [
     ],
   },
   {
+    id: 'raise-an-altar',
+    title: 'Raise an Altar',
+    // ACT II — WITCHERY, standing BEFORE wake-charm in
+    // the road (Adam, 2026-11-01: the Witchery tasks
+    // start now). The altar is the act's WORKSTATION —
+    // its own thread, The Altar, distinct from Wakings
+    // (the rites worked at it). Components are the
+    // transformation's OWN ORDER, read off the stump
+    // additions by stumpy-altar's own readers
+    // (altarProgressFrom / isStumpyAltar) — no second
+    // account of the steps. Each step carries the
+    // road-step derivation (stands OR its own mark) so
+    // an anomalous additions list can never un-check a
+    // standing altar; in every state the transformation
+    // itself can produce, the marks are prefix-closed
+    // and the derivation never fires. Completion = the
+    // altar stands; nothing here gates the rite (a
+    // Waking still completes at grade-1 ground —
+    // wake-charm's own derivation says so).
+    thread: 'altar',
+    act: 'witchery',
+    isDone: (facts) => isStumpyAltar(facts.altarAdditions ?? []),
+    components: [
+      {
+        id: 'ring-the-stones',
+        label: 'Ring a stump with river stones',
+        isDone: (facts) =>
+          isStumpyAltar(facts.altarAdditions ?? []) ||
+          altarProgressFrom(facts.altarAdditions ?? []).stones,
+      },
+      {
+        id: 'draw-the-glyph',
+        label: 'Draw the glyph',
+        isDone: (facts) =>
+          isStumpyAltar(facts.altarAdditions ?? []) ||
+          altarProgressFrom(facts.altarAdditions ?? []).glyph,
+      },
+      {
+        id: 'set-the-candle',
+        label: 'Set the candle',
+        isDone: (facts) =>
+          isStumpyAltar(facts.altarAdditions ?? []) ||
+          altarProgressFrom(facts.altarAdditions ?? []).candle,
+      },
+    ],
+  },
+  {
     id: 'wake-charm',
     title: 'Wake a Charm',
-    // ACT II — WITCHERY'S FIRST QUEST (Adam's re-seat,
-    // 2026-11-01: 'let's put that into witchery'): the
-    // rite was Act I's named misfit for an hour; it has
-    // a home now, opening the Wakings fold. The bone
+    // ACT II — WITCHERY (Adam's re-seat, 2026-11-01:
+    // 'let's put that into witchery'): the rite was Act
+    // I's named misfit for an hour; it was seated here
+    // first, opening the Wakings fold, and raise-an-
+    // altar now stands before it in the road. The bone
     // road crosses the act line — find-bone stays in
     // The Land, and acts are not gates, so the road
     // walks fine.
