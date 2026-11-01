@@ -14,11 +14,28 @@
  *
  * Opened by the Read verb on her journal (and, by the
  * linked-books law, on her grimoire — the same book by
- * the other name). The panel owns NO rules: it renders
- * rows and reports a close.
+ * the other name), and — dialog audit #4, Adam's release
+ * 2026-11-01 — by its own doors: the J key and the panel
+ * buttons, live once she carries the journal. The panel
+ * owns NO rules: it renders rows and reports a close.
+ *
+ * The book also carries her QUEST LOG now (the audit's
+ * missing half: the log hid inside the Options modal
+ * though the journal is a carried item). The caller
+ * passes the same mapped quest rows it gives Options;
+ * Options keeps its own copy — the audit's complaint
+ * was hiding, not duplication.
  */
 
+import { useState } from 'react';
+
 import { UI_THEMES, type UiThemeName } from './themes';
+import {
+  QuestLog,
+  DEFAULT_QUEST_ACT,
+  groupQuestsByAct,
+  type QuestDisplay,
+} from './QuestLog';
 
 export interface JournalMarkRow {
   /** The mark id (the caller's key). */
@@ -40,6 +57,14 @@ export interface JournalMarkRow {
 export interface JournalPanelProps {
   /** One row per begun mark, caller's order. */
   marks: JournalMarkRow[];
+  /**
+   * The quest log the book carries (dialog audit #4):
+   * the caller's mapped rows, rendered below the marks
+   * GROUPED BY ACT (Adam's amendments — one independent
+   * FOLD per act, rows in the caller's order inside it).
+   * Omitted = marks only.
+   */
+  quests?: QuestDisplay[];
   /** Called when the player closes the panel. Optional. */
   onClose?: () => void;
   /** Thumb-sized close button (44 px target) on touch. Default false. */
@@ -50,11 +75,39 @@ export interface JournalPanelProps {
 
 export function JournalPanel({
   marks,
+  quests,
   onClose,
   comfortable = false,
   theme = 'mire',
 }: JournalPanelProps) {
   const t = UI_THEMES[theme];
+  // ACT FOLDS (accordion amendment, Adam via DEV
+  // 2026-11-01): each act group is an INDEPENDENT fold —
+  // the unification's class default, mirroring
+  // ItemListSurface's collapsed-set idiom. Default: the
+  // act holding the current quest (the first incomplete
+  // row in the caller's order) starts OPEN; every other
+  // act starts folded. The panel mounts per opening, so
+  // the default re-settles each time she opens the book;
+  // while it stands open the folds are hers alone.
+  const groups = quests ? groupQuestsByAct(quests) : [];
+  const currentAct =
+    quests?.find((quest) => !quest.done)?.act ?? DEFAULT_QUEST_ACT;
+  const [collapsedActs, setCollapsedActs] = useState<ReadonlySet<string>>(
+    () =>
+      new Set(
+        groups
+          .filter((group) => group.act !== currentAct)
+          .map((group) => group.act),
+      ),
+  );
+  const toggleActFold = (act: string) =>
+    setCollapsedActs((previous) => {
+      const next = new Set(previous);
+      if (next.has(act)) next.delete(act);
+      else next.add(act);
+      return next;
+    });
   const btn = comfortable
     ? 'rounded px-3 py-2 text-sm min-h-[44px] '
     : 'rounded px-2 py-1 text-sm ';
@@ -107,6 +160,39 @@ export function JournalPanel({
           ))}
         </ul>
       )}
+      {quests ? (
+        <div className="mt-3">
+          <h3 className={'mb-2 text-sm font-semibold ' + t.heading}>
+            Quests
+          </h3>
+          {quests.length === 0 ? (
+            <QuestLog quests={quests} theme={theme} />
+          ) : (
+            groups.map((group) => {
+              const folded = collapsedActs.has(group.act);
+              return (
+                <div key={group.act} className="mt-2">
+                  <button
+                    type="button"
+                    aria-expanded={!folded}
+                    onClick={() => toggleActFold(group.act)}
+                    className={
+                      'w-full pt-1 text-left text-xs font-semibold uppercase tracking-wide ' +
+                      t.muted
+                    }
+                  >
+                    <span aria-hidden="true">{folded ? '▸ ' : '▾ '}</span>
+                    {group.act}
+                  </button>
+                  {!folded ? (
+                    <QuestLog quests={group.quests} theme={theme} />
+                  ) : null}
+                </div>
+              );
+            })
+          )}
+        </div>
+      ) : null}
     </section>
   );
 }

@@ -28,6 +28,39 @@ export interface QuestDisplay {
   hint: string;
   /** Completion state from the Systems predicate. */
   done: boolean;
+  /**
+   * The act this quest belongs to, as the caller assigns
+   * it (dialog #4 amendment: the journal's log renders
+   * grouped by act). Omitted rows group under the default
+   * act. Options' flat list ignores the field.
+   */
+  act?: string;
+}
+
+/** The act unassigned rows belong to (Adam's frame: the survival act). */
+export const DEFAULT_QUEST_ACT = 'Act I — Survival';
+
+/** One act's slice of a quest list, for grouped rendering. */
+export interface QuestActGroup {
+  act: string;
+  quests: QuestDisplay[];
+}
+
+/**
+ * Group rows by act, preserving the caller's order twice
+ * over: groups stand in first-appearance order, rows keep
+ * their list order inside their group (the log's own
+ * within-act ordering is untouched).
+ */
+export function groupQuestsByAct(quests: QuestDisplay[]): QuestActGroup[] {
+  const groups: QuestActGroup[] = [];
+  for (const quest of quests) {
+    const act = quest.act ?? DEFAULT_QUEST_ACT;
+    const group = groups.find((candidate) => candidate.act === act);
+    if (group) group.quests.push(quest);
+    else groups.push({ act, quests: [quest] });
+  }
+  return groups;
 }
 
 export interface QuestLogProps {

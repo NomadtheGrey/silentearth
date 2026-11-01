@@ -1865,6 +1865,7 @@ import {
   type OwnedToolItem,
 } from './systems/owned-tool';
 import {
+  QUEST_ACTS,
   evaluateQuests,
   emptyQuestFlags,
   type QuestFlags,
@@ -2106,6 +2107,15 @@ const FIRE_NAME: Record<FireType, string> = {
   hearth: 'Hearth',
   kiln: 'Kiln',
 };
+
+// QUEST ACT TITLES (dialog #4 amendment): the journal's
+// quest log renders grouped by act. The act itself is
+// Systems' data now (each definition carries it, and
+// QUEST_ACTS pins the display names — Act I — Survival,
+// Act II — Witchery); the shell only stamps the pinned
+// NAME onto each display row. (This replaced the
+// shell-side QUEST_ACT_OVERRIDES table the same day the
+// data landed — one source, Systems'.)
 
 // QUEST HINTS (draft one-liners, Adam pins before merge):
 // one hint per Systems quest id, in priority order. The
@@ -5823,6 +5833,9 @@ export default function App() {
       }).map((quest) => ({
         ...quest,
         hint: QUEST_HINTS[quest.id] ?? '',
+        act:
+          QUEST_ACTS.find((act) => act.id === quest.act)?.name ??
+          'Act I — Survival',
       }))
     : undefined;
   // CRAFTING DERIVATION RELOCATED (2026-10-30): the
@@ -6431,6 +6444,13 @@ export default function App() {
     (record) => record.bond !== 'none',
   );
   const hasBondedCompanion = bondedCompanions.length > 0;
+  // THE JOURNAL'S DOOR FACT (dialog audit #4, Adam's
+  // release 2026-11-01: 'Once she makes a journal, J for
+  // journal, and a button'): the J key and the Journal
+  // buttons exist only while she CARRIES the journal —
+  // the same item fact the transcribe gate reads. No
+  // journal, no door, nothing teased.
+  const hasJournalItem = inventory.count(ITEMS.journal) >= 1;
   // THE FAMILIAR LEADS (Build 2, Piece 4): the standing
   // familiar's row seats first in the panel — the
   // one-standing law made visible in the list's order.
@@ -6523,6 +6543,17 @@ export default function App() {
   const toggleCompanionsPanel = () => {
     if (companionsOpen) setCompanionsOpen(false);
     else openCompanionsPanel();
+  };
+  // The journal's toggle (dialog audit #4): closing is
+  // never gated; opening needs the carried journal (the
+  // gate lives here so every door — J, both button rows —
+  // inherits it, and a journal dropped mid-session takes
+  // its doors with it). The count is read live off the
+  // inventory instance, so the key handler's closure can
+  // never hold a stale gate.
+  const toggleJournalPanel = () => {
+    if (journalOpen) setJournalOpen(false);
+    else if (inventory.count(ITEMS.journal) >= 1) openJournalPanel();
   };
   const openCompanionsPanel = () => {
     setCompanionsOpen(true);
@@ -11118,6 +11149,7 @@ export default function App() {
         if (key === 'i') toggleInventoryPanel();
         else if (key === 'k') toggleCraftingPanel();
         else if (key === 'l') toggleCharmsPanel();
+        else if (key === 'j') toggleJournalPanel();
         // E CLOSES THE CRAFTING WINDOW (Adam, 2026-10-31 —
         // the flint lesson: while crafting was up, E did
         // nothing at all). E is the window's own key now,
@@ -11165,6 +11197,8 @@ export default function App() {
         toggleCraftingPanel();
       } else if (key === 'l') {
         toggleCharmsPanel();
+      } else if (key === 'j') {
+        toggleJournalPanel();
       } else if (key === 'p') {
         pauseState.setPaused(!pausedRef.current);
       }
@@ -12653,6 +12687,28 @@ export default function App() {
                 Companions
               </button>
             ) : null}
+            {hasJournalItem ? (
+              <button
+                type="button"
+                onClick={toggleJournalPanel}
+                aria-pressed={journalOpen}
+                className={
+                  isTouch
+                    ? 'rounded bg-moss-deep px-3 py-2 text-sm min-h-[44px] hover:bg-moss'
+                    : 'rounded bg-moss-deep px-3 py-1 text-xs hover:bg-moss'
+                }
+              >
+                Journal
+                {!isTouch ? (
+                  <span
+                    aria-hidden="true"
+                    className={'ml-1 ' + KEY_BADGE_CLASS}
+                  >
+                    J
+                  </span>
+                ) : null}
+              </button>
+            ) : null}
             <button
               type="button"
               onClick={() => setOptionsOpen(true)}
@@ -12815,6 +12871,16 @@ export default function App() {
                 Companions
               </button>
             ) : null}
+            {hasJournalItem ? (
+              <button
+                type="button"
+                onClick={toggleJournalPanel}
+                aria-pressed={journalOpen}
+                className="min-h-[44px] rounded bg-moss-deep px-3 py-2 text-sm hover:bg-moss"
+              >
+                Journal
+              </button>
+            ) : null}
             <button
               type="button"
               onClick={() => setOptionsOpen(true)}
@@ -12838,6 +12904,7 @@ export default function App() {
               setCraftingOpen(false);
               setCharmsOpen(false);
               setCompanionsOpen(false);
+              setJournalOpen(false);
             }}
             aria-label="Hide HUD panels to reveal the game"
             className="pointer-events-auto absolute right-2 top-2 z-40 min-h-[44px] rounded bg-black/60 px-3 py-2 text-sm"
@@ -13152,6 +13219,7 @@ export default function App() {
         {journalOpen ? (
           <JournalPanel theme={lookThemes.world}
             marks={journalRows}
+            quests={questDisplay}
             onClose={() => setJournalOpen(false)}
             comfortable={isTouch}
           />

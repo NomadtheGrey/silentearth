@@ -969,6 +969,83 @@ export const SOURCES: HarvestSourceDef[] = [
     biomes: ['oldfieldRise', 'creekBottom'],
     mesh: { shape: 'stone', color: 0x7d7668, extraColor: 0x4a3826, baseY: 0.9 },
   },
+  // The Homestead set (2026-11-01 — the recurring raided
+  // homesteads; site-pass only, same rule. Fragment-
+  // carrying homesteads are always burnt and raided
+  // (Adam), so the charred kinds are the fragment face.
+  // Names/descriptions/colors DRAFT.)
+  {
+    id: 'homesteadWall',
+    kind: 'homesteadWall',
+    name: 'Homestead Wall',
+    description:
+      'A standing stretch of a homestead wall (DRAFT, ' +
+      '2026-11-01): vertical boards, one window, smaller ' +
+      'than the farmhouse and plainer than the village.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['oldfieldRise', 'creekBottom'],
+    mesh: { shape: 'stone', color: 0x77644c, extraColor: 0x201812, baseY: 1.25 },
+  },
+  {
+    id: 'homesteadWallCharred',
+    kind: 'homesteadWallCharred',
+    name: 'Charred Homestead Wall',
+    description:
+      'A homestead wall the fire took (DRAFT, 2026-11-01). ' +
+      'Charred through, still standing; solid.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['oldfieldRise', 'creekBottom'],
+    mesh: { shape: 'stone', color: 0x2e2622, extraColor: 0x17120e, baseY: 1.25 },
+  },
+  {
+    id: 'homesteadRoof',
+    kind: 'homesteadRoof',
+    name: 'Homestead Roof',
+    description:
+      'A homestead gable roof still on its walls (DRAFT, ' +
+      '2026-11-01), with its stone chimney.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['oldfieldRise', 'creekBottom'],
+    mesh: { shape: 'stone', color: 0x55482e, extraColor: 0x7d7668, baseY: 0 },
+  },
+  {
+    id: 'homesteadRoofCharred',
+    kind: 'homesteadRoofCharred',
+    name: 'Charred Homestead Roof',
+    description:
+      'A homestead roof that burned and yet stands (DRAFT, ' +
+      '2026-11-01): split ridge, a slipped eave piece, the ' +
+      'stone chimney unburned among the char.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['oldfieldRise', 'creekBottom'],
+    mesh: { shape: 'stone', color: 0x2a2320, extraColor: 0x17120e, baseY: 0 },
+  },
+  {
+    id: 'homesteadRoofFallen',
+    kind: 'homesteadRoofFallen',
+    name: 'Fallen Homestead Roof',
+    description:
+      'A homestead roof that fell in when its house burned ' +
+      '(DRAFT, 2026-11-01), lying tilted among the walls.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['oldfieldRise', 'creekBottom'],
+    mesh: { shape: 'stone', color: 0x33291f, extraColor: 0x1f1813, baseY: 0 },
+  },
   {
     id: 'ashPatch',
     kind: 'ashPatch',

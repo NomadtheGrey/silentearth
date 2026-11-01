@@ -180,6 +180,7 @@ import type { SavedDiscovery } from './discovery';
 import { FIRST_CHARM_ITEM, FIRST_CHARM_KIND } from './charms';
 import type { SavedAwakening } from './charms';
 import type { SavedQuestFlags } from './quests';
+import { questById } from './quests';
 
 /** Storage key. The version rides inside the document too. */
 export const SAVE_KEY = 'silentearth-save-v1';
@@ -1792,6 +1793,13 @@ export function deserializeSave(value: unknown): SaveData | null {
         if (typeof record[field] === 'boolean') {
           parsed[field] = record[field] as boolean;
         }
+      }
+      // The active mark (2026-11-01): a string naming a
+      // KNOWN quest id rides; anything else (unknown or
+      // stale id, wrong type) drops — it reads as no
+      // mark, never as a corrupt save.
+      if (typeof record.active === 'string' && questById(record.active)) {
+        parsed.active = record.active;
       }
       if (Object.keys(parsed).length > 0) quests = parsed;
     }

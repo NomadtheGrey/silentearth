@@ -54,6 +54,7 @@ import { treeKindAt } from './treeKind';
 import { riverParamsFor, riverRibbonForChunk } from './river';
 import { barnSite, caveMouthSite, chapelSite, drownedMillSite, farmhouseSite, generalStoreSite, groveSite, pushOutOfWalls, railSidingSite, schoolhouseSite, siloSite, sunkenRoadSite, villageSite, wallsNearSites, type SiteFootprint } from './sites';
 import { caveFootprintFor, caveInstancesInRect, caveLayoutForKey, caveMouthsNear } from './caves';
+import { homesteadInstancesInRect } from './homesteads';
 import type { RiverParams } from './river';
 import { fireState } from './fireState';
 import { torchState } from './torchState';
@@ -1234,7 +1235,15 @@ export class WorldRenderer {
         minZ: z - 64,
         maxZ: z + 64,
       });
-      if (near.length > 0) sites = [...sites, ...near];
+      // The recurring homesteads are places too (2026-11-01
+      // integration): their standing wall segments collide.
+      const nearHomes = homesteadInstancesInRect(seed, this.wallsSpawnMemo.spawn, (wx, wz) => this.gen.weightsAt(wx, wz), {
+        minX: x - 64,
+        maxX: x + 64,
+        minZ: z - 64,
+        maxZ: z + 64,
+      });
+      if (near.length > 0 || nearHomes.length > 0) sites = [...sites, ...near, ...nearHomes];
     }
     return wallsNearSites(sites, x, z, 2);
   }
