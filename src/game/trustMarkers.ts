@@ -17,11 +17,12 @@
  * where the refusals live, so the marker and the 'sated'
  * refusal can never disagree. Untouched animals have no
  * record and resolve null: no marker, ever. FERALS GET
- * NO MARKER (Adam's ruling, 2026-11-01): a feral record
- * exists but the road is closed to it, and this marker's
- * whole promise is the road — the shell-side resolver
- * returns null for feral ids (their isFeral is the one
- * source for that too). THE CAT is not queried by the
+ * NO MARKER (Adam's ruling, 2026-11-01): the road is
+ * closed to a feral, and this marker's whole promise is
+ * the road. The absence is STRUCTURAL, not a filter:
+ * feed() refuses a feral before any trust is earned, so
+ * a feral never holds a record and factsFor answers null
+ * for it exactly as for the untouched. THE CAT is not queried by the
  * renderer layer in v1: it stands outside the feeding
  * road (its bond is the rite, its familiar read is its
  * glow) — named, not forgotten.
