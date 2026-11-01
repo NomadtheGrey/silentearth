@@ -924,8 +924,20 @@ export async function deleteCloudSave(
     undefined,
     fetchFn,
   );
-  if (res.ok === true) return { ok: true };
-  if (res.status === 404) return { ok: true };
+  if (res.ok === true || res.status === 404) {
+    if (slot === CLOUD_SLOT && isStoredIdentity(words)) {
+      // S8 (panel diagnosis, 2026-11-01): a deleted shelf
+      // takes its guard state with it. A conflict left
+      // standing against a shelf that no longer exists
+      // would suppress mirroring against a ghost (and
+      // its bring exit is dead — a 404 bring clears
+      // nothing). The device no longer knows a shelf:
+      // basis and conflict both clear. Deletes under
+      // other words, and of other slots, touch nothing.
+      writeGuardBlob({ basis: null, conflict: null });
+    }
+    return { ok: true };
+  }
   return { ok: false, reason: res.reason };
 }
 
