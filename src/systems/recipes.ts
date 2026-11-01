@@ -1079,20 +1079,6 @@ const DRAFT_RECIPES: Recipe[] = [
   // --- Receptacles. Clay is reserved for pottery / bricks / maybe tools
   // --- (NOT daub). Cooking is NOT a receptacle job: cooking is open-fire.
   {
-    id: 'clay-pot',
-    name: 'Clay Pot',
-    status: 'draft',
-    output: { item: ITEMS.clayPot, quantity: 1 },
-    ingredients: [i(ITEMS.clay, 3)],
-    station: 'kiln',
-    notes:
-      'DRAFT. Shaped on the wheel, fired in the kiln (kiln is the ' +
-      'engine station here; the wheel step is a shaping step, not a ' +
-      'second station). Food storage + salves / medicine / ' +
-      'restoratives / reagents. NOT cooking. Also the pot trap: sink ' +
-      'a pot in the creek.',
-  },
-  {
     id: 'clay-jar',
     name: 'Clay Jar',
     status: 'draft',
@@ -1233,15 +1219,17 @@ const DRAFT_RECIPES: Recipe[] = [
     name: 'Pot Trap',
     status: 'draft',
     output: { item: ITEMS.potTrap, quantity: 1 },
-    ingredients: [i(ITEMS.clayPot, 1)],
+    ingredients: [i(ITEMS.clayJar, 1)],
     station: 'hand',
     requiresSite: 'in-water',
     notes:
-      'DRAFT — BRAINSTORM, NOTHING PICKED. 1 clay pot, sunk in ' +
-      'the creek. CARRYABLE (trap table, Adam 2026-11-01): ' +
-      'hand-crafted anywhere, carried, and SET standing in ' +
-      'the creek water. No workstation needed (Adam\'s ' +
-      'ruling, 2026-10-26: traps are hand-crafted).',
+      'DRAFT — BRAINSTORM, NOTHING PICKED. 1 clay jar, sunk in ' +
+      'the creek (the jar took the retired pot\'s trap job, ' +
+      'Adam 2026-11-01 — one vessel stands). CARRYABLE (trap ' +
+      'table, Adam 2026-11-01): hand-crafted anywhere, ' +
+      'carried, and SET standing in the creek water. No ' +
+      'workstation needed (Adam\'s ruling, 2026-10-26: traps ' +
+      'are hand-crafted).',
   },
   {
     id: 'pitfall',

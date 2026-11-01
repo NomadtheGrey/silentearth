@@ -843,10 +843,19 @@ const RETIRED_FIRE_TYPES: ReadonlySet<string> = new Set([
  *   entry finishes the decision. Its registry rows stay
  *   (the shelter tables key the shared woven rung by it);
  *   only a saved stack drops here.
+ * - 'clay-pot' — retired 2026-11-01 on Adam's word
+ *   ('If they do the same thing, we'll get rid of one'):
+ *   the pot and the jar overlapped as vessels; the jar
+ *   stands (it carries Adam's water rulings), took the
+ *   pot-trap job, and the pot item retires. Its registry
+ *   rows stay; only a saved stack drops here.
  */
 const RETIRED_ITEM_IDS: ReadonlySet<string> = new Set([
   'bloomery',
   'wattle-and-daub-hut',
+  // The clay pot (Adam, 2026-11-01): one vessel stands —
+  // the jar took its trap job and its water cycle.
+  'clay-pot',
 ]);
 
 const SAVE_HOUSE_TYPES: ReadonlySet<string> = new Set([

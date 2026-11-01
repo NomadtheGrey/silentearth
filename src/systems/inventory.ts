@@ -674,8 +674,8 @@ export const ITEM_DESCRIPTIONS: Readonly<Record<string, string>> = {
   'writing-desk': 'A writing desk for the big book. The grimoire\'s workings are done standing at it. Made at a workstation.',
   // Crafted goods.
   'twined-cordage': 'Twined cord. It ties and binds half of everything you build.',
-  'clay-pot': 'A kiln-fired clay pot. Stores food — and sunk in a creek, it is a pot trap. Not a cooking pot.',
-  'clay-jar': 'A kiln-fired clay jar. Fill it at open water — soups and brews will want what\'s in it.',
+  'clay-pot': 'A kiln-fired clay pot. (Retired — the clay jar stands in its place.)',
+  'clay-jar': 'A kiln-fired clay jar — the one vessel. Fill it at open water; sunk in the creek it is a pot trap; poured on dry ground it makes mud, on mud it makes water. Soups and brews will want what\'s in it.',
   'water-jar': 'A clay jar filled with water. For soups and brews — and emptying it gives the jar back.',
   cauldron: 'A broad kiln-fired clay cauldron. Set it on a hearth — carcasses render, wax melts, and brews brew in it.',
   'clay-brick': 'A kiln-fired brick. No use for it yet.',
@@ -701,7 +701,7 @@ export const ITEM_DESCRIPTIONS: Readonly<Record<string, string>> = {
   // they stand — each line names which).
   snare: 'Stakes and a loop. Carried, and set on dry ground; it catches passing game.',
   'fish-weir-trap': 'A woven funnel. Carried, and set standing in the water; it catches passing game.',
-  'pot-trap': 'A clay pot, sunk in the creek. Carried, and set standing in the water; it catches passing game.',
+  'pot-trap': 'A clay jar, sunk in the creek. Carried, and set standing in the water; it catches passing game.',
   pitfall: 'A dug pit under a moss cover. Dug in dry ground where you craft it — digging one takes a spade-tier tool.',
   deadfall: 'Oak and stone, weighted to fall. Set on dry ground where you craft it; it catches passing game.',
   // Trap catches (not food; most render into tallow in the cauldron — frog and crayfish don't).
