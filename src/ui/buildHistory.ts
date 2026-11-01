@@ -43,6 +43,14 @@ export interface BuildRecord {
 
 const ALL_RECORDS: BuildRecord[] = [
   {
+    merge: 'Merge #48',
+    pr: 87,
+    sha: '63a4076',
+    date: '2026-11-01',
+    what: 'Four commits, and a fifth \u2014 this record \u2014 rides in the same merge. The quests step out of the book and into the day: the journal\u2019s log can now mark the quest she is actually on, and a card in the stack carries that marked quest where she can see it as she walks \u2014 and the altar step of the waking road is wired to the world at last, so raising an altar counts where the road asks for it. The farmhouses wait in the wings, twice over: their seats are rolled in the world data \u2014 some seventeen farmhouses a world, standing or fled-and-ransacked, never burnt \u2014 and their Lego kit is built, nine new pieces (upper walls in two window rhythms, a ground-story twin, gable ends in two widths, a chimney that seats anywhere along the ridge, a cellar bulkhead, stairs, a floor slab), with the variation table filled: a house\u2019s length, depth, windows, and porch are rolls of dice the kit answers. Nothing of them shows in the world yet \u2014 the integration that raises them is the next build \u2014 but every piece is on the table. And the record of the last merge corrects itself, per Adam\u2019s word: the folds slid in ahead of schedule, and the history now says so.',
+    why: 'The card closes the dialog audit\u2019s last thread: a quest you cannot see is a quest you forget. The farmhouse core and kit land inert on purpose \u2014 derivation first, bricks second, houses third \u2014 so each step can be checked before the world depends on it. And a history that hides its own untidiness teaches nobody anything; the amendment keeps the record honest about how the work actually flowed.',
+  },
+  {
     merge: 'Merge #47',
     pr: 86,
     sha: '8dfe012',
