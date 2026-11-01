@@ -28,6 +28,7 @@ import { PlayerController } from './player';
 import { marshWeight } from './biomes';
 import { SOURCE_FOR_KIND } from './objects';
 import { buildAltarGroup, buildAnimal, buildCampArrow, buildCandle, buildCatchProp, buildCauldronGroup, buildDeskGroup, buildEdgeArrow, buildKindGeometry, buildStagedBone, buildStumpDressing, buildSunflowerHeadGeometry, buildTorch, buildUmbrella, buildWitch, ALTAR_CANDLE_X, ALTAR_CANDLE_Z, CANDLE_FLAME_Y, DISC_RADIUS, STUMP_TOP_Y, sunflowerHeadMatrix, sunflowerHeadOrientation, TORCH_FLAME_Y, vertexLambert } from './models';
+import { placementFootprintFor, type PlacementPreview, type PlacementTint } from './placementFootprints';
 import { spawnAnimalsForChunk, updateAnimal } from './animals';
 import type { AnimalInstance, AnimalKind } from './animals';
 import {
@@ -212,6 +213,16 @@ export const CAMPFIRE_PILE_TOP_Y = 0.85;
 
 /** Stick colors for the tipi pile (warm browns, varied). */
 const CAMPFIRE_STICK_COLORS = [0x6b4a2f, 0x7a5a35, 0x5a4028];
+
+/** Placement-preview paint (DRAFT tints): neutral is the
+ *  standing register — a validity color appears only
+ *  when a real check supplies it (Adam's ruling). The
+ *  lift sits 1 cm above the ground discs' own lift so
+ *  the outline never z-fights a disc it crosses. */
+export const PLACEMENT_TINT_NEUTRAL = 0xe8e0c8;
+export const PLACEMENT_TINT_VALID = 0x7dc242;
+export const PLACEMENT_TINT_INVALID = 0xd84a3a;
+export const PLACEMENT_PREVIEW_LIFT_M = 0.03;
 
 /**
  * The unlit campfire mesh: stone ring + ash bed + crossed base
@@ -586,6 +597,17 @@ export class WorldRenderer {
   private placedGroup: THREE.Group | null = null;
   /** Unsubscribes for the placed-group rebuild events (below). */
   private unsubPlaced: (() => void)[] = [];
+  /**
+   * The placement preview (placement surface, 2026-11-01):
+   * the terrain-painted footprint outline at the aimed
+   * point, driven by setPlacementPreview. Its own group —
+   * NOT part of the placed rebuilds; the mesh rebuilds
+   * only when the keyed shape or tint changes, and aim
+   * moves just re-seat the group.
+   */
+  private previewGroup: THREE.Group | null = null;
+  private previewMesh: THREE.Mesh | null = null;
+  private previewShapeKey = '';
   /**
    * Companion layer (Companions Build 1, 2026-10-31):
    * promoted actors from companionRuntime — persistent,
@@ -965,6 +987,90 @@ export class WorldRenderer {
     this.tents = [...positions];
     this.rebuildPlacedGroup();
     this.proximity.recompute();
+  }
+
+  /**
+   * THE PLACEMENT PREVIEW (Adam's placement rulings,
+   * 2026-11-01; joint claim UI + Background): while a
+   * placement is armed, the shell hands the AIMED ground
+   * point + the placeable's key + facing, and the
+   * renderer paints the footprint's OUTLINE flat on the
+   * terrain there — the thing's own ground shape (the
+   * kiln round, a house its def square), replacing the
+   * floating plate as the preview. Neutral paint unless
+   * the caller passes a real validity (never a
+   * hardcoded green — no fire/house check exists today).
+   * Null clears. The footprint resolves game-side
+   * (placementFootprints.ts — the defs/builders are the
+   * authority); an unknown key paints nothing.
+   */
+  setPlacementPreview(preview: PlacementPreview | null): void {
+    if (!preview) {
+      if (this.previewGroup) this.previewGroup.visible = false;
+      this.previewShapeKey = '';
+      return;
+    }
+    const fp = placementFootprintFor(preview.key);
+    if (!fp) {
+      if (this.previewGroup) this.previewGroup.visible = false;
+      this.previewShapeKey = '';
+      return;
+    }
+    if (!this.previewGroup) {
+      this.previewGroup = new THREE.Group();
+      this.scene.add(this.previewGroup);
+    }
+    const shapeKey = `${preview.key}|${preview.tint}`;
+    if (shapeKey !== this.previewShapeKey || !this.previewMesh) {
+      this.previewShapeKey = shapeKey;
+      if (this.previewMesh) {
+        this.previewGroup.remove(this.previewMesh);
+        this.previewMesh.geometry.dispose();
+        (this.previewMesh.material as THREE.Material).dispose();
+        this.previewMesh = null;
+      }
+      const band = 0.07;
+      let geometry: THREE.BufferGeometry;
+      if (fp.shape === 'circle') {
+        geometry = new THREE.RingGeometry(fp.r - band, fp.r, 40);
+      } else {
+        const shape = new THREE.Shape();
+        const hw = fp.w / 2;
+        const hd = fp.d / 2;
+        shape.moveTo(-hw, -hd);
+        shape.lineTo(hw, -hd);
+        shape.lineTo(hw, hd);
+        shape.lineTo(-hw, hd);
+        shape.closePath();
+        const hole = new THREE.Path();
+        hole.moveTo(-hw + band, -hd + band);
+        hole.lineTo(hw - band, -hd + band);
+        hole.lineTo(hw - band, hd - band);
+        hole.lineTo(-hw + band, hd - band);
+        hole.closePath();
+        shape.holes.push(hole);
+        geometry = new THREE.ShapeGeometry(shape);
+      }
+      geometry.rotateX(-Math.PI / 2);
+      const color =
+        preview.tint === 'valid'
+          ? PLACEMENT_TINT_VALID
+          : preview.tint === 'invalid'
+            ? PLACEMENT_TINT_INVALID
+            : PLACEMENT_TINT_NEUTRAL;
+      const material = new THREE.MeshBasicMaterial({
+        color,
+        transparent: true,
+        opacity: 0.85,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+      });
+      this.previewMesh = new THREE.Mesh(geometry, material);
+      this.previewGroup.add(this.previewMesh);
+    }
+    this.previewGroup.position.set(preview.x, PLACEMENT_PREVIEW_LIFT_M, preview.z);
+    this.previewGroup.rotation.y = preview.rotY;
+    this.previewGroup.visible = true;
   }
 
   /**
@@ -1407,6 +1513,9 @@ export class WorldRenderer {
     // Placed traps belong to the old world's map too.
     trapState.clear();
     this.rebuildTrapGroup();
+    // An armed placement preview belongs to the old
+    // world's aim too — never carry the outline across.
+    this.setPlacementPreview(null);
     this.gen = wrapGenWithState(gen);
     this.stageCat(gen);
     this.riverParams = riverParamsFor(String(gen.seed), gen.findSpawn());
