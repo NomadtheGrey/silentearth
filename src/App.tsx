@@ -12235,7 +12235,38 @@ export default function App() {
                         ? 'SCRY'
                         : undefined;
 
-
+  // THE STACK'S META BLOCK (DEFECT 3, 2026-11-01): one
+  // JSX value with two seats in the expanded stack —
+  // FIRST on desktop (its historic place), LAST on touch,
+  // where the slice of visible column is short and the
+  // HUD's working parts (doors, vitals, the quest card)
+  // must lead. The '(press V or C)' hint is desktop-only
+  // advice and does not render on touch.
+  const stackMeta = (
+    <>
+      <h1 className="text-lg tracking-widest">SILENT EARTH</h1>
+      <div className="mt-2 text-xs space-y-1">
+        <p>
+          Camera:{' '}
+          {cameraMode === 'first'
+            ? 'First-person'
+            : cameraMode === 'behind'
+              ? 'Behind (over-shoulder)'
+              : 'Third-person overhead'}{' '}
+          {!isTouch ? (
+            <span className="opacity-60">(press V or C)</span>
+          ) : null}
+        </p>
+        <p>
+          Position: {position.x.toFixed(1)}, {position.z.toFixed(1)}
+        </p>
+        <p>Ground here: {biomeText}</p>
+        <p>Chunks loaded: {chunkCount}</p>
+        <p>Seed: {seed}</p>
+        <p>Owned tool: {ownedItem}</p>
+      </div>
+    </>
+  );
 
   return (
     <div
@@ -12729,43 +12760,42 @@ export default function App() {
         <div
           className={
             isTouch
-              // Reserve 18rem: needs row (~52 px) + thumbstick
-              // clearance (bottom-24 offset + 128 px ring =
-              // 224 px), so the expanded stack never slides
-              // under the stick on portrait — 13rem did.
-              // TURNING FIX: max-w-[46vw], not max-w-sm — the
-              // look field is the right half (w-1/2) at z-20
-              // and the stack sits above it (z-30), so a
-              // full-width stack on portrait swallowed the
+              // Reserve: needs row + thumbstick clearance
+              // (bottom-24 offset + 128 px ring = 224 px),
+              // so the expanded stack never slides under the
+              // stick — 13rem did. DEFECT 3 (2026-11-01,
+              // measured at 915x412 + 844x360): the old
+              // 18rem reserve forgot the LocationChip row
+              // (~32 px of flow above the column), so the
+              // column's box still painted 20 px into the
+              // MOVE disc's top and its buttons died there.
+              // Portrait reserve is now 19.75rem (the chip
+              // row + 8 px of air, from the measured boxes).
+              // LANDSCAPE: the column leaves the disc's
+              // x-band entirely — it seats between the
+              // sticks (ml 9.5rem, width to within 19.5rem
+              // of the right edge, clear of the TURN disc
+              // and the action row) and its cap leaves
+              // 100 px at the bottom for the bottom-center
+              // seat family (Scry's seat), so doors +
+              // vitals + the quest card stand in the
+              // visible slice instead of below its fold.
+              // TURNING FIX stands: max-w-[46vw] portrait —
+              // the look field is the right half (w-1/2) at
+              // z-20 and the stack sits above it (z-30), so
+              // a full-width stack on portrait swallowed the
               // look field and first-person drags could not
-              // turn. 46vw keeps the stack left of half width
-              // on any viewport, so the right half stays open
-              // world; the stack still scrolls (overflow-y)
-              // and its buttons keep 44 px targets.
-              ? 'pointer-events-auto m-2 max-w-[46vw] max-h-[calc(100vh-18rem)] overflow-y-auto pr-1 ' +
+              // turn. 46vw keeps the stack left of half
+              // width on any viewport, so the right half
+              // stays open world; the stack still scrolls
+              // (overflow-y) and its buttons keep 44 px
+              // targets.
+              ? 'pointer-events-auto m-2 max-w-[46vw] max-h-[calc(100vh-19.75rem)] overflow-y-auto pr-1 landscape:ml-[9.5rem] landscape:max-w-[calc(100vw-19.5rem)] landscape:max-h-[calc(100dvh-11.5rem)] ' +
                 touchScrollbar
               : 'pointer-events-auto m-2 max-w-sm'
           }
         >
-          <h1 className="text-lg tracking-widest">SILENT EARTH</h1>
-          <div className="mt-2 text-xs space-y-1">
-            <p>
-              Camera:{' '}
-              {cameraMode === 'first'
-                ? 'First-person'
-                : cameraMode === 'behind'
-                  ? 'Behind (over-shoulder)'
-                  : 'Third-person overhead'}{' '}
-              <span className="opacity-60">(press V or C)</span>
-            </p>
-            <p>
-              Position: {position.x.toFixed(1)}, {position.z.toFixed(1)}
-            </p>
-            <p>Ground here: {biomeText}</p>
-            <p>Chunks loaded: {chunkCount}</p>
-            <p>Seed: {seed}</p>
-            <p>Owned tool: {ownedItem}</p>
-          </div>
+          {!isTouch ? stackMeta : null}
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <button
               type="button"
@@ -12883,6 +12913,26 @@ export default function App() {
               ) : null}
             </button>
           </div>
+          {/* VITALS + CARD ROW (DEFECT 3): on touch
+              landscape these stand side by side — vitals
+              in a fixed rail, the quest card flexing
+              beside them — because a short screen cannot
+              stack both inside the visible slice. The
+              wrappers are plain blocks everywhere else,
+              so portrait and desktop stacking are
+              unchanged. */}
+          <div
+            className={
+              isTouch
+                ? 'landscape:flex landscape:items-start landscape:gap-3 landscape:-mt-1'
+                : ''
+            }
+          >
+            <div
+              className={
+                isTouch ? 'landscape:w-[11rem] landscape:shrink-0' : ''
+              }
+            >
           <div className="mt-3">
             <WitchHealth />
           </div>
@@ -12900,6 +12950,7 @@ export default function App() {
               flash={deerWarningFlash}
             />
           </div>
+            </div>
           {cardQuestRow ? (
             <div className="mt-2">
               <QuestCard
@@ -12911,6 +12962,7 @@ export default function App() {
               />
             </div>
           ) : null}
+          </div>
           <ForageHint stage={hungerStage} />
           <div className="mt-2">
             <WornList
@@ -12984,6 +13036,9 @@ export default function App() {
               ) : null}
             </div>
           ) : null}
+          {/* Touch seat for the meta block: LAST in the
+              stack (DEFECT 3 — the working parts lead). */}
+          {isTouch ? stackMeta : null}
         </div>
         ) : null}
       </HudShell>
