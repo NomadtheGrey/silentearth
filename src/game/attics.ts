@@ -91,6 +91,16 @@ import type { WorldGen } from './worldgen';
 export const ATTIC_ORIGIN = { x: 200000, z: 100000 };
 /** The light register upstairs: gloom, never true dark. */
 export const UPSTAIRS_LIGHT_REGISTER = 'gloom';
+/** Fog density inside an upstairs zone (DRAFT — the
+ *  surface runs 0.008, the caves' true dark 0.05; the
+ *  gloom sits between, a room's worth of murk). */
+export const UPSTAIRS_FOG_DENSITY = 0.02;
+/** Background / fog colour upstairs (DRAFT): a warm
+ *  dark, lit-room-at-dusk against the cave's black. */
+export const UPSTAIRS_BACKGROUND = 0x171310;
+/** The zone light spots' colour (dim warm — window
+ *  light, not fungus glow). */
+export const UPSTAIRS_LIGHT_COLOR = 0xffd9a0;
 /** Knee-wall inset from the long walls (m): where the
  *  slope clears standing height (DRAFT). */
 export const ATTIC_KNEE_INSET_M = 1.25;

@@ -28,6 +28,20 @@
  * session state) so exit needs nothing from the shell
  * beyond the call. Boot always starts on the surface, so
  * the capture can never go stale across a reload.
+ *
+ * UPSTAIRS (2026-11-01 — the travel wiring, joint with
+ * UI): the same validated machinery carries the upstairs
+ * zones (attics.ts). enterUpstairs validates BOTH writes
+ * before the swap — the zone's entry anchor against the
+ * zone's walls, the surface stair head against the
+ * surface house's walls — because exit is a second
+ * position write and the rule covers it too; the return
+ * anchor (the stair head, facing down the flight) is
+ * captured beside the surface generator. The zone's
+ * footprint + light spots ride the swap as the
+ * renderer's DimensionSeat, since an upstairs layout
+ * derives from the surface house and a dimension
+ * generator cannot carry that context itself.
  */
 
 import { pushOutOfWalls, type SiteWallBox } from './sites';
@@ -40,6 +54,15 @@ import {
   type CaveAnchor,
   type CaveMouthRef,
 } from './caves';
+import {
+  atticLayoutForKey,
+  createAtticGen,
+  isUpstairsKey,
+  upstairsMouthFor,
+  UPSTAIRS_LIGHT_COLOR,
+} from './attics';
+import { farmhouseInstanceForKey } from './farmhouses';
+import { farmhouseSite } from './sites';
 import { dimensionState } from './dimensionState';
 import type { WorldGen } from './worldgen';
 import type { BiomeWeights } from '../types';
@@ -52,7 +75,7 @@ export const TRAVEL_WALL_RADIUS_M = 0.3;
 
 export type TravelOutcome =
   | { ok: true }
-  | { ok: false; reason: 'anchor-blocked' | 'wrong-dimension' | 'no-deeper-layer' | 'already-deepest' | 'unknown-mouth' };
+  | { ok: false; reason: 'anchor-blocked' | 'wrong-dimension' | 'no-deeper-layer' | 'already-deepest' | 'unknown-mouth' | 'unknown-house' };
 
 /** The surface generator captured at entry, for exit. */
 let capturedSurfaceGen: WorldGen | null = null;
@@ -117,6 +140,7 @@ export function enterCave(
     return { ok: false, reason: 'anchor-blocked' };
   }
   capturedSurfaceGen = surfaceGen;
+  capturedUpstairsReturn = null;
   renderer.setDimensionGen(createCaveGen(seed, resolved.key));
   placeAt(player, anchor);
   dimensionState.enter(resolved.key, mouthId);
@@ -186,6 +210,113 @@ export function ascend(player: PlayerController): TravelOutcome {
   }
   placeAt(player, shaft);
   dimensionState.setLayer(1);
+  return { ok: true };
+}
+
+/** The surface stair head she returns to from upstairs,
+ *  captured at entry (position + the down-flight facing),
+ *  exactly as the surface generator is captured. */
+let capturedUpstairsReturn: CaveAnchor | null = null;
+
+/** The surface wall boxes of a house record — the return
+ *  validation's collision truth for the stair head. */
+function surfaceWallsForHouse(
+  seed: string,
+  spawn: { x: number; z: number },
+  weightsAtPos: (x: number, z: number) => BiomeWeights,
+  houseKey: string,
+): SiteWallBox[] | null {
+  if (houseKey === 'farmhouse') {
+    return farmhouseSite(seed, spawn, weightsAtPos).walls;
+  }
+  const inst = farmhouseInstanceForKey(seed, spawn, weightsAtPos, houseKey);
+  return inst ? inst.walls : null;
+}
+
+/**
+ * Go upstairs: enter a house's upstairs zone (attics.ts)
+ * at its stair-head door, seating her just inside it.
+ * Both position writes validate first (the travel rule):
+ * the zone's entry anchor against the zone's own walls,
+ * and the surface stair head she will return to against
+ * the surface house's walls. Refuses cleanly on an
+ * unknown house key or a blocked anchor — no swap, no
+ * state change.
+ */
+export function enterUpstairs(
+  renderer: WorldRenderer,
+  player: PlayerController,
+  surfaceGen: WorldGen,
+  houseKey: string,
+): TravelOutcome {
+  const seed = String(surfaceGen.seed);
+  const spawn = surfaceGen.findSpawn();
+  const weightsAtPos = (x: number, z: number) => surfaceGen.weightsAt(x, z);
+  const mouth = upstairsMouthFor(seed, spawn, weightsAtPos, houseKey);
+  if (!mouth) return { ok: false, reason: 'unknown-house' };
+  const layout = atticLayoutForKey(seed, spawn, weightsAtPos, mouth.zoneKey);
+  if (!layout) return { ok: false, reason: 'unknown-house' };
+  if (!anchorClear(layout.entryAnchor, layout.walls)) {
+    return { ok: false, reason: 'anchor-blocked' };
+  }
+  const surfaceWalls = surfaceWallsForHouse(seed, spawn, weightsAtPos, houseKey);
+  if (!surfaceWalls || !anchorClear(mouth.stairHead, surfaceWalls)) {
+    return { ok: false, reason: 'anchor-blocked' };
+  }
+  const gen = createAtticGen(seed, spawn, weightsAtPos, mouth.zoneKey);
+  if (!gen) return { ok: false, reason: 'unknown-house' };
+  // The return anchor: the stair head itself, facing DOWN
+  // the flight (the reverse of her climb).
+  const climbX = mouth.stairHead.x - mouth.stairBase.x;
+  const climbZ = mouth.stairHead.z - mouth.stairBase.z;
+  const returnAnchor: CaveAnchor = {
+    x: mouth.stairHead.x,
+    z: mouth.stairHead.z,
+    yaw: Math.atan2(climbX, climbZ),
+  };
+  capturedSurfaceGen = surfaceGen;
+  capturedUpstairsReturn = returnAnchor;
+  renderer.setDimensionGen(gen, {
+    footprint: layout.footprint,
+    lightSpots: layout.lightSpots,
+    lightColor: UPSTAIRS_LIGHT_COLOR,
+    lightY: 1.6,
+  });
+  placeAt(player, layout.entryAnchor);
+  dimensionState.enter(mouth.zoneKey, houseKey);
+  return { ok: true };
+}
+
+/**
+ * Come back down: exit the upstairs zone to the surface
+ * stair head she entered by. The return is validated
+ * again at write time against the surface house's walls.
+ */
+export function exitUpstairs(renderer: WorldRenderer, player: PlayerController): TravelOutcome {
+  if (
+    !isUpstairsKey(dimensionState.activeKey()) ||
+    !capturedSurfaceGen ||
+    !capturedUpstairsReturn
+  ) {
+    return { ok: false, reason: 'wrong-dimension' };
+  }
+  const surfaceGen = capturedSurfaceGen;
+  const seed = String(surfaceGen.seed);
+  const spawn = surfaceGen.findSpawn();
+  const weightsAtPos = (x: number, z: number) => surfaceGen.weightsAt(x, z);
+  const houseKey = dimensionState.enteredBy();
+  const surfaceWalls = houseKey
+    ? surfaceWallsForHouse(seed, spawn, weightsAtPos, houseKey)
+    : null;
+  if (!surfaceWalls || !anchorClear(capturedUpstairsReturn, surfaceWalls)) {
+    return { ok: false, reason: 'anchor-blocked' };
+  }
+  const anchor = capturedUpstairsReturn;
+  renderer.setDimensionGen(surfaceGen);
+  placeAt(player, anchor);
+  dimensionState.exit();
+  capturedSurfaceGen = null;
+  capturedUpstairsReturn = null;
   return { ok: true };
 }
 

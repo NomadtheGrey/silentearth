@@ -1801,6 +1801,21 @@ export function deserializeSave(value: unknown): SaveData | null {
       if (typeof record.active === 'string' && questById(record.active)) {
         parsed.active = record.active;
       }
+      // The latch (2026-11-01): the completed set rides
+      // with the mark's exact posture — known ids only,
+      // deduplicated; an all-unknown list reads as no
+      // latch, never as a corrupt save.
+      if (Array.isArray(record.completed)) {
+        const known = [
+          ...new Set(
+            record.completed.filter(
+              (entry): entry is string =>
+                typeof entry === 'string' && questById(entry) !== undefined,
+            ),
+          ),
+        ];
+        if (known.length > 0) parsed.completed = known;
+      }
       if (Object.keys(parsed).length > 0) quests = parsed;
     }
     // CHARM-LIST MIGRATION (2026-10-28, shrew-only):

@@ -235,6 +235,20 @@ export type CraftingStation =
   | 'kiln'
   | 'loom';
 
+/** A field-site requirement (see Recipe.requiresSite). */
+export type SiteRequirement = 'in-water' | 'dry-land';
+
+/**
+ * Where she is standing, shell-supplied (the water
+ * adapter's facts; Systems never computes them). The
+ * crafting gates read this input only — a null input
+ * leaves every site gate off (see Recipe.requiresSite).
+ */
+export interface SiteFacts {
+  /** True when she stands in water (a creek's flow). */
+  inWater: boolean;
+}
+
 export interface Ingredient {
   item: ItemId;
   quantity: number;
@@ -294,6 +308,22 @@ export interface Recipe {
    * First use: plant-pulp.
    */
   requiresCreek?: boolean;
+  /**
+   * Field-site requirement (fork B, Adam 2026-11-01:
+   * traps are field-built — 'those are field-based
+   * items'): where she must be STANDING for the craft,
+   * because for a placesTrap recipe the craft IS the
+   * placement. 'in-water' = standing in the water (the
+   * weir, the creek-sunk pot); 'dry-land' = NOT standing
+   * in water (stakes, a dug pit, a weighted rig).
+   * Checked by canCraft + executeCraft ONLY when the
+   * shell supplies the site facts (SiteFacts input); a
+   * null / omitted input leaves the gate OFF
+   * (transitional, the creek rule's exact shape — until
+   * the water adapter lands, the shell cannot say where
+   * she stands, so the craft proceeds meanwhile).
+   */
+  requiresSite?: SiteRequirement;
   /**
    * Craft-places (Adam, 2026-10-26; DEV correction: Systems
    * does NOT emit): crafting this recipe places right there
@@ -1132,10 +1162,13 @@ const DRAFT_RECIPES: Recipe[] = [
     ingredients: [i(ITEMS.tenderVines, 2), i(ITEMS.snapWood, 2)],
     station: 'hand',
     placesTrap: true,
+    requiresSite: 'dry-land',
     notes:
-      'DRAFT — BRAINSTORM, NOTHING PICKED. Stakes. Craftable by ' +
-      'hand anywhere — no workstation needed (Adam\'s ruling, ' +
-      '2026-10-26: traps are hand-crafted, cordage precedent).',
+      'DRAFT — BRAINSTORM, NOTHING PICKED. Stakes. Hand-crafted ' +
+      'on dry ground (fork B, Adam 2026-11-01: the craft is the ' +
+      'placement, and stakes do not hold standing in water). ' +
+      'No workstation needed (Adam\'s ruling, 2026-10-26: traps ' +
+      'are hand-crafted, cordage precedent).',
   },
   {
     id: 'fish-weir-trap',
@@ -1145,10 +1178,13 @@ const DRAFT_RECIPES: Recipe[] = [
     ingredients: [i(ITEMS.tenderVines, 6), i(ITEMS.snapWood, 4)],
     station: 'hand',
     placesTrap: true,
+    requiresSite: 'in-water',
     notes:
-      'DRAFT — BRAINSTORM, NOTHING PICKED. Woven funnel. ' +
-      'Craftable by hand anywhere — no workstation needed ' +
-      '(Adam\'s ruling, 2026-10-26: traps are hand-crafted).',
+      'DRAFT — BRAINSTORM, NOTHING PICKED. Woven funnel, built ' +
+      'standing in the water it fishes (fork B, Adam ' +
+      '2026-11-01: a weir belongs in the water — craft it ' +
+      'there where it goes). No workstation needed (Adam\'s ' +
+      'ruling, 2026-10-26: traps are hand-crafted).',
   },
   {
     id: 'pot-trap',
@@ -1158,10 +1194,12 @@ const DRAFT_RECIPES: Recipe[] = [
     ingredients: [i(ITEMS.clayPot, 1)],
     station: 'hand',
     placesTrap: true,
+    requiresSite: 'in-water',
     notes:
       'DRAFT — BRAINSTORM, NOTHING PICKED. 1 clay pot, sunk in ' +
-      'the creek. Craftable by hand anywhere — no workstation ' +
-      'needed (Adam\'s ruling, 2026-10-26: traps are hand-crafted).',
+      'the creek — set standing in its water (fork B, Adam ' +
+      '2026-11-01). No workstation needed (Adam\'s ruling, ' +
+      '2026-10-26: traps are hand-crafted).',
   },
   {
     id: 'pitfall',
@@ -1172,6 +1210,7 @@ const DRAFT_RECIPES: Recipe[] = [
     station: 'hand',
     placesTrap: true,
     requiresToolStage: 1,
+    requiresSite: 'dry-land',
     notes:
       'DRAFT — BRAINSTORM, NOTHING PICKED. Dug with the spade, ' +
       'not the trowel; peat moss is the cover. No build cost ' +
@@ -1179,8 +1218,10 @@ const DRAFT_RECIPES: Recipe[] = [
       'tool stage 1+, present, not consumed) — a spade-axe or ' +
       'trundle-tool qualifies; a literal spade item is NOT ' +
       'required, so upgrading never locks her out (Adam\'s ' +
-      'ruling, 2026-10-26). Craftable by hand anywhere — no ' +
-      'workstation needed (traps are hand-crafted).',
+      'ruling, 2026-10-26). Hand-crafted on dry ground — a ' +
+      'pit is dug, not scooped from a creek (fork B, Adam ' +
+      '2026-11-01). No workstation needed (traps are ' +
+      'hand-crafted).',
   },
   {
     id: 'deadfall',
@@ -1194,10 +1235,12 @@ const DRAFT_RECIPES: Recipe[] = [
     ],
     station: 'hand',
     placesTrap: true,
+    requiresSite: 'dry-land',
     notes:
       'DRAFT — BRAINSTORM, NOTHING PICKED. River stone is the ' +
-      'weight. Craftable by hand anywhere — no workstation ' +
-      'needed (Adam\'s ruling, 2026-10-26: traps are hand-crafted).',
+      'weight. Hand-crafted on dry ground (fork B, Adam ' +
+      '2026-11-01). No workstation needed (Adam\'s ruling, ' +
+      '2026-10-26: traps are hand-crafted).',
   },
   {
     id: 'writing-desk',

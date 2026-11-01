@@ -158,7 +158,12 @@ import {
   type HarvestStageName,
   type OwnedToolItem,
 } from './owned-tool';
-import type { CraftingStation, ItemId, Recipe } from './recipes';
+import type {
+  CraftingStation,
+  ItemId,
+  Recipe,
+  SiteFacts,
+} from './recipes';
 
 /**
  * Station presence, as passed in by wiring. Single station (or
@@ -247,6 +252,7 @@ export function executeCraft(
   station: StationInput = null,
   hunger: HungerState | null = null,
   nearCreek: boolean | null = null,
+  site: SiteFacts | null = null,
 ): CraftExecutionResult {
   // Ownership gate, FIRST (before hunger): an already-owned
   // or superseded recipe refuses with Adam's label and
@@ -317,6 +323,29 @@ export function executeCraft(
     throw new Error(
       `Cannot craft ${recipe.name}: requires creek water — craft near a creek.`,
     );
+  }
+
+  // Site gate (fork B, Adam 2026-11-01), before anything is
+  // consumed. A stated requiresSite reads where she stands
+  // from INPUT only (the creek gate's shape — Systems never
+  // computes where she stands). Null / omitted input leaves
+  // the gate OFF (transitional, like the creek gate until
+  // the water adapter lands). For a placesTrap recipe the
+  // craft IS the placement, so this gate is the trap's
+  // placement rule. Refusal copy is DRAFT for the pin pass.
+  if (site !== null && recipe.requiresSite !== undefined) {
+    if (recipe.requiresSite === 'in-water' && !site.inWater) {
+      throw new Error(
+        `Cannot craft ${recipe.name}: built standing in the ` +
+          `water — step into the creek first.`,
+      );
+    }
+    if (recipe.requiresSite === 'dry-land' && site.inWater) {
+      throw new Error(
+        `Cannot craft ${recipe.name}: set on dry ground — ` +
+          `step out of the water first.`,
+      );
+    }
   }
 
   // Engine station for craftIntoInventory: the required station when
@@ -509,6 +538,7 @@ interface ChainContext {
   station: StationInput;
   hunger: HungerState | null;
   nearCreek: boolean | null;
+  site: SiteFacts | null;
 }
 
 interface PlanState {
@@ -568,7 +598,7 @@ function planProducerBatch(
   // The validated path itself: every remaining gate (station,
   // hunger, ownership, tool stage, creek, capacity) speaks
   // with executeCraft's own voice, against the simulation.
-  executeCraft(producer, s.sim, ctx.station, ctx.hunger, ctx.nearCreek);
+  executeCraft(producer, s.sim, ctx.station, ctx.hunger, ctx.nearCreek, ctx.site);
   return { sim: s.sim, batches: [...s.batches, producer] };
 }
 
@@ -642,6 +672,7 @@ export function executeCraftChain(
   station: StationInput = null,
   hunger: HungerState | null = null,
   nearCreek: boolean | null = null,
+  site: SiteFacts | null = null,
 ): CraftChainResult {
   const wanted = normalizeItemId(item);
   const ingredient = recipe.ingredients.find((i) => i.item === wanted);
@@ -655,7 +686,7 @@ export function executeCraftChain(
   if (before >= ingredient.quantity) {
     return { steps: [], crafted: { item: wanted, quantity: 0 } };
   }
-  const ctx: ChainContext = { station, hunger, nearCreek };
+  const ctx: ChainContext = { station, hunger, nearCreek, site };
   const planned = planEnsure(
     wanted,
     ingredient.quantity,
@@ -665,7 +696,7 @@ export function executeCraftChain(
   );
   const steps: CraftChainStep[] = [];
   for (const batchRecipe of planned.batches) {
-    executeCraft(batchRecipe, inventory, station, hunger, nearCreek);
+    executeCraft(batchRecipe, inventory, station, hunger, nearCreek, site);
     const last = steps[steps.length - 1];
     if (last !== undefined && last.recipeId === batchRecipe.id) {
       last.batches += 1;
