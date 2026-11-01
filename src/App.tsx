@@ -2107,6 +2107,18 @@ const FIRE_NAME: Record<FireType, string> = {
   kiln: 'Kiln',
 };
 
+// QUEST ACTS (dialog #4 amendment, Adam 2026-11-01):
+// the journal's quest log renders GROUPED BY ACT.
+// Systems' quest definitions carry no act, so the
+// assignment lives here beside the hints: every quest
+// today is Act I — Survival (Adam's frame — the fifteen
+// are the survival stuff); a later act's quests are
+// named in the overrides as they exist, and if Systems'
+// quests ever grow an act field this table retires.
+const QUEST_ACT_OVERRIDES: Record<string, string> = {};
+const questActFor = (questId: string): string =>
+  QUEST_ACT_OVERRIDES[questId] ?? 'Act I — Survival';
+
 // QUEST HINTS (draft one-liners, Adam pins before merge):
 // one hint per Systems quest id, in priority order. The
 // Make Campfire hint says PLACE (the predicate completes on
@@ -5823,6 +5835,7 @@ export default function App() {
       }).map((quest) => ({
         ...quest,
         hint: QUEST_HINTS[quest.id] ?? '',
+        act: questActFor(quest.id),
       }))
     : undefined;
   // CRAFTING DERIVATION RELOCATED (2026-10-30): the

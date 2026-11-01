@@ -28,7 +28,11 @@
  */
 
 import { UI_THEMES, type UiThemeName } from './themes';
-import { QuestLog, type QuestDisplay } from './QuestLog';
+import {
+  QuestLog,
+  groupQuestsByAct,
+  type QuestDisplay,
+} from './QuestLog';
 
 export interface JournalMarkRow {
   /** The mark id (the caller's key). */
@@ -53,7 +57,9 @@ export interface JournalPanelProps {
   /**
    * The quest log the book carries (dialog audit #4):
    * the caller's mapped rows, rendered below the marks
-   * by the shared QuestLog. Omitted = marks only.
+   * GROUPED BY ACT (Adam's amendment — one headed
+   * QuestLog per act, rows in the caller's order).
+   * Omitted = marks only.
    */
   quests?: QuestDisplay[];
   /** Called when the player closes the panel. Optional. */
@@ -129,7 +135,23 @@ export function JournalPanel({
           <h3 className={'mb-2 text-sm font-semibold ' + t.heading}>
             Quests
           </h3>
-          <QuestLog quests={quests} theme={theme} />
+          {quests.length === 0 ? (
+            <QuestLog quests={quests} theme={theme} />
+          ) : (
+            groupQuestsByAct(quests).map((group) => (
+              <div key={group.act} className="mt-2">
+                <h4
+                  className={
+                    'mb-1 text-xs font-semibold uppercase tracking-wide ' +
+                    t.muted
+                  }
+                >
+                  {group.act}
+                </h4>
+                <QuestLog quests={group.quests} theme={theme} />
+              </div>
+            ))
+          )}
         </div>
       ) : null}
     </section>
