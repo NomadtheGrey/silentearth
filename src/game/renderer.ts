@@ -843,6 +843,7 @@ export class WorldRenderer {
       bus.on('altar:removed', rebuild),
       bus.on('desk:placed', rebuild),
       bus.on('desk:removed', rebuild),
+      bus.on('desk:grimoire', rebuild),
       bus.on('cauldron:placed', rebuild),
       bus.on('cauldron:removed', rebuild),
       bus.on('stump:upgraded', rebuild),
@@ -2494,6 +2495,12 @@ export class WorldRenderer {
       const dg = new THREE.Group();
       dg.position.set(desk.x, 0, desk.z);
       dg.add(buildDeskGroup());
+      // The seated grimoire (2026-11-01): a closed book on
+      // the top while the entity's flag stands — the flag
+      // flips only on a Systems grant's success (UI's
+      // composition), so the visible book is the seat's
+      // truth, never a promise.
+      if (desk.grimoire) dg.add(this.seatedGrimoireGroup());
       group.add(dg);
     }
     for (const record of stumpState.snapshot()) {
@@ -2749,6 +2756,31 @@ export class WorldRenderer {
       add(log, 0, 0.12, 0);
       add(new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.3, 0.3), lambert(0x78716c)), 0, 0.39, 0);
     }
+    return g;
+  }
+
+  /** The seated grimoire's visible book: cover + pages
+   *  boxes on the desk's top (surface 0.78, per
+   *  buildDeskGroup), seated left of centre with a lived
+   *  turn (DRAFT dress — a richer book is Models' to
+   *  claim). Renderer-built dressing, the campfire-group
+   *  precedent. */
+  private seatedGrimoireGroup(): THREE.Group {
+    const g = new THREE.Group();
+    const coverMat = lambert(0x4a2e22);
+    const pageMat = lambert(0xd8cdb2);
+    const coverGeo = new THREE.BoxGeometry(0.29, 0.008, 0.22);
+    const bottom = new THREE.Mesh(coverGeo, coverMat);
+    bottom.position.y = 0.004;
+    g.add(bottom);
+    const pages = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.03, 0.19), pageMat);
+    pages.position.y = 0.008 + 0.015;
+    g.add(pages);
+    const top = new THREE.Mesh(coverGeo, coverMat);
+    top.position.y = 0.008 + 0.03 + 0.004;
+    g.add(top);
+    g.position.set(-0.22, 0.78, 0.02);
+    g.rotation.y = 0.3;
     return g;
   }
 

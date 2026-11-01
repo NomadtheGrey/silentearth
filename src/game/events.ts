@@ -335,6 +335,13 @@ export interface EventMap {
    */
   'desk:removed': { id: string };
   /**
+   * A desk's grimoire seat flipped (deskState.setGrimoire,
+   * the shell's write path on a Systems grant's success).
+   * Renderer rebuilds the placed group — the visible book
+   * appears or lifts with the flag.
+   */
+  'desk:grimoire': { id: string; seated: boolean };
+  /**
    * A cauldron was placed on a hearth
    * (cauldronState.placeCauldron, Adam 2026-10-30 — the
    * cauldron is its OWN target, distinct from the hearth
