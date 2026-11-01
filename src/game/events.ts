@@ -403,6 +403,7 @@ export interface EventMap {
    * one craft places two traps.
    */
   'trap:placed': { id: string; type: TrapType; x: number; z: number };
+  'trap:removed': { id: string; type: TrapType };
   /**
    * A trap's catch changed (trapState.setCatch, the shell's write path:
    * set on caught hour-roll, cleared on granted collection; kind null =

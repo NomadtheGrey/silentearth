@@ -808,6 +808,7 @@ export class WorldRenderer {
     // Placed traps rebuild on their own event, like piles.
     const rebuildTraps = (): void => this.rebuildTrapGroup();
     this.unsubPlaced.push(bus.on('trap:placed', rebuildTraps));
+    this.unsubPlaced.push(bus.on('trap:removed', rebuildTraps));
     this.rebuildTrapGroup();
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));

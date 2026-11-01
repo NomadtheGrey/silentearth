@@ -34,6 +34,15 @@
  * (no per-trap emit; the caller rebuilds once) and drops
  * invalid records, the way save filters them.
  *
+ * PLACEMENT-SITE GATE + REMOVAL (Adam's trap table,
+ * pinned 2026-11-01): placeTrap checks the carryable
+ * three against the shell-supplied site fact (their
+ * gates moved from craft to placement; pitfall/deadfall
+ * keep craft-time gates in Systems' recipes) and speaks
+ * its refusals. removeTrap is the one removal primitive
+ * (fill / pick-up / dismantle — shell-composed, one
+ * caller per act).
+ *
  * SCOPE: placement + catch state + hour trigger. setCatch is
  * the shell's write path; no bait setter yet (no baiting
  * mechanic exists — no dead API), no decay. checkHour is
@@ -45,7 +54,20 @@
  */
 
 import { bus } from './events';
-import { isTrapType, type TrapType } from './traps';
+import { isTrapType, TRAP_DEFS, TRAP_PLACEMENT_SITE, type TrapType } from './traps';
+
+/** The site fact placeTrap's gate reads (Systems'
+ *  SiteFacts shape — the water adapter's object passes
+ *  straight in; Systems never computes it, this module
+ *  never derives it). */
+export interface TrapSiteFacts {
+  inWater: boolean;
+}
+
+/** Placement outcome: the trap, or a spoken refusal. */
+export type TrapPlaceResult =
+  | { ok: true; trap: PlacedTrap }
+  | { ok: false; reason: string };
 
 /** A placed trap entity. catch = caught kind, or null when empty; baited carried, always false until a baiting landing adds a setter. */
 export interface PlacedTrap {
@@ -76,11 +98,58 @@ class TrapState {
   /** Game-hour index last seen by checkHour (-1 = never checked). */
   private lastHourIndex = -1;
 
-  placeTrap(type: TrapType, x: number, z: number): PlacedTrap {
+  /**
+   * Place a trap at (x, z) — with the PLACEMENT-SITE
+   * GATE for the carryable three (Adam's trap table,
+   * pinned 2026-11-01; TRAP_PLACEMENT_SITE): the weir
+   * and the pot trap refuse dry land, the snare refuses
+   * water, and the refusal is a SPOKEN reason (the shell
+   * words it to her) — nothing is stored and nothing
+   * emits on a refusal. Pitfall and deadfall are never
+   * checked here (their gates live at craft). The site
+   * input is the water adapter's facts object, supplied
+   * by the shell; a null/absent site leaves the gate off
+   * (the transitional idiom — Systems' gates read the
+   * same way until the shell's wiring lands).
+   */
+  placeTrap(
+    type: TrapType,
+    x: number,
+    z: number,
+    site?: TrapSiteFacts | null,
+  ): TrapPlaceResult {
+    const requirement = TRAP_PLACEMENT_SITE[type];
+    if (requirement && site) {
+      const name = TRAP_DEFS[type].name;
+      if (requirement === 'in-water' && !site.inWater) {
+        return { ok: false, reason: `The ${name} belongs in the water.` };
+      }
+      if (requirement === 'dry-land' && site.inWater) {
+        return { ok: false, reason: `The ${name} belongs on dry land.` };
+      }
+    }
     const id = `trap:${type}:${++this.counter}`;
     const trap: PlacedTrap = { id, type, x, z, catch: null, baited: false };
     this.traps.set(id, trap);
     bus.emit('trap:placed', { id, type, x, z });
+    return { ok: true, trap };
+  }
+
+  /**
+   * Remove a placed trap — the one removal primitive,
+   * serving three shell-composed callers (the pitfall's
+   * fill after Systems' grant, a set carryable's
+   * pick-up, the deadfall's dismantle; single-caller
+   * rule per act, the placeTrap precedent reversed).
+   * Returns the removed record (the pick-up caller
+   * grants from it) or null for an unknown id; emits
+   * 'trap:removed' so the renderer's markers rebuild.
+   */
+  removeTrap(id: string): PlacedTrap | null {
+    const trap = this.traps.get(id);
+    if (!trap) return null;
+    this.traps.delete(id);
+    bus.emit('trap:removed', { id, type: trap.type });
     return trap;
   }
 

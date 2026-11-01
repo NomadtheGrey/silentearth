@@ -46,6 +46,26 @@ export const TRAP_DEFS: Record<TrapType, TrapDef> = {
   deadfall: { name: 'Deadfall', description: 'Oak + vine + river-stone weight.' },
 };
 
+/** A trap's placement-site requirement (the game's own
+ *  spelling of Systems' SiteRequirement — game never
+ *  imports systems; the shapes are structural twins). */
+export type TrapSiteRequirement = 'in-water' | 'dry-land';
+
+/**
+ * PLACEMENT-SITE TABLE (Adam's trap table, pinned
+ * 2026-11-01): the carryable three carry their site
+ * rule at PLACEMENT — the weir and the pot trap belong
+ * in the water, the snare on dry land. Pitfall and
+ * deadfall are NOT here: their site gates stay at craft
+ * time (Systems' recipes), and placeTrap never checks
+ * them.
+ */
+export const TRAP_PLACEMENT_SITE: Partial<Record<TrapType, TrapSiteRequirement>> = {
+  snare: 'dry-land',
+  'fish-weir-trap': 'in-water',
+  'pot-trap': 'in-water',
+};
+
 /** Runtime guard for values arriving from save data or the bus. */
 export function isTrapType(value: unknown): value is TrapType {
   return typeof value === 'string' && (TRAP_DEFS as Record<string, TrapDef | undefined>)[value] !== undefined;
