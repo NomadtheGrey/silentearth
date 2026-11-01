@@ -1914,6 +1914,7 @@ import {
   villageSite,
   waterTowerSite,
 } from './game/sites';
+import { fragmentCarriersHere as carriersHere } from './game/carriers';
 import {
   caveInstanceForKey,
   caveLayoutForKey,
@@ -10182,19 +10183,33 @@ export default function App() {
     z: number;
   };
 
-  // FRAGMENT CARRIERS — THE SEAM (First-Fragment
-  // Presentation, 2026-10-31): the carriers she can
-  // transcribe are Background's facts, named on the
-  // faced target. Their records today name the SEATS
-  // only (the caves' fragmentSpot, the raided
-  // homesteads' fragmentSpot); the facts ride
-  // Background's integration landings, and this
-  // function is the one place they will be read.
-  // Until then the list is empty: no fragment winner
-  // can stand, and the TRANSCRIBE verb is armed but
-  // dark — deliberately (the raven guide's dormancy
-  // pattern, before its probes were wired).
-  const fragmentCarriersHere = (): FragmentCarrier[] => [];
+  // FRAGMENT CARRIERS — THE SEAM, FILLED (First-
+  // Fragment Presentation, 2026-10-31; the fill rides
+  // #44 as its final inclusion, 2026-11-01): the
+  // carriers she can transcribe are Background's
+  // facts, and this function is the one place the
+  // shell reads them — Background's projection over
+  // all five carrier classes (carriers.ts, 3191082),
+  // asked for exactly the winner's own range; the
+  // challenger loop below applies facing + range on
+  // top, as it does for the trap and the hive. While
+  // the facts were unlanded this returned an empty
+  // list and the TRANSCRIBE verb stood armed but dark
+  // (the raven guide's dormancy pattern); on this
+  // fill the presentation goes live whole.
+  const fragmentCarriersHere = (): FragmentCarrier[] => {
+    const player = playerRef.current;
+    const gen = genRef.current;
+    if (!player || !gen) return [];
+    return carriersHere(
+      gen.seed,
+      gen.findSpawn(),
+      (x, z) => gen.weightsAt(x, z),
+      player.x,
+      player.z,
+      HARVEST_RANGE,
+    );
+  };
 
   // GROVE TREE FACT (Adam, 2026-10-30): a scatter target
   // is one of the Grove's own trees when its source fells
@@ -10324,8 +10339,8 @@ export default function App() {
     }
     // FRAGMENT CARRIERS (First-Fragment Presentation):
     // a faced carrier in range challenges like the
-    // trap and the hive (see the seam above
-    // computeUseWinner for why the list can be empty).
+    // trap and the hive (the seam above
+    // computeUseWinner reads Background's facts).
     for (const carrier of fragmentCarriersHere()) {
       const f = facingOf(carrier.x, carrier.z);
       if (f.distance <= HARVEST_RANGE) anyCandidateInRange = true;
