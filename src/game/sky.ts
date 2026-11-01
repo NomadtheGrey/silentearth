@@ -678,12 +678,27 @@ export class SkyRig {
 
   setCaveMode(on: boolean): void {
     this.caveMode = on;
-    this.group.visible = !on;
+    this.group.visible = !(this.caveMode || this.gloomMode);
     if (on) {
       this.sunLight.intensity = 0;
       this.hemiLight.intensity = 0;
       this.lastNightFactor = 1;
     }
+  }
+
+  /**
+   * GLOOM MODE (the upstairs register, attics.ts —
+   * Adam's interiors rule, 2026-11-01): the dome hides
+   * (she is indoors), but the lights hold at a dim warm
+   * floor instead of the cave's zero — window light,
+   * not true dark. Time still passes (update advances
+   * the cycle before this gate, as it does for caves).
+   */
+  private gloomMode = false;
+
+  setGloomMode(on: boolean): void {
+    this.gloomMode = on;
+    this.group.visible = !(this.caveMode || this.gloomMode);
   }
 
   update(dt: number, input: SkyUpdateInput): void {
@@ -697,6 +712,18 @@ export class SkyRig {
       // True dark: time passed above; nothing visual moves.
       this.sunLight.intensity = 0;
       this.hemiLight.intensity = 0;
+      return;
+    }
+    if (this.gloomMode) {
+      // Gloom: a dim warm floor, steady through the day —
+      // the room's light, not the sky's. DRAFT levels:
+      // sun 0.3 in window colour, hemi 0.35, and a
+      // day-leaning night factor (0.4) so nothing reads
+      // the upstairs as night.
+      this.sunLight.color.set(0xffd9a0);
+      this.sunLight.intensity = 0.3;
+      this.hemiLight.intensity = 0.35;
+      this.lastNightFactor = 0.4;
       return;
     }
     const split = cycleSplit(this.cycleT, month);
