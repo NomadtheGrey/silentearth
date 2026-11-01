@@ -134,7 +134,9 @@ export interface CloudSyncNote {
 export interface CloudSyncState {
   enabled: boolean;
   wordsStored: boolean;
-  /** True while an adopted identity's mirroring is held (adoptWords). */
+  /** RETIRED (2026-11-01): the adoption hold is gone;
+   * this reports false always and survives in the
+   * shape only until the panel retires its line. */
   mirrorHeld: boolean;
   lastMirror: CloudSyncNote | null;
   /**
@@ -174,7 +176,7 @@ export interface MirrorConflict {
 /**
  * Mirror outcome. mirrored:false + ok:true = no PUT was
  * needed/performed by this call and nothing failed: cloud
- * off, an adoption hold not yet armed, a standing mirror
+ * off, a standing mirror
  * conflict (the overwrite safeguard — no PUT while it
  * stands), the record already mirrored identically, or
  * the record coalesced into the pending flush (see the
@@ -215,12 +217,12 @@ interface CloudWordsBlob {
   words: [string, string, string] | null;
   enabled: boolean;
   /**
-   * The adoption hold (DEV ruling, 2026-10-31): true
-   * only for an ADOPTED identity whose mirroring has
-   * not yet been deliberately armed (see adoptWords /
-   * armMirror). Blobs written before the field existed
-   * read as unheld — legacy identities keep the
-   * behavior their own opt-in earned.
+   * RETIRED (Adam, 2026-11-01): the adoption hold.
+   * The field stays in the blob's shape for tolerance
+   * (blobs on devices still carry it, in both states)
+   * but NOTHING reads it: adoption no longer holds
+   * mirroring — the timestamp guard + matching words
+   * carry the protection. Writers store false.
    */
   mirrorHeld: boolean;
 }
@@ -478,9 +480,7 @@ export function turnOn(words: CloudWords): CloudAction {
   const stored = writeWordsBlob({
     words: [words[0], words[1], words[2]],
     enabled: true,
-    // Generation / first entry are this device's own
-    // deliberate enable — mirroring is NOT held (the
-    // hold belongs to adoption alone; see adoptWords).
+    // The retired hold's field — stored false, never read.
     mirrorHeld: false,
   });
   if (stored) resetGuard();
@@ -538,12 +538,6 @@ export function enterWords(input: string): CloudAction {
   return turnOn(canonical.words);
 }
 
-/** True while an adopted identity's mirroring is held. */
-function mirrorHeldNow(): boolean {
-  const blob = readWordsBlob();
-  return blob !== null && blob.enabled && blob.mirrorHeld === true;
-}
-
 /**
  * ADOPT an existing word set as this browser's
  * identity (Adam, 2026-10-31: "get the words first to
@@ -559,23 +553,25 @@ function mirrorHeldNow(): boolean {
  * no state is touched, a live pending mirror under
  * the same identity survives.
  *
- * ADOPTION NEVER MIRRORS (DEV ruling, 2026-10-31).
- * The identity is stored with mirroring HELD
- * (mirrorHeld): listing and bringing work at once,
- * but this device's local world is not written to the
- * adopted shelf by the adoption, by any routine
- * autosave, or by a pagehide — a stale local world on
- * a borrowed machine must never overwrite the real
- * save. Mirroring arms only on a deliberate act (see
- * armMirror). The hygiene matches the ruling:
- * a pending coalesced mirror under the old identity
- * is discarded HERE, at adoption; the mirror dedupe
- * key is deliberately LEFT as-is — suppression rides
- * on the hold, and the key resets at arming, when the
- * current record must truly reach the new shelf. The
- * old shelf's sync note is cleared (it would lie
- * about the new one). The local save is never read,
- * moved, or written by any of this.
+ * ADOPTION MIRRORS (Adam, 2026-11-01 — the hold
+ * RETIRED). The identity is stored UNHELD: words that
+ * match a standing shelf put the device IN — it
+ * mirrors like any other from the first save. The
+ * protection the hold used to give now belongs to the
+ * overwrite safeguard whole, and it does the job
+ * better: this device has no basis for the adopted
+ * shelf (adoption resets the guard), so its first
+ * write against a standing shelf raises the no-basis
+ * CONFLICT and asks — where the hold silently banned.
+ * Words matching nothing meet an empty shelf and
+ * writes run freely; there is nothing to displace.
+ * The hygiene: a pending coalesced mirror under the
+ * old identity is discarded HERE, at adoption; the
+ * dedupe key resets HERE too (nothing has mirrored
+ * to THIS shelf yet, so no record may read as already
+ * mirrored); the old shelf's sync note is cleared (it
+ * would lie about the new one). The local save is
+ * never read, moved, or written by any of this.
  */
 export function adoptWords(input: string): CloudAction {
   const canonical = canonicalizeWords(input);
@@ -591,7 +587,7 @@ export function adoptWords(input: string): CloudAction {
   const wrote = writeWordsBlob({
     words: [canonical.words[0], canonical.words[1], canonical.words[2]],
     enabled: true,
-    mirrorHeld: true,
+    mirrorHeld: false,
   });
   if (wrote === false) {
     return {
@@ -600,6 +596,7 @@ export function adoptWords(input: string): CloudAction {
     };
   }
   cancelPendingMirror();
+  lastMirroredKey = null;
   resetGuard();
   try {
     globalThis.localStorage?.removeItem(CLOUD_SYNC_KEY);
@@ -610,23 +607,17 @@ export function adoptWords(input: string): CloudAction {
 }
 
 /**
- * ARM mirroring for the current identity — the
- * deliberate act that releases an adoption hold. The
- * call sites are deliberate by construction: the
- * shell calls this when a bring/restore COMPLETES
- * under the adopted identity (this device's world is
- * then the shelf's own world, and its mirroring back
- * is content-identical — safe by construction), and
- * the panel's post-adoption button calls it as the
- * player's explicit save step.
- *
- * Arming also resets the mirror dedupe key: a record
+ * ARM mirroring — RETIRED AS A GATE (Adam,
+ * 2026-11-01), kept as a no-op-compatible shim so its
+ * existing call sites (the shell on a completed
+ * bring/restore; the panel's button) keep working
+ * until they retire on their own lanes' touches.
+ * Mirroring needs no arming: adoption stores the
+ * identity unheld and the timestamp guard carries
+ * the protection. The shim's one remaining effect is
+ * the dedupe reset it always carried: a record
  * already mirrored to a PREVIOUS shelf must not read
- * as "already mirrored" here — the current record
- * truly reaches this shelf on the next save. An
- * explicit-words manual sync (mirrorSave with words)
- * is one deliberate WRITE and does not come through
- * here: it never arms by itself. Idempotent; refuses
+ * as "already mirrored" here. Idempotent; refuses
  * plainly when no words are stored.
  */
 export function armMirror(): CloudAction {
@@ -635,15 +626,7 @@ export function armMirror(): CloudAction {
     return { ok: false, reason: 'No cloud words on this device.' };
   }
   lastMirroredKey = null;
-  if (blob.mirrorHeld !== true) return { ok: true };
-  const wrote = writeWordsBlob({
-    words: blob.words,
-    enabled: blob.enabled,
-    mirrorHeld: false,
-  });
-  return wrote
-    ? { ok: true }
-    : { ok: false, reason: 'Could not store the words on this device.' };
+  return { ok: true };
 }
 
 /** Sync state for UI's Settings display. */
@@ -651,7 +634,7 @@ export function syncState(): CloudSyncState {
   return {
     enabled: isCloudEnabled(),
     wordsStored: getWords() !== null,
-    mirrorHeld: mirrorHeldNow(),
+    mirrorHeld: false,
     lastMirror: readSyncNote(),
     mirrorConflict: readGuardBlob().conflict,
   };
@@ -1346,15 +1329,7 @@ export async function mirrorSave(
       // mirroring no-ops (no pend, no PUT, no re-raise:
       // once per episode) until a bring-down or a forced
       // overwrite resolves it. Explicit-words calls are
-      // deliberate writes and pass, as at the hold gate.
-      return { mirrored: false, ok: true };
-    }
-    if (opts?.words === undefined && mirrorHeldNow()) {
-      // ADOPTION HOLD (DEV ruling, 2026-10-31): the identity
-      // was adopted and mirroring is not yet armed — routine
-      // mirroring is a no-op here (no pend, no PUT) until a
-      // deliberate act arms it (armMirror). Explicit-words
-      // calls are deliberate writes and pass this gate.
+      // deliberate writes pass.
       return { mirrored: false, ok: true };
     }
     const fetchFn = opts?.fetchFn ?? defaultFetch;
