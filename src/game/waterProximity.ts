@@ -53,6 +53,7 @@
 
 import { riverCenterAt, riverParamsFor, RIVER_STEP, RIVER_WIDTH, type RiverParams } from './river';
 import { DISC_RADIUS } from './models';
+import { standingInWater, type WaterDisc } from './movement';
 import { CHUNK_SIZE } from '../constants';
 import type { WorldGen } from './worldgen';
 
@@ -164,4 +165,67 @@ export function stillWatersNear(gen: WorldGen, x: number, z: number, range: numb
     }
   }
   return waters;
+}
+
+/**
+ * The water discs (pond + standing water — the wading
+ * model's set, wider than this family's pond-only list)
+ * in the 3×3 chunks around (x, z), as movement.ts
+ * WaterDisc circles. The same scan the renderer's
+ * per-frame memo performs; here it is per-action priced,
+ * like the rest of the adapter family.
+ */
+export function waterDiscsNear(gen: WorldGen, x: number, z: number): WaterDisc[] {
+  const discs: WaterDisc[] = [];
+  const pcx = Math.floor(x / CHUNK_SIZE);
+  const pcz = Math.floor(z / CHUNK_SIZE);
+  for (let cx = pcx - 1; cx <= pcx + 1; cx++) {
+    for (let cz = pcz - 1; cz <= pcz + 1; cz++) {
+      for (const obj of gen.generateChunk(cx, cz).objects) {
+        if (obj.kind !== 'pond' && obj.kind !== 'standingWater') continue;
+        discs.push({ x: obj.x, z: obj.z, r: (DISC_RADIUS[obj.kind] ?? 1.0) * obj.scale });
+      }
+    }
+  }
+  return discs;
+}
+
+/** The site-water facts at a point (the trap gate's wire, 2026-11-01). */
+export interface SiteWaterFacts {
+  /** She is standing in water — the engine's wading fact itself. */
+  inWater: boolean;
+  /** A water edge is within creekRange (the crafting gate's fact). */
+  nearCreek: boolean;
+}
+
+/**
+ * The site-water facts at (x, z), from the engine's own
+ * water model — the supplier Systems' trap site-gates
+ * named (DEV routing, 2026-11-01): the weir and the pot
+ * trap belong IN water, the snare / pitfall / deadfall
+ * on dry land, and the shell computes these once at her
+ * position and passes them in (the same call also feeds
+ * crafting's nearCreek, which the shell has passed null
+ * until now).
+ *
+ * inWater IS movement.ts's standingInWater — the river
+ * ribbon (half width + the wading margin) or a pond /
+ * standing-water disc (+ margin) — composed from the
+ * adapter's data, never a second test that could drift
+ * from the wading she feels. nearCreek is the family's
+ * edge-distance fact at the scry range by default.
+ *
+ * A dimension generator (a cave) answers both false:
+ * cave pools are their own question, not this gate's.
+ */
+export function siteWaterFacts(
+  gen: WorldGen,
+  x: number,
+  z: number,
+  creekRange: number = SCRY_WATER_RANGE,
+): SiteWaterFacts {
+  if (gen.dimensionKey) return { inWater: false, nearCreek: false };
+  const inWater = standingInWater(paramsFor(gen), waterDiscsNear(gen, x, z), x, z);
+  const nearCreek = distanceToWater(gen, x, z) <= creekRange;
+  return { inWater, nearCreek };
 }
