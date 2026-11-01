@@ -1863,7 +1863,9 @@ import {
   mirrorSave,
   parkLocal,
   readParked,
+  resolveMirrorConflictKeep,
   syncState,
+  type MirrorConflict,
   turnOff,
   turnOn,
 } from './systems/cloudSaves';
@@ -3874,7 +3876,12 @@ export default function App() {
       // forget: mirrorSave never throws and no-ops when
       // cloud is off, so a failed mirror never breaks
       // play (the sync note records it for the panel).
-      void mirrorSave(CLOUD_BASE_URL, data);
+      // THE CONFLICT PASS (2026-11-01): when the mirror
+      // settles, a conflict it raised is announced once
+      // per episode (the write-guard dialog).
+      void mirrorSave(CLOUD_BASE_URL, data).then(() => {
+        announceCloudConflict(syncState().mirrorConflict);
+      });
     } catch {
       // Saving must never break play.
     }
@@ -3935,6 +3942,21 @@ export default function App() {
     slot: string;
     row: CloudSaveRow;
   } | null>(null);
+  // THE WRITE-GUARD DIALOG (the conflict pass,
+  // 2026-11-01): the conflict episode currently being
+  // asked about, or null. The latch remembers the
+  // raise stamp of the last episode announced, so
+  // the dialog opens ONCE PER EPISODE — never twice
+  // for the same raise, however often state refreshes.
+  const [cloudConflictPrompt, setCloudConflictPrompt] =
+    useState<MirrorConflict | null>(null);
+  const cloudConflictAnnouncedRef = useRef<number | null>(null);
+  const announceCloudConflict = (conflict: MirrorConflict | null) => {
+    if (conflict === null || conflict.resolvedKeep) return;
+    if (cloudConflictAnnouncedRef.current === conflict.at) return;
+    cloudConflictAnnouncedRef.current = conflict.at;
+    setCloudConflictPrompt(conflict);
+  };
   const [cloudPendingRestore, setCloudPendingRestore] =
     useState<SaveData | null>(null);
   const [cloudPendingNewGame, setCloudPendingNewGame] = useState<{
@@ -3943,7 +3965,9 @@ export default function App() {
   } | null>(null);
 
   const refreshCloudState = () => {
-    setCloudSync(syncState());
+    const nextSync = syncState();
+    setCloudSync(nextSync);
+    announceCloudConflict(nextSync.mirrorConflict);
     setCloudWords(getWords());
     const parked = readParked();
     setCloudParked(
@@ -4260,6 +4284,49 @@ export default function App() {
     }
   };
 
+  // THE CONFLICT'S DOORS (the conflict pass,
+  // 2026-11-01): KEEP is the module's decision write —
+  // the episode is marked decided and mirroring stays
+  // suppressed until a bring or a forced overwrite.
+  // The dialog's dismiss (X / Escape / backdrop) IS
+  // this door: focus and no-action default to KEEP.
+  const handleCloudConflictKeep = () => {
+    setCloudConflictPrompt(null);
+    const res = resolveMirrorConflictKeep();
+    if (!res.ok) {
+      setCloudNote(res.reason ?? 'Could not record that choice.');
+    }
+    refreshCloudState();
+  };
+
+  // OVERWRITE: this device's CURRENT record writes
+  // through, forced — saveNow first, so the shelf
+  // receives the freshest local state, then the disk
+  // record mirrors with force (a forced success
+  // clears the episode module-side).
+  const handleCloudConflictOverwrite = async () => {
+    setCloudConflictPrompt(null);
+    saveNow();
+    const data = loadSave();
+    if (data === null) {
+      setCloudNote('Nothing saved on this device yet to copy up.');
+      return;
+    }
+    setCloudBusy(true);
+    try {
+      const res = await mirrorSave(CLOUD_BASE_URL, data, { force: true });
+      setCloudNote(
+        res.ok
+          ? "Copied this device's save over the shelf copy."
+          : (res.reason ?? 'Could not copy over the shelf copy.'),
+      );
+    } finally {
+      setCloudBusy(false);
+    }
+    refreshCloudState();
+    void refreshCloudList();
+  };
+
   const confirmCloudRestore = () => {
     const parked = cloudPendingRestore;
     setCloudPendingRestore(null);
@@ -4391,6 +4458,10 @@ export default function App() {
     onRestoreParked: () => {
       const parked = readParked();
       if (parked !== null) setCloudPendingRestore(parked);
+    },
+    onResolveConflictKeep: handleCloudConflictKeep,
+    onResolveConflictOverwrite: () => {
+      void handleCloudConflictOverwrite();
     },
     onRename: handleCloudRename,
     onNewGame: handleNewGame,
@@ -10807,7 +10878,8 @@ export default function App() {
       cloudPendingBring !== null ||
       cloudPendingRemove !== null ||
       cloudPendingRestore !== null ||
-      cloudPendingNewGame !== null;
+      cloudPendingNewGame !== null ||
+      cloudConflictPrompt !== null;
     if (dialogUp) return;
     const off = bus.on('player:moved', ({ x, z }) => {
       const p = { x, z };
@@ -12128,6 +12200,7 @@ export default function App() {
       cloudPendingRemove !== null ||
       cloudPendingRestore !== null ||
       cloudPendingNewGame !== null ||
+      cloudConflictPrompt !== null ||
       paused;
     if (anyScreenOpen && document.pointerLockElement !== null) {
       document.exitPointerLock();
@@ -12155,6 +12228,7 @@ export default function App() {
     cloudPendingRemove,
     cloudPendingRestore,
     cloudPendingNewGame,
+    cloudConflictPrompt,
     paused,
   ]);
 
@@ -15266,6 +15340,70 @@ export default function App() {
                 onClick={() => setCloudPendingRemove(null)}
               >
                 Cancel
+              </button>
+            </div>
+          </div>
+        ) : null}
+      </Popup>
+
+      {/* THE WRITE-GUARD DIALOG (the conflict pass,
+        2026-11-01): opened once per episode by
+        announceCloudConflict. Both times are spoken;
+        the doors are the panel block's own handlers.
+        Enter confirms KEEP and dismissal IS Keep —
+        focus and no-action default to the safe door.
+        Copy DRAFT. */}
+      <Popup theme={lookThemes.dialog}
+        open={cloudConflictPrompt !== null}
+        title="A newer copy stands on the shelf"
+        onClose={handleCloudConflictKeep}
+        onConfirm={handleCloudConflictKeep}
+        comfortable={isTouch}
+      >
+        {cloudConflictPrompt !== null ? (
+          <div className="flex flex-col gap-3 p-3 text-sm">
+            <p>
+              The shelf holds a copy of this world saved{' '}
+              {new Date(
+                cloudConflictPrompt.shelfUpdatedAt,
+              ).toLocaleString()}
+              . This device's own save is from{' '}
+              {new Date(
+                cloudConflictPrompt.localSavedAt,
+              ).toLocaleString()}
+              .
+            </p>
+            <p className="text-xs opacity-80">
+              {cloudConflictPrompt.basisUpdatedAt !== null
+                ? `This device last knew the shelf at ${new Date(cloudConflictPrompt.basisUpdatedAt).toLocaleString()}, so the newer copy was made somewhere else — another device, or this one before its memory was cleared.`
+                : 'This device had never copied from this shelf before, so the newer copy was made somewhere else.'}{' '}
+              Copying this device's save up now would
+              replace it. Keeping it means this device
+              holds its saves back until you load the
+              shelf copy or overwrite on purpose.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                className={
+                  'rounded bg-moss-deep hover:bg-moss px-3 py-1 text-sm text-stone-100 ' +
+                  (isTouch ? 'min-h-[44px] px-3 py-2' : '')
+                }
+                onClick={handleCloudConflictKeep}
+              >
+                Keep the newer copy
+              </button>
+              <button
+                type="button"
+                className={
+                  'rounded bg-moss-deep hover:bg-moss px-3 py-1 text-sm text-stone-100 ' +
+                  (isTouch ? 'min-h-[44px] px-3 py-2' : '')
+                }
+                onClick={() => {
+                  void handleCloudConflictOverwrite();
+                }}
+              >
+                Overwrite it with this device's save
               </button>
             </div>
           </div>
