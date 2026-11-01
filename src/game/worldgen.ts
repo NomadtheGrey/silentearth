@@ -22,6 +22,7 @@ import { treeKindAt } from './treeKind';
 import { barnSite, caveMouthSite, chapelSite, distToSegment, drownedMillSite, farmhouseSite, generalStoreSite, groveSite, railSidingSite, schoolhouseSite, siloSite, sunkenRoadSite, villageSite, waterTowerSite, type SiteFootprint } from './sites';
 import { CHUNK_SIZE, BASE_SCATTER_PER_CHUNK, GROUND_SEGMENTS } from '../constants';
 import { caveInstancesInRect } from './caves';
+import { homesteadInstancesInRect } from './homesteads';
 import type { BiomeWeights, ChunkData, ScatterKind, ScatterObject } from '../types';
 
 export interface WorldGen {
@@ -278,8 +279,10 @@ export function createWorldGen(seed: string): WorldGen {
   // feature emission in the site pass.
   let spawnMemo: { x: number; z: number } | null = null;
   const spawnOnce = (): { x: number; z: number } => (spawnMemo ??= findSpawn());
-  const getInstancesNear = (rect: { minX: number; maxX: number; minZ: number; maxZ: number }): SiteFootprint[] =>
-    caveInstancesInRect(seed, spawnOnce(), weightsAtPos, rect);
+  const getInstancesNear = (rect: { minX: number; maxX: number; minZ: number; maxZ: number }): SiteFootprint[] => [
+    ...caveInstancesInRect(seed, spawnOnce(), weightsAtPos, rect),
+    ...homesteadInstancesInRect(seed, spawnOnce(), weightsAtPos, rect),
+  ];
 
   const getSites = (): SiteFootprint[] => {
     if (!sitesCache) {
