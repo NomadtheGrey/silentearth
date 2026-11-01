@@ -69,17 +69,18 @@ function copyAltar(altar: PlacedAltar): PlacedAltar {
     : { ...altar };
 }
 
-/** The consecration vocabulary — the placed altar's
- *  closed additions set: the three step members PLUS
- *  the completing 'altar' member, exactly the stump's
- *  set (stumpState ALTAR_ADDITIONS). 'altar' in an
- *  additions array is the COMPLETION MARKER, not a
- *  kind claim — the stump's record carries it too, and
- *  Systems' isConsecratedAltar reads it; a set without
- *  it caps a placed altar at grade 1 forever (Systems'
- *  parity ruling (i), 2026-11-01). Restore and the
- *  setter both validate against it, the stumpState
- *  pattern: a non-member never rides the record. */
+/** The placed altar's closed additions set: the
+ *  consecration vocabulary — the three ordered steps
+ *  PLUS 'altar', the completion marker the candle
+ *  step's outcome seats (on a stump, completing the
+ *  transformation applies the 'altar' member, and
+ *  isConsecratedAltar reads for it; a placed altar's
+ *  record must carry the same four or it caps below
+ *  consecration forever). 'workstation' stays out: a
+ *  stump role with no altar meaning. Restore and the
+ *  setter both validate against this set, the
+ *  stumpState pattern: a non-member never rides the
+ *  record. */
 const ALTAR_STEP_MEMBERS: ReadonlySet<string> = new Set([
   'altar-stones',
   'altar-glyph',
