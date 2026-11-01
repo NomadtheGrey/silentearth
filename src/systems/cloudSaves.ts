@@ -147,6 +147,44 @@ export interface CloudSyncState {
    * stays suppressed until a bring or a forced write.
    */
   mirrorConflict: MirrorConflict | null;
+  /**
+   * The last wake-offer probe's finding
+   * (probeShelfFreshness), or null when no probe has
+   * run this session or the last probe could not read
+   * the shelf. Session state: the offer is an at-open
+   * act, so a reload re-probes rather than resurrecting
+   * a stale finding.
+   */
+  shelfFresher: ShelfFresherFacts | null;
+}
+
+/**
+ * What one wake-offer probe found on the shelf (Adam,
+ * 2026-11-01: at open, a device whose shelf holds a
+ * fresher save OFFERS the load — an ask, never an
+ * auto-load). `fresher` is the whole verdict; the rest
+ * is the offer's wording. The verdict's legs: a shelf
+ * copy stands, its stamp differs from this device's
+ * BASIS (the stamp it last knew — its own PUT or a
+ * bring), and it postdates the local record. The basis
+ * leg is what keeps a device from being offered its
+ * OWN mirror: a PUT stamps the shelf AFTER the local
+ * save, so stamps alone would offer every device its
+ * own copy at every open.
+ */
+export interface ShelfFresherFacts {
+  fresher: boolean;
+  /** The shelf copy's stamp (the index entry's). */
+  shelfUpdatedAt: string;
+  shelfName: string | null;
+  shelfSeed: string | null;
+  /** This device's basis at probe time, echoed. */
+  basisUpdatedAt: string | null;
+  /** The local record's stamp the probe compared
+   * against, echoed; null when no local record. */
+  localSavedAt: number | null;
+  /** When the probe ran (ms since epoch). */
+  at: number;
 }
 
 /**
@@ -497,6 +535,7 @@ export function turnOff(): CloudAction {
   // A pending coalesced mirror dies with the opt-in: it
   // must not PUT after the player turned cloud off.
   cancelPendingMirror();
+  lastShelfProbe = null;
   resetGuard();
   const cleared = writeWordsBlob({
     words: null,
@@ -576,16 +615,53 @@ export function enterWords(input: string): CloudAction {
 export function adoptWords(input: string): CloudAction {
   const canonical = canonicalizeWords(input);
   if (canonical.ok === false) return { ok: false, reason: canonical.reason };
+  return adoptCanonical(canonical.words);
+}
+
+/**
+ * ADOPT a word set directly (the tuple form of
+ * adoptWords) — the LOAD-ADOPTS door (Adam, 2026-11-01:
+ * "the words I entered to get the save downloaded and
+ * loaded" are the device's words). The shell calls this
+ * with the typed lookup words AHEAD of a typed-words
+ * bring: the identity flips first, so the bring lands
+ * under the device's own identity — bringHere seats
+ * the basis to the brought copy's stamp, and from the
+ * next save the brought world mirrors under the words
+ * it was fetched with. The fetch/identity split is
+ * abolished: a successful typed-words load and an
+ * adoption are one act.
+ */
+export function adoptWordSet(words: CloudWords): CloudAction {
+  if (
+    words.length !== 3 ||
+    words.some((w) => typeof w !== 'string' || !CLOUD_WORD_SET.has(w))
+  ) {
+    return { ok: false, reason: 'Those words are not a cloud phrase.' };
+  }
+  return adoptCanonical(words);
+}
+
+/** The shared adoption act: store the identity unheld
+ * and run the identity-change hygiene — a pending
+ * mirror under the old identity dies here, the dedupe
+ * key resets (nothing has mirrored to THIS shelf),
+ * the guard resets (no basis for the new shelf until
+ * a bring or a PUT seats one), and the old shelf's
+ * sync note clears. Adopting the set this browser
+ * already holds (and has enabled) is a no-op success:
+ * no state is touched. */
+function adoptCanonical(words: CloudWords): CloudAction {
   const stored = getWords();
   if (
     stored !== null &&
     isCloudEnabled() &&
-    stored.join(' ') === canonical.words.join(' ')
+    stored.join(' ') === words.join(' ')
   ) {
     return { ok: true };
   }
   const wrote = writeWordsBlob({
-    words: [canonical.words[0], canonical.words[1], canonical.words[2]],
+    words: [words[0], words[1], words[2]],
     enabled: true,
     mirrorHeld: false,
   });
@@ -597,6 +673,7 @@ export function adoptWords(input: string): CloudAction {
   }
   cancelPendingMirror();
   lastMirroredKey = null;
+  lastShelfProbe = null;
   resetGuard();
   try {
     globalThis.localStorage?.removeItem(CLOUD_SYNC_KEY);
@@ -626,6 +703,7 @@ export function armMirror(): CloudAction {
     return { ok: false, reason: 'No cloud words on this device.' };
   }
   lastMirroredKey = null;
+  lastShelfProbe = null;
   return { ok: true };
 }
 
@@ -637,7 +715,72 @@ export function syncState(): CloudSyncState {
     mirrorHeld: false,
     lastMirror: readSyncNote(),
     mirrorConflict: readGuardBlob().conflict,
+    shelfFresher: lastShelfProbe,
   };
+}
+
+/**
+ * The wake-offer probe (Adam, 2026-11-01): one index
+ * read under the stored identity, comparing the
+ * shelf's `main` stamp against this device's basis
+ * and the local record's stamp (passed in — the
+ * module does not read the local save). The finding
+ * seats in session state for syncState() and is also
+ * returned; null means no offer facts (cloud off, no
+ * shelf copy, or the read failed — unknown is not
+ * 'not fresher'). Never throws.
+ */
+export async function probeShelfFreshness(
+  baseUrl: string = CLOUD_BASE_URL,
+  localSavedAt: number | null,
+  fetchFn: CloudFetch = defaultFetch,
+): Promise<ShelfFresherFacts | null> {
+  const words = getWords();
+  if (words === null) {
+    lastShelfProbe = null;
+    return null;
+  }
+  const res = await requestJson(
+    baseUrl,
+    '/index',
+    words.join(' '),
+    'GET',
+    undefined,
+    fetchFn,
+  );
+  if (res.ok === false || !isRecord(res.json) || !Array.isArray(res.json['saves'])) {
+    lastShelfProbe = null;
+    return null;
+  }
+  let entry: Record<string, unknown> | null = null;
+  for (const candidate of res.json['saves'] as unknown[]) {
+    if (isRecord(candidate) && candidate["slot"] === CLOUD_SLOT) {
+      entry = candidate;
+      break;
+    }
+  }
+  if (entry === null || typeof entry['updatedAt'] !== 'string') {
+    lastShelfProbe = null;
+    return null;
+  }
+  const shelfUpdatedAt = entry['updatedAt'] as string;
+  const basisUpdatedAt = readGuardBlob().basis;
+  const shelfMs = Date.parse(shelfUpdatedAt);
+  const fresher =
+    shelfUpdatedAt !== basisUpdatedAt &&
+    (localSavedAt === null ||
+      (Number.isFinite(shelfMs) && shelfMs > localSavedAt));
+  const facts: ShelfFresherFacts = {
+    fresher,
+    shelfUpdatedAt,
+    shelfName: typeof entry['name'] === 'string' ? (entry['name'] as string) : null,
+    shelfSeed: typeof entry['seed'] === 'string' ? (entry['seed'] as string) : null,
+    basisUpdatedAt,
+    localSavedAt,
+    at: Date.now(),
+  };
+  lastShelfProbe = facts;
+  return facts;
 }
 
 /**
@@ -887,8 +1030,21 @@ export async function deleteCloudSave(
     undefined,
     fetchFn,
   );
-  if (res.ok === true) return { ok: true };
-  if (res.status === 404) return { ok: true };
+  if (res.ok === true || res.status === 404) {
+    if (slot === CLOUD_SLOT && isStoredIdentity(words)) {
+      // S8 (panel diagnosis, 2026-11-01): a deleted shelf
+      // takes its guard state with it. A conflict left
+      // standing against a shelf that no longer exists
+      // would suppress mirroring against a ghost (and
+      // its bring exit is dead — a 404 bring clears
+      // nothing). The device no longer knows a shelf:
+      // basis and conflict both clear. Deletes under
+      // other words, and of other slots, touch nothing.
+      writeGuardBlob({ basis: null, conflict: null });
+      lastShelfProbe = null;
+    }
+    return { ok: true };
+  }
   return { ok: false, reason: res.reason };
 }
 
@@ -1009,6 +1165,14 @@ interface PendingMirror {
 let pendingMirror: PendingMirror | null = null;
 let lastMirrorPutAt: number | null = null;
 let lastMirroredKey: string | null = null;
+
+/**
+ * The last wake-offer probe's finding (session only —
+ * see ShelfFresherFacts). Identity changes clear it:
+ * facts about one word set say nothing about another's
+ * shelf.
+ */
+let lastShelfProbe: ShelfFresherFacts | null = null;
 let mirrorTimer: unknown = null;
 let mirrorTimerClear: ((handle: unknown) => void) | null = null;
 let mirrorFlushInFlight = false;
@@ -1199,6 +1363,50 @@ async function checkShelfFreshness(
   return 'fresh';
 }
 
+/**
+ * MIRROR NOW — the Save button's mirror half (panel
+ * diagnosis, 2026-11-01). One act: pend the record and
+ * flush it immediately — the coalescing window is
+ * bypassed, the overwrite safeguard's freshness check
+ * is NOT (immediacy is not force; a forced write
+ * remains the dialog's overwrite act, a different
+ * door). The local write is the shell's; this is the
+ * copy-up only.
+ *
+ * Against the guard's states: CLEAN — the write lands
+ * at once (or the press itself raises the episode if
+ * the shelf advanced). UNRESOLVED conflict — nothing
+ * writes; the episode stands for the dialog, exactly
+ * as a routine save leaves it. DECIDED-KEEP — the one
+ * state a routine save cannot move: a deliberate
+ * press REOPENS the episode (resolvedKeep clears; the
+ * original stamps stand — it is the same episode,
+ * asked again once, default still keep) and nothing
+ * writes. Explicit-words calls are deliberate writes
+ * and skip the reopen, as they skip every gate.
+ */
+export async function mirrorNow(
+  baseUrl: string | undefined,
+  saveData: SaveData,
+  opts?: { words?: CloudWords; fetchFn?: CloudFetch } & MirrorTiming,
+): Promise<MirrorResult> {
+  if (opts?.words === undefined) {
+    const guard = readGuardBlob();
+    if (guard.conflict !== null) {
+      if (guard.conflict.resolvedKeep) {
+        writeGuardBlob({
+          basis: guard.basis,
+          conflict: { ...guard.conflict, resolvedKeep: false },
+        });
+      }
+      return { mirrored: false, ok: true };
+    }
+  }
+  const pended = await mirrorSave(baseUrl, saveData, opts);
+  const flushed = await flushPendingMirror();
+  return flushed ?? pended;
+}
+
 export async function flushPendingMirror(): Promise<MirrorResult | null> {
   const pending = pendingMirror;
   if (pending === null || mirrorFlushInFlight) return null;
@@ -1344,9 +1552,14 @@ export async function mirrorSave(
       // Already the mirrored record — nothing to send.
       // Any pending is superseded too: the player's latest
       // state IS what the cloud holds, so a queued older
-      // change must never land after it.
+      // change must never land after it. `mirrored` is
+      // false: no copy was sent by THIS call — the same
+      // reading flushPendingMirror's identical-key
+      // short-circuit returns, so a caller (a Save Now
+      // press, say) can phrase 'already on the shelf'
+      // from the result instead of claiming a fresh copy.
       if (pendingMirror !== null) cancelPendingMirror();
-      return { mirrored: true, ok: true };
+      return { mirrored: false, ok: true };
     }
     const now = opts?.now ?? Date.now;
     const pending: PendingMirror = {

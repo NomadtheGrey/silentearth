@@ -293,9 +293,42 @@ export function guideVisible(): boolean {
   return guide !== null && (guide.state === 'perched' || guide.state === 'flying' || guide.state === 'departing');
 }
 
+/** Whether the latest step ran inside a dimension (a
+ *  cave, an upstairs) — remembered from the step
+ *  context so the tag read below can compose the
+ *  dimension gate in THIS layer, where the law lives,
+ *  instead of the shell re-deriving it (UI's ask,
+ *  2026-11-01: a shell-side twin reading is exactly
+ *  the kind that drifts — the frozen-mid-state bird
+ *  would be the tag's ghost). */
+let lastStepDimensionActive = false;
+
+/** The guide's tag seat (UI's tag claim, 2026-11-01):
+ *  an immutable snapshot for the shell's nearest-faced
+ *  derivation — a fresh object per call, never the
+ *  live actor (that stays the renderer's). Null
+ *  whenever the bird is not present in the world the
+ *  player sees: unstaged, in no visible state, or the
+ *  player inside a dimension. State rides along for
+ *  the perch/flight distinction; the tag reads 'Raven'
+ *  either way in v1. */
+export interface GuideTagSeat {
+  x: number;
+  z: number;
+  state: 'perched' | 'flying' | 'departing';
+}
+
+export function guideTagSeat(): GuideTagSeat | null {
+  if (!guide || lastStepDimensionActive) return null;
+  const s = guide.state;
+  if (s !== 'perched' && s !== 'flying' && s !== 'departing') return null;
+  return { x: guide.instance.x, z: guide.instance.z, state: s };
+}
+
 export function clearGuide(): void {
   guide = null;
   grovePoint = null;
+  lastStepDimensionActive = false;
 }
 
 export interface GuideStepContext {
@@ -435,6 +468,7 @@ function beginFlight(
  */
 export function stepGuide(dt: number, ctx: GuideStepContext): void {
   if (!guide || !grovePoint) return;
+  lastStepDimensionActive = ctx.dimensionActive;
   const g = guide;
   const inst = g.instance;
 
