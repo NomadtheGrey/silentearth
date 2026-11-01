@@ -65,6 +65,12 @@ export interface JournalPanelProps {
    * Omitted = marks only.
    */
   quests?: QuestDisplay[];
+  /**
+   * The mark control for the book's quest log (the
+   * HUD-card chunk): passed through to the QuestLogs.
+   * Omitted = the log renders read-only.
+   */
+  onMarkQuest?: (questId: string) => void;
   /** Called when the player closes the panel. Optional. */
   onClose?: () => void;
   /** Thumb-sized close button (44 px target) on touch. Default false. */
@@ -76,6 +82,7 @@ export interface JournalPanelProps {
 export function JournalPanel({
   marks,
   quests,
+  onMarkQuest,
   onClose,
   comfortable = false,
   theme = 'mire',
@@ -166,7 +173,11 @@ export function JournalPanel({
             Quests
           </h3>
           {quests.length === 0 ? (
-            <QuestLog quests={quests} theme={theme} />
+            <QuestLog
+              quests={quests}
+              theme={theme}
+              onMarkQuest={onMarkQuest}
+            />
           ) : (
             groups.map((group) => {
               const folded = collapsedActs.has(group.act);
@@ -185,7 +196,11 @@ export function JournalPanel({
                     {group.act}
                   </button>
                   {!folded ? (
-                    <QuestLog quests={group.quests} theme={theme} />
+                    <QuestLog
+                      quests={group.quests}
+                      theme={theme}
+                      onMarkQuest={onMarkQuest}
+                    />
                   ) : null}
                 </div>
               );

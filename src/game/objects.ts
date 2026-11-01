@@ -1106,6 +1106,145 @@ export const SOURCES: HarvestSourceDef[] = [
     biomes: ['oldfieldRise'],
     mesh: { shape: 'stone', color: 0x6e5136, extraColor: 0x59422a, baseY: 1.15 },
   },
+  // The Farmhouse FAMILY kit (2026-10-31 — the recurring
+  // two-story family; site-pass only, same rule. Adam's
+  // ruling: variant KINDS are the randomization machine —
+  // the parametric shell was declined. The landed set
+  // above is untouched; the family builds beside it.
+  // Names/descriptions DRAFT.)
+  {
+    id: 'farmWallUpper',
+    kind: 'farmWallUpper',
+    name: 'Farmhouse Upper Wall',
+    description:
+      'The second story of a farmhouse (DRAFT, 2026-10-31): ' +
+      'the same weathered boards carried up, a heavy beam ' +
+      'marking the floor line. Solid.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['oldfieldRise'],
+    mesh: { shape: 'stone', color: 0x7a6248, extraColor: 0x201812, baseY: 1.3 },
+  },
+  {
+    id: 'farmWallUpperB',
+    kind: 'farmWallUpperB',
+    name: 'Farmhouse Upper Wall',
+    description:
+      'The second story of a farmhouse (DRAFT, 2026-10-31), ' +
+      'its window seated the other way — no two houses on ' +
+      'the road quite match. Solid.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['oldfieldRise'],
+    mesh: { shape: 'stone', color: 0x7a6248, extraColor: 0x201812, baseY: 1.3 },
+  },
+  {
+    id: 'farmStairs',
+    kind: 'farmStairs',
+    name: 'Farmhouse Stairs',
+    description:
+      'A wooden stair run climbing one story inside a ' +
+      'farmhouse (DRAFT, 2026-10-31).',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['oldfieldRise'],
+    mesh: { shape: 'stone', color: 0x6e5136, extraColor: 0x59422a, baseY: 0 },
+  },
+  {
+    id: 'farmFloorSlab',
+    kind: 'farmFloorSlab',
+    name: 'Upper Floor',
+    description:
+      'One tile of a farmhouse upper floor (DRAFT, ' +
+      '2026-10-31): boards above, beams below.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['oldfieldRise'],
+    mesh: { shape: 'stone', color: 0x6e5136, extraColor: 0x59422a, baseY: 0 },
+  },
+  {
+    id: 'farmWallB',
+    kind: 'farmWallB',
+    name: 'Farmhouse Wall',
+    description:
+      'A standing stretch of farmhouse wall (DRAFT, ' +
+      '2026-11-01), its window seated the other way — the ' +
+      'family rhythm twin. Solid.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['oldfieldRise'],
+    mesh: { shape: 'stone', color: 0x7a6248, extraColor: 0x201812, baseY: 1.3 },
+  },
+  {
+    id: 'farmGableEnd',
+    kind: 'farmGableEnd',
+    name: 'Farmhouse Gable',
+    description:
+      'The triangular gable filling a farmhouse end ' +
+      '(DRAFT, 2026-11-01), narrow span. Boards and a ' +
+      'brace, under the roof peak.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['oldfieldRise'],
+    mesh: { shape: 'stone', color: 0x7a6248, extraColor: 0x7a6248, baseY: 0 },
+  },
+  {
+    id: 'farmGableEndWide',
+    kind: 'farmGableEndWide',
+    name: 'Farmhouse Gable',
+    description:
+      'The triangular gable filling a farmhouse end ' +
+      '(DRAFT, 2026-11-01), wide span. Boards and a ' +
+      'brace, under the roof peak.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['oldfieldRise'],
+    mesh: { shape: 'stone', color: 0x7a6248, extraColor: 0x7a6248, baseY: 0 },
+  },
+  {
+    id: 'farmChimney',
+    kind: 'farmChimney',
+    name: 'Chimney',
+    description:
+      'A stone chimney brick (DRAFT, 2026-11-01): stack, ' +
+      'cap, and a base skirt long enough to sink into ' +
+      'any roof seat along the ridge.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['oldfieldRise'],
+    mesh: { shape: 'stone', color: 0x7d7668, extraColor: 0x2a2521, baseY: 0.65 },
+  },
+  {
+    id: 'farmCellarDoor',
+    kind: 'farmCellarDoor',
+    name: 'Cellar Doors',
+    description:
+      'Slanted bulkhead doors on a stone curb (DRAFT, ' +
+      '2026-11-01), the outside mouth of a farmhouse ' +
+      'cellar.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['oldfieldRise'],
+    mesh: { shape: 'stone', color: 0x6e5136, extraColor: 0x8a8578, baseY: 0 },
+  },
   {
     id: 'hearthStone',
     kind: 'hearthStone',
