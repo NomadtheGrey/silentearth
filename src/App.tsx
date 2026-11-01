@@ -1304,7 +1304,9 @@
  *   from the DRAFT constants — shrew's row now reads
  *   Systems' phrase; machinery BUILT in the
  *   shrew-effect bullet below (latch + multiplier
- *   wired, display live).
+ *   wired, display live). RETIRED 2026-11-01: the
+ *   boot grant above is gone (see the drop at the
+ *   boot effect) — awakenings are rite-earned only.
  *   Save: stagings + awakenings ride saveNow as-is +
  *   boot restore BEFORE construction (ritualSite
  *   restore derives site positions from altarState /
@@ -1669,6 +1671,7 @@ import {
   type CatCatchTable,
 } from './game/catRuntime';
 import { installGuideProbes } from './game/guideRuntime';
+import { installTrustFacts } from './game/trustMarkers';
 import {
   collectTrapCatch,
   catchItemFor,
@@ -1975,7 +1978,6 @@ import {
   GroundhogRest,
   WeatherWarning,
   bearCapacityBonusLb,
-  grantFirstCharm,
   groundhogWakeBonus,
   listCharms,
   mouseStorageBonus,
@@ -4967,38 +4969,37 @@ export default function App() {
     installGuideProbes({
       groveDiscovered: () => discoveryStateRef.current.groveDiscovered(),
     });
-    // FIRST-CHARM BOOT GRANT (outright, tier 1,
-    // GRANT-TO-LIST since Systems 9e9a9dd): runs
-    // AFTER the CharmState restore above, so a loaded
-    // awakening is never double-granted. Idempotent — a
-    // fresh save gains the shrew charm IN THE LIST; a
-    // loaded save with the awakening gains nothing.
-    // NO item is granted (no full-pack failure mode —
-    // the old addPartial gate is gone with the item),
-    // so a grant refreshes nothing in main inventory:
-    // it saves at once (the awakening is save data)
-    // and the panel reads the list live on open. The
-    // inventory param is LEGACY, IGNORED by Systems
-    // (void inventory) — still passed because the
-    // signature keeps it; its removal rides a Systems
-    // change, flagged to DEV (UI does not edit
-    // Systems files unclaimed).
-    const firstCharmGrant = grantFirstCharm(
-      inventory,
-      charmStateRef.current,
+    // TRUST MARKER INSTALL (Background's marker layer,
+    // 2026-11-01): the renderer's trust sprites read
+    // Systems' companion facts through this resolver.
+    // The closure reads the live CompanionState and
+    // the shell's own day source — the same
+    // snapshotSky().daysElapsed the feed path writes
+    // lastFedDay against — so the marker's fedToday
+    // can never drift a day off the records. One
+    // install, live for the session (the cat probes'
+    // pattern); ferals hold no record, so factsFor
+    // answers null for them by construction.
+    installTrustFacts((creatureId) =>
+      companionStateRef.current.factsFor(
+        creatureId,
+        rendererRef.current?.snapshotSky()?.daysElapsed ?? 0,
+      ),
     );
-    if (firstCharmGrant.granted > 0) {
-      saveNow();
-    }
+    // FIRST-CHARM BOOT GRANT — RETIRED (2026-11-01):
+    // the outright shrew grant is gone (Systems
+    // retired grantFirstCharm in charms.ts; this call
+    // site dropped in the same window so the batch
+    // composes green). Awakenings are rite-earned
+    // only now, and the quest facts' snapshot-length
+    // awakenings count is honest by construction —
+    // no origin re-point was needed after all.
     // Shrew effect boot sync (follow-up call path):
-    // runs whether or not the grant fired — a loaded
-    // save with the shrew in its list needs its 0.9
-    // multiplier from boot (multiplier is session
-    // state, never saved), and a boot hunger below 45
-    // while listed fires the latch fresh (she IS in
-    // the warning zone). No refreshInventory runs on
-    // the grant path anymore (grant-to-list grants no
-    // item) — this call is the sync, not a duplicate.
+    // a loaded save with the shrew in its list needs
+    // its 0.9 multiplier from boot (multiplier is
+    // session state, never saved), and a boot hunger
+    // below 45 while listed fires the latch fresh
+    // (she IS in the warning zone).
     syncShrewEffect();
     // Charm-hook boot sync: a loaded save's listed
     // charms need their hooks from boot (all five
