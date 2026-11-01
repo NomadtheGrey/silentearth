@@ -1993,6 +1993,7 @@ import {
   TRUST_FOR_BOND,
   dietFor,
   isFeedable,
+  isFeral,
   provisioningCatchesFor,
   snatchFish,
   type CompanionStance,
@@ -15675,7 +15676,27 @@ export default function App() {
       !paused ? (
         <AnimalTag theme={lookThemes.world}
           getAnimals={() => {
-            const animals = rendererRef.current?.getVisibleAnimals() ?? [];
+            const animals = (
+              rendererRef.current?.getVisibleAnimals() ?? []
+            ).map((animal) =>
+              // THE FERAL DRESS (Adam, 2026-11-01: "If the
+              // fox is feral, put that in the tag."): a
+              // feral creature's plate carries its nature
+              // as a named entry, composed here where
+              // Systems' isFeral may be read (a pure fact
+              // of the stable spawn id). The dress is a
+              // WILD-road fact: her companions are not
+              // dressed (the module frames feral as the
+              // wild road's category), and the cat is
+              // exempt entirely — the module's own law:
+              // the feral distinction does not reach her.
+              animal.cat || animal.companion || !isFeral(animal.id)
+                ? animal
+                : {
+                    ...animal,
+                    name: `Feral ${animal.kind.charAt(0).toUpperCase()}${animal.kind.slice(1)}`,
+                  },
+            );
             // THE GUIDE RAVEN (tag claim): Background's
             // seat snapshot joins the feed as a NAMED
             // entry — the tag reads 'Raven' (Adam's
