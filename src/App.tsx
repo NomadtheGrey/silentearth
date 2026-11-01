@@ -332,7 +332,9 @@
  *   the shell's tracked coords; the biome is the engine's
  *   dominant id + its weight from the same ground weights
  *   the scaffold readout formats. FPS is shell-side rAF sampling (~1 update per
- *   second, never per frame; hidden-tab samples dropped),
+ *   second, never per frame; each window publishes its
+ *   average AND its worst frame gap, hidden-tab windows
+ *   marked interrupted rather than dropped),
  *   not a renderer instrument — the renderer is untouched.
  *   The pill is pointer-events-none and lives in the bottom
  *   ~36 px, clear of the stick and USE buttons (which end
@@ -12095,32 +12097,58 @@ export default function App() {
   // FPS, shell-side (see the header): a requestAnimationFrame
   // sampler, not a renderer instrument — the renderer is
   // untouched. State updates about once a second, never per
-  // frame, so the chip does not churn the HUD. A sample
-  // spanning hidden-tab time (rAF pauses when hidden) is
-  // dropped instead of showing a bogus low number.
-  const [fps, setFps] = useState<number | null>(null);
+  // frame, so the chip does not churn the HUD. The window
+  // publishes its AVERAGE and its WORST single frame gap
+  // side by side (the FPS witness, 2026-11-01): the average
+  // alone smoothed Adam's hitch away ('60 FPS while
+  // hitching' — a per-frame throw aborts a frame, not the
+  // average). A window spanning hidden-tab time (rAF
+  // pauses when hidden, elapsed >= 2000) drops the
+  // average but still publishes the worst, marked
+  // interrupted — a stall shows as a stall, a hidden tab
+  // as an interruption, neither as silence. The worst
+  // resets per window: a fresh witness each second, not
+  // a sticky old hitch.
+  const [fps, setFps] = useState<{
+    avg: number | null;
+    worst: number;
+    interrupted: boolean;
+  } | null>(null);
   useEffect(() => {
     let raf = 0;
     let frames = 0;
     let start = performance.now();
+    let last = start;
+    let worst = 0;
     const tick = (now: number): void => {
       // PAUSE GATE: discard paused frames instead of sampling
       // them, so the chip never reports a pause-inflated number
-      // and resume starts a fresh sample window.
+      // and resume starts a fresh sample window (the worst
+      // resets too — the resume gap never pollutes it).
       if (pausedRef.current) {
         frames = 0;
         start = now;
+        last = now;
+        worst = 0;
         raf = requestAnimationFrame(tick);
         return;
       }
       frames += 1;
+      if (now - last > worst) worst = now - last;
+      last = now;
       const elapsed = now - start;
       if (elapsed >= 1000) {
-        if (elapsed < 2000) {
-          setFps(Math.round((frames * 1000) / elapsed));
-        }
+        const interrupted = elapsed >= 2000;
+        setFps({
+          avg: interrupted
+            ? null
+            : Math.round((frames * 1000) / elapsed),
+          worst: Math.round(worst),
+          interrupted,
+        });
         frames = 0;
         start = now;
+        worst = 0;
       }
       raf = requestAnimationFrame(tick);
     };

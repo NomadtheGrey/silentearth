@@ -38,8 +38,9 @@ export interface LocationChipProps {
    *  Null = no weight to read (underground — the chip
    *  names the place alone). */
   biomePercent: number | null;
-  /** Measured framerate, or null until the first sample lands. */
-  fps: number | null;
+  /** The shell's FPS sample (average + worst frame gap +
+   *  interrupted flag), or null until the first window lands. */
+  fps: { avg: number | null; worst: number; interrupted: boolean } | null;
   /**
    * Zone coords (east, north) from the shell's zoneCoords
    * call. Omitted = no zone readout (the chip predates
@@ -97,14 +98,18 @@ export function LocationChip({
         'pointer-events-none rounded px-2 py-1 text-xs text-stone-100 ' +
         t.overlay
       }
-      aria-label={`Location: ${biomeName}${biomePercent !== null ? ` ${biomePercent} percent` : ''}, position ${Math.round(x)}, ${Math.round(-z)}${zoneText !== null ? `, zone ${zoneText}` : ''}${fps !== null ? `, ${fps} frames per second` : ''}${timeDateMonth ? `, ${timeDateMonth}` : ''}`}
+      aria-label={`Location: ${biomeName}${biomePercent !== null ? ` ${biomePercent} percent` : ''}, position ${Math.round(x)}, ${Math.round(-z)}${zoneText !== null ? `, zone ${zoneText}` : ''}${fps !== null ? (fps.interrupted ? `, frame rate interrupted, worst frame ${fps.worst.toLocaleString('en-US')} milliseconds` : `, ${fps.avg} frames per second, worst frame ${fps.worst.toLocaleString('en-US')} milliseconds`) : ''}${timeDateMonth ? `, ${timeDateMonth}` : ''}`}
     >
       <p className="whitespace-nowrap">
         {biomeName}
         {biomePercent !== null ? ` ${biomePercent}%` : ''} · ({Math.round(x)},{' '}
         {Math.round(-z)})
         {zoneText !== null ? ` · ${zoneText}` : ''}
-        {fps !== null ? ` · ${fps} FPS` : ''}
+        {fps !== null
+          ? fps.interrupted
+            ? ` · FPS interrupted · worst ${fps.worst.toLocaleString('en-US')} ms`
+            : ` · ${fps.avg} FPS · worst ${fps.worst.toLocaleString('en-US')} ms`
+          : ''}
       </p>
       {timeDateMonth ? (
         <p className="whitespace-nowrap text-center">{timeDateMonth}</p>
