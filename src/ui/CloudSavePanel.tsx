@@ -573,21 +573,23 @@ export function CloudSavePanel({
         does not hold. The lookup validates in App
         (canonicalizeWords) before anything is fetched;
         Bring rides the caller's existing confirm + park +
-        install path under the TYPED words. One-time fetch
-        semantics, stated on the panel: the device's own
-        words and its on/off switch never change here (if
-        cloud is on, the brought world syncs under the
-        device's own words from the next save). Copy is
-        PROPOSED, like the words screen's — Adam pins at
-        sighting. */}
+        install path under the TYPED words — and ADOPTS
+        them (Adam's ruling, 2026-11-01: the words belong
+        to the save; the load door no longer fetches
+        without adopting). The confirm says so when the
+        typed words differ from the device's current
+        ones, and "Show my words" reads the typed words
+        after a bring. Copy is PROPOSED, like the words
+        screen's — Adam pins at sighting. */}
       <div className="flex flex-col gap-2 border-t border-moss-deep pt-3">
         <h3 className={'text-sm font-semibold ' + t.heading}>
           Load from cloud
         </h3>
         <p className="text-xs opacity-70">
           Look up the worlds under any three words and bring one
-          here. This is a one-time fetch — it does not change this
-          device's own words or its cloud on/off switch.
+          here. Bringing a world here makes its words this
+          device&rsquo;s cloud words — the brought world becomes
+          this device&rsquo;s world, under its own words.
         </p>
         <form
           className="flex flex-wrap gap-2"

@@ -1844,6 +1844,7 @@ import {
 import {
   CLOUD_BASE_URL,
   adoptWords,
+  adoptWordSet,
   armMirror,
   bringHere,
   canonicalizeWords,
@@ -3947,6 +3948,25 @@ export default function App() {
     }
     setCloudBusy(true);
     try {
+      // LOAD ADOPTS (Adam's ruling, 2026-11-01: 'the words
+      // I entered to get the save downloaded and loaded'
+      // are this device's words): the identity flips
+      // AHEAD of the fetch, so the bring lands under the
+      // device's own identity — bringHere seats the basis
+      // to the brought copy's stamp, and the brought
+      // world mirrors under the words it was fetched
+      // with. A stored-list bring passes the device's
+      // own words (the module's same-identity arm is a
+      // true no-op). If the fetch then fails, the guard
+      // stands behind the flip: adoption reset the basis,
+      // so this device's next write against that shelf
+      // asks instead of overwriting.
+      const adopt = adoptWordSet(words);
+      if (adopt.ok === false) {
+        setCloudNote(adopt.reason);
+        return;
+      }
+      refreshCloudState();
       const brought = await bringHere(CLOUD_BASE_URL, words, slot);
       if (brought.ok === false) {
         setCloudNote(brought.reason);
@@ -3960,20 +3980,6 @@ export default function App() {
         return;
       }
       saveGame(brought.value);
-      // ADOPTION ARMING (DEV ruling, 2026-10-31): a save
-      // APPLIED under the device's own identity — the
-      // bring's words ARE the stored words — arms
-      // copying if adoption left it held. A typed-words
-      // (load door) bring under other words does not.
-      const storedWords = getWords();
-      if (
-        storedWords !== null &&
-        storedWords[0] === words[0] &&
-        storedWords[1] === words[1] &&
-        storedWords[2] === words[2]
-      ) {
-        armMirror();
-      }
       // Install = write + fresh boot: the boot path is
       // the tested restore path; mid-session rehydration
       // is a far larger surface. Reload boots into the
@@ -4008,9 +4014,11 @@ export default function App() {
   };
 
   // Load-door bring: the same confirm + park + install
-  // path, under the TYPED words from the lookup — the
-  // device's own words and its on/off switch are never
-  // touched (one-time fetch semantics).
+  // path, under the TYPED words from the lookup — and
+  // runCloudBring ADOPTS those words as this device's
+  // identity ahead of the fetch (LOAD ADOPTS, Adam,
+  // 2026-11-01), so the brought world lands as this
+  // device's own world under its own words.
   const handleCloudLoadBringHere = (slot: string) => {
     const row = (cloudLoadRows ?? []).find(
       (candidate) => candidate.slot === slot,
@@ -14529,6 +14537,17 @@ export default function App() {
                 ? ' Your existing parked save will be replaced.'
                 : ''}
             </p>
+            {cloudPendingBring.words !== null &&
+            (cloudWords === null ||
+              cloudPendingBring.words.join(' ') !==
+                cloudWords.join(' ')) ? (
+              <p className="text-xs opacity-80">
+                This world lives under the words “
+                {cloudPendingBring.words.join(' ')}” — bringing
+                it here makes those this device&rsquo;s cloud
+                words, and “Show my words” will read them.
+              </p>
+            ) : null}
             <div className="flex flex-wrap gap-2">
               <button
                 type="button"
