@@ -43,6 +43,14 @@ export interface BuildRecord {
 
 const ALL_RECORDS: BuildRecord[] = [
   {
+    merge: 'Merge #50',
+    pr: 89,
+    sha: 'c86d4c6',
+    date: '2026-11-01',
+    what: 'Three commits, and a fourth \u2014 this record \u2014 rides in the same merge. The Farmhouse itself is rebuilt as Adam ruled it: the first farmhouse stands TWO STORIES now \u2014 upper walls over the ground floor, a slab floor between, gable ends, its own whole roof reseated at the top with the chimney over its hearth \u2014 and inside, a stair flight and the ransack: the toppled, scattered, opened leavings of a household that fled in a hurry. Its great stone, its porch, and its cellar door are exactly where they always were. The journal\u2019s book is completed: its quest log now nests act, then thread, then quests, each level folding on its own, so the book reads the way the roads actually run. And the attic\u2019s bricks ride as named riders \u2014 slopes, knee walls, collar beams, a dormer, the stair-head door, windowed gable ends \u2014 inert pieces waiting for the zones build that will raise them into rooms.',
+    why: 'The exception completes the family: the singular was promised two stories and a ransacked heart on the day the family was approved, and a promise about the first house matters more than any other. The thread folds finish the book\u2019s shape so the quests she carries read as the braided roads they are. The attic bricks land ahead of their build on purpose \u2014 pieces first, rooms second, the same order the farmhouses themselves followed.',
+  },
+  {
     merge: 'Merge #49',
     pr: 88,
     sha: '2ed8fcc',
