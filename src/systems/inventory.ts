@@ -646,7 +646,7 @@ export const ITEM_DESCRIPTIONS: Readonly<Record<string, string>> = {
   mud: 'Scooped mud. No known use yet.',
   grass: 'Cut grass. Fibre for pulp, and stuffing for bedding.',
   'salt-crystal': 'Salt from the flats. No known use yet.',
-  bone: 'A calcified fragment. No known use yet.',
+  bone: 'A calcified fragment. It answers Find a Bone, but no Waking knows its name.',
   // Tools (owning is using; the ladder gates harder ground).
   'garden-trowel': 'The first tool. Digs and works soft ground. Made at a workstation.',
   'sharp-trowel': 'The garden trowel, whetstone-sharp. Works ground the plain trowel cannot. Made at a workstation.',
