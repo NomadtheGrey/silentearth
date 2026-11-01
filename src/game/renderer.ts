@@ -47,7 +47,7 @@ import {
   stepActors,
 } from './companionRuntime';
 import { catActor, catGlowOn, clearCat, ensureCat, installCatPreyAccess, stepCat } from './catRuntime';
-import { clearGuide, guideActor, guideVisible, stageGuide, stepGuide } from './guideRuntime';
+import { clearGuide, guideActor, guideVisible, GUIDE_SIT_IN_M, stageGuide, stepGuide } from './guideRuntime';
 import { exodusBats, stepExodus } from './exodusRuntime';
 import { crowGlowIntensity, CROW_GLOW_EMISSIVE } from './crow';
 import type { CrowTier } from './crow';
@@ -671,7 +671,7 @@ export class WorldRenderer {
   private coverMemo = new Map<string, { x: number; z: number }[]>();
   /** The guide's layer (a single crow mesh) + its tree-point memo. */
   private guideGroup: THREE.Group | null = null;
-  private treeMemo = new Map<string, { x: number; z: number }[]>();
+  private treeMemo = new Map<string, { x: number; z: number; crownY: number }[]>();
   /** The bat exodus layer: pooled bat meshes keyed by bat id. */
   private exodusGroup: THREE.Group | null = null;
   private exodusMeshes = new Map<string, THREE.Group>();
@@ -1254,7 +1254,14 @@ export class WorldRenderer {
     const village = villageSite(String(gen.seed), gen.findSpawn(), (x, z) => gen.weightsAt(x, z));
     ensureCat(village.hearthHouse.hearthSpot.x, village.hearthHouse.hearthSpot.z);
     const grove = groveSite(String(gen.seed), gen.findSpawn(), (x, z) => gen.weightsAt(x, z).dominant);
-    stageGuide(grove.center.x, grove.center.z);
+    // The grove seat reads the grove's own nearest tree
+    // crown (the acceptance fix — no flat height).
+    const grovePerch = this.treePointNear(grove.center.x, grove.center.z, 12);
+    stageGuide(
+      grove.center.x,
+      grove.center.z,
+      grovePerch ? grovePerch.crownY - GUIDE_SIT_IN_M : undefined,
+    );
   }
 
   /**
@@ -1294,10 +1301,32 @@ export class WorldRenderer {
   }
 
   /** The nearest real tree point (the guide's perches), generateChunk ground truth, memoized per chunk. */
-  private treePointNear(x: number, z: number, r: number): { x: number; z: number } | null {
+  /** A tree kind's crown-top height at scale 1, measured
+   *  once off its built geometry (geometry top + the
+   *  mesh's baseY — the renderer's own placement sum,
+   *  so the crown a perch reads is the crown that draws). */
+  private crownTopCache = new Map<string, number>();
+  private crownTopFor(kind: 'tree' | 'oakTree'): number {
+    let top = this.crownTopCache.get(kind);
+    if (top === undefined) {
+      const mesh = SOURCE_FOR_KIND[kind].mesh;
+      const geo = buildKindGeometry(mesh, kind);
+      geo.computeBoundingBox();
+      top = (geo.boundingBox?.max.y ?? 0) + mesh.baseY;
+      geo.dispose();
+      this.crownTopCache.set(kind, top);
+    }
+    return top;
+  }
+
+  private treePointNear(
+    x: number,
+    z: number,
+    r: number,
+  ): { x: number; z: number; crownY: number } | null {
     const pcx = Math.floor(x / CHUNK_SIZE);
     const pcz = Math.floor(z / CHUNK_SIZE);
-    let best: { x: number; z: number } | null = null;
+    let best: { x: number; z: number; crownY: number } | null = null;
     let bestD = r;
     for (let cx = pcx - 1; cx <= pcx + 1; cx++) {
       for (let cz = pcz - 1; cz <= pcz + 1; cz++) {
@@ -1306,7 +1335,13 @@ export class WorldRenderer {
         if (!pts) {
           pts = [];
           for (const obj of this.gen.generateChunk(cx, cz).objects) {
-            if (obj.kind === 'tree' || obj.kind === 'oakTree') pts.push({ x: obj.x, z: obj.z });
+            if (obj.kind === 'tree' || obj.kind === 'oakTree') {
+              pts.push({
+                x: obj.x,
+                z: obj.z,
+                crownY: this.crownTopFor(obj.kind) * obj.scale,
+              });
+            }
           }
           this.treeMemo.set(key, pts);
         }
