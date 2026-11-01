@@ -25,9 +25,19 @@
  * The discovery fact is Systems'; the shell installs it
  * (installGuideProbes). The Grove's point is staged by
  * the renderer from groveSite. All numbers DRAFT.
+ *
+ * FINDABILITY (Adam's playtest, 2026-11-01 — the bird
+ * was seated yet invisible): staging's fallback order is
+ * by SIGHT, not distance (the grove-shifted bias before
+ * her own ring); the guide perches at its own height
+ * (3.75 m, above the ambient birds' 2.0); at a window's
+ * opening she FLIES IN visibly and calls on landing; and
+ * every call carries the bearing from her to the bird
+ * (bearingDeg + compass on 'guide:call') so the shell's
+ * lines can say where 'faintly' is.
  */
 import { bus } from './events';
-import { stepAnimalAnimation, PERCH_HEIGHT_M } from './animals';
+import { stepAnimalAnimation } from './animals';
 import type { AnimalInstance } from './animals';
 import { makeCompanionInstance } from './companionRuntime';
 
@@ -51,6 +61,39 @@ export const GUIDE_CALL_REPEAT_S = 20;
 export const GUIDE_PERCH_DWELL_S = 2.5;
 /** Stage on a tree about this far ahead of her (m). */
 export const GUIDE_STAGE_AHEAD_M = 30;
+/** The guide's own perch height (m) — higher than the
+ *  ambient birds' shared PERCH_HEIGHT_M, so the bird she
+ *  is meant to FOLLOW reads above the undergrowth
+ *  (findability fix, Adam's playtest 2026-11-01). */
+export const GUIDE_PERCH_HEIGHT_M = 3.75;
+/** The biased fallback's search centre sits this far
+ *  (m) toward the Grove from her, with this radius —
+ *  the nearest tree to a grove-shifted centre is a
+ *  grove-side tree by construction (the half-plane bias;
+ *  the direction-blind player-centred ring is the LAST
+ *  resort, never the second). */
+export const GUIDE_BIAS_AHEAD_M = 20;
+export const GUIDE_BIAS_RADIUS_M = 25;
+/** At a window's opening she FLIES IN from this far (m)
+ *  out at cruise height and calls on landing — she is
+ *  never seated invisibly between frames. */
+export const GUIDE_FLY_IN_M = 14;
+
+/** The eight winds, index 0 = north, clockwise. */
+export const GUIDE_COMPASS_WINDS = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'] as const;
+
+/**
+ * The bearing from her to a point, on the world's
+ * compass (north = −z, east = +x): degrees 0=N, 90=E,
+ * plus the eight-wind name. The call lines carry it so
+ * 'faintly' can finally say WHERE (the findability
+ * fix's text half is the shell's; the fact is here).
+ */
+export function guideBearing(dx: number, dz: number): { bearingDeg: number; compass: string } {
+  const bearingDeg = (Math.atan2(dx, -dz) * (180 / Math.PI) + 360) % 360;
+  const compass = GUIDE_COMPASS_WINDS[Math.round(bearingDeg / 45) % 8];
+  return { bearingDeg, compass };
+}
 
 export type GuideState = 'absent' | 'perched' | 'flying' | 'retired';
 
@@ -86,7 +129,7 @@ export function stageGuide(x: number, z: number): void {
   grovePoint = { x, z };
   if (guide) return;
   const instance = makeCompanionInstance(GUIDE_ID, 'crow', x, z);
-  instance.y = PERCH_HEIGHT_M;
+  instance.y = GUIDE_PERCH_HEIGHT_M;
   guide = {
     instance,
     state: 'absent',
@@ -123,13 +166,14 @@ export interface GuideStepContext {
   perchNear: (x: number, z: number, r: number) => { x: number; z: number } | null;
 }
 
-function call(g: GuideActor): void {
+function call(g: GuideActor, playerX: number, playerZ: number): void {
   g.callT = 0;
-  bus.emit('guide:call', { x: g.instance.x, z: g.instance.z });
+  const { bearingDeg, compass } = guideBearing(g.instance.x - playerX, g.instance.z - playerZ);
+  bus.emit('guide:call', { x: g.instance.x, z: g.instance.z, bearingDeg, compass });
 }
 
-function retire(g: GuideActor): void {
-  call(g); // one last call at the Grove
+function retire(g: GuideActor, playerX: number, playerZ: number): void {
+  call(g, playerX, playerZ); // one last call at the Grove
   g.state = 'retired';
   g.instance.flying = false;
 }
@@ -138,7 +182,7 @@ function retire(g: GuideActor): void {
 function perchAt(g: GuideActor, p: { x: number; z: number }): void {
   g.instance.x = p.x;
   g.instance.z = p.z;
-  g.instance.y = PERCH_HEIGHT_M;
+  g.instance.y = GUIDE_PERCH_HEIGHT_M;
   g.instance.flying = false;
   g.perchT = 0;
 }
@@ -155,7 +199,7 @@ export function stepGuide(dt: number, ctx: GuideStepContext): void {
 
   if (g.state === 'retired') return;
   if (discoveredProbe()) {
-    retire(g);
+    retire(g, ctx.playerX, ctx.playerZ);
     return;
   }
   if (ctx.dimensionActive) {
@@ -174,8 +218,12 @@ export function stepGuide(dt: number, ctx: GuideStepContext): void {
 
   if (g.state === 'absent') {
     // Stage: a tree ahead of her, toward the Grove, in
-    // sight — or the nearest tree to her if the line
-    // offers none.
+    // sight. The fallbacks are ORDERED BY SIGHT, not by
+    // distance (the playtest lesson, 2026-11-01: the old
+    // player-centred ring seated her behind-left, low,
+    // and 'faintly' said nothing) — first the grove-
+    // shifted centre, whose nearest tree is grove-side
+    // by construction; only then her own ring.
     const ux = distGrovePlayer > 0.001 ? dxG / distGrovePlayer : 0;
     const uz = distGrovePlayer > 0.001 ? dzG / distGrovePlayer : 1;
     const ahead = ctx.perchNear(
@@ -183,20 +231,39 @@ export function stepGuide(dt: number, ctx: GuideStepContext): void {
       ctx.playerZ + uz * GUIDE_STAGE_AHEAD_M,
       15,
     );
-    const perch = ahead ?? ctx.perchNear(ctx.playerX, ctx.playerZ, 40);
+    const biased =
+      ahead ??
+      ctx.perchNear(
+        ctx.playerX + ux * GUIDE_BIAS_AHEAD_M,
+        ctx.playerZ + uz * GUIDE_BIAS_AHEAD_M,
+        GUIDE_BIAS_RADIUS_M,
+      );
+    const perch = biased ?? ctx.perchNear(ctx.playerX, ctx.playerZ, 40);
     if (!perch) return; // no tree to haunt — tries again next frame
-    perchAt(g, perch);
-    g.state = 'perched';
     g.atFinalPerch = Math.hypot(perch.x - grovePoint.x, perch.z - grovePoint.z) <= GUIDE_LEAD_RING_M;
-    call(g);
-    stepAnimalAnimation(inst, dt, false);
+    // The visible arrival: she starts FLYING, a short
+    // way off at cruise height on the line from her to
+    // the perch, and the flight step lands + calls her.
+    // Never seated invisibly between frames.
+    const sx = perch.x - ctx.playerX;
+    const sz = perch.z - ctx.playerZ;
+    const sDist = Math.hypot(sx, sz);
+    const back = sDist > 0.001 ? Math.min(GUIDE_FLY_IN_M, sDist * 0.6) / sDist : 0;
+    inst.x = perch.x - sx * back;
+    inst.z = perch.z - sz * back;
+    inst.y = GUIDE_CRUISE_Y_M;
+    inst.flying = true;
+    g.targetX = perch.x;
+    g.targetZ = perch.z;
+    g.state = 'flying';
+    stepAnimalAnimation(inst, dt, true);
     return;
   }
 
   if (g.state === 'perched') {
     g.callT += dt;
     g.perchT += dt;
-    if (g.callT >= GUIDE_CALL_REPEAT_S) call(g);
+    if (g.callT >= GUIDE_CALL_REPEAT_S) call(g, ctx.playerX, ctx.playerZ);
     stepAnimalAnimation(inst, dt, false);
     if (g.atFinalPerch) return; // the edge perch: it waits for her discovery
     const distP = Math.hypot(ctx.playerX - inst.x, ctx.playerZ - inst.z);
@@ -243,7 +310,7 @@ export function stepGuide(dt: number, ctx: GuideStepContext): void {
   if (dist < 0.6) {
     perchAt(g, { x: g.targetX, z: g.targetZ });
     g.state = 'perched';
-    call(g);
+    call(g, ctx.playerX, ctx.playerZ);
     stepAnimalAnimation(inst, dt, false);
     return;
   }
@@ -251,7 +318,7 @@ export function stepGuide(dt: number, ctx: GuideStepContext): void {
   inst.heading = Math.atan2(dx, dz);
   inst.x += (dx / dist) * step;
   inst.z += (dz / dist) * step;
-  const wantY = dist > 6 ? GUIDE_CRUISE_Y_M : PERCH_HEIGHT_M;
+  const wantY = dist > 6 ? GUIDE_CRUISE_Y_M : GUIDE_PERCH_HEIGHT_M;
   const dy = wantY - inst.y;
   inst.y += Math.max(-dt * 4, Math.min(dt * 4, dy));
   stepAnimalAnimation(inst, dt, true);
