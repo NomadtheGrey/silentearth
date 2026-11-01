@@ -119,6 +119,14 @@ export interface InventoryPanelProps {
   /** Called when the player presses Light on an item. Optional. */
   onLightItem?: (id: string) => void;
   /**
+   * Item ids that can be read (her books). Items in this
+   * set gain a Read button. Omitted = no Read buttons;
+   * what reading opens is the caller's job.
+   */
+  readableIds?: ReadonlySet<string>;
+  /** Called when the player presses Read on an item. Optional. */
+  onReadItem?: (id: string) => void;
+  /**
    * Home-storage section, shown when the caller opens one
    * (sheltered at a placed house). Omitted = personal list
    * only, no Deposit buttons.
@@ -211,6 +219,8 @@ export function InventoryPanel({
   onEatItem,
   lightableIds,
   onLightItem,
+  readableIds,
+  onReadItem,
   storage,
   onDepositItem,
   onDropItem,
@@ -247,6 +257,9 @@ export function InventoryPanel({
     if ((lightableIds?.has(item.id) ?? false) && onLightItem) {
       verbs.push({ id: 'light', label: 'Light', ariaLabel: `Light ${item.name}` });
     }
+    if ((readableIds?.has(item.id) ?? false) && onReadItem) {
+      verbs.push({ id: 'read', label: 'Read', ariaLabel: `Read ${item.name}` });
+    }
     if (storage !== undefined && onDepositItem) {
       verbs.push({
         id: 'deposit',
@@ -274,6 +287,7 @@ export function InventoryPanel({
     if (verbId === 'place') onPlaceItem?.(itemId);
     else if (verbId === 'eat') onEatItem?.(itemId);
     else if (verbId === 'light') onLightItem?.(itemId);
+    else if (verbId === 'read') onReadItem?.(itemId);
     else if (verbId === 'deposit') onDepositItem?.(itemId);
     else if (verbId === 'drop-one') onDropItem?.(itemId);
     else if (verbId === 'drop-all') onDropAllItem?.(itemId);

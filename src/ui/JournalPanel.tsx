@@ -1,0 +1,112 @@
+/**
+ * Silent Earth redesign — journal panel (UI lane,
+ * presentation only).
+ *
+ * The journal's tally surface (First-Fragment
+ * Presentation, 2026-10-31): one row per mark she has
+ * BEGUN — unbegun marks are absent by design (Systems'
+ * snapshot lists begun marks only; the panel renders
+ * the order it is given and invents nothing). Each row
+ * reads the mark's canonical name, its fragment tally
+ * against the tier threshold, the day the pursuit
+ * began, and the kept-best copy's weathering as a word
+ * (the caller's derivation — the panel owns no numbers).
+ *
+ * Opened by the Read verb on her journal (and, by the
+ * linked-books law, on her grimoire — the same book by
+ * the other name). The panel owns NO rules: it renders
+ * rows and reports a close.
+ */
+
+import { UI_THEMES, type UiThemeName } from './themes';
+
+export interface JournalMarkRow {
+  /** The mark id (the caller's key). */
+  mark: string;
+  /** Canonical display name (Systems' markDisplayName). */
+  name: string;
+  /** Copies held of this mark. */
+  count: number;
+  /** Copies the first tier needs (Systems' tally). */
+  needed: number;
+  /** The first tier stands whole. */
+  complete: boolean;
+  /** The kept-best copy's weathering as a word (caller's DRAFT scale). */
+  bestWord: string | null;
+  /** The day the pursuit of this mark began. */
+  seekingSinceDay: number | null;
+}
+
+export interface JournalPanelProps {
+  /** One row per begun mark, caller's order. */
+  marks: JournalMarkRow[];
+  /** Called when the player closes the panel. Optional. */
+  onClose?: () => void;
+  /** Thumb-sized close button (44 px target) on touch. Default false. */
+  comfortable?: boolean;
+  /** Look for the panel. Default "mire". */
+  theme?: UiThemeName;
+}
+
+export function JournalPanel({
+  marks,
+  onClose,
+  comfortable = false,
+  theme = 'mire',
+}: JournalPanelProps) {
+  const t = UI_THEMES[theme];
+  const btn = comfortable
+    ? 'rounded px-3 py-2 text-sm min-h-[44px] '
+    : 'rounded px-2 py-1 text-sm ';
+  return (
+    <section
+      aria-label="Journal"
+      className={'@container rounded-2xl p-3 ' + t.panel}
+    >
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <h2 className={'text-base font-semibold ' + t.heading}>Journal</h2>
+        {onClose ? (
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close journal"
+            className={btn + t.button}
+          >
+            Close
+          </button>
+        ) : null}
+      </div>
+      {marks.length === 0 ? (
+        <p className="text-sm text-stone-300">
+          No marks begun yet. What you copy down will be kept here.
+        </p>
+      ) : (
+        <ul className="flex flex-col gap-2">
+          {marks.map((row) => (
+            <li
+              key={row.mark}
+              className="flex flex-col gap-y-0.5 rounded-xl bg-black/20 px-3 py-2"
+            >
+              <span className="flex flex-wrap items-baseline gap-x-2">
+                <span className="font-medium">{row.name}</span>
+                <span className="text-xs text-stone-400">
+                  {row.complete
+                    ? 'First tier whole'
+                    : `${row.count} of ${row.needed} toward the first tier`}
+                </span>
+              </span>
+              <span className="text-xs text-stone-400">
+                {row.seekingSinceDay !== null
+                  ? `Looking since day ${row.seekingSinceDay}`
+                  : 'Looking'}
+                {row.bestWord !== null
+                  ? ` · best copy ${row.bestWord}`
+                  : ''}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}

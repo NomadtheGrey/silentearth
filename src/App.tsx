@@ -1940,6 +1940,7 @@ import {
   type SavedCompanion,
 } from './systems/companions';
 import { DiscoveryState } from './systems/discovery';
+import { FragmentState, markDisplayName } from './systems/fragments';
 import {
   CharmState,
   GroundhogRest,
@@ -1966,6 +1967,7 @@ import { RitualPanel } from './ui/RitualPanel';
 import { walkAwayShouldClose } from './ui/walkAway';
 import { CharmsPanel } from './ui/CharmsPanel';
 import { CompanionsPanel } from './ui/CompanionsPanel';
+import { JournalPanel, type JournalMarkRow } from './ui/JournalPanel';
 import { StormWarning } from './ui/StormWarning';
 import { WakeNotice } from './ui/WakeNotice';
 
@@ -2222,6 +2224,17 @@ const FOOD_IDS: ReadonlySet<string> = new Set([
  * lit-menu fix fe7b304.
  */
 const TORCH_IDS: ReadonlySet<string> = new Set([ITEMS.torch]);
+
+/**
+ * Her books (First-Fragment Presentation, 2026-10-31):
+ * the journal and the grimoire both carry the Read verb
+ * — the linked-books law makes them one door to the
+ * journal's tally surface.
+ */
+const READABLE_BOOK_IDS: ReadonlySet<string> = new Set([
+  ITEMS.journal,
+  ITEMS.grimoire,
+]);
 
 /** Engine house type → Systems house item (for HomeStorage). */
 const HOUSE_TYPE_TO_ITEM: Record<HouseType, string> = {
@@ -2675,6 +2688,11 @@ export default function App() {
   // difference: its DOOR exists only while she has a
   // companion (see the button rows + hasBondedCompanion).
   const [companionsOpen, setCompanionsOpen] = useState(false);
+  // JOURNAL (First-Fragment Presentation, 2026-10-31):
+  // the tally panel — a radio-family member like its
+  // siblings, opened by the Read verb on her journal /
+  // grimoire rows (no HUD door of its own).
+  const [journalOpen, setJournalOpen] = useState(false);
   // The panel's mirror of CompanionState (records are
   // ref-state; the mirror is what renders). Refreshed at
   // boot and after every companion act.
@@ -2880,6 +2898,16 @@ export default function App() {
   const discoveryStateRef = useRef<DiscoveryState | null>(null);
   if (discoveryStateRef.current === null) {
     discoveryStateRef.current = new DiscoveryState(bootSave?.discovery);
+  }
+  // FRAGMENT STATE (First-Fragment Presentation,
+  // 2026-10-31): the shell owns the one FragmentState
+  // (Systems' module), constructed from the boot save's
+  // records — the same ref-lazy pattern. Transcription
+  // writes it, the JournalPanel reads it, and snapshot()
+  // rides every saveNow.
+  const fragmentStateRef = useRef<FragmentState | null>(null);
+  if (fragmentStateRef.current === null) {
+    fragmentStateRef.current = new FragmentState(bootSave?.fragments);
   }
   // The ritual site whose panel is open, by SITE ID
   // ('altar:<n>' or 'stump:x,z' — one selection for
@@ -3487,6 +3515,12 @@ export default function App() {
           // 2026-10-31): the grove fact rides every save
           // (the day she found it, or null while unfound).
           discovery: discoveryStateRef.current.snapshot(),
+          // FRAGMENT SAVE WIRING (First-Fragment
+          // Presentation, 2026-10-31): the journal's
+          // mark progress rides every save as-is
+          // (Systems' SavedMarkProgress shape; serialize
+          // writes it verbatim, load validates).
+          fragments: fragmentStateRef.current.snapshot(),
           // QUEST SAVE WIRING: the live quest flags ride every
           // save (all-false serializes as all-false; absent on
           // old saves reads as all-false on load). Flags are
@@ -5813,6 +5847,16 @@ export default function App() {
     creatureId: string;
     grade: number;
   } | null>(null);
+  // THE TEACHING BEAT (First-Fragment Presentation,
+  // 2026-10-31): a mark's first transcription waits
+  // here as a dismissible dialog (Popup family, no
+  // confirm — the dismissal is the lesson's end).
+  // First-ever and later-first carry different texts;
+  // the handler composes both. Null = no beat standing.
+  const [fragmentBeat, setFragmentBeat] = useState<{
+    title: string;
+    body: string;
+  } | null>(null);
 
   const executeCraftNow = (recipeId: string) => {
     const recipe = RECIPES.find((candidate) => candidate.id === recipeId);
@@ -6420,6 +6464,7 @@ export default function App() {
     setCraftingOpen(false);
     setCharmsOpen(false);
     setCompanionsOpen(false);
+    setJournalOpen(false);
   };
   const openCraftingPanel = () => {
     // THE FOLD: opening the dialog while a stump (plain
@@ -6439,6 +6484,7 @@ export default function App() {
     setInventoryOpen(false);
     setCharmsOpen(false);
     setCompanionsOpen(false);
+    setJournalOpen(false);
   };
   // E / touch USE / the name chip at a stump: open the
   // dialog on that stump's context, Craft door first.
@@ -6468,6 +6514,18 @@ export default function App() {
     setInventoryOpen(false);
     setCraftingOpen(false);
     setCharmsOpen(false);
+    setJournalOpen(false);
+  };
+  // The journal's door (First-Fragment Presentation):
+  // the Read verb on her journal / grimoire rows — the
+  // linked-books law makes them one door. A radio
+  // member: opening it closes its siblings.
+  const openJournalPanel = () => {
+    setJournalOpen(true);
+    setInventoryOpen(false);
+    setCraftingOpen(false);
+    setCharmsOpen(false);
+    setCompanionsOpen(false);
   };
 
   // COMPANION ACTS (build 1, 2026-10-31): the panel's
@@ -6872,6 +6930,7 @@ export default function App() {
     setInventoryOpen(false);
     setCraftingOpen(false);
     setCompanionsOpen(false);
+    setJournalOpen(false);
     setSelectedCharmKind((current) =>
       charmEntries.some((charm) => charm.kind === current)
         ? current
@@ -9380,6 +9439,7 @@ export default function App() {
       craftingOpen ||
       charmsOpen ||
       companionsOpen ||
+      journalOpen ||
       placement !== null ||
       selectedSiteId !== null ||
       optionsOpen ||
@@ -9387,6 +9447,7 @@ export default function App() {
       pendingTrapRecipe ||
       pendingRemoveTarget !== null ||
       pendingRite !== null ||
+      fragmentBeat !== null ||
       paused
     ) {
       return null;
@@ -9450,6 +9511,7 @@ export default function App() {
       craftingOpen ||
       charmsOpen ||
       companionsOpen ||
+      journalOpen ||
       placement !== null ||
       selectedSiteId !== null ||
       optionsOpen ||
@@ -9457,6 +9519,7 @@ export default function App() {
       pendingTrapRecipe ||
       pendingRemoveTarget !== null ||
       pendingRite !== null ||
+      fragmentBeat !== null ||
       paused
     ) {
       return null;
@@ -9540,6 +9603,7 @@ export default function App() {
         pendingTrapRecipe ||
         pendingRemoveTarget !== null ||
         pendingRite !== null ||
+        fragmentBeat !== null ||
         leaveConfirmOpen
       ) {
         return;
@@ -9574,6 +9638,10 @@ export default function App() {
         setRitualNote(null);
         return;
       }
+      if (journalOpen) {
+        setJournalOpen(false);
+        return;
+      }
       if (companionsOpen) {
         setCompanionsOpen(false);
         return;
@@ -9600,6 +9668,7 @@ export default function App() {
     pendingTrapRecipe,
     pendingRemoveTarget,
     pendingRite,
+    fragmentBeat,
     placement,
     homeMenuOpen,
     selectedPileId,
@@ -9609,6 +9678,7 @@ export default function App() {
     selectedSiteId,
     charmsOpen,
     companionsOpen,
+    journalOpen,
     craftingOpen,
     inventoryOpen,
     firstRunDone,
@@ -9758,6 +9828,7 @@ export default function App() {
       pendingTrapRecipeId !== null ||
       pendingRemoveTarget !== null ||
       pendingRite !== null ||
+      fragmentBeat !== null ||
       leaveConfirmOpen ||
       cloudPendingBring !== null ||
       cloudPendingRemove !== null ||
@@ -9821,6 +9892,7 @@ export default function App() {
     pendingTrapRecipeId,
     pendingRemoveTarget,
     pendingRite,
+    fragmentBeat,
     leaveConfirmOpen,
     cloudPendingBring,
     cloudPendingRemove,
@@ -9874,6 +9946,7 @@ export default function App() {
     pendingTrapRecipe,
     pendingRemoveTarget,
     pendingRite,
+    fragmentBeat,
     placement,
     homeMenuOpen,
     selectedPileId,
@@ -9882,6 +9955,7 @@ export default function App() {
     selectedSiteId,
     charmsOpen,
     companionsOpen,
+    journalOpen,
     craftingOpen,
     inventoryOpen,
     firstRunDialogOpen,
@@ -10073,7 +10147,39 @@ export default function App() {
         verb: 'offer' | 'speak' | 'snatch';
         item?: ItemId;
         distance: number;
+      }
+    | {
+        kind: 'fragment';
+        fragmentId: string;
+        mark: string;
+        completeness: number;
+        distance: number;
       };
+
+  // A fragment carrier as the winner consumes it: the
+  // facts Background names on a faced inscription (its
+  // stable id, its mark, its weathering).
+  type FragmentCarrier = {
+    fragmentId: string;
+    mark: string;
+    completeness: number;
+    x: number;
+    z: number;
+  };
+
+  // FRAGMENT CARRIERS — THE SEAM (First-Fragment
+  // Presentation, 2026-10-31): the carriers she can
+  // transcribe are Background's facts, named on the
+  // faced target. Their records today name the SEATS
+  // only (the caves' fragmentSpot, the raided
+  // homesteads' fragmentSpot); the facts ride
+  // Background's integration landings, and this
+  // function is the one place they will be read.
+  // Until then the list is empty: no fragment winner
+  // can stand, and the TRANSCRIBE verb is armed but
+  // dark — deliberately (the raven guide's dormancy
+  // pattern, before its probes were wired).
+  const fragmentCarriersHere = (): FragmentCarrier[] => [];
 
   // GROVE TREE FACT (Adam, 2026-10-30): a scatter target
   // is one of the Grove's own trees when its source fells
@@ -10197,6 +10303,23 @@ export default function App() {
           kind: 'hive',
           x: hiveRowHive.x,
           z: hiveRowHive.z,
+          distance: f.distance,
+        });
+      }
+    }
+    // FRAGMENT CARRIERS (First-Fragment Presentation):
+    // a faced carrier in range challenges like the
+    // trap and the hive (see the seam above
+    // computeUseWinner for why the list can be empty).
+    for (const carrier of fragmentCarriersHere()) {
+      const f = facingOf(carrier.x, carrier.z);
+      if (f.distance <= HARVEST_RANGE) anyCandidateInRange = true;
+      if (f.isFaced && f.distance <= HARVEST_RANGE) {
+        challengers.push({
+          kind: 'fragment',
+          fragmentId: carrier.fragmentId,
+          mark: carrier.mark,
+          completeness: carrier.completeness,
           distance: f.distance,
         });
       }
@@ -10451,6 +10574,73 @@ export default function App() {
   // range + permit, so a stale press fails safely). The
   // zero-arg player.pressUse() path is NOT used (its
   // shell query has no callers).
+  // TRANSCRIBE (First-Fragment Presentation,
+  // 2026-10-31): the pill/E press at a faced carrier.
+  // Systems' FragmentState judges (the journal gate,
+  // the already-noted gate) and records; the shell
+  // voices the outcome. A mark's FIRST copy raises the
+  // teaching beat (a dialog, not a feed line — the
+  // moment is the lesson); the threshold-reaching copy
+  // adds its completion line to the feed. All lines
+  // DRAFT. hasJournal reads the journal ITSELF (the
+  // build's standing reading of Systems' gate, flagged
+  // for Adam's pin pass: the grimoire mirrors the
+  // journal by the linked-books law but is not the
+  // carried book).
+  const handleTranscribe = (winner: {
+    fragmentId: string;
+    mark: string;
+    completeness: number;
+  }): void => {
+    const state = fragmentStateRef.current;
+    const day = rendererRef.current?.snapshotSky()?.daysElapsed ?? 0;
+    const result = state.inscribe(
+      winner.fragmentId,
+      winner.mark,
+      winner.completeness,
+      inventory.count(ITEMS.journal) >= 1,
+      day,
+    );
+    if (result.ok === false) {
+      if (result.code === 'no-journal') {
+        showFeedback('Wish I had a journal...', 'blocked');
+      } else {
+        showFeedback('Already in your journal.', 'info');
+      }
+      return;
+    }
+    const name = markDisplayName(winner.mark);
+    const tally = state.tallyFor(winner.mark);
+    showFeedback(
+      `Copied into your journal — the ${name} mark, ${result.count} of ${tally.needed}.` +
+        (result.bestImproved
+          ? ' A cleaner copy than the one you kept.'
+          : ''),
+      'gain',
+    );
+    if (result.first) {
+      // First-ever (the journal's only begun mark, at
+      // its first copy) teaches the whole pursuit; a
+      // later mark's first teaches the shorter form.
+      const firstEver =
+        state.snapshot().length === 1 && result.count === 1;
+      setFragmentBeat(
+        firstEver
+          ? {
+              title: `The ${name} mark`,
+              body: `A carved mark, copied into your journal. It is one piece of the ${name} mark — three fragments make its first tier whole. From now on you are looking for the rest, and your journal keeps the tally.`,
+            }
+          : {
+              title: `A new mark — ${name}`,
+              body: `The first piece of the ${name} mark, copied into your journal. Three fragments make its first tier whole.`,
+            },
+      );
+    } else if (result.tierComplete && result.count === tally.needed) {
+      showFeedback(`The ${name} mark — its first tier is whole.`, 'gain');
+    }
+    saveNow();
+  };
+
   const handleUseInteract = (): void => {
     const player = playerRef.current;
     if (!player) return;
@@ -10505,6 +10695,12 @@ export default function App() {
         // The faced creature's live verb (Piece B) —
         // the same act the creature pill runs.
         handleCreatureInteract(winner);
+        break;
+      case 'fragment':
+        // The faced carrier's verb (First-Fragment
+        // Presentation) — the same act the fragment
+        // pill runs.
+        handleTranscribe(winner);
         break;
       case 'torch':
         // TORCH PICKUP ON E (Adam, 2026-10-31): E at a
@@ -10760,6 +10956,7 @@ export default function App() {
       craftingOpen ||
       charmsOpen ||
       companionsOpen ||
+      journalOpen ||
       optionsOpen ||
       introOpen ||
       firstRunDialogOpen ||
@@ -10770,6 +10967,7 @@ export default function App() {
       selectedSiteId !== null ||
       pendingRemoveTarget !== null ||
       pendingRite !== null ||
+      fragmentBeat !== null ||
       pendingTrapRecipe !== null ||
       cloudPendingBring !== null ||
       cloudPendingRemove !== null ||
@@ -10784,6 +10982,7 @@ export default function App() {
     craftingOpen,
     charmsOpen,
     companionsOpen,
+    journalOpen,
     optionsOpen,
     introOpen,
     firstRunDialogOpen,
@@ -10794,6 +10993,7 @@ export default function App() {
     selectedSiteId,
     pendingRemoveTarget,
     pendingRite,
+    fragmentBeat,
     pendingTrapRecipe,
     cloudPendingBring,
     cloudPendingRemove,
@@ -10841,6 +11041,7 @@ export default function App() {
         pendingTrapRecipe ||
         pendingRemoveTarget !== null ||
         pendingRite !== null ||
+        fragmentBeat !== null ||
         firstRunDialogOpen
       ) {
         return;
@@ -10891,7 +11092,7 @@ export default function App() {
       // waits. (Before this, only the open panel's own
       // key did anything here — I then K was blocked
       // by the open Inventory. That was the bug.)
-      if (inventoryOpen || craftingOpen || charmsOpen || companionsOpen) {
+      if (inventoryOpen || craftingOpen || charmsOpen || companionsOpen || journalOpen) {
         if (key === 'i') toggleInventoryPanel();
         else if (key === 'k') toggleCraftingPanel();
         else if (key === 'l') toggleCharmsPanel();
@@ -10954,10 +11155,12 @@ export default function App() {
     pendingTrapRecipe,
     pendingRemoveTarget,
     pendingRite,
+    fragmentBeat,
     inventoryOpen,
     craftingOpen,
     charmsOpen,
     companionsOpen,
+    journalOpen,
     handleUseInteract,
     handleSecondInteract,
     openCharmsPanel,
@@ -11011,6 +11214,7 @@ export default function App() {
         pendingTrapRecipe ||
         pendingRemoveTarget !== null ||
         pendingRite !== null ||
+        fragmentBeat !== null ||
         craftingOpen ||
         charmsOpen ||
         companionsOpen
@@ -11041,10 +11245,12 @@ export default function App() {
     pendingTrapRecipe,
     pendingRemoveTarget,
     pendingRite,
+    fragmentBeat,
     inventoryOpen,
     craftingOpen,
     charmsOpen,
     companionsOpen,
+    journalOpen,
     placement,
     handleUseInteract,
     handleWorldPlaceTorch,
@@ -11623,6 +11829,36 @@ export default function App() {
                 : 'Snatch',
         }
       : null;
+  // THE FRAGMENT'S PILL (First-Fragment Presentation,
+  // 2026-10-31): the fragment winner presents its row —
+  // the creature shape — with the transcribe verb as
+  // its label (DRAFT). The press runs the stored
+  // pick's act, the very act E performs (the contract).
+  const presentedFragment =
+    useWinner?.kind === 'fragment'
+      ? { id: useWinner.fragmentId, label: 'Transcribe the mark' }
+      : null;
+  // THE JOURNAL'S ROWS (First-Fragment Presentation):
+  // one row per BEGUN mark (Systems' snapshot lists
+  // begun marks only — the panel invents nothing),
+  // composed from the tally; the kept-best weathering
+  // reads as a word on a DRAFT scale.
+  const fragmentBestWord = (best: number | null): string | null =>
+    best === null ? null : best >= 0.75 ? 'clear' : best >= 0.4 ? 'worn' : 'faint';
+  const journalRows: JournalMarkRow[] = fragmentStateRef.current
+    .snapshot()
+    .map((progress) => {
+      const tally = fragmentStateRef.current.tallyFor(progress.mark);
+      return {
+        mark: progress.mark,
+        name: markDisplayName(progress.mark),
+        count: tally.count,
+        needed: tally.needed,
+        complete: tally.complete,
+        bestWord: fragmentBestWord(tally.best),
+        seekingSinceDay: progress.seekingSinceDay,
+      };
+    });
 
   // DESKTOP PILE PICKUP (see the header): the mouse twin
   // of R's pile second — shown only when the faced
@@ -11691,9 +11927,11 @@ export default function App() {
                   : useWinner.verb === 'speak'
                     ? 'SPEAK'
                     : 'SNATCH'
-                : useWinner.kind === 'site' &&
-                  useWinner.siteId.startsWith('stump:')
-                ? 'KRAFT'
+                : useWinner.kind === 'fragment'
+                  ? 'TRANSCRIBE'
+                  : useWinner.kind === 'site' &&
+                    useWinner.siteId.startsWith('stump:')
+                  ? 'KRAFT'
                 : useWinner.kind === 'cauldron'
                   ? 'RENDER'
                   : useWinner.kind === 'fire'
@@ -12104,6 +12342,12 @@ export default function App() {
           onCreature={() => {
             if (useWinner?.kind === 'creature') {
               handleCreatureInteract(useWinner);
+            }
+          }}
+          fragment={presentedFragment}
+          onTranscribe={() => {
+            if (useWinner?.kind === 'fragment') {
+              handleTranscribe(useWinner);
             }
           }}
           showKeyHints={!isTouch}
@@ -12567,6 +12811,8 @@ export default function App() {
             onEatItem={handleEatItem}
             lightableIds={TORCH_IDS}
             onLightItem={handleLightTorchItem}
+            readableIds={READABLE_BOOK_IDS}
+            onReadItem={() => openJournalPanel()}
             storage={storageSection}
             onDepositItem={handleDepositItem}
             onDropItem={handleDropItem}
@@ -12810,6 +13056,13 @@ export default function App() {
             comfortable={isTouch}
           />
         ) : null}
+        {journalOpen ? (
+          <JournalPanel theme={lookThemes.world}
+            marks={journalRows}
+            onClose={() => setJournalOpen(false)}
+            comfortable={isTouch}
+          />
+        ) : null}
         {craftNote ? (
           <p className="rounded bg-black/45 px-2 py-1 text-xs text-stone-200">
             {craftNote}
@@ -12983,6 +13236,36 @@ export default function App() {
             </button>
           </div>
         </div>
+      </Popup>
+
+      {/* The teaching beat (First-Fragment
+        Presentation): a NON-confirm Popup — a mark's
+        first transcription is a lesson, not a choice,
+        so the dialog only dismisses (Keep looking,
+        the shell's Close, Esc, backdrop). Copy DRAFT. */}
+      <Popup theme={lookThemes.dialog}
+        open={fragmentBeat !== null}
+        title={fragmentBeat?.title ?? 'A mark'}
+        onClose={() => setFragmentBeat(null)}
+        comfortable={isTouch}
+      >
+        {fragmentBeat !== null ? (
+          <div className="flex flex-col gap-3 text-sm">
+            <p>{fragmentBeat.body}</p>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                className={
+                  'rounded bg-moss-deep hover:bg-moss px-3 py-1 text-sm text-stone-100 ' +
+                  (isTouch ? 'min-h-[44px] px-3 py-2' : '')
+                }
+                onClick={() => setFragmentBeat(null)}
+              >
+                Keep looking
+              </button>
+            </div>
+          </div>
+        ) : null}
       </Popup>
 
       {/* The familiar's rite confirm (Build 2, Piece 1):
