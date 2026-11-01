@@ -136,9 +136,10 @@ export function caveCarrier(worldSeed: string, instanceKey: string): CarrierHere
 /**
  * Every carrier within r of a point, nearest first —
  * the shell's faced-target projection (UI's seam). The
- * designated cave (cave:main) mints no carrier yet: its
- * fragment presentation rides the cave-touch swap, as
- * held; plural caves carry circles now.
+ * debut cave (cave:main) mints no carrier: under the
+ * general cave rules its layout reports no fragment
+ * spot — no layer guarantee (Adam, 2026-11-01); plural
+ * caves carry circles.
  */
 export function fragmentCarriersHere(
   worldSeed: string,
