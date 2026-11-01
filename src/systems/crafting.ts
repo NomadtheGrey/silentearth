@@ -65,6 +65,7 @@ import {
   type Recipe,
   type SiteFacts,
   type SiteRequirement,
+  effectiveInWater,
 } from './recipes';
 // The shelf rule reads the item registry's categories.
 // inventory.ts imports CraftingInventory from here as
@@ -378,7 +379,9 @@ export function canCraft(
     site !== null &&
     recipe.placesTrap === true &&
     recipe.requiresSite !== undefined &&
-    (recipe.requiresSite === 'in-water' ? !site.inWater : site.inWater);
+    (recipe.requiresSite === 'in-water'
+      ? !effectiveInWater(site)
+      : effectiveInWater(site));
 
   // No-recraft ownership: an already-owned or superseded
   // recipe is not craftable, whatever the materials say.

@@ -32,7 +32,12 @@
 // drop/pickup (the desk precedent) — the crafts that
 // MAKE the traps keep whatever gates crafts carry.
 
-import { ITEMS, RECIPES, type SiteFacts } from './recipes';
+import {
+  ITEMS,
+  RECIPES,
+  effectiveInWater,
+  type SiteFacts,
+} from './recipes';
 import type { PersonalInventory } from './inventory';
 
 /** The carryable three, by trap type (== recipe id == item id). */
@@ -75,13 +80,13 @@ export function placeCarriedTrap(
   }
   const recipe = RECIPES.find((candidate) => candidate.id === trapType);
   if (site !== null && recipe?.requiresSite !== undefined) {
-    if (recipe.requiresSite === 'in-water' && !site.inWater) {
+    if (recipe.requiresSite === 'in-water' && !effectiveInWater(site)) {
       return {
         placed: false,
         reason: 'Set standing in the water — step into the creek first.',
       };
     }
-    if (recipe.requiresSite === 'dry-land' && site.inWater) {
+    if (recipe.requiresSite === 'dry-land' && effectiveInWater(site)) {
       return {
         placed: false,
         reason: 'Set on dry ground — step out of the water first.',

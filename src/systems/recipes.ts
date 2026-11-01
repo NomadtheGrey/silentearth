@@ -248,6 +248,25 @@ export type SiteRequirement = 'in-water' | 'dry-land';
 export interface SiteFacts {
   /** True when she stands in water (a creek's flow). */
   inWater: boolean;
+  /**
+   * True when the crosshair's ground point — where a
+   * placement would land (the placement ruling, Adam
+   * 2026-11-01: all placement goes to the aimed point
+   * within reach) — sits in water. Absent when the
+   * shell supplies no aim; the feet fact then governs.
+   */
+  aimedInWater?: boolean;
+}
+
+/**
+ * The one reading rule for site facts (the placement
+ * ruling): a trap meets the ground at the AIMED point
+ * when an aim is supplied, else at her feet. Every
+ * site evaluation — the craft gates and the place
+ * grant alike — reads this, never the raw fields.
+ */
+export function effectiveInWater(site: SiteFacts): boolean {
+  return site.aimedInWater ?? site.inWater;
 }
 
 export interface Ingredient {

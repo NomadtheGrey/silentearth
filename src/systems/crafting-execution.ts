@@ -150,7 +150,7 @@ import {
   normalizeItemId,
   PersonalInventory,
 } from './inventory';
-import { RECIPES } from './recipes';
+import { RECIPES, effectiveInWater } from './recipes';
 import type { HungerState } from './hunger';
 import {
   ownedStage,
@@ -190,9 +190,12 @@ export interface CraftExecutionResult {
    * id — == its output item for the site-built two). The shell
    * places it: trapState.placeTrap(type, player.x, player.z).
    * Systems never places and never emits. Absent for every
-   * ordinary grant craft.
+   * ordinary grant craft. When the shell supplied an AIM
+   * (the placement ruling: all placement goes to the
+   * crosshair's ground point within reach), x/z echo it —
+   * the shell places at the echo; absent, her feet govern.
    */
-  placedTrap?: { type: string };
+  placedTrap?: { type: string; x?: number; z?: number };
   /**
    * Present only for upgradesStump crafts: the upgraded
    * workbench's type (recipe id — == its output item, as with
@@ -266,6 +269,7 @@ export function executeCraft(
   hunger: HungerState | null = null,
   nearCreek: boolean | null = null,
   site: SiteFacts | null = null,
+  aim: { x: number; z: number } | null = null,
 ): CraftExecutionResult {
   // Ownership gate, FIRST (before hunger): an already-owned
   // or superseded recipe refuses with Adam's label and
@@ -339,9 +343,11 @@ export function executeCraft(
   }
 
   // Site gate (fork B, Adam 2026-11-01), before anything is
-  // consumed. A stated requiresSite reads where she stands
-  // from INPUT only (the creek gate's shape — Systems never
-  // computes where she stands). Null / omitted input leaves
+  // consumed. A stated requiresSite reads where the trap
+  // LANDS from INPUT only (the creek gate's shape — Systems
+  // never computes positions): the aimed point when an aim
+  // is supplied, else her feet (effectiveInWater — the
+  // placement ruling). Null / omitted input leaves
   // the gate OFF (transitional, like the creek gate until
   // the water adapter lands). The CRAFT-side gate bites
   // only where craft IS placement (placesTrap — the
@@ -354,13 +360,13 @@ export function executeCraft(
     recipe.placesTrap === true &&
     recipe.requiresSite !== undefined
   ) {
-    if (recipe.requiresSite === 'in-water' && !site.inWater) {
+    if (recipe.requiresSite === 'in-water' && !effectiveInWater(site)) {
       throw new Error(
         `Cannot craft ${recipe.name}: built standing in the ` +
           `water — step into the creek first.`,
       );
     }
-    if (recipe.requiresSite === 'dry-land' && site.inWater) {
+    if (recipe.requiresSite === 'dry-land' && effectiveInWater(site)) {
       throw new Error(
         `Cannot craft ${recipe.name}: set on dry ground — ` +
           `step out of the water first.`,
@@ -458,7 +464,12 @@ export function executeCraft(
     return {
       output: { ...recipe.output },
       ...(recipe.placesTrap
-        ? { placedTrap: { type: recipe.id } }
+        ? {
+            placedTrap: {
+              type: recipe.id,
+              ...(aim ? { x: aim.x, z: aim.z } : {}),
+            },
+          }
         : { upgradedStump: { type: recipe.id } }),
       ...(spoilGrant && recipe.spoil
         ? {
