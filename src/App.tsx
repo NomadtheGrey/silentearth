@@ -1899,7 +1899,21 @@ import {
   cauldronState,
   type PlacedCauldron as PlacedCauldronEntity,
 } from './game/cauldronState';
-import { groveContains, groveSite } from './game/sites';
+import {
+  barnSite,
+  chapelSite,
+  drownedMillSite,
+  farmhouseSite,
+  generalStoreSite,
+  groveContains,
+  groveSite,
+  railSidingSite,
+  schoolhouseSite,
+  siloSite,
+  sunkenRoadSite,
+  villageSite,
+  waterTowerSite,
+} from './game/sites';
 import {
   caveInstanceForKey,
   caveLayoutForKey,
@@ -1968,6 +1982,7 @@ import { walkAwayShouldClose } from './ui/walkAway';
 import { CharmsPanel } from './ui/CharmsPanel';
 import { CompanionsPanel } from './ui/CompanionsPanel';
 import { JournalPanel, type JournalMarkRow } from './ui/JournalPanel';
+import { StructureTag, STRUCTURE_TAG_NAMES, STRUCTURE_TAG_RANGE_M } from './ui/StructureTag';
 import { StormWarning } from './ui/StormWarning';
 import { WakeNotice } from './ui/WakeNotice';
 
@@ -11838,6 +11853,64 @@ export default function App() {
     useWinner?.kind === 'fragment'
       ? { id: useWinner.fragmentId, label: 'Transcribe the mark' }
       : null;
+  // THE STRUCTURE TAG (2026-10-31): the nearest FACED
+  // singular within the tag range, derived per render
+  // (structures are static; her position state rides
+  // the movement tick, so the derivation never sits
+  // stale — the scatter tag's shape; AnimalTag polls
+  // only because animals move). Facing is the winner's
+  // own rule (dot > √½; <1 m counts as faced). The
+  // site derivations are memoized; the village
+  // contributes its non-'gone' plots individually.
+  // Surface only (site centers are surface facts).
+  // Display only: no candidacy, no verb (a name is not
+  // a door — the grove-tree law).
+  const structureTag = ((): { name: string; x: number; y: number } | null => {
+    const player = playerRef.current;
+    if (!player || dimensionState.isUnderground()) return null;
+    const gen = genRef.current;
+    if (!gen) return null;
+    const spawn = gen.findSpawn();
+    const weights = (x: number, z: number) => gen.weightsAt(x, z);
+    const candidates: { key: string; x: number; z: number }[] = [
+      { key: 'schoolhouse', ...schoolhouseSite(gen.seed, spawn, weights).center },
+      { key: 'farmhouse', ...farmhouseSite(gen.seed, spawn, weights).center },
+      { key: 'chapel', ...chapelSite(gen.seed, spawn, weights).center },
+      { key: 'general-store', ...generalStoreSite(gen.seed, spawn, weights).center },
+      { key: 'drowned-mill', ...drownedMillSite(gen.seed, spawn, weights).center },
+      { key: 'sunken-road', ...sunkenRoadSite(gen.seed, spawn, weights).center },
+      { key: 'rail-siding', ...railSidingSite(gen.seed, spawn, weights).center },
+      { key: 'barn', ...barnSite(gen.seed, spawn, weights).center },
+      { key: 'silo', ...siloSite(gen.seed, spawn, weights).center },
+      { key: 'water-tower', ...waterTowerSite(gen.seed, spawn, weights).center },
+    ];
+    for (const plot of villageSite(gen.seed, spawn, weights).plots) {
+      if (plot.state !== 'gone') {
+        candidates.push({ key: 'village-house', x: plot.x, z: plot.z });
+      }
+    }
+    const forwardX = Math.sin(player.facing);
+    const forwardZ = Math.cos(player.facing);
+    let best: { name: string; x: number; y: number } | null = null;
+    let bestDistance = Infinity;
+    for (const candidate of candidates) {
+      const name = STRUCTURE_TAG_NAMES[candidate.key];
+      if (!name) continue;
+      const dx = candidate.x - player.x;
+      const dz = candidate.z - player.z;
+      const distance = Math.hypot(dx, dz);
+      if (distance > STRUCTURE_TAG_RANGE_M || distance >= bestDistance) continue;
+      const faced =
+        distance < 1 ||
+        (dx * forwardX + dz * forwardZ) / distance > Math.SQRT1_2;
+      if (!faced) continue;
+      const anchor = projectAnchor(candidate.x, candidate.z, 'scatter');
+      if (!anchor) continue;
+      best = { name, x: anchor.x, y: anchor.y };
+      bestDistance = distance;
+    }
+    return best;
+  })();
   // THE JOURNAL'S ROWS (First-Fragment Presentation):
   // one row per BEGUN mark (Systems' snapshot lists
   // begun marks only — the panel invents nothing),
@@ -13738,6 +13811,26 @@ export default function App() {
         derivation would go stale); App only gates it and
         hands it the feed, the live player position, and
         the 'scatter' projector. */}
+      {/* Structure identifier tag (2026-10-31): the
+        nearest faced singular's name — the creature
+        tag's seat and hiding set (plus the journal and
+        the teaching beat, the newer surfaces), with the
+        tag itself derived per render above (structures
+        are static, so no poll). Display only. */}
+      {!inventoryOpen &&
+      !craftingOpen &&
+      !charmsOpen &&
+      !companionsOpen &&
+      !journalOpen &&
+      !optionsOpen &&
+      !introOpen &&
+      !pendingTrapRecipe &&
+      pendingRemoveTarget === null &&
+      fragmentBeat === null &&
+      !paused ? (
+        <StructureTag theme={lookThemes.world} tag={structureTag} />
+      ) : null}
+
       {!inventoryOpen &&
       !craftingOpen &&
       !charmsOpen &&
