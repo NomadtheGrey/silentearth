@@ -43,6 +43,14 @@ export interface BuildRecord {
 
 const ALL_RECORDS: BuildRecord[] = [
   {
+    merge: 'Merge #57',
+    pr: 95,
+    sha: 'd144540',
+    date: '2026-11-01',
+    what: 'The words fix, and the doors it dragged with it. HEADLINE, IN ADAM\u2019S OWN TEST: load a cloud save under typed words, press Show my words, and the words shown are the words you typed \u2014 the load door ADOPTS now (the words belong to the save; a bring makes them this device\u2019s own, hygiene and guard reset riding along), and the old small print that quietly kept them apart is gone. Around it: the cauldron gets its door back \u2014 \u2018Place cauldron\u2019 lives in a faced hearth\u2019s own menu, where the aim can actually pass, instead of a pack press aimed at nothing; the clay jar\u2019s verbs land whole (Fill on the water\u2019s pill, Dump on the crosshair\u2019s aim, its mud patches now persisting through saves); the ground-pile dialog speaks weights now, in the pack\u2019s own words; the grimoire\u2019s desk is whole (E seats and takes it, Read opens only at its desk, a boot-map fix stops a dropped flag from deleting the one book in the world); deleting a cloud save takes its overwrite-guard state with it, so a cleared slot stops arguing; a Save press can now flush the mirror at once at the module level (its button is panel work, still to come); the wake-offer\u2019s STATE lands (a device can now know its shelf holds a fresher save \u2014 the offer\u2019s dialog surface is the panel rework, not in this merge); and the guide gains the composed seat read the raven\u2019s tag will consume (the tag itself is not in this merge).',
+    why: 'Adam found the words bug by living it: he loaded his world and the game answered to a different name. The fix is a model correction, not a patch \u2014 one save, one set of words, carried by whichever device holds it \u2014 and the rest of the stack is the same lesson in smaller rooms: a door belongs where its act can happen, state belongs with the thing it describes, and nothing the player earned should vanish into a gap between halves.',
+  },
+  {
     merge: 'Merge #56',
     pr: 95,
     sha: '635a08b',
