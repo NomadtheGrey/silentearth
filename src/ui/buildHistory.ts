@@ -43,6 +43,14 @@ export interface BuildRecord {
 
 const ALL_RECORDS: BuildRecord[] = [
   {
+    merge: 'Merge #49',
+    pr: 88,
+    sha: '2ed8fcc',
+    date: '2026-11-01',
+    what: 'Six commits, and a seventh \u2014 this record \u2014 rides in the same merge. The farmhouses STAND. Some seventeen a world in the oldfield and meadow country, each assembled from its own rolls: length and depth composed from the dice, walls in one of two window rhythms, a second story on the full-floor houses, gable ends, a chimney seated anywhere along the ridge, a porch where the roll allows \u2014 under a roof of tiled slabs that fits any house because it is built a segment at a time. The fled ones show it inside: a table on its side with a leg splintered short, a shelf face-down with its goods spilled, drawers hanging open, a barrel on its side soaking the boards \u2014 disorder authored piece by piece, never simulated. And the places have learned their names at a distance: a homestead reads simply Homestead as she comes up on it, a farmhouse Farmhouse \u2014 one plain name for the whole family, standing or ransacked alike, nothing about a place given away before its door.',
+    why: 'The population law made visible: there was never going to be only one farmhouse in an endless world, so now the country fills the way the design always said it would \u2014 firsts become families. The plain family names carry Adam\u2019s register: The Farmhouse is a place; a farmhouse is a kind of place, and the tag does not spoil which kind of story waits inside.',
+  },
+  {
     merge: 'Merge #48',
     pr: 87,
     sha: '63a4076',

@@ -1918,6 +1918,14 @@ import {
   villageSite,
   waterTowerSite,
 } from './game/sites';
+import {
+  HOMESTEAD_CLEAR_RADIUS_M,
+  homesteadInstancesInRect,
+} from './game/homesteads';
+import {
+  FARMHOUSE_CLEAR_RADIUS_M,
+  farmhouseInstancesInRect,
+} from './game/farmhouses';
 import { fragmentCarriersHere as carriersHere } from './game/carriers';
 import {
   caveInstanceForKey,
@@ -12005,6 +12013,59 @@ export default function App() {
       if (plot.state !== 'gone') {
         candidates.push({ key: 'village-house', x: plot.x, z: plot.z });
       }
+    }
+    // DISTRIBUTED HOMESTEADS (structure-tags follow-up):
+    // the recurring houses join as candidates at their
+    // centers under the one generic name, standing or
+    // burnt — a burnt homestead carries a fragment, and
+    // the name must not mark its stone. The query rect
+    // reaches the tag range plus a clearing radius so an
+    // instance whose clearing reaches into range is not
+    // lost at the rect's edge; the distance test below
+    // still rules every candidate.
+    const homesteadReach = STRUCTURE_TAG_RANGE_M + HOMESTEAD_CLEAR_RADIUS_M;
+    for (const instance of homesteadInstancesInRect(
+      gen.seed,
+      spawn,
+      weights,
+      {
+        minX: player.x - homesteadReach,
+        maxX: player.x + homesteadReach,
+        minZ: player.z - homesteadReach,
+        maxZ: player.z + homesteadReach,
+      },
+    )) {
+      candidates.push({
+        key: 'homestead',
+        x: instance.center.x,
+        z: instance.center.z,
+      });
+    }
+    // DISTRIBUTED FARMHOUSES (the homestead treatment):
+    // the recurring farmhouses join under the one
+    // generic name, standing or ransacked — a
+    // state-named tag would tell her the interior
+    // before she opens the door; the generic name
+    // keeps the discovery at the threshold. The
+    // SINGULAR keeps 'The Farmhouse' above; these
+    // ride their own candidate key.
+    const farmhouseReach = STRUCTURE_TAG_RANGE_M + FARMHOUSE_CLEAR_RADIUS_M;
+    for (const instance of farmhouseInstancesInRect(
+      gen.seed,
+      spawn,
+      weights,
+      {
+        minX: player.x - farmhouseReach,
+        maxX: player.x + farmhouseReach,
+        minZ: player.z - farmhouseReach,
+        maxZ: player.z + farmhouseReach,
+      },
+    )) {
+      candidates.push({
+        key: 'farmhouse-instance',
+        x: instance.center.x,
+        z: instance.center.z,
+      });
     }
     const forwardX = Math.sin(player.facing);
     const forwardZ = Math.cos(player.facing);

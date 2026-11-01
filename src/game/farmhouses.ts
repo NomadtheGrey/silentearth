@@ -37,13 +37,23 @@
  * unstated either way — this record mints no carrier,
  * asserts nothing, and waits for his word.
  *
- * This module is the DERIVATION ONLY: instance records,
- * pure in the world seed. Features, walls, scatter
- * integration, and the upstairs zones are their own
- * later landings, sequenced behind this core.
+ * THE INTEGRATION (this landing) gives each instance
+ * its FEATURES + WALLS from a plan stream appended
+ * after the derivation draws (the homestead shape):
+ * the house assembled from the slots on Models'
+ * manifest — length from the footprint, depth from the
+ * gable width (the slots compose the plan), walls in
+ * the rolled window rhythm on both stories where the
+ * form carries an upper floor, gable ends at the wall
+ * top, the chimney seated on the ridge by its seat
+ * roll, the porch at the door, the stairs inside, the
+ * cellar bulkhead at the back, the great stone in the
+ * yard, under a TILED roof (Models' roof wave: slope
+ * slabs + ridge beams, seated per segment). The
+ * upstairs ZONES are their own later landing still.
  */
 
-import type { BiomeId, BiomeWeights } from '../types';
+import type { BiomeId, BiomeWeights, ScatterKind, ScatterObject } from '../types';
 import {
   barnSite,
   caveMouthSite,
@@ -60,9 +70,12 @@ import {
   villageSite,
   waterTowerSite,
   CAVE_MOUTH_CLEAR_RADIUS_M,
+  FARM_SEGMENT_M,
+  FARM_WALL_H_M,
   ROAD_RIBBON_HALF_WIDTH_M,
   SIDING_HALF_WIDTH_M,
   SITE_SPACING_MARGIN_M,
+  type SiteWallBox,
 } from './sites';
 import {
   DISTRIBUTION_CELL_M,
@@ -72,7 +85,16 @@ import {
 import { deriveSeed, mulberry32 } from './seed';
 import { caveInstancesInRect } from './caves';
 import { homesteadInstancesInRect, HOMESTEAD_CLEAR_RADIUS_M } from './homesteads';
-import { farmhouseSlotIndex, type FarmhouseSlot } from './farmhouseTable';
+import {
+  farmhouseSlotIndex,
+  FARMHOUSE_GABLE_KINDS,
+  FARMHOUSE_GABLE_WIDTHS_M,
+  FARMHOUSE_LENGTH_SEGMENTS,
+  FARMHOUSE_PORCH_KINDS,
+  FARMHOUSE_RHYTHM_KINDS,
+  FARMHOUSE_STAIRS_KINDS,
+  type FarmhouseSlot,
+} from './farmhouseTable';
 
 /** Per-cell presence draw (DRAFT). */
 export const FARMHOUSE_CELL_PRESENCE = 0.4;
@@ -114,6 +136,12 @@ export interface FarmhouseInstance {
   hearthStone: { x: number; z: number };
   /** Yard dressing richness 0..1. */
   dressing: number;
+  /** THE PLAN (the integration landing): the scatter
+   *  features the house emits into its clearing. */
+  features: ScatterObject[];
+  /** Collision boxes for the emitted walls (ground
+   *  lines; the upper story shares the footprint). */
+  walls: SiteWallBox[];
   clearRadius: number;
   bounds: { minX: number; maxX: number; minZ: number; maxZ: number };
 }
@@ -256,6 +284,8 @@ function farmhouseInstanceAt(
         upstairsForm,
         hearthStone,
         dressing,
+        features: [],
+        walls: [],
         clearRadius: FARMHOUSE_CLEAR_RADIUS_M,
         bounds: {
           minX: x - FARMHOUSE_CLEAR_RADIUS_M,
@@ -264,10 +294,254 @@ function farmhouseInstanceAt(
           maxZ: z + FARMHOUSE_CLEAR_RADIUS_M,
         },
       };
+      const plan = buildFarmhousePlan(worldSeed, result);
+      result.features = plan.features;
+      result.walls = plan.walls;
     }
   }
   instanceCache.set(cacheKey, result);
   return result;
+}
+
+/** Wall half-thickness (m) — the farm wall build is
+ *  0.3 thick; sites' own FARM_WALL_HALF_T is private. */
+export const FARMHOUSE_WALL_HALF_T = 0.15;
+
+/**
+ * THE ROOF TABLE (settled with Models, 2026-11-01):
+ * the family roof is TILED, not fixed — one slope
+ * segment per wall segment per side ('farmRoofSlab'
+ * for the 5.0 depth, 'farmRoofSlabWide' for 7.5,
+ * authored on the -Z side with origin at wall top;
+ * the +Z side seats by rotY π), plus 'farmRidgeBeam'
+ * segments at the ridge height. The ridge heights are
+ * Models' MEASURED figures (where the two slopes'
+ * edges meet, roof-local). A future footprint costs
+ * no new kinds — the tiles simply run longer.
+ */
+export const FARMHOUSE_ROOF_SLAB_KINDS: readonly ScatterKind[] = ['farmRoofSlab', 'farmRoofSlabWide'];
+export const FARMHOUSE_RIDGE_H_M: readonly number[] = [2.04, 2.93];
+
+/**
+ * THE PLAN (integration): the house assembled from the
+ * instance's slots on Models' manifest, from a plan
+ * stream appended AFTER the derivation draws — the
+ * derivation facts never move. Shells are WHOLE in v1:
+ * ransacked is an interior condition (Adam's word —
+ * toppled, scattered, opened), not shell damage; the
+ * interior dressing wave deepens it later.
+ */
+function buildFarmhousePlan(
+  worldSeed: string,
+  inst: FarmhouseInstance,
+): { features: ScatterObject[]; walls: SiteWallBox[] } {
+  const rand = mulberry32(deriveSeed(worldSeed, `farmhouse-plan:${inst.key}`));
+  const { x: cx, z: cz } = inst.center;
+  const swap = inst.theta !== 0;
+  const toWorld = (lx: number, lz: number): { x: number; z: number } =>
+    swap ? { x: cx + lz, z: cz - lx } : { x: cx + lx, z: cz + lz };
+
+  const SEG = FARM_SEGMENT_M;
+  const GH = FARM_WALL_H_M;
+  const L = FARMHOUSE_LENGTH_SEGMENTS[inst.slots.footprint] * SEG;
+  const D = FARMHOUSE_GABLE_WIDTHS_M[inst.slots.gableWidth];
+  const perLong = Math.round(L / SEG);
+  const perShort = Math.round(D / SEG);
+  const rhythm = FARMHOUSE_RHYTHM_KINDS[inst.slots.windowRhythm];
+  const isFloor = inst.upstairsForm === 'floor';
+  const topY = isFloor ? GH * 2 : GH;
+
+  const features: ScatterObject[] = [];
+  const walls: SiteWallBox[] = [];
+  const feat = (kind: ScatterKind, x: number, z: number, y: number, scale: number, rotY: number): void => {
+    features.push({ kind, x, z, y, scale, rotY });
+  };
+  const box = (bx: number, bz: number, hx: number, hz: number): void => {
+    walls.push({ minX: bx - hx, maxX: bx + hx, minZ: bz - hz, maxZ: bz + hz });
+  };
+
+  type Side = 'north' | 'south' | 'east' | 'west';
+  interface Segment { side: Side; lx: number; lz: number; running: 'x' | 'z' }
+  const segments: Segment[] = [];
+  for (let i = 0; i < perLong; i++) {
+    const lx = -L / 2 + SEG / 2 + i * SEG;
+    segments.push({ side: 'north', lx, lz: -D / 2, running: 'x' });
+    segments.push({ side: 'south', lx, lz: D / 2, running: 'x' });
+  }
+  for (let i = 0; i < perShort; i++) {
+    const lz = -D / 2 + SEG / 2 + i * SEG;
+    segments.push({ side: 'west', lx: -L / 2, lz, running: 'z' });
+    segments.push({ side: 'east', lx: L / 2, lz, running: 'z' });
+  }
+
+  // The door: the middle segment of a plan-picked side.
+  const SIDES: Side[] = ['south', 'north', 'east', 'west'];
+  const doorSide = SIDES[Math.min(3, Math.floor(rand() * 4))];
+  const doorPool = segments.filter((s) => s.side === doorSide);
+  const door =
+    doorPool.length % 2 === 0
+      ? doorPool[doorPool.length / 2 - 1 + Math.floor(rand() * 2)]
+      : doorPool[Math.floor(doorPool.length / 2)];
+
+  const emitWall = (s: Segment, kind: ScatterKind, y: number, withBox: boolean): void => {
+    const w = toWorld(s.lx, s.lz);
+    const runsWorldX = (s.running === 'x') !== swap;
+    feat(kind, w.x, w.z, y, 1, runsWorldX ? 0 : Math.PI / 2);
+    if (withBox) {
+      if (runsWorldX) box(w.x, w.z, SEG / 2, FARMHOUSE_WALL_HALF_T);
+      else box(w.x, w.z, FARMHOUSE_WALL_HALF_T, SEG / 2);
+    }
+  };
+  for (const s of segments) {
+    if (s !== door) emitWall(s, rhythm.ground as ScatterKind, 0, true);
+    if (isFloor) emitWall(s, rhythm.upper as ScatterKind, GH, false);
+  }
+
+  // The upper floor itself ('floor' form): slab tiles
+  // across the footprint at the story line.
+  if (isFloor) {
+    for (let i = 0; i < perLong; i++) {
+      for (let j = 0; j < perShort; j++) {
+        const w = toWorld(-L / 2 + SEG / 2 + i * SEG, -D / 2 + SEG / 2 + j * SEG);
+        feat('farmFloorSlab', w.x, w.z, GH, 1, inst.theta);
+      }
+    }
+  }
+
+  // Gable ends at both length-ends, seated at the top
+  // of the wall stack the form carries.
+  const gableKind = FARMHOUSE_GABLE_KINDS[inst.slots.gableWidth] as ScatterKind;
+  for (const endSign of [-1, 1]) {
+    const w = toWorld(endSign * (L / 2), 0);
+    feat(gableKind, w.x, w.z, topY, 1, inst.theta);
+  }
+
+  // The roof: tiled slabs, one per wall segment per
+  // side, plus the ridge beam segments — all seated at
+  // the wall top the form carries.
+  {
+    const slabKind = FARMHOUSE_ROOF_SLAB_KINDS[inst.slots.gableWidth];
+    const ridgeH = FARMHOUSE_RIDGE_H_M[inst.slots.gableWidth];
+    for (let i = 0; i < perLong; i++) {
+      const lx = -L / 2 + SEG / 2 + i * SEG;
+      const w = toWorld(lx, 0);
+      feat(slabKind, w.x, w.z, topY, 1, inst.theta);
+      feat(slabKind, w.x, w.z, topY, 1, inst.theta + Math.PI);
+      feat('farmRidgeBeam', w.x, w.z, topY + ridgeH, 1, inst.theta);
+    }
+  }
+
+  // The chimney: seated on the ridge by its seat roll,
+  // its skirt sunk so the stack straddles the ridge
+  // line (the measured ridge height for the depth).
+  {
+    const ridgeH = FARMHOUSE_RIDGE_H_M[inst.slots.gableWidth];
+    const lx = -L / 2 + 0.8 + inst.chimneySeatU * (L - 1.6);
+    const w = toWorld(lx, 0);
+    feat('farmChimney', w.x, w.z, topY + ridgeH - 0.35, 1, inst.theta);
+  }
+
+  // The porch at the door (when the slot carries one):
+  // the singular's idiom, posts colliding.
+  const outRot = (side: Side): number =>
+    side === 'north' ? Math.PI : side === 'south' ? 0 : side === 'east' ? Math.PI / 2 : -Math.PI / 2;
+  const porchKind = FARMHOUSE_PORCH_KINDS[inst.slots.porch];
+  if (porchKind) {
+    const doorW = toWorld(door.lx, door.lz);
+    feat(porchKind as ScatterKind, doorW.x, doorW.z, 0, 1, inst.theta + outRot(doorSide));
+    const rot = (lx: number, lz: number, r: number): { x: number; z: number } => {
+      const c = Math.cos(r);
+      const s = Math.sin(r);
+      return { x: lx * c + lz * s, z: -lx * s + lz * c };
+    };
+    for (const px of [-1.65, 1.65]) {
+      const inHouse = rot(px, 2.05, outRot(doorSide));
+      const w = toWorld(door.lx + inHouse.x, door.lz + inHouse.z);
+      box(w.x, w.z, 0.13, 0.13);
+    }
+  }
+
+  // The stairs inside, against the north wall (the
+  // stairsDressing slot's one piece; dressing in v1 —
+  // the upstairs zones own their anchors later).
+  {
+    const kind = FARMHOUSE_STAIRS_KINDS[inst.slots.stairsDressing] as ScatterKind;
+    const w = toWorld(-L / 2 + 1.0, -D / 2 + 0.55);
+    feat(kind, w.x, w.z, 0, 1, inst.theta);
+  }
+
+  // The cellar bulkhead at the back foundation.
+  {
+    const backSide: Side =
+      doorSide === 'south' ? 'north' : doorSide === 'north' ? 'south' : doorSide === 'east' ? 'west' : 'east';
+    const backSign = backSide === 'north' || backSide === 'west' ? 1 : -1;
+    const local =
+      backSide === 'north' || backSide === 'south'
+        ? { lx: L / 4, lz: backSign * (D / 2 + 0.9) }
+        : { lx: backSign * (L / 2 + 0.9), lz: L / 4 };
+    const w = toWorld(local.lx, local.lz);
+    feat('farmCellarDoor', w.x, w.z, 0, 1, inst.theta + outRot(backSide));
+  }
+
+  // The great stone in the yard (the core's seat).
+  feat('hearthStone', inst.hearthStone.x, inst.hearthStone.z, 0, 1.25, inst.theta + Math.PI / 5);
+
+  // Dressing: standing houses shed a little rubble at
+  // their feet. A RANSACKED house's disorder is the
+  // authored set (Models' ransacked wave): toppled
+  // table, chair, shelf, opened crate and drawers, the
+  // spilled barrel — a plan-shuffled subset seated on
+  // the ground floor, east of the stair run, plus one
+  // rubble spill at the door where the flight went out.
+  const rubbleAt = (lx: number, lz: number): void => {
+    const w = toWorld(lx, lz);
+    feat('rubble', w.x, w.z, 0, 0.7 + rand() * 0.6, rand() * Math.PI);
+  };
+  if (inst.state === 'standing') {
+    const n = Math.floor(inst.dressing * 2.99);
+    for (let i = 0; i < n; i++) {
+      const side = Math.floor(rand() * 4);
+      const t = rand();
+      if (side === 0) rubbleAt(-L / 2 + t * L, -D / 2 - 0.8);
+      else if (side === 1) rubbleAt(-L / 2 + t * L, D / 2 + 0.8);
+      else if (side === 2) rubbleAt(-L / 2 - 0.8, -D / 2 + t * D);
+      else rubbleAt(L / 2 + 0.8, -D / 2 + t * D);
+    }
+  } else {
+    const RANSACKED_SET: ScatterKind[] = [
+      'farmTableToppled',
+      'farmChairToppled',
+      'farmShelfToppled',
+      'farmCrateOpen',
+      'farmDrawersOpen',
+      'farmBarrelSpilled',
+    ];
+    const roster = [...RANSACKED_SET];
+    for (let i = roster.length - 1; i > 0; i--) {
+      const j = Math.floor(rand() * (i + 1));
+      [roster[i], roster[j]] = [roster[j], roster[i]];
+    }
+    // Seats as fractions of (L, D), clear of the stair
+    // run in the north-west and of the walls.
+    const SEATS: readonly (readonly [number, number])[] = [
+      [0.28, -0.22],
+      [-0.02, 0.24],
+      [0.3, 0.26],
+      [-0.08, -0.28],
+      [0.12, 0.02],
+      [-0.26, 0.05],
+    ];
+    const n = Math.min(roster.length, 3 + Math.floor(inst.dressing * 3.99));
+    for (let i = 0; i < n; i++) {
+      const [fx, fz] = SEATS[i];
+      const w = toWorld(fx * L, fz * D);
+      feat(roster[i], w.x, w.z, 0, 1, inst.theta + Math.floor(rand() * 4) * (Math.PI / 2));
+    }
+    const out = { lx: door.lx * 1.15, lz: door.lz * 1.15 };
+    rubbleAt(out.lx, out.lz);
+  }
+
+  return { features, walls };
 }
 
 /**
