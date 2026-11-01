@@ -1865,6 +1865,7 @@ import {
   type OwnedToolItem,
 } from './systems/owned-tool';
 import {
+  QUEST_ACTS,
   evaluateQuests,
   emptyQuestFlags,
   type QuestFlags,
@@ -2107,17 +2108,14 @@ const FIRE_NAME: Record<FireType, string> = {
   kiln: 'Kiln',
 };
 
-// QUEST ACTS (dialog #4 amendment, Adam 2026-11-01):
-// the journal's quest log renders GROUPED BY ACT.
-// Systems' quest definitions carry no act, so the
-// assignment lives here beside the hints: every quest
-// today is Act I — Survival (Adam's frame — the fifteen
-// are the survival stuff); a later act's quests are
-// named in the overrides as they exist, and if Systems'
-// quests ever grow an act field this table retires.
-const QUEST_ACT_OVERRIDES: Record<string, string> = {};
-const questActFor = (questId: string): string =>
-  QUEST_ACT_OVERRIDES[questId] ?? 'Act I — Survival';
+// QUEST ACT TITLES (dialog #4 amendment): the journal's
+// quest log renders grouped by act. The act itself is
+// Systems' data now (each definition carries it, and
+// QUEST_ACTS pins the display names — Act I — Survival,
+// Act II — Witchery); the shell only stamps the pinned
+// NAME onto each display row. (This replaced the
+// shell-side QUEST_ACT_OVERRIDES table the same day the
+// data landed — one source, Systems'.)
 
 // QUEST HINTS (draft one-liners, Adam pins before merge):
 // one hint per Systems quest id, in priority order. The
@@ -5835,7 +5833,9 @@ export default function App() {
       }).map((quest) => ({
         ...quest,
         hint: QUEST_HINTS[quest.id] ?? '',
-        act: questActFor(quest.id),
+        act:
+          QUEST_ACTS.find((act) => act.id === quest.act)?.name ??
+          'Act I — Survival',
       }))
     : undefined;
   // CRAFTING DERIVATION RELOCATED (2026-10-30): the

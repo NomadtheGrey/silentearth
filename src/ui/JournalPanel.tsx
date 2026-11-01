@@ -27,9 +27,12 @@
  * was hiding, not duplication.
  */
 
+import { useState } from 'react';
+
 import { UI_THEMES, type UiThemeName } from './themes';
 import {
   QuestLog,
+  DEFAULT_QUEST_ACT,
   groupQuestsByAct,
   type QuestDisplay,
 } from './QuestLog';
@@ -57,8 +60,8 @@ export interface JournalPanelProps {
   /**
    * The quest log the book carries (dialog audit #4):
    * the caller's mapped rows, rendered below the marks
-   * GROUPED BY ACT (Adam's amendment — one headed
-   * QuestLog per act, rows in the caller's order).
+   * GROUPED BY ACT (Adam's amendments — one independent
+   * FOLD per act, rows in the caller's order inside it).
    * Omitted = marks only.
    */
   quests?: QuestDisplay[];
@@ -78,6 +81,33 @@ export function JournalPanel({
   theme = 'mire',
 }: JournalPanelProps) {
   const t = UI_THEMES[theme];
+  // ACT FOLDS (accordion amendment, Adam via DEV
+  // 2026-11-01): each act group is an INDEPENDENT fold —
+  // the unification's class default, mirroring
+  // ItemListSurface's collapsed-set idiom. Default: the
+  // act holding the current quest (the first incomplete
+  // row in the caller's order) starts OPEN; every other
+  // act starts folded. The panel mounts per opening, so
+  // the default re-settles each time she opens the book;
+  // while it stands open the folds are hers alone.
+  const groups = quests ? groupQuestsByAct(quests) : [];
+  const currentAct =
+    quests?.find((quest) => !quest.done)?.act ?? DEFAULT_QUEST_ACT;
+  const [collapsedActs, setCollapsedActs] = useState<ReadonlySet<string>>(
+    () =>
+      new Set(
+        groups
+          .filter((group) => group.act !== currentAct)
+          .map((group) => group.act),
+      ),
+  );
+  const toggleActFold = (act: string) =>
+    setCollapsedActs((previous) => {
+      const next = new Set(previous);
+      if (next.has(act)) next.delete(act);
+      else next.add(act);
+      return next;
+    });
   const btn = comfortable
     ? 'rounded px-3 py-2 text-sm min-h-[44px] '
     : 'rounded px-2 py-1 text-sm ';
@@ -138,19 +168,28 @@ export function JournalPanel({
           {quests.length === 0 ? (
             <QuestLog quests={quests} theme={theme} />
           ) : (
-            groupQuestsByAct(quests).map((group) => (
-              <div key={group.act} className="mt-2">
-                <h4
-                  className={
-                    'mb-1 text-xs font-semibold uppercase tracking-wide ' +
-                    t.muted
-                  }
-                >
-                  {group.act}
-                </h4>
-                <QuestLog quests={group.quests} theme={theme} />
-              </div>
-            ))
+            groups.map((group) => {
+              const folded = collapsedActs.has(group.act);
+              return (
+                <div key={group.act} className="mt-2">
+                  <button
+                    type="button"
+                    aria-expanded={!folded}
+                    onClick={() => toggleActFold(group.act)}
+                    className={
+                      'w-full pt-1 text-left text-xs font-semibold uppercase tracking-wide ' +
+                      t.muted
+                    }
+                  >
+                    <span aria-hidden="true">{folded ? '▸ ' : '▾ '}</span>
+                    {group.act}
+                  </button>
+                  {!folded ? (
+                    <QuestLog quests={group.quests} theme={theme} />
+                  ) : null}
+                </div>
+              );
+            })
           )}
         </div>
       ) : null}
