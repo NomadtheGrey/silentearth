@@ -187,6 +187,15 @@ export interface CompanionFacts {
   trust: number;
   fedToday: boolean;
   bond: CompanionBond;
+  /**
+   * Trust full and the bond not yet taken (trust >=
+   * TRUST_FOR_BOND while bond is 'none') — computed
+   * here where the constant lives, the same reading
+   * feed()'s result reports, so the marker's 'ready'
+   * row never twins the constant game-side (the seam
+   * amendment, Background via DEV, 2026-11-01).
+   */
+  bondReady: boolean;
 }
 
 /**
@@ -304,6 +313,8 @@ export class CompanionState {
       trust: record.trust,
       fedToday: fedOnDay(record, day),
       bond: record.bond,
+      bondReady:
+        record.bond === 'none' && record.trust >= TRUST_FOR_BOND,
     };
   }
 
