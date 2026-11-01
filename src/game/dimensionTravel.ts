@@ -74,7 +74,7 @@ function placeAt(player: PlayerController, anchor: CaveAnchor): void {
 
 /**
  * Resolve a mouth id to its mouth + owning dimension
- * key: the designated cave's mouths ('mouth' | 'cellar')
+ * key: the debut cave's mouths ('mouth' | 'cellar')
  * own 'cave:main'; a distributed instance's mouth id IS
  * its key ('cave:<cell>') and owns that cave.
  */
@@ -96,7 +96,7 @@ function resolveMouth(
 
 /**
  * Enter a cave dimension through a surface mouth: the
- * designated cave's 'mouth' | 'cellar', or a distributed
+ * debut cave's 'mouth' | 'cellar', or a distributed
  * instance's mouth id (its key). Refuses cleanly when
  * the entry anchor is blocked (it never should be — the
  * probes check it) or the mouth id is unknown.

@@ -43,6 +43,14 @@ export interface BuildRecord {
 
 const ALL_RECORDS: BuildRecord[] = [
   {
+    merge: 'Merge #45',
+    pr: 84,
+    sha: 'a7a7c37',
+    date: '2026-11-01',
+    what: 'Seven commits, and an eighth \u2014 this record \u2014 rides in the same merge. Fire serves whole now: a fire honestly lit by friction, with no flint and no kindling in her pack, cooks and chars at no cost and no second charge \u2014 the vessel adopts the fire\u2019s lit state as bookkeeping, never as a second lighting \u2014 and a stick chars at ANY lit fire, including the hearth under a hung cauldron, where facing the pot is facing its fire. Small honesties ride with it: the wattle-and-daub hut, merged into the Woven Cottage long ago, retires its lingering item record (old saves simply let it go), and the first cave is the DEBUT cave in every word the game keeps \u2014 \u2018designated\u2019 retires, because there is nothing special about a first except that it came first. One pair of commits is recorded exactly as it happened: a Home fragment was minted onto the chapel\u2019s gravestone to complete the Home mark\u2019s three seats, and then, on Adam\u2019s word that graves and their marks are reserved for the mark line that starts with human bone, it was unminted again in the next commit \u2014 the carriers net out unchanged, and Home\u2019s third seat waits on his chosen ground rather than a grave.',
+    why: 'Adam\u2019s pins run through it: a lit fire is a lit fire and lit fires consume nothing; charring belongs at any fire, not a favored kind; graves are reserved, full stop \u2014 a ruling that outranks a completed tier, and the record says so plainly rather than smoothing the pair away. The terminology sweep is the no-one-of-anything principle applied to language: the debut cave is a first, not a category.',
+  },
+  {
     merge: 'Merge #44',
     pr: 83,
     sha: 'b3a2bbf',

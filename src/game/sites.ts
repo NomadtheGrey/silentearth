@@ -1963,7 +1963,7 @@ export interface CaveMouthSite {
 const caveMouthCache = new Map<string, CaveMouthSite>();
 
 /**
- * The cave mouth FACADE, shared by the world's designated
+ * The cave mouth FACADE, shared by the world's debut
  * mouth (caveMouthSite) and every distributed cave
  * instance (caves.ts): the opening feature, its flanking
  * + threshold boxes, the rock surround, and the approach

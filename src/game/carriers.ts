@@ -32,6 +32,15 @@
  *                hearth, the burnt homesteads' stones —
  *                read between (0.35–0.75).
  *
+ * GRAVES ARE RESERVED (Adam, 2026-11-01): graves and
+ * their marks belong to the mark line that starts with
+ * HUMAN BONE. No grave carrier mints for the founding
+ * three — the chapel's inscription stone was minted as
+ * Home's third seat for one landing (b8dbfae) and came
+ * straight back out on this ruling. Home's third seat
+ * re-mints from the non-grave classes on Adam's word
+ * (held, not chosen, in this module).
+ *
  * WHERE THE FACTS LIVE: plural instances carry the
  * field on their record beside fragmentSpot (homesteads
  * mint it in their derivation; cave instances resolve
@@ -127,9 +136,10 @@ export function caveCarrier(worldSeed: string, instanceKey: string): CarrierHere
 /**
  * Every carrier within r of a point, nearest first —
  * the shell's faced-target projection (UI's seam). The
- * designated cave (cave:main) mints no carrier yet: its
- * fragment presentation rides the cave-touch swap, as
- * held; plural caves carry circles now.
+ * debut cave (cave:main) mints no carrier: under the
+ * general cave rules its layout reports no fragment
+ * spot — no layer guarantee (Adam, 2026-11-01); plural
+ * caves carry circles.
  */
 export function fragmentCarriersHere(
   worldSeed: string,

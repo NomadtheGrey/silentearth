@@ -151,19 +151,19 @@
  *   acorn per press, quantity preserved 1:1, disabled
  *   without carried acorns. THE BRIDGE (shell-owned, see
  *   getSystemsFire / ensureSystemsLit): one Systems
- *   FireState per placed fire; engine lit is the gate —
- *   the shell mirrors engine lighting into the vessel
- *   (light() at lighting start, tick(1) on the game clock)
- *   and completes it when the engine reports lit or Cook
- *   is pressed, so cook() never runs against a vessel the
- *   engine hasn't lit. COST ASYMMETRY, FLAGGED: Systems'
- *   slow method consumes 1 dry-kindling, but engine
- *   friction charges nothing — the mirror charges kindling
- *   only when dry-kindling is carried (named in the friction
- *   menu hint), engine lighting proceeds regardless, and a
- *   kindling-less friction fire cooks once kindling is
- *   carried and Cook is pressed (the press retries and
- *   says so when it still can't). Cooking stays open-fire
+ *   FireState per placed fire; engine lit is the gate and
+ *   the authority — the shell records the lighting path at
+ *   the start, the vessel waits unlit, and a Cook/Char
+ *   press at the lit fire syncs the vessel by ADOPTION
+ *   (FireState.adoptLit: cost-free, never throws), so
+ *   cook() never runs against a vessel the engine hasn't
+ *   lit and a lit fire always serves. The priced light()
+ *   is never called to mirror an engine fire — no second
+ *   kindling is ever charged for a fire the world already
+ *   lit (VESSEL SYNC, DEV ruling 2026-11-01; the pre-sync
+ *   bridge completed vessels through the priced light()
+ *   and refused Cook/Char at kindling-less friction
+ *   fires). Cooking stays open-fire
  *   (stick or fire-buried, never pot cooking). CANDLE NOTE:
  *   the avatar / portrait candle is untouched, and nothing
  *   here assumes the candle lights fires — that relation
@@ -4724,7 +4724,7 @@ export default function App() {
         // strand a boot.
         const visit = saved.dimensionVisit ?? null;
         // PLURAL CAVES (2026-10-30): the resolution is by
-        // the saved key + mouthId — the designated cave's
+        // the saved key + mouthId — the debut cave's
         // key reads its two mouths as before; any other
         // key names an instance, honored only when the
         // instance's mouthId equals the saved one (for
@@ -5079,11 +5079,10 @@ export default function App() {
       syncShrewEffect();
       syncDeerWarning();
       fireState.advanceLighting(Date.now());
-      // Drive every tracked Systems fire's lighting clock
-      // alongside the engine's (the bridge's tick half).
-      for (const systemsFire of systemsFiresRef.current.values()) {
-        systemsFire.tick(1);
-      }
+      // (No Systems-vessel tick here: the bridge no longer
+      // mirrors lighting into the vessels — a vessel adopts
+      // the engine's lit state whole, at the Cook/Char
+      // press. See VESSEL SYNC at ensureSystemsLit.)
       // Night gate for the sleep button: the renderer's live
       // sky cycle, split by the engine's own cycleSplit at
       // the world's fixed start month (the renderer feeds
@@ -7824,20 +7823,19 @@ export default function App() {
   /**
    * COOKING BRIDGE (DEV decision, gap-closing round — see the
    * header): one Systems FireState per placed fire, created
-   * lazily here. Engine lit is the gate: the shell mirrors
-   * the player's engine lighting into the Systems vessel
-   * (light() at lighting start, tick(1) on the game clock),
-   * and completes it the moment the engine reports lit or
-   * the player presses Cook — so cook() never runs against
-   * a vessel the engine hasn't lit, and never against a
-   * stale one. COST ASYMMETRY, FLAGGED: Systems' slow method
-   * ('sticks') consumes 1 dry-kindling, but the
-   * engine friction path charges nothing — so the mirror
-   * charges kindling only when dry-kindling is carried, and
-   * engine lighting proceeds regardless. A friction-lit fire
-   * with no kindling cooks once kindling is carried and Cook
-   * is pressed (the press retries the completion and says
-   * so when it still can't).
+   * lazily here. Engine lit is the gate and the authority.
+   * VESSEL SYNC (DEV ruling, 2026-11-01): the shell never
+   * lights a vessel to mirror an engine fire — mirroring is
+   * bookkeeping, not a lighting act. The vessel waits unlit
+   * while the engine fire lights; when a Cook/Char press
+   * finds the engine fire lit, ensureSystemsLit ADOPTS that
+   * state into the vessel (FireState.adoptLit — cost-free,
+   * never throws), so cook()/charStick() never run against
+   * a vessel the engine hasn't lit, and never refuse at an
+   * honestly lit fire over a kindling the world never
+   * charged. The priced FireState.light() belongs to
+   * genuine lighting acts on the vessel itself, of which
+   * the shell performs none.
    */
   const getSystemsFire = (fireId: string): SystemsFireState => {
     const existing = systemsFiresRef.current.get(fireId);
@@ -7847,45 +7845,39 @@ export default function App() {
     return created;
   };
 
-  /** Bring a Systems vessel to lit for an engine-lit fire. */
+  /**
+   * Bring a Systems vessel to lit for an engine-lit fire:
+   * the vessel ADOPTS the engine's lit state (VESSEL SYNC —
+   * see the bridge header). Adoption is cost-free and never
+   * throws; the only callers are the Cook and Char handlers,
+   * which sit in lit-fire menus, so the engine fire is lit
+   * whenever this runs. (fireId names the fire for the
+   * bridge's bookkeeping; the adoption itself needs nothing
+   * but the vessel.)
+   */
   const ensureSystemsLit = (
     fireId: string,
     systemsFire: SystemsFireState,
   ) => {
+    void fireId;
     if (systemsFire.lit) return;
-    if (systemsFire.fireStatus() === 'lighting') {
-      systemsFire.tick(systemsFire.lightingRemaining());
-      return;
-    }
-    const path = engineFirePathRef.current.get(fireId);
-    const method =
-      path === 'flint'
-        ? 'flint'
-        : path === 'friction'
-          ? 'sticks'
-          : inventory.count(ITEMS.flint) > 0
-            ? 'flint'
-            : 'sticks';
-    systemsFire.light(method, inventory);
-    systemsFire.tick(systemsFire.lightingRemaining());
+    systemsFire.adoptLit();
   };
 
-  /** Mirror an engine lighting start into the Systems vessel. */
+  /**
+   * Record how an engine lighting started. The vessel is
+   * deliberately NOT lit here (VESSEL SYNC, DEV ruling
+   * 2026-11-01): mirroring a start through the priced
+   * light() charged a second kindling for a fire the world
+   * was already lighting. The vessel waits unlit and adopts
+   * the lit state at the first Cook/Char press
+   * (ensureSystemsLit). Only the path record lives here.
+   */
   const mirrorLightingStart = (
     fireId: string,
     method: 'flint' | 'friction',
   ) => {
     engineFirePathRef.current.set(fireId, method);
-    try {
-      getSystemsFire(fireId).light(
-        method === 'flint' ? 'flint' : 'sticks',
-        inventory,
-      );
-    } catch {
-      // Engine lighting is the authority and proceeds: a
-      // friction start without dry-kindling simply
-      // leaves the vessel unlit until Cook retries it.
-    }
   };
 
   /** Lighting + cooking menu actions for one placed fire. */
@@ -8004,7 +7996,7 @@ export default function App() {
       {
         id: 'light-friction',
         label: 'Light with friction (slow)',
-        hint: 'Rub, wait, rub · 1 dry-kindling readies it for cooking',
+        hint: 'Rub, wait, rub',
       },
       { id: 'close', label: 'Close' },
     ];
@@ -10462,7 +10454,7 @@ export default function App() {
       const gen = genRef.current;
       if (gen) {
         // PLURAL CAVES (2026-10-30): mouths arrive in ONE
-        // list — the designated cave's two plus every
+        // list — the debut cave's two plus every
         // registered instance near her (instances keyed
         // by their cave key as the winner id; travel
         // routes by it).
@@ -11498,8 +11490,12 @@ export default function App() {
   //   hearth is lit (winner kind 'cauldron', the
   //   placed-cauldron build's UI half) — the cauldron
   //   goes on the Hearth, and facing the Cauldron is
-  //   different from facing the Hearth. The carried-
-  //   pot composition is dead; do not rebuild it.
+  //   different from facing the Hearth for the DOOR
+  //   (E is the pot's). For the FEED the host still
+  //   counts as what it is: 'fire' rides with
+  //   'cauldron' (the charring ruling at the feed
+  //   below). The carried-pot composition is dead;
+  //   do not rebuild it.
   // - a faced LOOM feeds 'loom' (winner kind 'loom' —
   //   looms joined the winner race in this landing; the
   //   loom's pill opens the Crafting panel, so the door
@@ -11531,6 +11527,15 @@ export default function App() {
     const hostFire = fireState.get(useWinner.id);
     if (hostFire?.lit === true) {
       availableStations.push('cauldron');
+      // ANY LIT FIRE (Adam's charring ruling, via the
+      // char-a-stick claim, 2026-11-01): the pot hangs
+      // on its hearth — facing the cauldron IS facing
+      // a lit fire, so the host feeds 'fire' too (fire-
+      // presence is the charcoal-stick recipe's only
+      // gate). The cauldron tie rule is untouched: the
+      // pot still owns the winner and E; the feed
+      // simply stops being blind to the fire under it.
+      availableStations.push('fire');
     }
   }
   // Header display names (stump-header fix, Adam-approved

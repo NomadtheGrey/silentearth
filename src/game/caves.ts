@@ -119,8 +119,11 @@ export interface CaveLayout {
   fungusLights: { x: number; z: number }[];
   /** The fragment anchor (distributed instances only in
    *  this round: a carved stone staged at the deepest
-   *  layer's far dead end; the designated cave keeps its
-   *  exact v1 layout and reports null). */
+   *  layer's far dead end; the DEBUT cave — cave:main, the
+   *  first cave (Adam, 2026-11-01: 'designated' retires as
+   *  a category; all caves populate by seed and location)
+   *  — keeps its exact v1 layout and reports null: no
+   *  layer guarantee under the general rules). */
   fragmentSpot: { x: number; z: number } | null;
   /** The footprint the wall query reads underground. */
   footprint: SiteFootprint;
@@ -303,7 +306,7 @@ function deriveLayer(
 
 /**
  * Derive one cave dimension's layout by its key.
- * Memoized per (seed, key). The designated cave
+ * Memoized per (seed, key). The debut cave
  * ('cave:main') derives EXACTLY as it did in v1 — same
  * streams, same grids, same depth roll; distributed
  * instances draw their grid sizes and depth from their
@@ -342,7 +345,7 @@ export function caveLayoutForKey(worldSeed: string, key: string): CaveLayout {
   }
 
   // The fragment anchor (instances only this round —
-  // the designated cave's layout stays byte-stable).
+  // the debut cave's layout stays byte-stable).
   let fragmentSpot: { x: number; z: number } | null = null;
   if (!isMain) {
     const deepest = layers[layers.length - 1];
@@ -392,7 +395,7 @@ export function caveLayoutForKey(worldSeed: string, key: string): CaveLayout {
   return layout;
 }
 
-/** Derive the world's designated cave layout (v1). */
+/** Derive the world's debut cave layout (v1). */
 export function caveLayoutFor(worldSeed: string): CaveLayout {
   return caveLayoutForKey(worldSeed, CAVE_DIMENSION_KEY);
 }
@@ -502,12 +505,12 @@ export function caveMouths(
 // customer (distribution.ts): one candidate seat per
 // 512 m cell, drawn on the cell's own stream; a candidate
 // registers only where the ground suits a mouth
-// (tanglewood / forest dominant — the designated mouth's
+// (tanglewood / forest dominant — the debut mouth's
 // taste) and the spacing law holds against every singular
 // site (ribbons by line) and against sibling instances.
 // Each registered instance is a full cave: its own stable
 // key ('cave:<cell>'), its own layout, its own fragment
-// anchor. The designated cave above is untouched by all
+// anchor. The debut cave above is untouched by all
 // of this — instances are ADDITIVE.
 // ---------------------------------------------------------------------------
 
@@ -677,7 +680,7 @@ export function caveInstancesInRect(
 }
 
 /** One instance by its dimension key, or null when the
- *  key names no registered instance (or the designated
+ *  key names no registered instance (or the debut
  *  cave — that key is caveLayoutForKey's, not an
  *  instance's). */
 export function caveInstanceForKey(
@@ -693,7 +696,7 @@ export function caveInstanceForKey(
 }
 
 /**
- * Every mouth within a radius of a point: the designated
+ * Every mouth within a radius of a point: the debut
  * cave's two mouths plus registered instances — the list
  * travel routing and the shell's faced-target arms read.
  */
