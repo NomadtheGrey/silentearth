@@ -1869,6 +1869,7 @@ import {
   QUEST_THREADS,
   evaluateQuests,
   emptyQuestFlags,
+  newlyCompleted,
   questById,
   questComponentsFor,
   type QuestFacts,
@@ -2701,6 +2702,19 @@ export default function App() {
   // toggle is the journal log's mark control.
   const [activeQuestId, setActiveQuestId] = useState<string | null>(null);
   const activeQuestIdRef = useRef<string | null>(null);
+  // THE LATCH (Systems' latch law, 03c9444; the lean-to
+  // defect's fix): the ids of quests that have EVER read
+  // complete. The predicates read the present tense —
+  // build a lean-to, upgrade it, and 'leanTo' leaves the
+  // houses list, so the completion must latch or it
+  // un-reads. Boot seats the set from the saved quests
+  // record (stripped out of the flags spread beside the
+  // mark, same treatment); the facts site unions in
+  // whatever reads complete NOW (newlyCompleted) before
+  // evaluating, so the render that first sees a
+  // completion is the render that latches it; saveNow
+  // writes the set back on the quests record.
+  const latchedCompletedRef = useRef<ReadonlySet<string>>(new Set());
   const toggleActiveQuestMark = (questId: string) => {
     const next = activeQuestIdRef.current === questId ? null : questId;
     activeQuestIdRef.current = next;
@@ -3587,6 +3601,11 @@ export default function App() {
             ...(activeQuestIdRef.current
               ? { active: activeQuestIdRef.current }
               : {}),
+            // THE LATCH (the latch law): the ever-completed
+            // ids ride every save — the facts site keeps the
+            // set current (newlyCompleted unions in at
+            // render), saveNow only writes it back.
+            completed: [...latchedCompletedRef.current],
           },
           // LOOK SAVE WIRING: the live look counts ride
           // every save (snapshot as-is, first-look order;
@@ -4634,15 +4653,22 @@ export default function App() {
         // follow-up; the tab only reads. The saved ACTIVE
         // MARK leaves the flags here — it seats in the
         // shell's mark state (one source), so the flags
-        // record never carries a stale second copy.
-        const { active: savedActiveQuest, ...savedQuestFlagFields } =
-          bootSaved.quests ?? {};
+        // record never carries a stale second copy. The
+        // saved COMPLETED latch leaves with it (the latch
+        // law): it seats in latchedCompletedRef, and the
+        // flags spread never carries it either.
+        const {
+          active: savedActiveQuest,
+          completed: savedCompletedQuests,
+          ...savedQuestFlagFields
+        } = bootSaved.quests ?? {};
         const questFlagsInit = {
           ...emptyQuestFlags(),
           ...savedQuestFlagFields,
         };
         questFlagsRef.current = questFlagsInit;
         setQuestFlags(questFlagsInit);
+        latchedCompletedRef.current = new Set(savedCompletedQuests ?? []);
         if (savedActiveQuest && questById(savedActiveQuest)) {
           activeQuestIdRef.current = savedActiveQuest;
           setActiveQuestId(savedActiveQuest);
@@ -5885,10 +5911,32 @@ export default function App() {
         altarRaised: stumpState
           .snapshot()
           .some((stump) => isStumpyAltar(stump.additions)),
+        // THE AWAKENINGS COUNT (Systems' latch chunk):
+        // how many Wakings stand recorded — wake-charm
+        // reads flag OR count, so a completed rite stays
+        // complete in the log's reading too.
+        awakenings: charmStateRef.current.snapshot().length,
       }
     : undefined;
+  // THE LATCH UNION (the latch law): whatever reads
+  // complete in THIS facts object and is not yet latched
+  // joins the latch before anything evaluates — the
+  // render that first sees a completion latches it, and
+  // every later saveNow carries it on the quests record.
+  if (questFacts) {
+    const freshCompletions = newlyCompleted(
+      questFacts,
+      latchedCompletedRef.current,
+    );
+    if (freshCompletions.length > 0) {
+      latchedCompletedRef.current = new Set([
+        ...latchedCompletedRef.current,
+        ...freshCompletions,
+      ]);
+    }
+  }
   const questDisplay = questFacts
-    ? evaluateQuests(questFacts).map((quest) => ({
+    ? evaluateQuests(questFacts, latchedCompletedRef.current).map((quest) => ({
         ...quest,
         hint: QUEST_HINTS[quest.id] ?? '',
         act:

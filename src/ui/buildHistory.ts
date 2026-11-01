@@ -43,6 +43,14 @@ export interface BuildRecord {
 
 const ALL_RECORDS: BuildRecord[] = [
   {
+    merge: 'Merge #54',
+    pr: 93,
+    sha: 'e389353',
+    date: '2026-11-01',
+    what: 'One commit, and this record rides with it. The latch law completes: quest completion now LATCHES in the shell. Boot seats the latched set from the saved record; the render that first sees a completion latches it in the same breath; the log and the quest card read predicate OR latched; and the save writes the set back, so what she has finished stays finished. The lean-to defect is cured at its root \u2014 build it, upgrade it, and the step stays complete, where the live re-derivation once un-completed it the moment the lean-to became something else. Named as NOT in this merge: the pitfall\u2019s lifecycle and the traps\u2019 water facts wait on WIP and ride the trap chunk\u2019s merge (#55), where the shell wires the pitfall\u2019s spoil to a pile so dug earth is never voided.',
+    why: 'A completion that can quietly un-happen teaches her the book cannot be trusted \u2014 Adam found exactly that in the lean-to. Completion is a fact about her history, not a reading of the world\u2019s present state, so it latches the moment it is earned; the latch now stands in both places the law lives, where quests are computed and where she is.',
+  },
+  {
     merge: 'Merge #53',
     pr: 92,
     sha: '43293b8',
