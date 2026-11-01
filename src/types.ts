@@ -176,6 +176,20 @@ export type ScatterKind =
   | 'farmCrateOpen'
   | 'farmDrawersOpen'
   | 'farmBarrelSpilled'
+  // Site-pass kinds (the ATTIC interior bricks — the
+  // under-roof room in the zone's local frame: slope
+  // undersides married to the family roof, knee walls,
+  // collar beams, the dormer, the mouth's door, and the
+  // gable-window variants of the gable family.)
+  | 'farmAtticSlope'
+  | 'farmAtticSlopeWide'
+  | 'farmAtticKneeWall'
+  | 'farmAtticCollarBeam'
+  | 'farmAtticCollarBeamWide'
+  | 'farmDormer'
+  | 'farmAtticDoor'
+  | 'farmGableEndWindow'
+  | 'farmGableEndWideWindow'
   // Site-pass kinds (the Chapel, sites.ts — same rule):
   // tall wall segments, the steep roof, the steeple, and
   // the graveyard's two stone shapes.

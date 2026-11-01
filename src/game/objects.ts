@@ -1376,6 +1376,138 @@ export const SOURCES: HarvestSourceDef[] = [
     biomes: ['oldfieldRise'],
     mesh: { shape: 'stone', color: 0x74604a, extraColor: 0x2a2018, baseY: 0 },
   },
+  // The ATTIC interior bricks (2026-11-01 — the
+  // under-roof room for the upstairs zones; names and
+  // descriptions DRAFT.)
+  {
+    id: 'farmAtticSlope',
+    kind: 'farmAtticSlope',
+    name: 'Attic Roof Slope',
+    description:
+      'The underside of a farmhouse roof from inside ' +
+      '(DRAFT, 2026-11-01): boards and rafters, narrow ' +
+      'depth, on the roof\u2019s own line.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['oldfieldRise'],
+    mesh: { shape: 'stone', color: 0x66543c, extraColor: 0x59422a, baseY: 0 },
+  },
+  {
+    id: 'farmAtticSlopeWide',
+    kind: 'farmAtticSlopeWide',
+    name: 'Attic Roof Slope',
+    description:
+      'The underside of a farmhouse roof from inside ' +
+      '(DRAFT, 2026-11-01): boards and rafters, wide ' +
+      'depth, on the roof\u2019s own line.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['oldfieldRise'],
+    mesh: { shape: 'stone', color: 0x66543c, extraColor: 0x59422a, baseY: 0 },
+  },
+  {
+    id: 'farmAtticKneeWall',
+    kind: 'farmAtticKneeWall',
+    name: 'Attic Knee Wall',
+    description:
+      'The short wall where an attic\u2019s slope meets ' +
+      'its floor (DRAFT, 2026-11-01).',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['oldfieldRise'],
+    mesh: { shape: 'stone', color: 0x77644c, extraColor: 0x59422a, baseY: 0.55 },
+  },
+  {
+    id: 'farmAtticCollarBeam',
+    kind: 'farmAtticCollarBeam',
+    name: 'Attic Collar Beam',
+    description:
+      'A beam tying an attic\u2019s slopes (DRAFT, ' +
+      '2026-11-01), narrow span — duck under it.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['oldfieldRise'],
+    mesh: { shape: 'stone', color: 0x6e5136, extraColor: 0x59422a, baseY: 0 },
+  },
+  {
+    id: 'farmAtticCollarBeamWide',
+    kind: 'farmAtticCollarBeamWide',
+    name: 'Attic Collar Beam',
+    description:
+      'A beam tying an attic\u2019s slopes (DRAFT, ' +
+      '2026-11-01), wide span — duck under it.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['oldfieldRise'],
+    mesh: { shape: 'stone', color: 0x6e5136, extraColor: 0x59422a, baseY: 0 },
+  },
+  {
+    id: 'farmDormer',
+    kind: 'farmDormer',
+    name: 'Dormer',
+    description:
+      'A dormer breaking an attic slope (DRAFT, ' +
+      '2026-11-01), with its small window — the light ' +
+      'in an under-roof room.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['oldfieldRise'],
+    mesh: { shape: 'stone', color: 0x77644c, extraColor: 0x201812, baseY: 0 },
+  },
+  {
+    id: 'farmAtticDoor',
+    kind: 'farmAtticDoor',
+    name: 'Attic Door',
+    description:
+      'The door at the stair head (DRAFT, 2026-11-01) — ' +
+      'the mouth between the house and its upstairs.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['oldfieldRise'],
+    mesh: { shape: 'stone', color: 0x6e5136, extraColor: 0x3d2c1c, baseY: 0 },
+  },
+  {
+    id: 'farmGableEndWindow',
+    kind: 'farmGableEndWindow',
+    name: 'Farmhouse Gable',
+    description:
+      'A farmhouse gable with a small window under the ' +
+      'peak (DRAFT, 2026-11-01), narrow span.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['oldfieldRise'],
+    mesh: { shape: 'stone', color: 0x7a6248, extraColor: 0x201812, baseY: 0 },
+  },
+  {
+    id: 'farmGableEndWideWindow',
+    kind: 'farmGableEndWideWindow',
+    name: 'Farmhouse Gable',
+    description:
+      'A farmhouse gable with a small window under the ' +
+      'peak (DRAFT, 2026-11-01), wide span.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['oldfieldRise'],
+    mesh: { shape: 'stone', color: 0x7a6248, extraColor: 0x201812, baseY: 0 },
+  },
   {
     id: 'hearthStone',
     kind: 'hearthStone',

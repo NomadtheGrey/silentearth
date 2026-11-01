@@ -1461,6 +1461,100 @@ export function buildKindGeometry(spec: MeshSpec, kind: ScatterKind): THREE.Buff
       part(cyl(0.05, 0.06, 0.09, 6), shade(c, 0.9), { p: [0.58, 0.03, -0.42], r: [0.4, 0, 0.2] }),
     ]);
   }
+  // Kind overrides (the ATTIC interior bricks, 2026-11-01
+  // — the under-roof room in the zone's local frame).
+  if (kind === 'farmAtticSlope' || kind === 'farmAtticSlopeWide') {
+    // The roof slab's own numbers, read from inside:
+    // same slope line (the marriage is probe-asserted
+    // against the landed farmRoofSlab geometry), the
+    // panel a touch thinner, two rafter strips hanging
+    // below it. Authored on the -Z side; the zone seats
+    // the +Z side by rotY pi, as outside.
+    const wide = kind === 'farmAtticSlopeWide';
+    const slabLen = wide ? 5.0 : 3.47;
+    const cy = wide ? 1.47 : 1.03;
+    const cz = wide ? -2.015 : -1.39;
+    return merge([
+      part(box(FARM_SEGMENT_M, 0.07, slabLen), c, { p: [0, cy, cz], r: [-0.62, 0, 0] }),
+      part(box(0.1, 0.12, slabLen - 0.1), e, { p: [-0.8, cy - 0.09, cz + 0.02], r: [-0.62, 0, 0] }),
+      part(box(0.1, 0.12, slabLen - 0.1), e, { p: [0.8, cy - 0.09, cz + 0.02], r: [-0.62, 0, 0] }),
+    ]);
+  }
+  if (kind === 'farmAtticKneeWall') {
+    // The short wall where slope meets floor: boards,
+    // a cap rail, a base rail — one segment long, 1.1
+    // high, finished both faces (a single slab reads
+    // the same from either side in this register).
+    return merge([
+      part(box(FARM_SEGMENT_M, 1.1, 0.12), c),
+      part(box(FARM_SEGMENT_M, 0.08, 0.18), shade(c, 1.1), { p: [0, 0.51, 0] }),
+      part(box(FARM_SEGMENT_M, 0.08, 0.18), shade(c, 0.85), { p: [0, -0.51, 0] }),
+    ]);
+  }
+  if (kind === 'farmAtticCollarBeam' || kind === 'farmAtticCollarBeamWide') {
+    // The beam tying the slopes, width family like the
+    // gables: origin at the beam's center, a king post
+    // rising to the ridge (taller in the wide house,
+    // whose ridge stands higher).
+    const wide = kind === 'farmAtticCollarBeamWide';
+    const w = wide ? 7.5 : 5.0;
+    return merge([
+      part(box(0.16, 0.2, w - 0.3), c),
+      wide
+        ? part(box(0.14, 1.35, 0.14), shade(c, 0.9), { p: [0, 0.78, 0] })
+        : part(box(0.14, 0.5, 0.14), shade(c, 0.9), { p: [0, 0.35, 0] }),
+    ]);
+  }
+  if (kind === 'farmDormer') {
+    // A dormer breaking the slope: two cheeks, a front
+    // face with the window (extraColor dark — the light
+    // read is the zone's placement, never an emissive),
+    // a sill, a small sloped cap.
+    return merge([
+      part(box(0.06, 0.85, 0.95), c, { p: [-0.42, 0.42, 0] }),
+      part(box(0.06, 0.85, 0.95), c, { p: [0.42, 0.42, 0] }),
+      part(box(0.9, 0.85, 0.06), shade(c, 1.05), { p: [0, 0.42, 0.48] }),
+      part(box(0.5, 0.55, 0.05), e, { p: [0, 0.45, 0.52] }),
+      part(box(0.6, 0.06, 0.1), shade(c, 0.85), { p: [0, 0.14, 0.52] }),
+      part(box(1.0, 0.06, 1.1), shade(c, 0.85), { p: [0, 0.92, 0], r: [-0.18, 0, 0] }),
+    ]);
+  }
+  if (kind === 'farmAtticDoor') {
+    // THE MOUTH: frame and a closed door at the stair
+    // head — the visible seat both lanes agreed on; the
+    // transition through it is the zone's business.
+    return merge([
+      part(box(0.1, 2.1, 0.14), shade(c, 0.85), { p: [-0.47, 1.05, 0] }),
+      part(box(0.1, 2.1, 0.14), shade(c, 0.85), { p: [0.47, 1.05, 0] }),
+      part(box(1.04, 0.12, 0.14), shade(c, 0.85), { p: [0, 2.08, 0] }),
+      part(box(0.84, 1.98, 0.06), shade(c, 0.95), { p: [0, 0.99, 0] }),
+      part(box(0.05, 0.05, 0.06), e, { p: [0.32, 1.0, 0.05] }),
+      part(box(1.04, 0.05, 0.2), shade(c, 0.8), { p: [0, 0.025, 0] }),
+    ]);
+  }
+  if (kind === 'farmGableEndWindow' || kind === 'farmGableEndWideWindow') {
+    // The gable family's window variants: the plain
+    // twin's prism and brace, plus a small window on
+    // the outer face under the peak (the attic's light
+    // at the ends). Sites flip the far end, which turns
+    // the windowed face outward there too.
+    const w = kind === 'farmGableEndWindow' ? 5.0 : 7.5;
+    const peak = (w / 2) * Math.tan(0.62);
+    const shape = new THREE.Shape();
+    shape.moveTo(-w / 2, 0);
+    shape.lineTo(w / 2, 0);
+    shape.lineTo(0, peak);
+    shape.closePath();
+    const gable = new THREE.ExtrudeGeometry(shape, { depth: 0.3, bevelEnabled: false });
+    gable.rotateY(Math.PI / 2);
+    gable.translate(-0.15, 0, 0);
+    return merge([
+      part(gable, c),
+      part(box(0.34, 0.12, w - 0.4), shade(c, 0.85), { p: [0, 0.5, 0] }),
+      part(box(0.05, 0.6, 0.48), e, { p: [0.16, peak * 0.5, 0] }),
+      part(box(0.05, 0.07, 0.58), shade(c, 0.8), { p: [0.16, peak * 0.5 + 0.34, 0] }),
+    ]);
+  }
   if (kind === 'pumpShed') {
     return merge([
       part(box(2.6, 2.1, 2.0), c),
