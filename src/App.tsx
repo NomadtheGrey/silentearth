@@ -3274,6 +3274,16 @@ export default function App() {
   // world (Systems' save shape, serialize defaults it
   // false for old documents).
   const [journalLinked, setJournalLinked] = useState(false);
+  // THE LINK FLAG'S REF (parity rider, 2026-11-01):
+  // saveNow builds its document from render-scope state,
+  // so the Linking act's own save — and any flush bound
+  // to an older closure, the pagehide flush included —
+  // wrote the flag's PREVIOUS value: the link read
+  // linked in-session and was gone after every reload,
+  // on stumps exactly as on placed altars. The ref is
+  // the save's source (the questFlagsRef pattern); the
+  // state still drives the renders.
+  const journalLinkedRef = useRef(false);
   const [, setRitualVersion] = useState(0);
   const refreshRitual = () => {
     setRitualVersion((version) => version + 1);
@@ -3559,8 +3569,10 @@ export default function App() {
           // Without this, upgrades vanish on reload.
           stumps: stumpState.snapshot(),
           // JOURNAL LINK FLAG rides every save (Systems'
-          // shape; false until the Linking act sets it).
-          journalLinked,
+          // shape; false until the Linking act sets it) —
+          // read from the ref (see the flag's declaration):
+          // a render-scope read here wrote the stale value.
+          journalLinked: journalLinkedRef.current,
           // DIMENSION VISIT (cave close-out, 2026-10-30):
           // the visit a save is written in, from
           // dimensionState's snapshot — {key, mouthId}
@@ -4605,7 +4617,8 @@ export default function App() {
         // JOURNAL LINK FLAG restore (altar transformation,
         // 2026-10-30): old saves carry no flag and read
         // false — the Linking simply offers itself again.
-        setJournalLinked(bootSaved.journalLinked === true);
+        journalLinkedRef.current = bootSaved.journalLinked === true;
+        setJournalLinked(journalLinkedRef.current);
         // WORLD-STATE SAVE WIRING (fires + harvest, same
         // restore-before-first-build pattern): fireState.
         // restore() is silent and REPLACES the old placeFire
@@ -4666,6 +4679,16 @@ export default function App() {
               id: altar.id as string,
               x: altar.x,
               z: altar.z,
+              // PARITY PERSISTENCE (2026-11-01): the
+              // consecration additions ride the boot map
+              // too — SavedAltar carries them and
+              // altarState.restore validates them, but
+              // this map dropped them, so a placed
+              // altar's consecration evaporated on
+              // reload while the save file kept it.
+              ...(altar.additions
+                ? { additions: [...altar.additions] }
+                : {}),
             })),
         );
         // PLACED-DESK SAVE WIRING (same restore-before-
@@ -5981,6 +6004,26 @@ export default function App() {
   // input, built once and read by both evaluateQuests
   // (the log) and questComponentsFor (the card) so the
   // two surfaces can never disagree about the world.
+  // THE ALTAR BASES (parity, 2026-11-01 — Adam: 'Both
+  // types of altars should work the same'): every base's
+  // additions, stump or placed, read once for the facts
+  // below. Progress between bases compares by step
+  // count (the steps seat in order, so the longest
+  // record is the furthest along).
+  const altarBasesAdditions: readonly string[][] = [
+    ...stumpState.snapshot().map((stump) => stump.additions),
+    ...altarState.snapshot().map((altar) => altar.additions ?? []),
+  ];
+  const mostProgressedAltarAdditions = altarBasesAdditions.reduce<
+    readonly string[]
+  >(
+    (best, additions) =>
+      additions.length > best.length ? additions : best,
+    [],
+  );
+  const anyAltarConsecrated = altarBasesAdditions.some((additions) =>
+    isStumpyAltar(additions),
+  );
   const questFacts: QuestFacts | undefined = inventory
     ? {
         inventory,
@@ -5994,12 +6037,18 @@ export default function App() {
         })),
         placedTorches: torchState.snapshot().length,
         flags: questFlags,
-        // THE ALTAR FACT (Systems' wiring note, consumed
-        // here by the card): any standing stumpy altar —
-        // wake-charm's road reads it mid-road.
-        altarRaised: stumpState
-          .snapshot()
-          .some((stump) => isStumpyAltar(stump.additions)),
+        // THE ALTAR FACTS (parity): a raised altar of
+        // EITHER base for wake-charm's road; the most-
+        // progressed base's additions and the any-base
+        // consecration for Raise an Altar, whose
+        // predicate (Systems' altarComplete) reads the
+        // additions through isConsecratedAltar or the
+        // consecrated flag — pre-parity the shell fed
+        // neither, so the quest could not complete
+        // from the shell on any base.
+        altarRaised: anyAltarConsecrated,
+        altarAdditions: mostProgressedAltarAdditions,
+        altarConsecrated: anyAltarConsecrated,
         // THE AWAKENINGS COUNT (Systems' latch chunk):
         // how many Wakings stand recorded — wake-charm
         // reads flag OR count, so a completed rite stays
@@ -7612,13 +7661,16 @@ export default function App() {
       setRitualNote('No site there.');
       return;
     }
+    // BASE-BLIND (parity): the site's additions resolve
+    // from whichever record holds the base — the stump's
+    // by position, the placed altar's by its entity id.
     const additions: readonly string[] =
       site.kind === 'stump'
         ? (stumpState
             .snapshot()
             .find((record) => record.x === site.x && record.z === site.z)
             ?.additions ?? [])
-        : [];
+        : (altarState.get(siteId)?.additions ?? []);
     if (actId === 'link-journal') {
       const outcome = linkJournal(
         inventory,
@@ -7629,6 +7681,7 @@ export default function App() {
         setRitualNote(altarActVoice(outcome.reason));
         return;
       }
+      journalLinkedRef.current = true;
       setJournalLinked(true);
       setRitualNote('The books are linked.');
       saveNow();
@@ -7646,14 +7699,34 @@ export default function App() {
       setRitualNote(altarActVoice(outcome.reason));
       return;
     }
-    for (const addition of outcome.additions) {
-      stumpState.applyAddition(site.x, site.z, addition as StumpAddition);
+    // The grants return the shared step members
+    // ('altar-stones' / 'altar-glyph' / 'altar-candle'),
+    // which are exactly each base's own record dialect:
+    // the stump applies them one by one; the placed
+    // altar seats the widened record whole (altarState
+    // validates the members at the setter).
+    if (site.kind === 'stump') {
+      for (const addition of outcome.additions) {
+        stumpState.applyAddition(site.x, site.z, addition as StumpAddition);
+      }
+    } else {
+      altarState.setAdditions(siteId, [
+        ...additions,
+        ...outcome.additions,
+      ]);
     }
+    // The feed lines name the base she worked on (the
+    // altar's pair DRAFT for Adam's pin pass; the
+    // candle line already read both ways).
     setRitualNote(
       actId === 'place-stones'
-        ? 'The stones ring the stump.'
+        ? site.kind === 'stump'
+          ? 'The stones ring the stump.'
+          : 'The stones ring the altar.'
         : actId === 'draw-glyph'
-          ? 'The glyph darkens the bark.'
+          ? site.kind === 'stump'
+            ? 'The glyph darkens the bark.'
+            : 'The glyph is cut into the slab.'
           : 'The candle stands lit. This is an altar now.',
     );
     refreshInventory();
@@ -9523,7 +9596,10 @@ export default function App() {
               record.x === selectedSitePosition.x &&
               record.z === selectedSitePosition.z,
           )?.additions ?? [])
-      : [];
+      : selectedSitePosition?.kind === 'altar' &&
+          selectedSiteId !== null
+        ? (altarState.get(selectedSiteId)?.additions ?? [])
+        : [];
   const selectedSiteProgress = altarProgressFrom(selectedSiteAdditions);
   const selectedSiteGrade =
     selectedSitePosition === null
@@ -9638,7 +9714,10 @@ export default function App() {
               record.x === contextSitePosition.x &&
               record.z === contextSitePosition.z,
           )?.additions ?? [])
-      : [];
+      : contextSitePosition?.kind === 'altar' &&
+          craftContextSiteId !== null
+        ? (altarState.get(craftContextSiteId)?.additions ?? [])
+        : [];
   const contextSiteProgress = altarProgressFrom(contextSiteAdditions);
   const contextSiteGrade =
     contextSitePosition === null
@@ -9692,16 +9771,28 @@ export default function App() {
   // digit dispatch reads the SAME list the panel
   // renders. The makings at a stump live in the CONTEXT
   // acts list (the fold — stumps no longer select, so
-  // this selected list never sees one); here, at an
-  // altar site: while the books are unlinked and the
-  // ground is altar-grade (grade 2 — a made Altar; a
-  // Stumpy Altar reaches the same act through the
-  // context list), the Linking.
+  // this selected list never sees one); at a PLACED
+  // altar they live HERE (parity, 2026-11-01): the
+  // altar's own panel is its door, the same three steps
+  // in the same order, off the same progress reading.
+  // And at either altar at grade 2, while the books are
+  // unlinked, the Linking.
   const selectedSiteActs: { id: string; label: string }[] = (() => {
     if (selectedSiteId === null || selectedSitePosition === null) {
       return [];
     }
     const acts: { id: string; label: string }[] = [];
+    if (selectedSitePosition.kind === 'altar') {
+      if (!selectedSiteProgress.stones) {
+        acts.push({ id: 'place-stones', label: 'Place the Stones' });
+      }
+      if (!selectedSiteProgress.glyph) {
+        acts.push({ id: 'draw-glyph', label: 'Draw the Glyph' });
+      }
+      if (!selectedSiteProgress.candle) {
+        acts.push({ id: 'set-candle', label: 'Set the Candle' });
+      }
+    }
     if (selectedSiteGrade === 2 && !journalLinked) {
       acts.push({ id: 'link-journal', label: 'Link the Journal' });
     }
