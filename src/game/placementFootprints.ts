@@ -46,6 +46,13 @@
  * - writing desk: the desk top, 1.2 x 0.65 (models.ts
  *   buildDeskGroup header measurement).
  * - tent: the renderer's A-frame, 1.4 wide x 2.0 long.
+ * - traps: the renderer's trapMarker bases (the placed
+ *   type IS the item id for all five) — the snare's loop
+ *   (r 0.18) + its stakes at ±0.2 -> r 0.25; the weir
+ *   basket's rim r 0.28 -> r 0.3; the pot r 0.22 -> r 0.25;
+ *   the pitfall's dug disc + moss ring, outer r 0.5; the
+ *   deadfall's log, 0.9 long, under its stone -> a rect
+ *   0.9 x 0.35.
  */
 
 import { HOUSE_DEFS, type HouseType } from './shelter';
@@ -81,6 +88,11 @@ const FOOTPRINTS: Record<string, PlacementFootprint> = {
   altar: { shape: 'circle', r: 0.55 },
   'writing-desk': { shape: 'rect', w: 1.2, d: 0.65 },
   tent: { shape: 'rect', w: 1.4, d: 2.0 },
+  snare: { shape: 'circle', r: 0.25 },
+  'fish-weir-trap': { shape: 'circle', r: 0.3 },
+  'pot-trap': { shape: 'circle', r: 0.25 },
+  pitfall: { shape: 'circle', r: 0.5 },
+  deadfall: { shape: 'rect', w: 0.9, d: 0.35 },
 };
 
 /** House item ids (Systems' spellings) -> their defs. */
