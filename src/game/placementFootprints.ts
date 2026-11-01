@@ -17,6 +17,13 @@
  * absent on purpose: it is object-targeted on its faced
  * hearth, never ground-placed.
  *
+ * FRESH PLACEMENTS ONLY (Adam, 2026-11-01): the outline
+ * follows the thing's own base shape, 'round or
+ * rectangular as the case may be' — the thatch hut's
+ * round paint is the ruling's own example. UPGRADES take
+ * no placement surface at all ('it should just
+ * upgrade'): this table never grows an upgrade case.
+ *
  * SOURCES (each entry cites its def/builder; all values
  * DRAFT for Adam's pin pass — if a mesh and its def
  * disagree, the DEF is the authority the outline reads,
