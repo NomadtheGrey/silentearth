@@ -29,21 +29,26 @@
  * from the revealed state just cancels the reveal (no
  * module call), and OFF from truly-on rides the
  * caller's turnOff path as before.
- * ADOPT (2026-10-31, Adam: "let's get the words
- * first"): a device that HAS words can switch identity
- * to words he already has (onAdoptWords — the module's
- * adoptWords; the wordless case already had the enter
- * door). The flow is form → confirm → call: the
- * confirm step shows both word sets with the honesty
- * block (saves under the old words stay on that shelf;
- * switching moves nothing; switching alone copies
- * nothing — all copy DRAFT for Adam's pin pass).
- * Adoption leaves mirroring HELD (sync.mirrorHeld):
- * the sync line then states it plainly beside the
- * deliberate arm button (onArmMirroring); a bring or
- * restore applied under the adopted identity arms
- * automatically on the caller's side. No generation
- * happens anywhere in this flow.
+ * ADOPT — RETIRED (Adam, 2026-11-01: "We'll allow
+ * word changing later so we don't confuse the
+ * works"): the switch-identity door that stood here
+ * from 2026-10-31 is GONE from the panel; changing
+ * words is a permitted FUTURE feature, designed
+ * separately. The module's adoption entry points
+ * stay on Systems' side — only the door retired.
+ * The adoption HOLD retired with it (Adam: the
+ * timestamp guard and matching words are
+ * sufficient): sync.mirrorHeld is hardcoded false
+ * module-side, so the held block + arm button that
+ * rendered here were unreachable dead code.
+ * THE UNGATE (the rework's opening pass, 2026-11-01):
+ * the words section keys on WORDS, not on enabled —
+ * words belong to the save and are always viewable;
+ * the park block inside the same section is a LOCAL
+ * save and its door is no longer cloud-gated either.
+ * Turning cloud back ON from here re-enables with
+ * the device's own stored words (the caller's
+ * turnOn — the module's only enable write).
  * Sync mapping: enabled + mirrored ok → 'Synced';
  * enabled + never mirrored → 'Will sync on next save';
  * enabled + last mirror failed unreachable → 'Will sync
@@ -73,11 +78,10 @@ export interface CloudSyncDisplay {
   enabled: boolean;
   wordsStored: boolean;
   lastMirror: { at: number; ok: boolean; reason?: string } | null;
-  /** Adoption hold (2026-10-31): true while mirroring
-    is disarmed after adopting words, until a deliberate
-    arm (button, or a bring/restore applied under the
-    adopted identity on the caller's side). Optional —
-    sync objects from before the field read as unheld. */
+  /** RETIRED with the adoption hold (2026-11-01):
+    the module hardcodes this false; the panel no
+    longer reads it. Kept in the type because the
+    caller's sync objects still carry the field. */
   mirrorHeld?: boolean;
 }
 
@@ -93,17 +97,6 @@ export interface CloudSavePanelProps {
   onToggle: (on: boolean) => void;
   onGenerateWords: () => void;
   onEnterWords: (input: string) => void;
-  /** Adopt-existing-words (2026-10-31): switch this
-    device's cloud identity to the entered words. The
-    caller validates (a word off the list refuses
-    plainly and changes nothing) and, on success,
-    re-points the identity display + this list to the
-    adopted shelf. */
-  onAdoptWords: (input: string) => void;
-  /** The deliberate arm (2026-10-31): start copying
-    this device's world to the current shelf after an
-    adoption hold. */
-  onArmMirroring: () => void;
   onRefreshList: () => void;
   onBringHere: (slot: string) => void;
   /** Load-from-cloud door (2026-10-29): the typed-words
@@ -139,8 +132,6 @@ export function CloudSavePanel({
   onToggle,
   onGenerateWords,
   onEnterWords,
-  onAdoptWords,
-  onArmMirroring,
   onRefreshList,
   onBringHere,
   loadSaves,
@@ -167,13 +158,6 @@ export function CloudSavePanel({
   const shownOn = sync.enabled || reveal;
   const [showEnter, setShowEnter] = useState(false);
   const [enterInput, setEnterInput] = useState('');
-  // Adopt flow (2026-10-31): form → confirm → call.
-  // adoptPending holds the typed input between the
-  // form's submit and the confirm's decision; the
-  // caller is only called from the confirm.
-  const [showAdopt, setShowAdopt] = useState(false);
-  const [adoptInput, setAdoptInput] = useState('');
-  const [adoptPending, setAdoptPending] = useState(false);
   const [loadInput, setLoadInput] = useState('');
   const [showWords, setShowWords] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -318,7 +302,12 @@ export function CloudSavePanel({
         </div>
       ) : null}
 
-      {sync.enabled && words !== null ? (
+      {/* THE UNGATE (2026-11-01): this section keys on
+        WORDS alone — it stands while cloud is off,
+        because the words belong to the save, the park
+        is a local save, and neither may be gated
+        behind the mirroring switch. */}
+      {words !== null ? (
         <div className="flex flex-col gap-2">
           <button
             type="button"
@@ -362,112 +351,12 @@ export function CloudSavePanel({
             </div>
           ) : null}
 
-          {sync.mirrorHeld === true ? (
-            <div className="flex flex-col gap-2">
-              <p className="text-xs opacity-70">
-                This device isn&rsquo;t copying its world to this
-                shelf yet.
-              </p>
-              <button
-                type="button"
-                className={buttonClass + ' self-start'}
-                disabled={busy}
-                onClick={onArmMirroring}
-              >
-                Start copying this device&rsquo;s world here
-              </button>
-            </div>
-          ) : (
-            <p className="text-xs opacity-70">{syncLine}</p>
-          )}
+          {/* The held block + arm button retired with
+            the hold itself (2026-11-01) — the sync line
+            renders directly, and while cloud is off it
+            reads 'Cloud off', which is the plain truth. */}
+          <p className="text-xs opacity-70">{syncLine}</p>
 
-          <div className="flex flex-col gap-2 border-t border-moss-deep pt-3">
-            {!showAdopt ? (
-              <button
-                type="button"
-                className={buttonClass + ' self-start'}
-                disabled={busy}
-                onClick={() => setShowAdopt(true)}
-              >
-                Use words I already have
-              </button>
-            ) : adoptPending ? (
-              <div className="flex flex-col gap-2">
-                <p className="text-sm font-semibold">
-                  Switch this device&rsquo;s cloud words?
-                </p>
-                <p className="text-xs opacity-80">
-                  Now: {words.join(' ')}
-                  <br />
-                  To:{' '}
-                  {adoptInput.trim().split(/\s+/).join(' ')}
-                </p>
-                <p className="text-xs opacity-80">
-                  Saves copied under your current words stay on
-                  that shelf — switching does not move them.
-                  Switching alone doesn&rsquo;t copy this
-                  device&rsquo;s world anywhere. You can switch
-                  back any time by entering those words here.
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    className={buttonClass}
-                    disabled={busy}
-                    onClick={() => {
-                      onAdoptWords(adoptInput);
-                      setAdoptPending(false);
-                      setShowAdopt(false);
-                      setAdoptInput('');
-                    }}
-                  >
-                    Switch to these words
-                  </button>
-                  <button
-                    type="button"
-                    className={buttonClass}
-                    disabled={busy}
-                    onClick={() => setAdoptPending(false)}
-                  >
-                    Back
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <form
-                className="flex flex-col gap-2"
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  setAdoptPending(true);
-                }}
-              >
-                <input
-                  value={adoptInput}
-                  onChange={(e) => setAdoptInput(e.target.value)}
-                  placeholder="word word word"
-                  aria-label="Three cloud words to switch to"
-                  className={inputClass}
-                />
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    type="submit"
-                    className={buttonClass}
-                    disabled={busy}
-                  >
-                    Use these words
-                  </button>
-                  <button
-                    type="button"
-                    className={buttonClass}
-                    disabled={busy}
-                    onClick={() => setShowAdopt(false)}
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </form>
-            )}
-          </div>
 
           <div className="flex flex-col gap-2">
             <label className="text-xs opacity-70">
@@ -508,7 +397,15 @@ export function CloudSavePanel({
             </button>
           </div>
           {saves.length === 0 && !busy ? (
-            <p className="text-xs opacity-70">No cloud saves found.</p>
+            // TWO CASES (Adam's ruling, 2026-11-01): words
+            // that match nothing on the shelf mean this is
+            // a NEW shelf — say so plainly, never as an
+            // absence. Copy DRAFT for the pin pass.
+            <p className="text-xs opacity-70">
+              Nothing on this shelf yet — it is a new shelf.
+              Your next save will copy this world to it for
+              the first time.
+            </p>
           ) : null}
           {saves.map((row) => (
             <div key={row.slot} className="flex flex-col gap-1">

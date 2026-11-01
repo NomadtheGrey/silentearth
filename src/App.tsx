@@ -1849,7 +1849,6 @@ import {
 } from './systems/save';
 import {
   CLOUD_BASE_URL,
-  adoptWords,
   adoptWordSet,
   armMirror,
   bringHere,
@@ -4063,8 +4062,30 @@ export default function App() {
       refreshCloudState();
       return;
     }
-    // Reveal only: no module call until words are chosen
-    // (opt-in completes via turnOn/enterWords).
+    // THE RE-ENABLE DOOR (the ungate pass, 2026-11-01):
+    // a device HOLDING words turns truly back on here —
+    // turnOn with the device's own stored words is the
+    // module's only enable write, and without this call
+    // the toggle was reveal-only forever (the
+    // diagnosis's CRITICAL: the only road back in was a
+    // cloud load's adoption side effect, wearing the
+    // BROUGHT words). A wordless device stays
+    // reveal-only: its opt-in completes via
+    // turnOn/enterWords when words are chosen.
+    const held = getWords();
+    if (held !== null) {
+      const res = turnOn(held);
+      if (!res.ok) {
+        setCloudNote(
+          res.reason ?? 'Could not turn cloud back on.',
+        );
+        return;
+      }
+      setCloudNote(null);
+      refreshCloudState();
+      void refreshCloudList();
+      return;
+    }
     setCloudNote(null);
   };
 
@@ -4100,45 +4121,13 @@ export default function App() {
     void refreshCloudList();
   };
 
-  // ADOPT EXISTING WORDS (Adam, 2026-10-31: "let's get
-  // the words first"): switch this device's identity to
-  // words he already has. Validation is the module's —
-  // a refusal shows plainly and changes nothing. On
-  // success the identity display + the cloud list
-  // re-point to the ADOPTED shelf (refreshCloudList
-  // reads the stored words, which are now the adopted
-  // ones), so he immediately sees what's on it.
-  // Adoption never mirrors: the module holds mirroring
-  // until a deliberate arm (DEV ruling, 2026-10-31).
-  // Copy is DRAFT for Adam's pin pass.
-  const handleCloudAdoptWords = (input: string) => {
-    const res = adoptWords(input);
-    if (res.ok === false) {
-      setCloudNote(res.reason ?? 'Could not switch words.');
-      return;
-    }
-    setCloudNote(
-      'Now using these words — you are looking at that shelf.',
-    );
-    refreshCloudState();
-    void refreshCloudList();
-  };
-
-  // The deliberate arm after an adoption hold: copying
-  // resumes for the current shelf. A manual sync does
-  // NOT clear the hold (by design) — this button is the
-  // only panel path that arms.
-  const handleArmMirroring = () => {
-    const res = armMirror();
-    if (res.ok === false) {
-      setCloudNote(res.reason ?? 'Could not start copying.');
-      return;
-    }
-    setCloudNote(
-      'Copying is on — this device will copy its world to this shelf when it saves.',
-    );
-    refreshCloudState();
-  };
+  // RETIRED (2026-11-01): handleCloudAdoptWords and
+  // handleArmMirroring — the adopt door and the arm
+  // button left the panel with Adam's rulings (word
+  // changing is a future feature, designed separately;
+  // the hold itself was retired for the timestamp
+  // guard). armMirror still runs on the restore path
+  // below, where a deliberate application arms copying.
 
   const runCloudBring = async (
     slot: string,
@@ -4384,8 +4373,6 @@ export default function App() {
     onToggle: handleCloudToggle,
     onGenerateWords: handleCloudGenerateWords,
     onEnterWords: handleCloudEnterWords,
-    onAdoptWords: handleCloudAdoptWords,
-    onArmMirroring: handleArmMirroring,
     onRefreshList: () => {
       void refreshCloudList();
     },
