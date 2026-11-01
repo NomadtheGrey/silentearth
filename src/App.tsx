@@ -1672,7 +1672,8 @@ import {
   setCatBond,
   type CatCatchTable,
 } from './game/catRuntime';
-import { installGuideProbes } from './game/guideRuntime';
+import { guideTagSeat, installGuideProbes } from './game/guideRuntime';
+import { discFeaturesInRect } from './game/discs';
 import { installTrustFacts } from './game/trustMarkers';
 import {
   collectTrapCatch,
@@ -1692,7 +1693,11 @@ import { fillJar, dumpJar } from './systems/clay-jar';
 import { placeTent, pickupTent } from './systems/camping';
 import { harvestHoney } from './systems/honey';
 import { harvestState } from './game/harvestState';
-import { SOURCE_BY_ID, type ToolTier } from './game/objects';
+import {
+  SOURCE_BY_ID,
+  SOURCE_FOR_KIND,
+  type ToolTier,
+} from './game/objects';
 import type { FireType } from './game/fire';
 import { FLINT_CLICKS, FRICTION_WAIT_MS } from './game/fire';
 import {
@@ -2379,6 +2384,13 @@ function formatLb(pounds: number): string {
  * This constant stays the single point that decides it.
  */
 const TITLE_WEIGHT_UNIT = 'lb';
+
+// TAG RANGES (tag claim, 2026-11-01 — DRAFT for Adam's
+// pin pass): the ground tag and the trap tag read at
+// the creature tag's cap (AnimalTag's TAG_RANGE_M) —
+// one reading distance for every name in the world.
+const GROUND_TAG_RANGE_M = 32;
+const TRAP_TAG_RANGE_M = 32;
 
 /**
  * One inventory row's title-row meta (the one-liner that
@@ -13111,6 +13123,95 @@ export default function App() {
     }
     return best;
   })();
+
+  // THE GROUND TAG (tag claim, 2026-11-01 — the TAG
+  // LAW: anything visible names itself when faced;
+  // mystery only where designed): the flat ground
+  // discs name themselves. Derivation: Background's
+  // disc query around her — FEET-IN-DISC FIRST (a
+  // disc she stands in names itself regardless of
+  // facing), else the nearest FACED disc centre
+  // (winner cone) inside the range cap. The name is
+  // the def's own (SOURCE_FOR_KIND — 'Ash', 'Pond',
+  // 'Silt Bed'...), never a coined table; the plate
+  // sits at the disc centre, painted by the same
+  // StructureTag plate the singulars use. Dimension
+  // gens answer truthfully through the query (cave
+  // pools name themselves underground).
+  const groundTag = ((): { name: string; x: number; y: number } | null => {
+    const player = playerRef.current;
+    if (!player) return null;
+    const gen = genRef.current;
+    if (!gen) return null;
+    const features = discFeaturesInRect(gen, {
+      minX: player.x - GROUND_TAG_RANGE_M,
+      maxX: player.x + GROUND_TAG_RANGE_M,
+      minZ: player.z - GROUND_TAG_RANGE_M,
+      maxZ: player.z + GROUND_TAG_RANGE_M,
+    });
+    const forwardX = Math.sin(player.facing);
+    const forwardZ = Math.cos(player.facing);
+    let inDisc: { name: string; x: number; z: number } | null = null;
+    let inDistance = Infinity;
+    let facedBest: { name: string; x: number; z: number } | null = null;
+    let facedDistance = Infinity;
+    for (const feature of features) {
+      const name = SOURCE_FOR_KIND[feature.kind]?.name;
+      if (!name) continue;
+      const dx = feature.x - player.x;
+      const dz = feature.z - player.z;
+      const distance = Math.hypot(dx, dz);
+      if (distance <= feature.r) {
+        if (distance < inDistance) {
+          inDisc = { name, x: feature.x, z: feature.z };
+          inDistance = distance;
+        }
+        continue;
+      }
+      if (distance > GROUND_TAG_RANGE_M || distance >= facedDistance) continue;
+      const faced =
+        distance < 1 ||
+        (dx * forwardX + dz * forwardZ) / distance > Math.SQRT1_2;
+      if (!faced) continue;
+      facedBest = { name, x: feature.x, z: feature.z };
+      facedDistance = distance;
+    }
+    const pick = inDisc ?? facedBest;
+    if (!pick) return null;
+    const anchor = projectAnchor(pick.x, pick.z, 'scatter');
+    if (!anchor) return null;
+    return { name: pick.name, x: anchor.x, y: anchor.y };
+  })();
+
+  // THE TRAP TAG (tag claim): a placed trap names
+  // itself when faced — TRAP_DEFS' own name, display
+  // only — at reading distance, beyond the winner
+  // row's leash. The trap the row already names is
+  // suppressed here (one name per thing).
+  const trapTag = ((): { name: string; x: number; y: number } | null => {
+    const player = playerRef.current;
+    if (!player) return null;
+    const forwardX = Math.sin(player.facing);
+    const forwardZ = Math.cos(player.facing);
+    let best: { name: string; x: number; y: number } | null = null;
+    let bestDistance = Infinity;
+    for (const trap of traps) {
+      if (presentedTrap?.id === trap.id) continue;
+      const dx = trap.x - player.x;
+      const dz = trap.z - player.z;
+      const distance = Math.hypot(dx, dz);
+      if (distance > TRAP_TAG_RANGE_M || distance >= bestDistance) continue;
+      const faced =
+        distance < 1 ||
+        (dx * forwardX + dz * forwardZ) / distance > Math.SQRT1_2;
+      if (!faced) continue;
+      const anchor = projectAnchor(trap.x, trap.z, 'scatter');
+      if (!anchor) continue;
+      best = { name: TRAP_DEFS[trap.type].name, x: anchor.x, y: anchor.y };
+      bestDistance = distance;
+    }
+    return best;
+  })();
   // THE JOURNAL'S ROWS (First-Fragment Presentation):
   // one row per BEGUN mark (Systems' snapshot lists
   // begun marks only — the panel invents nothing),
@@ -13507,16 +13608,40 @@ export default function App() {
             </WorldAnchor>
           </Fragment>
         ))}
-        {stumpAnchors.map(({ siteId, x, y }) => (
-          <Fragment key={siteId}>
-            <WorldAnchor x={x} y={y} interactive>
-              <AltarChip
-                label="Stump"
-                onSelect={() => openStumpContext(siteId)}
-              />
-            </WorldAnchor>
-          </Fragment>
-        ))}
+        {(() => {
+          // STUMP ROLE TAGS (Adam, 2026-11-01 — 'Tag
+          // needs fixed'): the chip names the stump's
+          // CURRENT role — a consecrated stump is
+          // 'Stumpy Altar' (the context label's
+          // altar-first precedence), a workstation
+          // stump 'Stumpy Workstation', a plain stump
+          // 'Stump'. Roles read live from stumpState
+          // by site id at render.
+          const stumpRecords = new Map(
+            stumpState.snapshot().map((record) => [
+              record.siteId,
+              record.additions,
+            ]),
+          );
+          return stumpAnchors.map(({ siteId, x, y }) => {
+            const additions = stumpRecords.get(siteId) ?? [];
+            const label = isStumpyAltar(additions)
+              ? 'Stumpy Altar'
+              : additions.includes('workstation')
+                ? 'Stumpy Workstation'
+                : 'Stump';
+            return (
+              <Fragment key={siteId}>
+                <WorldAnchor x={x} y={y} interactive>
+                  <AltarChip
+                    label={label}
+                    onSelect={() => openStumpContext(siteId)}
+                  />
+                </WorldAnchor>
+              </Fragment>
+            );
+          });
+        })()}
         {pileAnchors.map(({ pile, x, y }) => {
           const total = pile.stacks.reduce(
             (sum, stack) => sum + stack.quantity,
@@ -15481,7 +15606,11 @@ export default function App() {
       {!anyDialogOpen &&
       fragmentBeat === null &&
       !paused ? (
-        <StructureTag theme={lookThemes.world} tag={structureTag} />
+        <>
+          <StructureTag theme={lookThemes.world} tag={structureTag} />
+          <StructureTag theme={lookThemes.world} tag={groundTag} />
+          <StructureTag theme={lookThemes.world} tag={trapTag} />
+        </>
       ) : null}
 
       {!inventoryOpen &&
@@ -15494,7 +15623,30 @@ export default function App() {
       pendingRemoveTarget === null &&
       !paused ? (
         <AnimalTag theme={lookThemes.world}
-          getAnimals={() => rendererRef.current?.getVisibleAnimals() ?? []}
+          getAnimals={() => {
+            const animals = rendererRef.current?.getVisibleAnimals() ?? [];
+            // THE GUIDE RAVEN (tag claim): Background's
+            // seat snapshot joins the feed as a NAMED
+            // entry — the tag reads 'Raven' (Adam's
+            // word; the engine kind stays 'crow'), under
+            // the same nearest-within-range rule as
+            // every creature. Visibility (perched /
+            // flying / departing; surface only) is
+            // composed in their layer; the shell only
+            // names it.
+            const seat = guideTagSeat();
+            return seat
+              ? [
+                  ...animals,
+                  {
+                    kind: 'crow' as const,
+                    name: 'Raven',
+                    x: seat.x,
+                    z: seat.z,
+                  },
+                ]
+              : animals;
+          }}
           getPlayerPos={() => {
             const player = playerRef.current;
             return player ? { x: player.x, z: player.z } : { x: 0, z: 0 };
