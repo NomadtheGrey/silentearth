@@ -175,6 +175,7 @@ import {
   type StationContext,
 } from './crafting';
 import { WORN_CAPACITY_BONUS } from './clothes';
+import { markItemMet } from './knowledge';
 import {
   isLadderTool,
   ownedToolItem,
@@ -1078,6 +1079,7 @@ export class PersonalInventory implements CraftingInventory {
           // item in both spellings lands as ONE stack, not two.
           const id = normalizeItemId(item);
           this.stacks.set(id, (this.stacks.get(id) ?? 0) + quantity);
+          markItemMet(id);
         }
       }
     }
@@ -1138,6 +1140,7 @@ export class PersonalInventory implements CraftingInventory {
     }
     this.stacks.set(id, this.count(id) + quantity);
     this.noteGain(id);
+    markItemMet(id);
   }
 
   /**
@@ -1190,6 +1193,7 @@ export class PersonalInventory implements CraftingInventory {
     if (granted > 0) {
       this.stacks.set(id, this.count(id) + granted);
       this.noteGain(id);
+      markItemMet(id);
     }
     return { item: id, granted, remainder: quantity - granted };
   }
