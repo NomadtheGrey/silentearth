@@ -2656,9 +2656,12 @@ export const ALTAR_STONE_RING_R = 0.85;
  *    not cardinal), rounded grey, shade-varied.
  *  - 'altar-glyph': a dark glyph on the stump's face —
  *    three charcoal strokes (a stem and two arms) at
- *    mid-trunk on the +Z facet. Heading-less like every
- *    placed overlay (the record carries no rotY; tents
- *    face +Z by the same law).
+ *    mid-trunk on the +Z facet — AND the drawn design
+ *    on the top disc (2026-11-01): an eleven-stroke
+ *    ring (a gap at the candle's bearing), a flat echo
+ *    of the face mark, a center dot. Heading-less like
+ *    every placed overlay (the record carries no rotY;
+ *    tents face +Z by the same law).
  *  - 'altar-candle': buildCandle() standing on the top
  *    disc at the offset above — flame included in the
  *    build, lit as the act leaves it; the renderer adds
@@ -2697,6 +2700,40 @@ export function buildStumpDressing(additions: readonly string[]): THREE.Group {
       arm.rotation.z = s * 0.6;
       glyph.add(arm);
     }
+    // THE TOP DESIGN (Adam's queue, 2026-11-01): the same
+    // charcoal, drawn on the stump's top disc — a ring of
+    // eleven short strokes at r 0.35 (the twelfth left
+    // out at the candle's bearing: the candle stands at
+    // (ALTAR_CANDLE_X, ALTAR_CANDLE_Z) on this disc, and
+    // the design makes room for it), a flat echo of the
+    // face mark at the center (stem + two arms, laid
+    // down), and a center dot. Strokes ride 0.008 above
+    // the disc (y = STUMP_TOP_Y + 0.008, thickness 0.014)
+    // so they read as drawn, not carved.
+    const discY = STUMP_TOP_Y + 0.008;
+    const candleBearing = Math.atan2(ALTAR_CANDLE_Z, ALTAR_CANDLE_X);
+    for (let i = 0; i < 12; i++) {
+      const a = (i * Math.PI) / 6;
+      let d = Math.abs(a - candleBearing) % (Math.PI * 2);
+      if (d > Math.PI) d = Math.PI * 2 - d;
+      if (d < 0.3) continue;
+      const stroke = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.014, 0.035), charcoal);
+      stroke.position.set(Math.cos(a) * 0.35, discY, Math.sin(a) * 0.35);
+      stroke.rotation.y = -a;
+      glyph.add(stroke);
+    }
+    const flatStem = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.014, 0.3), charcoal);
+    flatStem.position.set(0, discY, -0.03);
+    glyph.add(flatStem);
+    for (const s of [-1, 1]) {
+      const flatArm = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.014, 0.19), charcoal);
+      flatArm.position.set(s * 0.05, discY, 0.07);
+      flatArm.rotation.y = s * 0.6;
+      glyph.add(flatArm);
+    }
+    const dot = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.014, 8), charcoal);
+    dot.position.set(0, discY, -0.2);
+    glyph.add(dot);
     g.add(glyph);
   }
   if (additions.includes('altar-candle')) {
