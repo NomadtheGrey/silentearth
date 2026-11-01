@@ -43,6 +43,14 @@ export interface BuildRecord {
 
 const ALL_RECORDS: BuildRecord[] = [
   {
+    merge: 'Merge #52',
+    pr: 91,
+    sha: '077d7bd',
+    date: '2026-11-01',
+    what: 'Three commits, and a fourth \u2014 this record \u2014 rides in the same merge. Two are testable on the phone and at the stump. The expanded HUD is fixed where Adam found it broken: on a landscape phone the stack showed a two-row slice of title and info lines while the doors, the health, and the quest card waited below a scroll fold \u2014 now the info block moves to the stack\u2019s end on touch, vitals and the quest card stand side by side in the visible slice, and the column seats between the sticks, clear of both. And the altar glyph is drawn at last: where the transformation\u2019s second step once left three charcoal strokes on the stump\u2019s face, a real design now marks the stump \u2014 a drawn glyph for a drawn rite. Riding named, honestly: the Raise an Altar quest\u2019s DATA \u2014 Act II\u2019s road gains its first step in the book, but the shell fact that ticks it (the stump whose steps count) wires in with the grimoire chunk next in the pipeline, so the step is written before it can be walked.',
+    why: 'The HUD is the game she sees while she plays; a stack that hides her health and her quest behind its own letterhead fails at its one job, and it failed on the screen Adam actually plays on. The glyph pays a debt the transformation has carried since it landed \u2014 the rite said \u201cDraw the Glyph\u201d and drew almost nothing. And the altar step rides as data because the book and the world meet in the shell, and the shell\u2019s next chunk was already formed \u2014 the record says which half is here and which is coming, so no one mistakes the writing for the walking.',
+  },
+  {
     merge: 'Merge #51',
     pr: 90,
     sha: 'fa12cb1',
