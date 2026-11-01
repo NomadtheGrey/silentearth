@@ -69,6 +69,19 @@ function copyAltar(altar: PlacedAltar): PlacedAltar {
     : { ...altar };
 }
 
+/** The consecration's step members — the placed altar's
+ *  closed additions set (the stump's set minus its base
+ *  members: a placed altar IS an altar by kind, so its
+ *  record carries the three steps and nothing else).
+ *  Restore and the setter both validate against it, the
+ *  stumpState pattern: a non-member never rides the
+ *  record. */
+const ALTAR_STEP_MEMBERS: ReadonlySet<string> = new Set([
+  'altar-stones',
+  'altar-glyph',
+  'altar-candle',
+]);
+
 class AltarState {
   private altars = new Map<string, PlacedAltar>();
   private counter = 0;
@@ -111,7 +124,9 @@ class AltarState {
   setAdditions(id: string, additions: readonly string[]): boolean {
     const altar = this.altars.get(id);
     if (!altar) return false;
-    const next = additions.filter((a) => typeof a === 'string' && a !== '');
+    const next = additions.filter(
+      (a) => typeof a === 'string' && ALTAR_STEP_MEMBERS.has(a),
+    );
     const current = altar.additions ?? [];
     if (next.length === current.length && next.every((a, i) => a === current[i])) {
       return true;
@@ -131,12 +146,14 @@ class AltarState {
       if (typeof altar.id !== 'string' || altar.id === '') continue;
       if (!Number.isFinite(altar.x) || !Number.isFinite(altar.z)) continue;
       const record: PlacedAltar = { id: altar.id, x: altar.x, z: altar.z };
-      // Additions pass through whole (string members
-      // only; an empty result leaves the record bare —
-      // pre-parity saves load exactly as they saved).
+      // Additions restore under membership validation
+      // (the stumpState pattern: step members only,
+      // anything else drops; an empty result leaves the
+      // record bare — pre-parity saves load exactly as
+      // they saved).
       if (Array.isArray(altar.additions)) {
         const adds = altar.additions.filter(
-          (a) => typeof a === 'string' && a !== '',
+          (a) => typeof a === 'string' && ALTAR_STEP_MEMBERS.has(a),
         );
         if (adds.length > 0) record.additions = adds;
       }
