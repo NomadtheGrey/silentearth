@@ -118,6 +118,17 @@ export type ScatterKind =
   | 'villageRoofFallen'
   | 'villageWell'
   | 'ashPatch'
+  // Site-pass kinds (the Homesteads, sites.ts — same rule):
+  // the recurring raided-homestead family at
+  // HOMESTEAD_SEGMENT_M — wall segments (sound + charred),
+  // gable roofs (standing, charred-standing, fallen).
+  // Fragment-carrying homesteads are always burnt (Adam):
+  // the charred set is the fragment face of the family.
+  | 'homesteadWall'
+  | 'homesteadWallCharred'
+  | 'homesteadRoof'
+  | 'homesteadRoofCharred'
+  | 'homesteadRoofFallen'
   // Placement-pass kind (the village beats build, pre-built
   // 2026-10-31): weathered human remains — emitted ONLY by
   // the beats build's boneSpots placement, never in biome

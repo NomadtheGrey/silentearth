@@ -47,7 +47,7 @@ import type { ScatterKind } from '../types';
 import type { MeshSpec } from './objects';
 import type { AnimalKind } from './animals';
 import { hashSeed, mulberry32 } from './seed';
-import { BARN_SEGMENT_M, CHAPEL_SEGMENT_M, FARM_SEGMENT_M, GROVE_CELL_M, MILL_SEGMENT_M, SCHOOL_SEGMENT_M, STORE_SEGMENT_M, VILLAGE_SEGMENT_M } from './sites';
+import { BARN_SEGMENT_M, CHAPEL_SEGMENT_M, FARM_SEGMENT_M, GROVE_CELL_M, HOMESTEAD_SEGMENT_M, MILL_SEGMENT_M, SCHOOL_SEGMENT_M, STORE_SEGMENT_M, VILLAGE_SEGMENT_M } from './sites';
 import { CAVE_CELL_M } from './caves';
 import { sunDirection, sunElevationAtCycle } from './sky';
 import { dayFraction } from './weather';
@@ -552,6 +552,72 @@ export function buildKindGeometry(spec: MeshSpec, kind: ScatterKind): THREE.Buff
       part(box(2.05, 0.1, 0.14), shade(e, 1.1), { p: [0, 0.52, 0] }),
       part(box(1.5, 0.07, 0.8), shade(e, 0.9), { p: [-0.36, 0.78, 0], r: [0, 0, 0.5] }),
       part(box(1.5, 0.07, 0.8), shade(e, 0.9), { p: [0.36, 0.78, 0], r: [0, 0, -0.5] }),
+    ]);
+  }
+  // Kind overrides (the Homestead set, sites.ts): the
+  // recurring raided-homestead family, built at
+  // HOMESTEAD_SEGMENT_M (3.0, Background's siting ruler).
+  // A 6 x 6 house, walls 2.5 — smaller than the farmhouse,
+  // plainer than the village. The char rides TWIN KINDS
+  // (the village idiom): each charred kind carries its
+  // own def colors and its own geometric char; the wall
+  // twins share one body so they cannot drift apart.
+  // Local ground is y = -baseY (walls 1.25; roofs carry
+  // their height in the feature's y, origin at wall top).
+  if (kind === 'homesteadWall' || kind === 'homesteadWallCharred') {
+    const charred = kind === 'homesteadWallCharred';
+    const wallParts = [
+      part(box(HOMESTEAD_SEGMENT_M, 2.5, 0.28), c),
+      part(box(0.6, 0.78, 0.32), e, { p: [0.62, 0.08, 0] }),
+    ];
+    if (!charred) {
+      wallParts.push(part(box(HOMESTEAD_SEGMENT_M, 0.16, 0.34), shade(c, 1.12), { p: [0, 1.1, 0] }));
+      wallParts.push(part(box(0.15, 2.5, 0.34), shade(c, 0.88), { p: [-1.05, 0, 0] }));
+      wallParts.push(part(box(HOMESTEAD_SEGMENT_M, 0.18, 0.34), shade(c, 0.85), { p: [0, -1.12, 0] }));
+    } else {
+      // The village char grammar: tilted remnants riding
+      // the top line, a fallen brace at the base.
+      wallParts.push(part(box(0.9, 0.45, 0.3), shade(c, 1.15), { p: [0.85, 1.32, 0], r: [0, 0, 0.12] }));
+      wallParts.push(part(box(0.65, 0.34, 0.3), shade(c, 0.9), { p: [-1.0, 1.3, 0], r: [0, 0, -0.16] }));
+      wallParts.push(part(box(0.15, 1.8, 0.15), shade(e, 1.0), { p: [-0.4, -0.8, 0.3], r: [0.35, 0, 0.2] }));
+    }
+    return merge(wallParts);
+  }
+  if (kind === 'homesteadRoof' || kind === 'homesteadRoofCharred') {
+    // Gable roof on the family pitch law (the -Z slab
+    // takes -slope, the +Z slab +slope — the roof-fix
+    // pairing, asserted numerically by probe). Slope
+    // 0.60 rad for the 6 m span; the stone chimney stands
+    // at -1.9 x on the ridge line in both states — stone
+    // does not burn.
+    const slope = 0.6;
+    const charred = kind === 'homesteadRoofCharred';
+    const roofParts = [
+      part(box(6.6, 0.09, 3.9), c, { p: [0, 1.18, -1.62], r: [-slope, 0, 0] }),
+      part(box(6.6, 0.09, 3.9), c, { p: [0, 1.18, 1.62], r: [slope, 0, 0] }),
+      part(box(0.55, 1.5, 0.55), 0x7d7668, { p: [-1.9, 2.0, 0] }),
+      part(box(0.7, 0.12, 0.7), 0x6e6a5e, { p: [-1.9, 2.78, 0] }),
+    ];
+    if (!charred) {
+      roofParts.push(part(box(6.7, 0.15, 0.22), shade(c, 1.1), { p: [0, 2.34, 0] }));
+    } else {
+      // Burned yet standing: the ridge beam split with a
+      // gap at the middle, one eave piece slipped and
+      // hanging at the +Z eave.
+      roofParts.push(part(box(2.6, 0.15, 0.22), shade(c, 1.1), { p: [-2.0, 2.34, 0] }));
+      roofParts.push(part(box(2.6, 0.15, 0.22), shade(c, 1.1), { p: [2.0, 2.3, 0], r: [0, 0, -0.03] }));
+      roofParts.push(part(box(1.8, 0.09, 1.2), shade(c, 1.12), { p: [1.6, 0.32, 3.05], r: [0.85, 0, 0.08] }));
+    }
+    return merge(roofParts);
+  }
+  if (kind === 'homesteadRoofFallen') {
+    // The village fallen grammar at homestead span: one
+    // plane tilted down into the house, a broken piece
+    // across it, the ridge timber among them.
+    return merge([
+      part(box(6.2, 0.09, 3.6), c, { p: [0, 0.7, 0.35], r: [0.5, 0, 0.04] }),
+      part(box(3.0, 0.09, 3.2), shade(c, 1.12), { p: [-1.0, 0.32, -0.7], r: [0.2, 0.4, 0.15] }),
+      part(box(1.9, 0.28, 0.28), shade(e, 1.0), { p: [0.7, 0.45, 0.2], r: [0, 0.2, 0.3] }),
     ]);
   }
   // Kind overrides (the Farmhouse set, sites.ts): a mostly
