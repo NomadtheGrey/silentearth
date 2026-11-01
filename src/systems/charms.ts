@@ -15,14 +15,23 @@
 //   'primal-bone-<kind>'. Only the first charm's id is
 //   REGISTERED here (recipes.ts ITEMS) — other bone ids
 //   land with the bone build, not this one.
-// - The first charm is granted OUTRIGHT, tier 1 (Adam,
-//   pinned). Grant shape (lane's call, flagged):
-//   FIRST-BOOT grant — the shell calls grantFirstCharm
-//   once for a fresh save (starting-inventory alternative
-//   considered: a boot grant keeps the default inventory
-//   generic and stays idempotent). App wiring is UI's
-//   follow-up (torch precedent) — the function lands
-//   here; the boot call follows.
+// - THE GIFT, RETIRED (Adam, 2026-11-01: 'Ya retire
+//   the gift. It's messing up our quest log.'): the
+//   first charm was once granted OUTRIGHT at first
+//   boot (grantFirstCharm, tier 1, records-only after
+//   the charm-list build). It retired because a
+//   standing Waking from boot made Wake a Charm read
+//   complete before any rite — new worlds now start
+//   with an EMPTY charm list and earn the first
+//   Waking by the road. EXISTING saves keep their
+//   seated shrew (nothing unseats it): the gift's
+//   record is indistinguishable from a road-earned
+//   first shrew Waking — same awaken(), same record —
+//   so old saves' wake-charm still completes at first
+//   sight off the standing Waking (the latch seals
+//   it), an accepted residue stated to Adam as built.
+//   FIRST_CHARM_KIND stays: the shrew is a real kind
+//   with a real effect, woken now like any other.
 //
 // EFFECT NUMBERS (DRAFT, flagged for Adam's pin pass —
 // DATA, not machinery):
@@ -58,10 +67,7 @@
 // Carried for effect purposes = list membership once
 // the list lands (Adam CONFIRMED: functional from the
 // list, no wearing gate); interim main-inventory
-// carried is shell-side (UI syncShrewEffect). The
-// first-charm grant records the awakening ONLY (no
-// inventory item — the shrew's 0.5 lb frees by
-// construction; list records weigh nothing).
+// carried is shell-side (UI syncShrewEffect).
 // Existing saves migrate in save.ts deserialize
 // (shrew item + awakening → item removed, record kept).
 //
@@ -73,9 +79,19 @@ import type { NameSight, LookResult } from './name-sight';
 /**
  * SOURCES (current 2026-10-28): world sources now yield
  * individual kind items (Background boneKind — kind
- * derives from position; shrew EXCLUDED, the grant is
- * its sole source). Generic 'bone' survives only as a
+ * derives from position; shrew EXCLUDED from the
+ * scatter). Generic 'bone' survives only as a
  * sinkless secondary fragment (silt/stone secondaries).
+ *
+ * THE SHREW'S SOURCE GAP — CLOSED BY RULING (Adam,
+ * 2026-11-01): the grant was the shrew's sole source,
+ * so the retirement briefly left the Waking sourceless;
+ * Adam ruled (a) — the shrew bone JOINS the position
+ * cycle like any other kind (Background builds the
+ * scatter change; the modulo grows and unharvested
+ * spots re-derive, as named when the gap was flagged).
+ * The kind now stands or falls by the road, same as
+ * every other.
  *
  * Kind <-> item mapping (single source for the rule):
  * kind = shape slug as displayed after "Primal Bone - "
@@ -613,30 +629,36 @@ export function recordBonePickupLook(
   return nameSight.look(kind, portions);
 }
 
+
+/** Wake-the-shrew outcome; `reason` is player-facing. */
+export type WakeShrewOutcome =
+  | { woke: true }
+  | { woke: false; reason: string };
+
 /**
- * Outright first-charm grant — now GRANT-TO-LIST
- * (charm-list build 2026-10-28): records the shrew
- * awakening ONLY, no main-inventory item (the charm
- * lives in the list — listCharms view — and its 0.5 lb
- * frees by construction; list records weigh nothing).
- * Idempotent: an already-awakened shrew grants
- * nothing. No full-pack failure mode (no item
- * involved — awakening always records; the old
- * addPartial gate is gone with the item).
- * `inventory` is a LEGACY param, IGNORED — kept so
- * App's call site keeps compiling until UI's panel
- * landing updates the call (panel + carried switch +
- * call update + row adjustment in ONE UI landing);
- * removal rides that landing, not this one.
+ * THE CHARM PATH — the shrew's road (2026-11-01, the
+ * gift's replacement). The shrew has no staging rite
+ * (stageBoneFromInventory refuses it: no ritual
+ * recipe), so a FOUND shrew skull wakes the charm
+ * directly: consume one carried skull, record the
+ * tier-1 awakening — the retired grant's exact
+ * outcome, earned instead of given. Refuses when the
+ * shrew already stands woken (a further skull is an
+ * ordinary spare bone) or none is carried; failures
+ * consume nothing. No hunger gate (the module's
+ * standing idiom for record acts).
  */
-export function grantFirstCharm(
+export function wakeShrewFromBone(
   inventory: PersonalInventory,
   charms: CharmState,
-): { granted: number; already: boolean } {
-  void inventory;
+): WakeShrewOutcome {
   if (charms.isAwakened(FIRST_CHARM_KIND)) {
-    return { granted: 0, already: true };
+    return { woke: false, reason: 'The shrew already stands woken.' };
   }
+  if (inventory.count(FIRST_CHARM_ITEM) <= 0) {
+    return { woke: false, reason: 'No shrew skull carried.' };
+  }
+  inventory.remove(FIRST_CHARM_ITEM, 1);
   charms.awaken(FIRST_CHARM_KIND, 1);
-  return { granted: 1, already: false };
+  return { woke: true };
 }

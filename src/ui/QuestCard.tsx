@@ -12,7 +12,10 @@
  * which quest stands, reads the components off Systems'
  * data, and passes plain rows in. Marking itself lives
  * in the journal's quest log, not here: the card is a
- * readout, not a control.
+ * readout. Its ONE control is its close (Adam, 2026-11-01
+ * — no Close [X] button on the task chip): the caller
+ * owns the dismissal and its lifetime; this component
+ * only renders the door when handed an onClose.
  */
 
 import { UI_THEMES, type UiThemeName } from './themes';
@@ -39,6 +42,13 @@ export interface QuestCardProps {
   marked: boolean;
   /** Look for the card. Default "mire" (the world outside). */
   theme?: UiThemeName;
+  /**
+   * The card's close door (Adam, 2026-11-01): when the
+   * caller hands this in, the card renders its
+   * 'Close [X]' button; the caller owns what dismissal
+   * means and how long it lasts.
+   */
+  onClose?: () => void;
 }
 
 export function QuestCard({
@@ -47,6 +57,7 @@ export function QuestCard({
   components,
   marked,
   theme = 'mire',
+  onClose,
 }: QuestCardProps) {
   const t = UI_THEMES[theme];
   return (
@@ -54,13 +65,27 @@ export function QuestCard({
       aria-label="Active quest"
       className={'rounded px-3 py-2 ' + t.panel}
     >
-      <p
-        className={
-          'text-[11px] font-semibold uppercase tracking-wide ' + t.muted
-        }
-      >
-        {marked ? 'Active quest' : 'Current quest'}
-      </p>
+      <div className="flex items-start justify-between gap-2">
+        <p
+          className={
+            'text-[11px] font-semibold uppercase tracking-wide ' + t.muted
+          }
+        >
+          {marked ? 'Active quest' : 'Current quest'}
+        </p>
+        {onClose ? (
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close quest card"
+            className={
+              'pointer-events-auto rounded px-1.5 py-0.5 text-xs ' + t.button
+            }
+          >
+            Close [X]
+          </button>
+        ) : null}
+      </div>
       <h3 className={'text-sm font-semibold ' + t.heading}>{title}</h3>
       {hint ? (
         <p className={'mt-0.5 text-xs ' + t.muted}>{hint}</p>

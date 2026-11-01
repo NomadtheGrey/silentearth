@@ -83,11 +83,14 @@
  *   import): same additive-field rule (old saves load
  *   desks: []) and the same leniency as altars on read
  *   (entries pass through, the placed-desk restore
- *   validates + drops bad records). Placed desks carry
- *   no grimoire state — the desk is the SITE; the
- *   grimoire's workings come later, so no working
- *   field is stored. Multiple desks are legitimate
- *   (a second camp wants a second desk).
+ *   validates + drops bad records). A placed desk
+ *   carries ONE state field: grimoire (boolean,
+ *   optional) — whether THE grimoire rests on it (the
+ *   seat, accepted 2026-11-01; one book ever, so a
+ *   boolean suffices). The book's workings still come
+ *   later — the seat stores presence, nothing more.
+ *   Multiple desks are legitimate (a second camp
+ *   wants a second desk).
  * - placed tents (position, id optional — no game
  *   import): same additive-field rule (old saves load
  *   tents: []) and the same leniency as altars on read
@@ -177,7 +180,6 @@ import type { SavedRitualStaging } from './rituals';
 import type { SavedCompanion } from './companions';
 import type { SavedMarkProgress } from './fragments';
 import type { SavedDiscovery } from './discovery';
-import { FIRST_CHARM_ITEM, FIRST_CHARM_KIND } from './charms';
 import type { SavedAwakening } from './charms';
 import type { SavedQuestFlags } from './quests';
 import { questById } from './quests';
@@ -325,8 +327,10 @@ export interface SavedTorch {
 }
 
 /**
- * A placed altar, as saved. No ritual state is stored —
- * the altar is the SITE; rituals come later. `id` is
+ * A placed altar, as saved. The altar is the SITE;
+ * its consecration additions ride when present (altar
+ * parity, 2026-11-01 — the base carries the road's
+ * progress, as a stump does). `id` is
  * optional: Background's placed-altar entity owns the id
  * scheme (torch precedent); the save carries position
  * always and the id when the entity provides one. Order
@@ -337,6 +341,14 @@ export interface SavedAltar {
   x: number;
   z: number;
   id?: string;
+  /**
+   * Consecration additions (altar parity, Adam
+   * 2026-11-01): the placed altar is a BASE like the
+   * stump and carries the same ordered additions
+   * (stumpy-altar's record). Absent = unconsecrated
+   * (every pre-parity altar); sparse like `id`.
+   */
+  additions?: string[];
 }
 
 /**
@@ -352,6 +364,8 @@ export interface SavedDesk {
   x: number;
   z: number;
   id?: string;
+  /** True when THE grimoire rests on this desk (the seat). */
+  grimoire?: boolean;
 }
 
 /**
@@ -374,6 +388,21 @@ export interface SavedCauldron {
   x: number;
   z: number;
   id?: string;
+}
+
+/**
+ * A jar-made ground patch (Background's jarPatchState
+ * snapshot shape, seated 2026-11-01): the pour's work
+ * in the world — mud where water was dumped on dry
+ * ground, water where it was dumped on mud (Adam's
+ * water cycle). The patch is placed STATE, not an
+ * item; lifetime is the state's own ruling.
+ */
+export interface SavedPatch {
+  id: string;
+  kind: 'mud' | 'water';
+  x: number;
+  z: number;
 }
 
 /**
@@ -541,10 +570,12 @@ export interface SaveData {
   torches: SavedTorch[];
   /** Placed altars (sites, no ritual state); [] for old saves. */
   altars: SavedAltar[];
-  /** Placed desks (sites, no grimoire state); [] for old saves. */
+  /** Placed desks (sites; grimoire = the seated book); [] for old saves. */
   desks: SavedDesk[];
   /** Placed cauldrons (keyed to their hearths); [] for old saves. */
   cauldrons: SavedCauldron[];
+  /** Jar-made ground patches (mud/water); [] for old saves. */
+  patches: SavedPatch[];
   /** The cave visit this save was written in (boot-at-the-mouth
    * fact); null for surface saves and old saves. */
   dimensionVisit: SavedDimensionVisit | null;
@@ -678,6 +709,7 @@ export interface SaveDraft {
     x: number;
     z: number;
     id?: string;
+    additions?: ReadonlyArray<string>;
   }>;
   /**
    * Placed desks from the placed-desk source
@@ -688,6 +720,7 @@ export interface SaveDraft {
     x: number;
     z: number;
     id?: string;
+    grimoire?: boolean;
   }>;
   /**
    * Placed cauldrons from the placed-cauldron source
@@ -699,6 +732,17 @@ export interface SaveDraft {
     x: number;
     z: number;
     id?: string;
+  }>;
+  /**
+   * Jar-made ground patches from the patch-state
+   * source (Background's jarPatchState snapshot).
+   * OPTIONAL, same trap-save pattern as cauldrons.
+   */
+  patches?: ReadonlyArray<{
+    id: string;
+    kind: 'mud' | 'water';
+    x: number;
+    z: number;
   }>;
   /**
    * The cave visit, from dimensionState.snapshot() at
@@ -837,10 +881,19 @@ const RETIRED_FIRE_TYPES: ReadonlySet<string> = new Set([
  *   entry finishes the decision. Its registry rows stay
  *   (the shelter tables key the shared woven rung by it);
  *   only a saved stack drops here.
+ * - 'clay-pot' — retired 2026-11-01 on Adam's word
+ *   ('If they do the same thing, we'll get rid of one'):
+ *   the pot and the jar overlapped as vessels; the jar
+ *   stands (it carries Adam's water rulings), took the
+ *   pot-trap job, and the pot item retires. Its registry
+ *   rows stay; only a saved stack drops here.
  */
 const RETIRED_ITEM_IDS: ReadonlySet<string> = new Set([
   'bloomery',
   'wattle-and-daub-hut',
+  // The clay pot (Adam, 2026-11-01): one vessel stands —
+  // the jar took its trap job and its water cycle.
+  'clay-pot',
 ]);
 
 const SAVE_HOUSE_TYPES: ReadonlySet<string> = new Set([
@@ -995,16 +1048,20 @@ export function serializeSave(draft: SaveDraft): SaveData {
       x: altar.x,
       z: altar.z,
       ...(altar.id !== undefined ? { id: altar.id } : {}),
+      ...(altar.additions !== undefined
+        ? { additions: [...altar.additions] }
+        : {}),
     })),
     // Desks: written AS-IS, same as altars (positions
     // verbatim, id when the entity provides one — no
     // filtering, no normalization). Invalid entries
-    // are restore()'s problem, not serialize's. No
-    // grimoire state is written — the desk is the SITE.
+    // are restore()'s problem, not serialize's. The
+    // seated-grimoire flag writes only when true.
     desks: (draft.desks ?? []).map((desk) => ({
       x: desk.x,
       z: desk.z,
       ...(desk.id !== undefined ? { id: desk.id } : {}),
+      ...(desk.grimoire === true ? { grimoire: true } : {}),
     })),
     // Cauldrons: written AS-IS, same as desks (hearth
     // id + positions verbatim, entity id when provided
@@ -1015,6 +1072,16 @@ export function serializeSave(draft: SaveDraft): SaveData {
       x: cauldron.x,
       z: cauldron.z,
       ...(cauldron.id !== undefined ? { id: cauldron.id } : {}),
+    })),
+    // Patches: written AS-IS, same as cauldrons (id +
+    // kind + position verbatim — no filtering, no
+    // normalization). The patch is placed state; its
+    // lifetime ruling lives with the state, not here.
+    patches: (draft.patches ?? []).map((patch) => ({
+      id: patch.id,
+      kind: patch.kind,
+      x: patch.x,
+      z: patch.z,
     })),
     // The visit fact: written AS-IS (dimension key +
     // entry mouth verbatim). Absent/null in the draft
@@ -1478,6 +1545,14 @@ export function deserializeSave(value: unknown): SaveData | null {
           ...(typeof entry.id === 'string'
             ? { id: entry.id as string }
             : {}),
+          ...(Array.isArray(entry.additions)
+            ? {
+                additions: entry.additions.filter(
+                  (addition): addition is string =>
+                    typeof addition === 'string',
+                ),
+              }
+            : {}),
         });
       }
     }
@@ -1498,6 +1573,7 @@ export function deserializeSave(value: unknown): SaveData | null {
           ...(typeof entry.id === 'string'
             ? { id: entry.id as string }
             : {}),
+          ...(entry.grimoire === true ? { grimoire: true } : {}),
         });
       }
     }
@@ -1520,6 +1596,28 @@ export function deserializeSave(value: unknown): SaveData | null {
           ...(typeof entry.id === 'string'
             ? { id: entry.id as string }
             : {}),
+        });
+      }
+    }
+    // Patches are optional on read, same leniency as
+    // cauldrons: an old v1 save without them loads
+    // with patches: []. Entries pass through — the
+    // patch-state restore validates and drops bad
+    // records — except the KIND, which is this
+    // document's own vocabulary: an entry whose kind
+    // is neither 'mud' nor 'water' is not a patch and
+    // drops here, whole-record. A non-array patches
+    // field loads as [].
+    const patches: SavedPatch[] = [];
+    if (value.patches !== undefined && Array.isArray(value.patches)) {
+      for (const entry of value.patches) {
+        if (!isRecord(entry)) continue;
+        if (entry.kind !== 'mud' && entry.kind !== 'water') continue;
+        patches.push({
+          id: entry.id as string,
+          kind: entry.kind,
+          x: entry.x as number,
+          z: entry.z as number,
         });
       }
     }
@@ -1818,22 +1916,16 @@ export function deserializeSave(value: unknown): SaveData | null {
       }
       if (Object.keys(parsed).length > 0) quests = parsed;
     }
-    // CHARM-LIST MIGRATION (2026-10-28, shrew-only):
-    // an existing save holding the grant's shrew item
-    // + its awakening moves the charm to the list: drop
-    // the item, keep the record (0.5 lb frees). Safe
-    // because the grant is the shrew's sole source
-    // (world excludes shrew) — no found bone is ever
-    // removed. Item-only saves keep the item (they
-    // self-heal: next boot's grant awakens, the
-    // following save migrates). Idempotent: re-save
-    // writes the cleaned inventory.
-    if (
-      awakenings.some((entry) => entry.kind === FIRST_CHARM_KIND) &&
-      inventory[FIRST_CHARM_ITEM] !== undefined
-    ) {
-      delete inventory[FIRST_CHARM_ITEM];
-    }
+    // THE CHARM-LIST MIGRATION IS RETIRED (2026-11-01):
+    // the 2026-10-28 migration dropped a carried shrew
+    // item on load when a shrew awakening stood —
+    // sound only while the grant was the shrew's sole
+    // source and the world excluded shrew. Both
+    // premises are gone (the gift retired; Adam's (a1)
+    // put the shrew in the position cycle): a carried
+    // shrew skull beside a standing awakening is now
+    // legitimate play (a found spare), and load takes
+    // no side against it. Nothing migrates here.
     // World name: optional string, additive (old saves load
     // without it). Non-string values drop — the name is a
     // display label, never load-bearing, so a bad value
@@ -1861,6 +1953,7 @@ export function deserializeSave(value: unknown): SaveData | null {
       altars,
       desks,
       cauldrons,
+      patches,
       dimensionVisit,
       acquisitionOrder,
       companions,

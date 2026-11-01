@@ -55,6 +55,7 @@ export const ITEMS = {
   tallow: 'tallow',
   cauldron: 'cauldron',
   // New items (2026-10-25 design work).
+  dirt: 'dirt',
   clay: 'clay',
   flint: 'flint',
   oldStump: 'old-stump',
@@ -247,6 +248,25 @@ export type SiteRequirement = 'in-water' | 'dry-land';
 export interface SiteFacts {
   /** True when she stands in water (a creek's flow). */
   inWater: boolean;
+  /**
+   * True when the crosshair's ground point — where a
+   * placement would land (the placement ruling, Adam
+   * 2026-11-01: all placement goes to the aimed point
+   * within reach) — sits in water. Absent when the
+   * shell supplies no aim; the feet fact then governs.
+   */
+  aimedInWater?: boolean;
+}
+
+/**
+ * The one reading rule for site facts (the placement
+ * ruling): a trap meets the ground at the AIMED point
+ * when an aim is supplied, else at her feet. Every
+ * site evaluation — the craft gates and the place
+ * grant alike — reads this, never the raw fields.
+ */
+export function effectiveInWater(site: SiteFacts): boolean {
+  return site.aimedInWater ?? site.inWater;
 }
 
 export interface Ingredient {
@@ -316,12 +336,15 @@ export interface Recipe {
    * placement. 'in-water' = standing in the water (the
    * weir, the creek-sunk pot); 'dry-land' = NOT standing
    * in water (stakes, a dug pit, a weighted rig).
-   * Checked by canCraft + executeCraft ONLY when the
-   * shell supplies the site facts (SiteFacts input); a
-   * null / omitted input leaves the gate OFF
-   * (transitional, the creek rule's exact shape — until
-   * the water adapter lands, the shell cannot say where
-   * she stands, so the craft proceeds meanwhile).
+   * Checked ONLY when the shell supplies the site facts
+   * (SiteFacts input); a null / omitted input leaves the
+   * gate OFF (transitional, the creek rule's exact shape).
+   * WHERE it is checked follows the trap table (Adam,
+   * 2026-11-01): at CRAFT for site-built recipes
+   * (placesTrap — craft is placement), by canCraft +
+   * executeCraft; at PLACEMENT for the carryable three,
+   * by the place grant (trap-place.ts). This field is
+   * the one source either way.
    */
   requiresSite?: SiteRequirement;
   /**
@@ -333,12 +356,29 @@ export interface Recipe {
    * player.x, player.z) on that result (single-caller rule:
    * that call is the one and only placer). The shell's "Place
    * trap here?" confirm gates BEFORE execution (No = abort,
-   * nothing consumed). First use: all five traps. Trap items
+   * nothing consumed). First use: THE SITE-BUILT TWO
+   * (deadfall + pitfall) — the trap table (Adam, 2026-11-01)
+   * made the other three CARRYABLE: their crafts grant the
+   * item, and their requiresSite is read at PLACEMENT by
+   * the place grant (trap-place.ts), not at craft. Trap items
    * already sitting in an inventory from earlier saves stay
    * items for now (flagged edge, not solved here) — only
    * fresh crafts place.
    */
   placesTrap?: boolean;
+  /**
+   * Spoil (Adam, 2026-11-01 — the pitfall lifecycle):
+   * what the act of crafting THROWS UP, granted into
+   * the pack on a successful craft (the report path's
+   * one grant; see crafting-execution.ts). Digging a
+   * pit yields its dirt — the same dirt its filling-in
+   * later consumes (pitfall.ts reads THIS quantity as
+   * the fill cost, one source). What does not fit rides
+   * the result as a remainder for the shell to pile at
+   * her feet — the pit's edge; earth is never voided.
+   * Quantity DRAFT for the pin pass. First use: pitfall.
+   */
+  spoil?: { item: ItemId; quantity: number };
   /**
    * Stump-upgrade (Systems, 2026-10-28 — the Stumpy Workstation
    * fix; trap-report precedent). Crafting this recipe transforms
@@ -1039,20 +1079,6 @@ const DRAFT_RECIPES: Recipe[] = [
   // --- Receptacles. Clay is reserved for pottery / bricks / maybe tools
   // --- (NOT daub). Cooking is NOT a receptacle job: cooking is open-fire.
   {
-    id: 'clay-pot',
-    name: 'Clay Pot',
-    status: 'draft',
-    output: { item: ITEMS.clayPot, quantity: 1 },
-    ingredients: [i(ITEMS.clay, 3)],
-    station: 'kiln',
-    notes:
-      'DRAFT. Shaped on the wheel, fired in the kiln (kiln is the ' +
-      'engine station here; the wheel step is a shaping step, not a ' +
-      'second station). Food storage + salves / medicine / ' +
-      'restoratives / reagents. NOT cooking. Also the pot trap: sink ' +
-      'a pot in the creek.',
-  },
-  {
     id: 'clay-jar',
     name: 'Clay Jar',
     status: 'draft',
@@ -1071,8 +1097,9 @@ const DRAFT_RECIPES: Recipe[] = [
       'jar.ts) swap the ids. When soup / brew recipes ' +
       'land, they consume water-jar and return the ' +
       'empty jar among their outputs (the multi-output ' +
-      'idiom) — none in this landing. Listed single ' +
-      '(crafting.ts): one jar, in either form. ' +
+      'idiom) — none in this landing. A VESSEL, plural ' +
+      'by nature (Adam, 2026-11-01): unlisted in ' +
+      'crafting.ts — she makes as many as storage wants. ' +
       'Quantities draft.',
   },
   {
@@ -1161,14 +1188,14 @@ const DRAFT_RECIPES: Recipe[] = [
     output: { item: ITEMS.snare, quantity: 1 },
     ingredients: [i(ITEMS.tenderVines, 2), i(ITEMS.snapWood, 2)],
     station: 'hand',
-    placesTrap: true,
     requiresSite: 'dry-land',
     notes:
-      'DRAFT — BRAINSTORM, NOTHING PICKED. Stakes. Hand-crafted ' +
-      'on dry ground (fork B, Adam 2026-11-01: the craft is the ' +
-      'placement, and stakes do not hold standing in water). ' +
-      'No workstation needed (Adam\'s ruling, 2026-10-26: traps ' +
-      'are hand-crafted, cordage precedent).',
+      'DRAFT — BRAINSTORM, NOTHING PICKED. Stakes. CARRYABLE ' +
+      '(trap table, Adam 2026-11-01): hand-crafted anywhere, ' +
+      'carried, and SET on dry ground — requiresSite is read ' +
+      'at PLACEMENT for the carryable three, at craft for the ' +
+      'site-built two. No workstation needed (Adam\'s ruling, ' +
+      '2026-10-26: traps are hand-crafted, cordage precedent).',
   },
   {
     id: 'fish-weir-trap',
@@ -1177,29 +1204,32 @@ const DRAFT_RECIPES: Recipe[] = [
     output: { item: ITEMS.fishWeirTrap, quantity: 1 },
     ingredients: [i(ITEMS.tenderVines, 6), i(ITEMS.snapWood, 4)],
     station: 'hand',
-    placesTrap: true,
     requiresSite: 'in-water',
     notes:
-      'DRAFT — BRAINSTORM, NOTHING PICKED. Woven funnel, built ' +
-      'standing in the water it fishes (fork B, Adam ' +
-      '2026-11-01: a weir belongs in the water — craft it ' +
-      'there where it goes). No workstation needed (Adam\'s ' +
-      'ruling, 2026-10-26: traps are hand-crafted).',
+      'DRAFT — BRAINSTORM, NOTHING PICKED. Woven funnel. ' +
+      'CARRYABLE (trap table, Adam 2026-11-01): hand-crafted ' +
+      'anywhere, carried, and SET standing in the water it ' +
+      'fishes — his weir sentence, at placement: a weir ' +
+      'belongs in the water, so it is set there where it ' +
+      'goes. No workstation needed (Adam\'s ruling, ' +
+      '2026-10-26: traps are hand-crafted).',
   },
   {
     id: 'pot-trap',
     name: 'Pot Trap',
     status: 'draft',
     output: { item: ITEMS.potTrap, quantity: 1 },
-    ingredients: [i(ITEMS.clayPot, 1)],
+    ingredients: [i(ITEMS.clayJar, 1)],
     station: 'hand',
-    placesTrap: true,
     requiresSite: 'in-water',
     notes:
-      'DRAFT — BRAINSTORM, NOTHING PICKED. 1 clay pot, sunk in ' +
-      'the creek — set standing in its water (fork B, Adam ' +
-      '2026-11-01). No workstation needed (Adam\'s ruling, ' +
-      '2026-10-26: traps are hand-crafted).',
+      'DRAFT — BRAINSTORM, NOTHING PICKED. 1 clay jar, sunk in ' +
+      'the creek (the jar took the retired pot\'s trap job, ' +
+      'Adam 2026-11-01 — one vessel stands). CARRYABLE (trap ' +
+      'table, Adam 2026-11-01): hand-crafted anywhere, ' +
+      'carried, and SET standing in the creek water. No ' +
+      'workstation needed (Adam\'s ruling, 2026-10-26: traps ' +
+      'are hand-crafted).',
   },
   {
     id: 'pitfall',
@@ -1211,6 +1241,7 @@ const DRAFT_RECIPES: Recipe[] = [
     placesTrap: true,
     requiresToolStage: 1,
     requiresSite: 'dry-land',
+    spoil: { item: ITEMS.dirt, quantity: 6 },
     notes:
       'DRAFT — BRAINSTORM, NOTHING PICKED. Dug with the spade, ' +
       'not the trowel; peat moss is the cover. No build cost ' +

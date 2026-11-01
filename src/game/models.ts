@@ -2747,6 +2747,20 @@ export function buildStumpDressing(additions: readonly string[]): THREE.Group {
   return g;
 }
 
+/** Where the made altar's candle stands on its slab:
+ *  the free west end, clear of the bowl (rim 0.3) and
+ *  of the glyph ring (0.42) — the slab is 1.4 long, so
+ *  the ends are its spare ground. */
+export const ALTAR_TABLE_CANDLE_X = -0.52;
+export const ALTAR_TABLE_CANDLE_Z = 0;
+/** The made altar's slab-top height (the staged-bone
+ *  tableau and the candle light read it too). */
+export const ALTAR_SLAB_TOP_Y = 0.84;
+/** The glyph ring's radius on the slab: drawn AROUND
+ *  the bowl (its centerpiece stands where the stump's
+ *  center mark sits), inside the slab's narrow edge. */
+export const ALTAR_GLYPH_RING_R = 0.42;
+
 /**
  * A made ritual altar (Adam 2026-10-27 — placeable + visible
  * ONLY, no ritual actions). The read-at-a-glance shape, my
@@ -2759,8 +2773,21 @@ export function buildStumpDressing(additions: readonly string[]): THREE.Group {
  * person-scale, unmistakable at a glance, smaller than any
  * house. Lambert materials throughout (lit by sun/moon
  * like the houses — dark at night, like everything unlit).
+ *
+ * PARITY DRESSING (Adam, 2026-11-01: both altar flavors
+ * work the same and BOTH require the consecration): the
+ * table wears the same three additions the stump wears,
+ * read off the same record, in the same named subgroups
+ * ('altar-stones' / 'altar-glyph' / 'altar-candle') —
+ * stones ringed at the table's BASE on the stump ring's
+ * own radius; the drawn glyph as a ring of strokes on
+ * the slab AROUND the bowl (the bowl keeps the centre
+ * the stump's design marks; the ring leaves its gap at
+ * the candle's bearing, the stump design's courtesy);
+ * a candle standing on the slab's free end. The bowl
+ * stays as the made flavor's centerpiece throughout.
  */
-export function buildAltarGroup(): THREE.Group {
+export function buildAltarGroup(additions: readonly string[] = []): THREE.Group {
   const g = new THREE.Group();
   // Four wooden legs (frame) at the slab corners, inset.
   const legGeo = new THREE.BoxGeometry(0.1, 0.72, 0.1);
@@ -2790,6 +2817,50 @@ export function buildAltarGroup(): THREE.Group {
   const bowl = new THREE.Mesh(new THREE.LatheGeometry(profile, 20), bowlMat);
   bowl.position.set(0, 0.84, 0);
   g.add(bowl);
+  // The consecration, worn like the stump's (parity —
+  // see header). Each step appears as its act completes.
+  if (additions.includes('altar-stones')) {
+    const stones = new THREE.Group();
+    stones.name = 'altar-stones';
+    for (let i = 0; i < 4; i++) {
+      const a = Math.PI / 4 + (i * Math.PI) / 2;
+      const stone = new THREE.Mesh(
+        new THREE.SphereGeometry(0.17, 8, 6),
+        meshMat(shade(0x83878a, 0.9 + i * 0.07)),
+      );
+      stone.scale.set(1.15, 0.68, 0.95);
+      stone.position.set(Math.cos(a) * ALTAR_STONE_RING_R, 0.1, Math.sin(a) * ALTAR_STONE_RING_R);
+      stone.rotation.y = a;
+      stones.add(stone);
+    }
+    g.add(stones);
+  }
+  if (additions.includes('altar-glyph')) {
+    const glyph = new THREE.Group();
+    glyph.name = 'altar-glyph';
+    const charcoal = meshMat(0x14100c);
+    const ringY = ALTAR_SLAB_TOP_Y + 0.008;
+    const candleBearing = Math.atan2(ALTAR_TABLE_CANDLE_Z, ALTAR_TABLE_CANDLE_X);
+    for (let i = 0; i < 12; i++) {
+      const a = (i * Math.PI) / 6;
+      let d = Math.abs(a - candleBearing) % (Math.PI * 2);
+      if (d > Math.PI) d = Math.PI * 2 - d;
+      if (d < 0.3) continue;
+      const stroke = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.014, 0.035), charcoal);
+      stroke.position.set(Math.cos(a) * ALTAR_GLYPH_RING_R, ringY, Math.sin(a) * ALTAR_GLYPH_RING_R);
+      stroke.rotation.y = -a;
+      glyph.add(stroke);
+    }
+    g.add(glyph);
+  }
+  if (additions.includes('altar-candle')) {
+    const holder = new THREE.Group();
+    holder.name = 'altar-candle';
+    const candle = buildCandle();
+    candle.position.set(ALTAR_TABLE_CANDLE_X, ALTAR_SLAB_TOP_Y, ALTAR_TABLE_CANDLE_Z);
+    holder.add(candle);
+    g.add(holder);
+  }
   return g;
 }
 

@@ -65,6 +65,7 @@ import {
   type Recipe,
   type SiteFacts,
   type SiteRequirement,
+  effectiveInWater,
 } from './recipes';
 // The shelf rule reads the item registry's categories.
 // inventory.ts imports CraftingInventory from here as
@@ -201,10 +202,15 @@ export function craftingSection(recipe: Recipe): ItemCategory {
  * large available; both (old saves) → small
  * superseded + large already-owned.
  * Singles (garments + apron + umbrella + journal +
- * clay jar + grimoire): held → already-owned. Worn ⊆
+ * grimoire): held → already-owned. Worn ⊆
  * carried (wear never removes), and a dropped
- * garment's worn flag grants nothing, so inventory
- * presence is the ownership source. The journal is
+ * garment's worn flag grants nothing, so presence is
+ * the ownership source — the pack's presence, PLUS
+ * whatever the shell reports as owned OUT of the pack
+ * (the outOfPack input: the grimoire SEATED on a desk
+ * counts, Adam's one-book ruling 2026-11-01 — 'in
+ * play' means wherever it is). Callers that pass
+ * nothing get the inventory-only reading. The journal is
  * listed because the name-chain design implies ONE
  * (names live in it; a second would split the record
  * — DEV's call, 2026-10-30). The GRIMOIRE is listed
@@ -220,6 +226,7 @@ export function craftingSection(recipe: Recipe): ItemCategory {
 export function craftOwnershipStatus(
   recipe: Recipe,
   inventory: CraftingInventory,
+  outOfPack?: ReadonlySet<string> | null,
 ): CraftOwnership {
   const output = recipe.output.item;
 
@@ -264,26 +271,26 @@ export function craftOwnershipStatus(
       : 'available';
   }
 
-  // Singles: garments + apron + umbrella + journal + clay jar + grimoire.
+  // Singles: garments + apron + umbrella + journal + grimoire.
+  // The register lists UNIQUES and wearables — never VESSELS:
+  // a container is plural by nature (Adam's playtest ruling,
+  // 2026-11-01 — the clay jar sat here misfiled and refused
+  // its second craft; it and its water-jar form now craft
+  // as ordinary stackables, like the clay pot always did).
   const isSingle =
     output === ITEMS.apron ||
     output === ITEMS.umbrella ||
     output === ITEMS.journal ||
-    output === ITEMS.clayJar ||
     output === ITEMS.grimoire ||
     GARMENTS.some((g) => g.item === output);
   if (isSingle) {
-    // The clay jar has TWO forms (empty / filled with water):
-    // ownership counts either form, or a filled jar would leak
-    // a second jar through the listing.
-    const forms =
-      output === ITEMS.clayJar
-        ? [ITEMS.clayJar, ITEMS.waterJar]
-        : [output];
-    const held = forms.reduce(
-      (n, form) => n + inventory.count(form),
-      0,
-    );
+    const held =
+      inventory.count(output) +
+      (outOfPack !== undefined &&
+      outOfPack !== null &&
+      outOfPack.has(output)
+        ? 1
+        : 0);
     return held >= 1 ? 'already-owned' : 'available';
   }
 
@@ -321,6 +328,7 @@ export function canCraft(
   station: StationContext = null,
   nearCreek: boolean | null = null,
   site: SiteFacts | null = null,
+  outOfPack?: ReadonlySet<string> | null,
 ): CanCraftResult {
   const missingIngredients = missingFor(recipe.ingredients, inventory);
   const missingRequirements = recipe.requires
@@ -364,19 +372,27 @@ export function canCraft(
   const creekMismatch =
     recipe.requiresCreek === true && nearCreek === false;
 
-  // Site rule (fork B): a stated requiresSite mismatches only
-  // when the shell positively supplies where she stands and
-  // she stands wrong for it — 'in-water' wants inWater true,
-  // 'dry-land' wants it false. Null input leaves the gate off
-  // (transitional — see Recipe.requiresSite).
+  // Site rule (fork B + the trap table): a stated requiresSite
+  // mismatches only when the shell positively supplies where
+  // she stands and she stands wrong for it — 'in-water' wants
+  // inWater true, 'dry-land' wants it false. Null input leaves
+  // the gate off (transitional — see Recipe.requiresSite).
+  // The CRAFT-side check bites only where craft IS placement
+  // (placesTrap, the site-built two); a carryable trap's site
+  // is read at placement by its grant, never here, or the
+  // menu would refuse a weir's craft on dry land it is only
+  // being carried across.
   const siteMismatch =
     site !== null &&
+    recipe.placesTrap === true &&
     recipe.requiresSite !== undefined &&
-    (recipe.requiresSite === 'in-water' ? !site.inWater : site.inWater);
+    (recipe.requiresSite === 'in-water'
+      ? !effectiveInWater(site)
+      : effectiveInWater(site));
 
   // No-recraft ownership: an already-owned or superseded
   // recipe is not craftable, whatever the materials say.
-  const ownership = craftOwnershipStatus(recipe, inventory);
+  const ownership = craftOwnershipStatus(recipe, inventory, outOfPack);
 
   const ok =
     missingIngredients.length === 0 &&

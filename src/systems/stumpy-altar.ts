@@ -4,7 +4,8 @@
 // Altar by STONE + GLYPH + CANDLE; commissioned on
 // his nod the same day).
 //
-// THE THREE ACTS, in making order, at a plain stump:
+// THE THREE ACTS, in making order, at a plain base
+// (a found stump or a placed altar — parity):
 //   1. PLACE THE STONES — river stone x4, consumed.
 //   2. DRAW THE GLYPH — a charcoal stick HELD, never
 //      consumed (the whetstone precedent).
@@ -12,6 +13,12 @@
 //      and lit as part of the act.
 // The third act completes the STUMPY ALTAR
 // (ritual grade two).
+//
+// PARITY (2026-11-01): the base may equally be a
+// PLACED ALTAR — its entity carries the same
+// additions list (save.ts SavedAltar.additions), and
+// every act and reader below is base-blind: they
+// take the additions, never the base.
 //
 // STATE HOME: the stump's ADDITIONS — the existing
 // per-stump accumulating store (save.ts SavedStump
@@ -37,13 +44,20 @@
 // speaks them in her voice.
 //
 // RITUAL GRADE (the exposed fact): siteGrade below.
-// A made Altar (a placed altar ITEM's site) is grade
-// two by construction — the transformation is the
-// stump path only. Basic Waking reads grade >= 1
-// (any ritual site, as built); grade-two workings
-// read grade 2. rituals.ts is NOT rewired by this
-// module — tier-two filtering consumes the fact when
-// those workings are designed.
+// ALTAR PARITY (Adam, 2026-11-01: 'Both types of
+// altars should work the same... Just 2 flavors for
+// the same thing... BOTH REQUIRE THE CONSECRATION'):
+// a base is either a FOUND STUMP or a BUILT altar,
+// and grade derives from the ADDITIONS for both —
+// the made altar's born-grade-two by construction
+// RETIRED (an unconsecrated made altar now stands at
+// grade 1, the stump's unconsecrated grade; the
+// consecration completes either base to 2). Basic
+// Waking reads grade >= 1 (any ritual site, as
+// built); grade-two workings read grade 2.
+// rituals.ts is NOT rewired by this module —
+// tier-two filtering consumes the fact when those
+// workings are designed.
 //
 // FIRST CONSUMER — THE JOURNAL LINK: the journal's
 // enchantment, worked at altar-grade ground (a
@@ -93,9 +107,22 @@ export function altarProgressFrom(
   };
 }
 
-/** True when the stump's transformation is complete. */
-export function isStumpyAltar(additions: readonly string[]): boolean {
+/** True when a base's consecration is complete —
+ * either flavor (altar parity, 2026-11-01). */
+export function isConsecratedAltar(
+  additions: readonly string[],
+): boolean {
   return additions.includes(ALTAR_ADDITION);
+}
+
+/**
+ * The stump-era name for the same reading, kept as
+ * an alias while the shell's imports re-point
+ * (App.tsx consumes it); it reads ONLY the additions,
+ * never a stump. Retire it when the last import moves.
+ */
+export function isStumpyAltar(additions: readonly string[]): boolean {
+  return isConsecratedAltar(additions);
 }
 
 /** Ritual grade: 1 = any ritual site; 2 = altar-grade ground. */
@@ -111,9 +138,8 @@ export function siteGrade(
   kind: string,
   additions?: readonly string[],
 ): RitualGrade {
-  if (kind === 'altar') return 2;
-  if (kind === 'stump') {
-    return isStumpyAltar(additions ?? []) ? 2 : 1;
+  if (kind === 'altar' || kind === 'stump') {
+    return isConsecratedAltar(additions ?? []) ? 2 : 1;
   }
   return 1;
 }

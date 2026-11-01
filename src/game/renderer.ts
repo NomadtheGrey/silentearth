@@ -27,7 +27,17 @@ import type { WorldGen } from './worldgen';
 import { PlayerController } from './player';
 import { marshWeight } from './biomes';
 import { SOURCE_FOR_KIND } from './objects';
-import { buildAltarGroup, buildAnimal, buildCampArrow, buildCandle, buildCatchProp, buildCauldronGroup, buildDeskGroup, buildEdgeArrow, buildKindGeometry, buildStagedBone, buildStumpDressing, buildSunflowerHeadGeometry, buildTorch, buildUmbrella, buildWitch, ALTAR_CANDLE_X, ALTAR_CANDLE_Z, CANDLE_FLAME_Y, DISC_RADIUS, STUMP_TOP_Y, sunflowerHeadMatrix, sunflowerHeadOrientation, TORCH_FLAME_Y, vertexLambert } from './models';
+import { buildAltarGroup, buildAnimal, buildCampArrow, buildCandle, buildCatchProp, buildCauldronGroup, buildDeskGroup, buildEdgeArrow, buildKindGeometry, buildStagedBone, buildStumpDressing, buildSunflowerHeadGeometry, buildTorch, buildUmbrella, buildWitch, ALTAR_CANDLE_X, ALTAR_CANDLE_Z, ALTAR_SLAB_TOP_Y, ALTAR_TABLE_CANDLE_X, ALTAR_TABLE_CANDLE_Z, CANDLE_FLAME_Y, DISC_GROUND_LIFT_M, DISC_RADIUS, STUMP_TOP_Y, sunflowerHeadMatrix, sunflowerHeadOrientation, TORCH_FLAME_Y, vertexLambert } from './models';
+import { placementFootprintFor, type PlacementPreview, type PlacementTint } from './placementFootprints';
+import {
+  markerStateFor,
+  markerStateKey,
+  trustFactsFor,
+  TRUST_MARKER_FADE_START_M,
+  TRUST_MARKER_LIFT_M,
+  TRUST_MARKER_RANGE_M,
+  type MarkerState,
+} from './trustMarkers';
 import { spawnAnimalsForChunk, updateAnimal } from './animals';
 import type { AnimalInstance, AnimalKind } from './animals';
 import {
@@ -37,7 +47,7 @@ import {
   stepActors,
 } from './companionRuntime';
 import { catActor, catGlowOn, clearCat, ensureCat, installCatPreyAccess, stepCat } from './catRuntime';
-import { clearGuide, guideActor, guideVisible, stageGuide, stepGuide } from './guideRuntime';
+import { clearGuide, guideActor, guideVisible, seatYFor, stageGuide, stepGuide } from './guideRuntime';
 import { exodusBats, stepExodus } from './exodusRuntime';
 import { crowGlowIntensity, CROW_GLOW_EMISSIVE } from './crow';
 import type { CrowTier } from './crow';
@@ -70,6 +80,7 @@ import { shelterState, HOUSE_DEFS } from './shelter';
 import { loomState } from './loomState';
 import { pileState } from './pileState';
 import { trapState } from './trapState';
+import { jarPatchState, MUD_PATCH_COLOR, PATCH_R_M, WATER_PATCH_COLOR } from './jarPatchState';
 import { stumpState } from './stumpState';
 import type { TrapType } from './traps';
 import { pauseState } from './pause';
@@ -187,6 +198,18 @@ function collectWaterDiscs(gen: WorldGen, x: number, z: number): WaterDisc[] {
       }
     }
   }
+  // Placed jar patches (2026-11-01) slow her too — this
+  // set feeds SPEED only (the wading factor), where mud
+  // honestly belongs: mud is ground you sink in. The
+  // FACT channel (waterProximity's inWater) carries the
+  // water patches only. Surface gens only.
+  if (!gen.dimensionKey) {
+    for (const patch of jarPatchState.all()) {
+      if (Math.abs(patch.x - x) <= CHUNK_SIZE * 1.5 && Math.abs(patch.z - z) <= CHUNK_SIZE * 1.5) {
+        discs.push({ x: patch.x, z: patch.z, r: PATCH_R_M });
+      }
+    }
+  }
   return discs;
 }
 
@@ -212,6 +235,16 @@ export const CAMPFIRE_PILE_TOP_Y = 0.85;
 
 /** Stick colors for the tipi pile (warm browns, varied). */
 const CAMPFIRE_STICK_COLORS = [0x6b4a2f, 0x7a5a35, 0x5a4028];
+
+/** Placement-preview paint (DRAFT tints): neutral is the
+ *  standing register — a validity color appears only
+ *  when a real check supplies it (Adam's ruling). The
+ *  lift sits 1 cm above the ground discs' own lift so
+ *  the outline never z-fights a disc it crosses. */
+export const PLACEMENT_TINT_NEUTRAL = 0xe8e0c8;
+export const PLACEMENT_TINT_VALID = 0x7dc242;
+export const PLACEMENT_TINT_INVALID = 0xd84a3a;
+export const PLACEMENT_PREVIEW_LIFT_M = 0.03;
 
 /**
  * The unlit campfire mesh: stone ring + ash bed + crossed base
@@ -587,6 +620,32 @@ export class WorldRenderer {
   /** Unsubscribes for the placed-group rebuild events (below). */
   private unsubPlaced: (() => void)[] = [];
   /**
+   * The placement preview (placement surface, 2026-11-01):
+   * the terrain-painted footprint outline at the aimed
+   * point, driven by setPlacementPreview. Its own group —
+   * NOT part of the placed rebuilds; the mesh rebuilds
+   * only when the keyed shape or tint changes, and aim
+   * moves just re-seat the group.
+   */
+  private previewGroup: THREE.Group | null = null;
+  private previewMesh: THREE.Mesh | null = null;
+  private previewShapeKey = '';
+  /**
+   * Trust markers (2026-11-01): one sprite per marked
+   * individual's group, keyed by the GROUP (a WeakMap —
+   * chunk groups die with their chunk and take their
+   * entry with them; companion groups are reconciled by
+   * the same path). Textures are shared per painted
+   * state; materials are per-marker (the range fade is
+   * per-marker opacity).
+   */
+  private trustMarkerByGroup = new WeakMap<
+    THREE.Group,
+    { sprite: THREE.Sprite; key: string }
+  >();
+  private trustMarkerTextures = new Map<string, THREE.Texture>();
+  private animalHeightCache = new Map<string, number>();
+  /**
    * Companion layer (Companions Build 1, 2026-10-31):
    * promoted actors from companionRuntime — persistent,
    * NOT chunk-filtered (a companion survives its home
@@ -612,7 +671,7 @@ export class WorldRenderer {
   private coverMemo = new Map<string, { x: number; z: number }[]>();
   /** The guide's layer (a single crow mesh) + its tree-point memo. */
   private guideGroup: THREE.Group | null = null;
-  private treeMemo = new Map<string, { x: number; z: number }[]>();
+  private treeMemo = new Map<string, { x: number; z: number; crownY: number }[]>();
   /** The bat exodus layer: pooled bat meshes keyed by bat id. */
   private exodusGroup: THREE.Group | null = null;
   private exodusMeshes = new Map<string, THREE.Group>();
@@ -628,6 +687,8 @@ export class WorldRenderer {
   private pileGroup: THREE.Group | null = null;
   /** Placed-trap markers, rebuilt on 'trap:placed' (below). */
   private trapGroup: THREE.Group | null = null;
+  /** Placed jar patches (mud/water discs), rebuilt on their events. */
+  private patchGroup: THREE.Group | null = null;
   /**
    * Staged-bone meshes (Adam 2026-10-27 — tier-1 Waking,
    * site side): one pale bone per staged site, NOT
@@ -704,6 +765,13 @@ export class WorldRenderer {
         }
         return standingInWater(this.riverParams, discMemo, x, z);
       });
+      // A patch seated or risen in her current chunk must
+      // slow her without waiting for a chunk crossing —
+      // drop the memo on the patch events (the closure
+      // owns the key; the companion memo clears in
+      // rebuildPatchGroup).
+      bus.on('patch:seated', () => { discMemoKey = ''; });
+      bus.on('patch:risen', () => { discMemoKey = ''; });
     }
     // Site walls (sites landing, 2026-10-30; generalized to the
     // registered sites with the Schoolhouse): the renderer owns
@@ -773,8 +841,10 @@ export class WorldRenderer {
       bus.on('torch:removed', rebuild),
       bus.on('altar:placed', rebuild),
       bus.on('altar:removed', rebuild),
+      bus.on('altar:additions', rebuild),
       bus.on('desk:placed', rebuild),
       bus.on('desk:removed', rebuild),
+      bus.on('desk:grimoire', rebuild),
       bus.on('cauldron:placed', rebuild),
       bus.on('cauldron:removed', rebuild),
       bus.on('stump:upgraded', rebuild),
@@ -808,7 +878,13 @@ export class WorldRenderer {
     // Placed traps rebuild on their own event, like piles.
     const rebuildTraps = (): void => this.rebuildTrapGroup();
     this.unsubPlaced.push(bus.on('trap:placed', rebuildTraps));
+    this.unsubPlaced.push(bus.on('trap:removed', rebuildTraps));
     this.rebuildTrapGroup();
+    // Placed jar patches likewise (mud/water discs).
+    const rebuildPatches = (): void => this.rebuildPatchGroup();
+    this.unsubPlaced.push(bus.on('patch:seated', rebuildPatches));
+    this.unsubPlaced.push(bus.on('patch:risen', rebuildPatches));
+    this.rebuildPatchGroup();
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.setSize(container.clientWidth, container.clientHeight);
@@ -967,6 +1043,90 @@ export class WorldRenderer {
   }
 
   /**
+   * THE PLACEMENT PREVIEW (Adam's placement rulings,
+   * 2026-11-01; joint claim UI + Background): while a
+   * placement is armed, the shell hands the AIMED ground
+   * point + the placeable's key + facing, and the
+   * renderer paints the footprint's OUTLINE flat on the
+   * terrain there — the thing's own ground shape (the
+   * kiln round, a house its def square), replacing the
+   * floating plate as the preview. Neutral paint unless
+   * the caller passes a real validity (never a
+   * hardcoded green — no fire/house check exists today).
+   * Null clears. The footprint resolves game-side
+   * (placementFootprints.ts — the defs/builders are the
+   * authority); an unknown key paints nothing.
+   */
+  setPlacementPreview(preview: PlacementPreview | null): void {
+    if (!preview) {
+      if (this.previewGroup) this.previewGroup.visible = false;
+      this.previewShapeKey = '';
+      return;
+    }
+    const fp = placementFootprintFor(preview.key);
+    if (!fp) {
+      if (this.previewGroup) this.previewGroup.visible = false;
+      this.previewShapeKey = '';
+      return;
+    }
+    if (!this.previewGroup) {
+      this.previewGroup = new THREE.Group();
+      this.scene.add(this.previewGroup);
+    }
+    const shapeKey = `${preview.key}|${preview.tint}`;
+    if (shapeKey !== this.previewShapeKey || !this.previewMesh) {
+      this.previewShapeKey = shapeKey;
+      if (this.previewMesh) {
+        this.previewGroup.remove(this.previewMesh);
+        this.previewMesh.geometry.dispose();
+        (this.previewMesh.material as THREE.Material).dispose();
+        this.previewMesh = null;
+      }
+      const band = 0.07;
+      let geometry: THREE.BufferGeometry;
+      if (fp.shape === 'circle') {
+        geometry = new THREE.RingGeometry(fp.r - band, fp.r, 40);
+      } else {
+        const shape = new THREE.Shape();
+        const hw = fp.w / 2;
+        const hd = fp.d / 2;
+        shape.moveTo(-hw, -hd);
+        shape.lineTo(hw, -hd);
+        shape.lineTo(hw, hd);
+        shape.lineTo(-hw, hd);
+        shape.closePath();
+        const hole = new THREE.Path();
+        hole.moveTo(-hw + band, -hd + band);
+        hole.lineTo(hw - band, -hd + band);
+        hole.lineTo(hw - band, hd - band);
+        hole.lineTo(-hw + band, hd - band);
+        hole.closePath();
+        shape.holes.push(hole);
+        geometry = new THREE.ShapeGeometry(shape);
+      }
+      geometry.rotateX(-Math.PI / 2);
+      const color =
+        preview.tint === 'valid'
+          ? PLACEMENT_TINT_VALID
+          : preview.tint === 'invalid'
+            ? PLACEMENT_TINT_INVALID
+            : PLACEMENT_TINT_NEUTRAL;
+      const material = new THREE.MeshBasicMaterial({
+        color,
+        transparent: true,
+        opacity: 0.85,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+      });
+      this.previewMesh = new THREE.Mesh(geometry, material);
+      this.previewGroup.add(this.previewMesh);
+    }
+    this.previewGroup.position.set(preview.x, PLACEMENT_PREVIEW_LIFT_M, preview.z);
+    this.previewGroup.rotation.y = preview.rotY;
+    this.previewGroup.visible = true;
+  }
+
+  /**
    * Camp arrows show while scry OR pigeon holds (pigeon wing
    * bone — way-home sense, tier-1 charm: the same arrows,
    * ungated by water, while carried + awakened). The shell
@@ -1095,7 +1255,15 @@ export class WorldRenderer {
     const village = villageSite(String(gen.seed), gen.findSpawn(), (x, z) => gen.weightsAt(x, z));
     ensureCat(village.hearthHouse.hearthSpot.x, village.hearthHouse.hearthSpot.z);
     const grove = groveSite(String(gen.seed), gen.findSpawn(), (x, z) => gen.weightsAt(x, z).dominant);
-    stageGuide(grove.center.x, grove.center.z);
+    // The grove seat reads the grove's own nearest tree
+    // crown through the one seat law (seatYFor — ON the
+    // crown's top, never sunk in it).
+    const grovePerch = this.treePointNear(grove.center.x, grove.center.z, 12);
+    stageGuide(
+      grove.center.x,
+      grove.center.z,
+      grovePerch ? seatYFor(grovePerch) : undefined,
+    );
   }
 
   /**
@@ -1135,10 +1303,32 @@ export class WorldRenderer {
   }
 
   /** The nearest real tree point (the guide's perches), generateChunk ground truth, memoized per chunk. */
-  private treePointNear(x: number, z: number, r: number): { x: number; z: number } | null {
+  /** A tree kind's crown-top height at scale 1, measured
+   *  once off its built geometry (geometry top + the
+   *  mesh's baseY — the renderer's own placement sum,
+   *  so the crown a perch reads is the crown that draws). */
+  private crownTopCache = new Map<string, number>();
+  private crownTopFor(kind: 'tree' | 'oakTree'): number {
+    let top = this.crownTopCache.get(kind);
+    if (top === undefined) {
+      const mesh = SOURCE_FOR_KIND[kind].mesh;
+      const geo = buildKindGeometry(mesh, kind);
+      geo.computeBoundingBox();
+      top = (geo.boundingBox?.max.y ?? 0) + mesh.baseY;
+      geo.dispose();
+      this.crownTopCache.set(kind, top);
+    }
+    return top;
+  }
+
+  private treePointNear(
+    x: number,
+    z: number,
+    r: number,
+  ): { x: number; z: number; crownY: number } | null {
     const pcx = Math.floor(x / CHUNK_SIZE);
     const pcz = Math.floor(z / CHUNK_SIZE);
-    let best: { x: number; z: number } | null = null;
+    let best: { x: number; z: number; crownY: number } | null = null;
     let bestD = r;
     for (let cx = pcx - 1; cx <= pcx + 1; cx++) {
       for (let cz = pcz - 1; cz <= pcz + 1; cz++) {
@@ -1147,7 +1337,13 @@ export class WorldRenderer {
         if (!pts) {
           pts = [];
           for (const obj of this.gen.generateChunk(cx, cz).objects) {
-            if (obj.kind === 'tree' || obj.kind === 'oakTree') pts.push({ x: obj.x, z: obj.z });
+            if (obj.kind === 'tree' || obj.kind === 'oakTree') {
+              pts.push({
+                x: obj.x,
+                z: obj.z,
+                crownY: this.crownTopFor(obj.kind) * obj.scale,
+              });
+            }
           }
           this.treeMemo.set(key, pts);
         }
@@ -1415,6 +1611,13 @@ export class WorldRenderer {
     // Placed traps belong to the old world's map too.
     trapState.clear();
     this.rebuildTrapGroup();
+    // And jar patches (the shell restores the new
+    // world's state after install, as with the rest).
+    jarPatchState.clear();
+    this.rebuildPatchGroup();
+    // An armed placement preview belongs to the old
+    // world's aim too — never carry the outline across.
+    this.setPlacementPreview(null);
     this.gen = wrapGenWithState(gen);
     this.stageCat(gen);
     this.riverParams = riverParamsFor(String(gen.seed), gen.findSpawn());
@@ -1910,15 +2113,21 @@ export class WorldRenderer {
    * dressing mesh. Anchored off the same models constants
    * the dressing build uses, so light and flame can't drift.
    */
-  private addAltarCandleLight(x: number, z: number): void {
+  private addAltarCandleLight(
+    x: number,
+    z: number,
+    dx: number = ALTAR_CANDLE_X,
+    dz: number = ALTAR_CANDLE_Z,
+    flameY: number = STUMP_TOP_Y + CANDLE_FLAME_Y,
+  ): void {
     const light = new THREE.PointLight(
       CANDLE_LIGHT_COLOR,
       CANDLE_LIGHT_INTENSITY,
       CANDLE_LIGHT_DISTANCE,
       CANDLE_LIGHT_DECAY,
     );
-    light.position.set(x + ALTAR_CANDLE_X, STUMP_TOP_Y + CANDLE_FLAME_Y, z + ALTAR_CANDLE_Z);
-    light.userData.phase = flamePhase(x + ALTAR_CANDLE_X, z + ALTAR_CANDLE_Z);
+    light.position.set(x + dx, flameY, z + dz);
+    light.userData.phase = flamePhase(x + dx, z + dz);
     this.scene.add(light);
     this.altarCandleLights.push(light);
   }
@@ -2312,17 +2521,29 @@ export class WorldRenderer {
     }
     for (const altar of altarState.snapshot()) {
       // Made ritual altar (Adam 2026-10-27 — placeable +
-      // visible ONLY, no ritual actions): the stone-table +
-      // clay-bowl graphic, sitting on the ground at the
-      // placed position. Scene-level like all placed
-      // entities — chunk reload never touches it, and save
-      // restore rebuilds it via the constructor's initial
-      // rebuildPlacedGroup (altarState.restore first). No
-      // light: an altar is not a light source.
+      // visible): the stone-table + clay-bowl graphic at
+      // the placed position, wearing its consecration
+      // additions since the parity ruling (2026-11-01 —
+      // the same record the stump dressing reads, so the
+      // two flavors dress by one derivation). Scene-level
+      // like all placed entities — chunk reload never
+      // touches it, and save restore rebuilds it via the
+      // constructor's initial rebuildPlacedGroup
+      // (altarState.restore first). The candle, once set,
+      // gains its scene light like a stump's.
       const ag = new THREE.Group();
       ag.position.set(altar.x, 0, altar.z);
-      ag.add(buildAltarGroup());
+      ag.add(buildAltarGroup(altar.additions ?? []));
       group.add(ag);
+      if (altar.additions?.includes('altar-candle')) {
+        this.addAltarCandleLight(
+          altar.x,
+          altar.z,
+          ALTAR_TABLE_CANDLE_X,
+          ALTAR_TABLE_CANDLE_Z,
+          ALTAR_SLAB_TOP_Y + CANDLE_FLAME_Y,
+        );
+      }
     }
     for (const desk of deskState.snapshot()) {
       // Placed writing desk (Adam 2026-10-30 — placeable +
@@ -2338,6 +2559,12 @@ export class WorldRenderer {
       const dg = new THREE.Group();
       dg.position.set(desk.x, 0, desk.z);
       dg.add(buildDeskGroup());
+      // The seated grimoire (2026-11-01): a closed book on
+      // the top while the entity's flag stands — the flag
+      // flips only on a Systems grant's success (UI's
+      // composition), so the visible book is the seat's
+      // truth, never a promise.
+      if (desk.grimoire) dg.add(this.seatedGrimoireGroup());
       group.add(dg);
     }
     for (const record of stumpState.snapshot()) {
@@ -2410,10 +2637,14 @@ export class WorldRenderer {
    * per staged site, lying flat. Placement, measured at
    * build (flagged constants, not magic): made altar →
    * slab top 0.84 + bone half-height 0.05 = 0.89, offset
-   * z +0.37 so the bone lies beside the bowl (bowl radius
-   * 0.3, bone half-width 0.05 → clears by 0.02, inside the
-   * 0.45 slab edge); stump → stump top 0.6 (baseY 0.3 +
-   * geometry top 0.3) + 0.05 = 0.65, centred on the stump.
+   * z +0.33 so the bone lies beside the bowl (the bowl's
+   * radius at the bone's height is ~0.22 → clears by
+   * ~0.06; since the parity dressing, the glyph ring on
+   * the slab at r 0.42 bounds the other side → clears
+   * its strokes by ~0.02; the table candle at x −0.52
+   * stands clear of the bone's x-span entirely); stump
+   * → stump top 0.6 (baseY 0.3 + geometry top 0.3) +
+   * 0.05 = 0.65, centred on the stump.
    * Boulder stagings draw NOTHING (no boulder objects
    * exist yet) — the state still holds them, and Systems'
    * completion logic reads state, not this group. Own
@@ -2439,7 +2670,7 @@ export class WorldRenderer {
       if (staged.site.kind === 'boulder') continue;
       const bone = buildStagedBone();
       if (staged.site.kind === 'altar') {
-        bone.position.set(staged.site.x, 0.89, staged.site.z + 0.37);
+        bone.position.set(staged.site.x, 0.89, staged.site.z + 0.33);
       } else {
         bone.position.set(staged.site.x, 0.65, staged.site.z);
       }
@@ -2596,6 +2827,66 @@ export class WorldRenderer {
     return g;
   }
 
+  /** The seated grimoire's visible book: cover + pages
+   *  boxes on the desk's top (surface 0.78, per
+   *  buildDeskGroup), seated left of centre with a lived
+   *  turn (DRAFT dress — a richer book is Models' to
+   *  claim). Renderer-built dressing, the campfire-group
+   *  precedent. */
+  private seatedGrimoireGroup(): THREE.Group {
+    const g = new THREE.Group();
+    const coverMat = lambert(0x4a2e22);
+    const pageMat = lambert(0xd8cdb2);
+    const coverGeo = new THREE.BoxGeometry(0.29, 0.008, 0.22);
+    const bottom = new THREE.Mesh(coverGeo, coverMat);
+    bottom.position.y = 0.004;
+    g.add(bottom);
+    const pages = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.03, 0.19), pageMat);
+    pages.position.y = 0.008 + 0.015;
+    g.add(pages);
+    const top = new THREE.Mesh(coverGeo, coverMat);
+    top.position.y = 0.008 + 0.03 + 0.004;
+    g.add(top);
+    g.position.set(-0.22, 0.78, 0.02);
+    g.rotation.y = 0.3;
+    return g;
+  }
+
+  /** Rebuild the placed jar patches (mud/water discs at
+   *  the family's ground lift) from live jarPatchState. */
+  private rebuildPatchGroup(): void {
+    // A patch changed the ground underfoot — the
+    // companions' disc memo rebuilds on its next read.
+    this.companionDiscMemo = null;
+    if (this.patchGroup) {
+      this.scene.remove(this.patchGroup);
+      this.patchGroup.traverse((obj) => {
+        if (obj instanceof THREE.Mesh) {
+          obj.geometry.dispose();
+          const mat = obj.material;
+          if (Array.isArray(mat)) mat.forEach((m) => m.dispose());
+          else mat.dispose();
+        }
+      });
+      this.patchGroup = null;
+    }
+    const group = new THREE.Group();
+    for (const patch of jarPatchState.all()) {
+      const geo = new THREE.CircleGeometry(PATCH_R_M, 20);
+      geo.rotateX(-Math.PI / 2);
+      const mesh = new THREE.Mesh(
+        geo,
+        patch.kind === 'water'
+          ? lambert(WATER_PATCH_COLOR, 0.75)
+          : lambert(MUD_PATCH_COLOR),
+      );
+      mesh.position.set(patch.x, DISC_GROUND_LIFT_M, patch.z);
+      group.add(mesh);
+    }
+    this.scene.add(group);
+    this.patchGroup = group;
+  }
+
   /** Rebuild the placed-trap markers from live trapState (pile-group pattern). */
   private rebuildTrapGroup(): void {
     if (this.trapGroup) {
@@ -2692,6 +2983,134 @@ export class WorldRenderer {
    * right], inner edge at the body, so rotation.z flaps them
    * around the body edge — left negative, right positive).
    */
+  /** One animal kind's standing height, measured once
+   *  off its built geometry (the marker's seat needs it;
+   *  no height table exists to read instead). */
+  private animalHeightFor(kind: AnimalKind): number {
+    let h = this.animalHeightCache.get(kind);
+    if (h === undefined) {
+      const probe = buildAnimal(kind);
+      const box = new THREE.Box3().setFromObject(probe);
+      h = Math.max(0.2, box.max.y - Math.min(0, box.min.y));
+      this.animalHeightCache.set(kind, h);
+    }
+    return h;
+  }
+
+  /** The marker texture for one painted state, drawn
+   *  once and shared (canvas pips — see trustMarkers.ts
+   *  for the state table this paints). */
+  private trustMarkerTexture(state: MarkerState): THREE.Texture {
+    const key = markerStateKey(state);
+    let tex = this.trustMarkerTextures.get(key);
+    if (tex) return tex;
+    const canvas = document.createElement('canvas');
+    canvas.width = 264;
+    canvas.height = 88;
+    const ctx = canvas.getContext('2d')!;
+    const pip = (cx: number, fill: string | null, ring: string | null, lw = 6): void => {
+      ctx.beginPath();
+      ctx.arc(cx, 44, 25, 0, Math.PI * 2);
+      if (fill) {
+        ctx.fillStyle = fill;
+        ctx.fill();
+      }
+      if (ring) {
+        ctx.strokeStyle = ring;
+        ctx.lineWidth = lw;
+        ctx.stroke();
+      }
+    };
+    const diamond = (fill: string, ring: string | null): void => {
+      ctx.beginPath();
+      ctx.moveTo(132, 12);
+      ctx.lineTo(164, 44);
+      ctx.lineTo(132, 76);
+      ctx.lineTo(100, 44);
+      ctx.closePath();
+      ctx.fillStyle = fill;
+      ctx.fill();
+      if (ring) {
+        ctx.beginPath();
+        ctx.arc(132, 44, 40, 0, Math.PI * 2);
+        ctx.strokeStyle = ring;
+        ctx.lineWidth = 4;
+        ctx.stroke();
+      }
+    };
+    if (state.kind === 'pips') {
+      const spent = !state.open;
+      for (let i = 0; i < 3; i++) {
+        const cx = 44 + i * 88;
+        if (i < state.filled) {
+          pip(cx, spent ? 'rgba(154,143,118,0.9)' : '#e8d9a8', null);
+        } else if (i === state.filled && state.open) {
+          pip(cx, 'rgba(255,243,196,0.16)', '#fff3c4', 7);
+        } else {
+          pip(cx, null, spent ? 'rgba(160,150,130,0.45)' : 'rgba(232,217,168,0.5)', 5);
+        }
+      }
+    } else if (state.kind === 'ready') {
+      for (let i = 0; i < 3; i++) pip(44 + i * 88, '#f2c14e', 'rgba(242,193,78,0.45)');
+    } else if (state.kind === 'companion') {
+      diamond('#e8d9a8', null);
+    } else {
+      diamond('#f2c14e', 'rgba(242,193,78,0.8)');
+    }
+    tex = new THREE.CanvasTexture(canvas);
+    this.trustMarkerTextures.set(key, tex);
+    return tex;
+  }
+
+  /**
+   * Reconcile one individual's trust marker (Adam,
+   * 2026-11-01): the facts resolve through the installed
+   * seam (Systems' records — null for untouched and
+   * feral alike), the state derives in trustMarkers.ts,
+   * and the sprite rides the animal's own group above
+   * its head. Beyond the range the marker hides; inside
+   * the fade band it dims. Facts are queried ONLY in
+   * range (the resolver's cost assumption).
+   */
+  private updateTrustMarker(instance: AnimalInstance, group: THREE.Group): void {
+    const entry = this.trustMarkerByGroup.get(group);
+    const dist = Math.hypot(instance.x - this.player.x, instance.z - this.player.z);
+    if (dist > TRUST_MARKER_RANGE_M) {
+      if (entry) entry.sprite.visible = false;
+      return;
+    }
+    const state = markerStateFor(trustFactsFor(instance.id));
+    if (!state) {
+      if (entry) entry.sprite.visible = false;
+      return;
+    }
+    const key = markerStateKey(state);
+    let sprite = entry?.sprite;
+    if (!sprite) {
+      sprite = new THREE.Sprite(
+        new THREE.SpriteMaterial({
+          map: this.trustMarkerTexture(state),
+          transparent: true,
+          depthWrite: false,
+        }),
+      );
+      sprite.scale.set(1.05, 0.35, 1);
+      sprite.position.set(0, this.animalHeightFor(instance.kind) + TRUST_MARKER_LIFT_M, 0);
+      group.add(sprite);
+      this.trustMarkerByGroup.set(group, { sprite, key });
+    } else if (entry && entry.key !== key) {
+      (sprite.material as THREE.SpriteMaterial).map = this.trustMarkerTexture(state);
+      (sprite.material as THREE.SpriteMaterial).needsUpdate = true;
+      entry.key = key;
+    }
+    const fade =
+      dist <= TRUST_MARKER_FADE_START_M
+        ? 1
+        : 1 - ((dist - TRUST_MARKER_FADE_START_M) / (TRUST_MARKER_RANGE_M - TRUST_MARKER_FADE_START_M)) * 0.75;
+    (sprite.material as THREE.SpriteMaterial).opacity = fade;
+    sprite.visible = true;
+  }
+
   private poseAnimal(instance: AnimalInstance, group: THREE.Group): void {
     group.position.set(instance.x, instance.y + instance.bob, instance.z);
     // Squirrel cling (2026-10-31): while a squirrel climbs
@@ -2742,6 +3161,7 @@ export class WorldRenderer {
           night,
         });
         this.poseAnimal(pair.instance, pair.group);
+        this.updateTrustMarker(pair.instance, pair.group);
       }
     }
     // Companions (Build 1): persistent actors step after
@@ -2777,6 +3197,7 @@ export class WorldRenderer {
           this.companionGroup.add(g);
         }
         this.poseAnimal(a, g);
+        this.updateTrustMarker(a, g);
       }
       for (const [id, g] of [...this.companionMeshes]) {
         if (!seen.has(id)) {
