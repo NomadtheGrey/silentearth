@@ -1492,8 +1492,44 @@ export function farmhouseSite(
     emitWall(s.lx, s.lz, s.running, stubs.has(s) ? 0.45 : 1);
   }
 
-  // The roof: whole, always (mostly intact is the point).
-  feat('farmRoof', center.x, center.z, FARM_WALL_H_M, 1, theta);
+  // THE SECOND STORY (Adam's exception, enlarged
+  // 2026-10-31: the singular farmhouse is TWO-STORY —
+  // claim B, 2026-11-01). Upper walls in the farm
+  // rhythm's upper twin mirror the ground story: every
+  // standing or stubbed segment carries its upper
+  // (the door's upper too — a wall over the door);
+  // a segment the years took out entirely stays out
+  // through both stories. No boxes — the ground lines
+  // already carry the footprint's collision.
+  for (const s of segments) {
+    if (missing.has(s)) continue;
+    const w = toWorld(s.lx, s.lz);
+    const runsWorldX = (s.running === 'x') !== swap;
+    feat('farmWallUpper', w.x, w.z, FARM_WALL_H_M, 1, runsWorldX ? 0 : Math.PI / 2);
+  }
+
+  // The upper floor: slab tiles across the footprint
+  // at the story line (the floor its zone walks on
+  // when the upstairs zones build).
+  for (let i = 0; i < perLong; i++) {
+    for (let j = 0; j < perShort; j++) {
+      const w = toWorld(-W / 2 + SEG / 2 + i * SEG, -D / 2 + SEG / 2 + j * SEG);
+      feat('farmFloorSlab', w.x, w.z, FARM_WALL_H_M, 1, theta);
+    }
+  }
+
+  // Gable ends at the upper wall top, both ends (the
+  // wide prism — this house's depth is 7.5).
+  for (const endSign of [-1, 1]) {
+    const w = toWorld(endSign * (W / 2), 0);
+    feat('farmGableEndWide', w.x, w.z, FARM_WALL_H_M * 2, 1, theta);
+  }
+
+  // The roof: whole, always (mostly intact is the
+  // point) — now seated at the SECOND story's top.
+  // This is the house farmRoof was authored for; its
+  // baked chimney stands over this house's hearth.
+  feat('farmRoof', center.x, center.z, FARM_WALL_H_M * 2, 1, theta);
 
   // The porch: one composed feature at the door, facing
   // out; its two front posts collide.
@@ -1532,6 +1568,16 @@ export function farmhouseSite(
     });
   }
 
+  // The stairs: the family's flight, seated at the
+  // EAST end against the north wall (the west end is
+  // the hearth's). Dressing in this landing — the
+  // floor zone's entry anchor seats with the upstairs
+  // zones build, on this flight's head.
+  {
+    const w = toWorld(W / 2 - 1.0, -D / 2 + 0.55);
+    feat('farmStairs', w.x, w.z, 0, 1, theta);
+  }
+
   // The hearth: against the chimney end wall (local −X),
   // centred; the great stone stands beside it along the
   // same wall. The hearth block collides; the great stone
@@ -1555,6 +1601,42 @@ export function farmhouseSite(
       ? { lx: 2.0, lz: backSign * (D / 2 + 0.9) }
       : { lx: backSign * (W / 2 + 0.9), lz: 2.0 };
   const cellarWorld = toWorld(cellarLocal.lx, cellarLocal.lz);
+
+  // THE RANSACK (the exception's other half: the
+  // occupants FLED IN A HURRY). The authored disorder
+  // set, a plan-shuffled subset seated in the big room
+  // and the south strip — clear of the hearth, the
+  // stone, the partition line, and the stair run.
+  // Draws append at the plan stream's end; every
+  // earlier fact is untouched.
+  {
+    const SET: ScatterKind[] = [
+      'farmTableToppled',
+      'farmChairToppled',
+      'farmShelfToppled',
+      'farmCrateOpen',
+      'farmDrawersOpen',
+      'farmBarrelSpilled',
+    ];
+    const roster = [...SET];
+    for (let i = roster.length - 1; i > 0; i--) {
+      const j = Math.floor(planRand() * (i + 1));
+      [roster[i], roster[j]] = [roster[j], roster[i]];
+    }
+    const SEATS: readonly (readonly [number, number])[] = [
+      [-1.8, -1.6],
+      [0.6, -2.2],
+      [1.9, 0.2],
+      [-0.9, 0.5],
+      [2.6, -1.4],
+      [0.2, 2.6],
+    ];
+    const n = Math.min(roster.length, 4 + Math.floor(planRand() * 2.99));
+    for (let i = 0; i < n; i++) {
+      const w = toWorld(SEATS[i][0], SEATS[i][1]);
+      feat(roster[i], w.x, w.z, 0, 1, theta + Math.floor(planRand() * 4) * (Math.PI / 2));
+    }
+  }
 
   // A little rubble where the years have nibbled.
   {
