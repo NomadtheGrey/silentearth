@@ -2846,6 +2846,13 @@ export default function App() {
   const [chunkCount, setChunkCount] = useState(0);
   const [switching, setSwitching] = useState(false);
   const [inventoryOpen, setInventoryOpen] = useState(false);
+  // HUT STORAGE (the storage dialog's binding,
+  // 2026-11-01): the house the storage-headed pack is
+  // bound to, written ONLY at open (openInventoryPanel
+  // — every pack door rides it, the home menu's
+  // Storage row included, so the doors agree by
+  // construction). Null = the plain pack.
+  const [storageHouseId, setStorageHouseId] = useState<string | null>(null);
   const [craftingOpen, setCraftingOpen] = useState(false);
   const [charmsOpen, setCharmsOpen] = useState(false);
   // COMPANIONS (build 1, 2026-10-31): the fourth panel —
@@ -7303,6 +7310,15 @@ export default function App() {
   // modal guards), never swapped out, never swapped
   // in by a panel key.
   const openInventoryPanel = () => {
+    // STORAGE BINDING (hut storage): the dialog binds
+    // the house she is sheltered in AT OPEN — or no
+    // house (the plain pack). Written here and nowhere
+    // else, so every door (I, the touch button, the
+    // doors row, the home menu's Storage row) opens
+    // the same dialog on the same house.
+    setStorageHouseId(
+      sheltered && shelterHouseId !== null ? shelterHouseId : null,
+    );
     setInventoryOpen(true);
     setCraftingOpen(false);
     setCharmsOpen(false);
@@ -8554,9 +8570,19 @@ export default function App() {
     return store;
   };
 
+  // The bound storage house, live only while she
+  // stands sheltered at it — transfers never act
+  // from afar, and the dialog's head stands only
+  // while she is home at the bound house.
+  const boundStorageHouseId = (): string | null =>
+    storageHouseId !== null && shelterHouseId === storageHouseId
+      ? storageHouseId
+      : null;
+
   const handleDepositItem = (itemId: string) => {
-    if (!shelterHouseId) return;
-    const store = getHomeStore(shelterHouseId);
+    const houseId = boundStorageHouseId();
+    if (!houseId) return;
+    const store = getHomeStore(houseId);
     if (!store) {
       setStorageNote('No home storage here.');
       return;
@@ -8567,7 +8593,7 @@ export default function App() {
       // exists only for carried stacks).
       store.add(itemId, 1);
       inventory.remove(itemId, 1);
-      homeStoreItemsRef.current.get(shelterHouseId)?.add(itemId);
+      homeStoreItemsRef.current.get(houseId)?.add(itemId);
       inventory.setWorn(wardrobe.wornItemIds());
       setWornGarments(wardrobe.wornGarments());
       setStorageNote(null);
@@ -8581,8 +8607,9 @@ export default function App() {
   };
 
   const handleWithdrawItem = (itemId: string) => {
-    if (!shelterHouseId) return;
-    const store = getHomeStore(shelterHouseId);
+    const houseId = boundStorageHouseId();
+    if (!houseId) return;
+    const store = getHomeStore(houseId);
     if (!store) {
       setStorageNote('No home storage here.');
       return;
@@ -8594,7 +8621,7 @@ export default function App() {
       inventory.add(itemId, 1);
       store.remove(itemId, 1);
       if (store.count(itemId) === 0) {
-        homeStoreItemsRef.current.get(shelterHouseId)?.delete(itemId);
+        homeStoreItemsRef.current.get(houseId)?.delete(itemId);
       }
       inventory.setWorn(wardrobe.wornItemIds());
       setWornGarments(wardrobe.wornGarments());
@@ -9550,6 +9577,14 @@ export default function App() {
       setHomeMenuOpen(false);
       return;
     }
+    if (actionId === 'storage') {
+      // The menu's storage door: close the menu, open
+      // the pack — the opener binds this house (the
+      // menu only stands while she shelters here).
+      setHomeMenuOpen(false);
+      openInventoryPanel();
+      return;
+    }
     if (actionId === 'rest') {
       handleSleep();
       refreshInventory();
@@ -9649,13 +9684,12 @@ export default function App() {
   const capacityNote =
     capacityBonus > 0 ? `Carrying bonus +${capacityBonus} lb` : undefined;
 
-  // Home-storage section for the sheltering house, when
-  // sheltered: rows come from the HomeStorage counts (the
-  // shell tracks only the id universe, since HomeStorage
-  // exposes counts, not a snapshot). Unsheltered = no
-  // section, no Deposit buttons — storage is reached at
-  // home, not from afar. Transfers refresh the personal list
-  // above, which re-renders this derivation.
+  // Home-storage for the sheltering house: the store
+  // the HOME MENU's upgrade row prices against (that
+  // menu's own keying — the sheltering house, bound or
+  // not). Rows come from the HomeStorage counts (the
+  // shell tracks only the id universe, since
+  // HomeStorage exposes counts, not a snapshot).
   const openHomeStore =
     shelterHouseId !== null
       ? (homeStoresRef.current.get(shelterHouseId) ?? null)
@@ -9664,15 +9698,32 @@ export default function App() {
     shelterHouseId !== null
       ? (homeStoreItemsRef.current.get(shelterHouseId) ?? new Set<string>())
       : new Set<string>();
+  // THE STORAGE DIALOG'S CONTENT (hut storage,
+  // 2026-11-01): derived from the BINDING, not from
+  // proximity — standing sheltered no longer grows a
+  // section in the pack by itself (the proximity
+  // section is RETIRED). The bound house must still
+  // be the sheltering house: she cannot reach into a
+  // house she has walked away from, so leaving
+  // un-heads the panel to the plain pack, and the
+  // binding is re-read fresh at the next open.
+  const boundStore =
+    storageHouseId !== null && shelterHouseId === storageHouseId
+      ? (homeStoresRef.current.get(storageHouseId) ?? null)
+      : null;
+  const boundIds =
+    storageHouseId !== null && shelterHouseId === storageHouseId
+      ? (homeStoreItemsRef.current.get(storageHouseId) ?? new Set<string>())
+      : new Set<string>();
   const storageSection =
-    sheltered && shelterHouseId !== null
+    storageHouseId !== null && shelterHouseId === storageHouseId
       ? {
-          label: shelterHouseName ?? shelterHouseId,
+          label: shelterHouseName ?? storageHouseId,
           items:
-            openHomeStore === null
+            boundStore === null
               ? []
-              : [...openHomeIds]
-                  .filter((id) => openHomeStore.count(id) > 0)
+              : [...boundIds]
+                  .filter((id) => boundStore.count(id) > 0)
                   .map((id) => ({
                     id,
                     // Same display rule as panel rows above:
@@ -9685,10 +9736,15 @@ export default function App() {
                     // one itemNoteFor helper — descriptor
                     // wiring, 2026-10-29).
                     note: itemNoteFor(id, charmStateRef.current),
-                    quantityText: String(openHomeStore.count(id)),
+                    quantityText: String(boundStore.count(id)),
+                    // DEV rider (hut storage): the
+                    // dialog's rows speak weights like
+                    // the pack's — the FORMAT PIN's
+                    // typography over the stored count.
+                    titleMeta: pileTitleMetaFor(id, boundStore.count(id)),
                   })),
           capacityText:
-            openHomeStore === null
+            boundStore === null
               ? 'Home storage — empty until first deposit'
               : // POUNDS (Adam, 2026-10-28 — "pounds here
                 // and going forward"): used()/capacity()
@@ -9696,7 +9752,7 @@ export default function App() {
                 // the header names the unit. Null-store
                 // text unchanged; per-kind counts below
                 // are item quantities, not pounds.
-                `Stored ${openHomeStore.used()} lb / ${openHomeStore.capacity()} lb`,
+                `Stored ${boundStore.used()} lb / ${boundStore.capacity()} lb`,
           note: storageNote,
           onWithdrawItem: handleWithdrawItem,
         }
@@ -9761,6 +9817,14 @@ export default function App() {
     // unified surfaces (her pack panel's Deposit /
     // Withdraw, one tap away at home). Revisit only on
     // Adam's word.
+    // STORAGE ROW (hut storage, 2026-11-01): the
+    // menu's own door into the storage dialog — its
+    // press closes the menu and calls the pack's one
+    // opener, which binds this house at open, so the
+    // menu door and the I key open the same dialog on
+    // the same house by construction. The rows read
+    // [1] Sleep, [2] Upgrade, [3] Storage, [4] Close.
+    actions.push({ id: 'storage', label: 'Storage' });
     actions.push({ id: 'close', label: 'Close [X]' });
     return actions;
   };

@@ -340,9 +340,16 @@ export function InventoryPanel({
         ]
       : [];
   return (
-    <section aria-label="Inventory" className={'@container rounded-2xl p-3 ' + t.panel}>
+    <section
+      aria-label={
+        storage !== undefined ? `${storage.label} inventory` : 'Inventory'
+      }
+      className={'@container rounded-2xl p-3 ' + t.panel}
+    >
       <div className="mb-1 flex items-center justify-between gap-2">
-        <h2 className={'text-base font-semibold ' + t.heading}>Inventory</h2>
+        <h2 className={'text-base font-semibold ' + t.heading}>
+          {storage !== undefined ? `${storage.label} inventory` : 'Inventory'}
+        </h2>
         {onClose ? (
           <button
             type="button"
@@ -506,9 +513,10 @@ export function InventoryPanel({
       {storage !== undefined ? (
         <>
           <VineDivider className="mb-2 mt-3" />
-          <h3 className={'text-base font-semibold ' + t.heading}>
-            Home storage — {storage.label}
-          </h3>
+          {/* No sub-header: in the storage-headed mode
+              the panel's own title names the house
+              ('<House name> inventory' — hut storage,
+              2026-11-01); the capacity line speaks next. */}
           {storage.capacityText ? (
             <p className={'mb-2 text-sm ' + t.muted}>
               {storage.capacityText}
