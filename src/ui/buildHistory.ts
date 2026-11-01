@@ -43,6 +43,14 @@ export interface BuildRecord {
 
 const ALL_RECORDS: BuildRecord[] = [
   {
+    merge: 'Merge #51',
+    pr: 90,
+    sha: 'fa12cb1',
+    date: '2026-11-01',
+    what: 'Four commits, and a fifth \u2014 this record \u2014 rides in the same merge. Its story is the phone made right, in three pieces. The LOOK cue no longer sits under the turn knob \u2014 re-seated on the control cluster\u2019s own grid, clear of the disc at rest and at full travel \u2014 and the touch placement bar no longer stands down while the game is paused, leaving an armed placement ghosted with no way to confirm or cancel it. Adam\u2019s marked quest now stays visible: the quest card has a seat outside the collapsible stack, so the quest she chose to keep in view is in view on the phone without opening the HUD to find it. And the dialogs take the screen on touch \u2014 controls, door row, seed strip and structure tag stand down behind an open dialog, and the sheets rise to nearly the full height instead of crouching in a middle band with the world painting through them. Riding named: the upstairs ZONES module \u2014 every farmhouse\u2019s second floor and attic now exist as real places in waiting, dressed and gloomed, until the travel wiring makes the stairs climbable \u2014 and Models\u2019 upper-floor bricks, the pieces those rooms are built from.',
+    why: 'Three of these were found the only way they could be: by Adam, on his phone, in the middle of playing \u2014 a cue painted over, a quest marked and nowhere to be seen, a book squeezed into a sliver. The phone is not the small desktop; it is half the game\u2019s promise (desktop and phone at parity is standing law), and this merge pays that promise down where a player actually touched it. The zones ride because rooms before stairs is the order the game keeps proving: built, dressed, and plainly waiting on the one wiring that lets her climb.',
+  },
+  {
     merge: 'Merge #50',
     pr: 89,
     sha: 'c86d4c6',
