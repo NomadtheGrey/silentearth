@@ -43,6 +43,14 @@ export interface BuildRecord {
 
 const ALL_RECORDS: BuildRecord[] = [
   {
+    merge: 'Merge #55',
+    pr: 94,
+    sha: 'b5aff2d',
+    date: '2026-11-01',
+    what: 'One renderer delta, shipped alone and ahead of everything because it blocks play. The wall query answers NULL in open country \u2014 that is its documented contract, and her own step always guarded it \u2014 but the closures that push the cat and bonded companions out of walls passed the null straight into the push, which tried to iterate it. Every step an animal took away from every site footprint threw inside the frame loop: frames aborted mid-update (the pauses, then the catch-up to where she should be), and the console flood grew until the session froze outright. The two closures now coerce the open-country null to an empty list at the seam; the contract itself is untouched. Correction to the last record\u2019s forward note: the trap chunk it named as this merge follows as the NEXT merge instead \u2014 this slot went to the hotfix.',
+    why: 'Adam\u2019s own console named it \u2014 \u201ct is not iterable\u201d, at the wall push, hundreds of times \u2014 and his verdict named the culprit: \u201cBet it was the cat.\u201d The probes never caught it because every animal probe supplies its own wall push; the seam exists only where the renderer composes it. A throw inside every frame is not a stutter to schedule around \u2014 it is the game breaking under him, so the fix jumps the queue.',
+  },
+  {
     merge: 'Merge #54',
     pr: 93,
     sha: 'e389353',
