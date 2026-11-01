@@ -173,7 +173,7 @@ import { normalizeItemId } from './inventory';
 // owns it; save.ts imports it — no second mirror to drift,
 // the placed-torch id nuance taught us that lesson).
 import type { SavedNameLook } from './name-sight';
-import type { KnowledgeSnapshot } from './knowledge';
+import type { KnowledgeSnapshot } from './knowledge-register';
 // Single source for the ritual records (rituals.ts /
 // charms.ts own them; save.ts imports them — no second
 // mirror to drift, the placed-torch id lesson).

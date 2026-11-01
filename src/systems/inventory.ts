@@ -175,7 +175,7 @@ import {
   type StationContext,
 } from './crafting';
 import { WORN_CAPACITY_BONUS } from './clothes';
-import { markItemMet } from './knowledge';
+import { markItemMet } from './knowledge-register';
 import {
   isLadderTool,
   ownedToolItem,

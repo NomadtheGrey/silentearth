@@ -151,7 +151,7 @@ import {
   PersonalInventory,
 } from './inventory';
 import { RECIPES, effectiveInWater } from './recipes';
-import { recordCraftedUse } from './knowledge';
+import { recordCraftedUse } from './knowledge-register';
 import type { HungerState } from './hunger';
 import {
   ownedStage,
