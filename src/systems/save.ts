@@ -327,8 +327,10 @@ export interface SavedTorch {
 }
 
 /**
- * A placed altar, as saved. No ritual state is stored —
- * the altar is the SITE; rituals come later. `id` is
+ * A placed altar, as saved. The altar is the SITE;
+ * its consecration additions ride when present (altar
+ * parity, 2026-11-01 — the base carries the road's
+ * progress, as a stump does). `id` is
  * optional: Background's placed-altar entity owns the id
  * scheme (torch precedent); the save carries position
  * always and the id when the entity provides one. Order
@@ -339,6 +341,14 @@ export interface SavedAltar {
   x: number;
   z: number;
   id?: string;
+  /**
+   * Consecration additions (altar parity, Adam
+   * 2026-11-01): the placed altar is a BASE like the
+   * stump and carries the same ordered additions
+   * (stumpy-altar's record). Absent = unconsecrated
+   * (every pre-parity altar); sparse like `id`.
+   */
+  additions?: string[];
 }
 
 /**
@@ -699,6 +709,7 @@ export interface SaveDraft {
     x: number;
     z: number;
     id?: string;
+    additions?: ReadonlyArray<string>;
   }>;
   /**
    * Placed desks from the placed-desk source
@@ -1037,6 +1048,9 @@ export function serializeSave(draft: SaveDraft): SaveData {
       x: altar.x,
       z: altar.z,
       ...(altar.id !== undefined ? { id: altar.id } : {}),
+      ...(altar.additions !== undefined
+        ? { additions: [...altar.additions] }
+        : {}),
     })),
     // Desks: written AS-IS, same as altars (positions
     // verbatim, id when the entity provides one — no
@@ -1530,6 +1544,14 @@ export function deserializeSave(value: unknown): SaveData | null {
           z: entry.z as number,
           ...(typeof entry.id === 'string'
             ? { id: entry.id as string }
+            : {}),
+          ...(Array.isArray(entry.additions)
+            ? {
+                additions: entry.additions.filter(
+                  (addition): addition is string =>
+                    typeof addition === 'string',
+                ),
+              }
             : {}),
         });
       }
