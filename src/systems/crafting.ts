@@ -202,7 +202,7 @@ export function craftingSection(recipe: Recipe): ItemCategory {
  * large available; both (old saves) → small
  * superseded + large already-owned.
  * Singles (garments + apron + umbrella + journal +
- * clay jar + grimoire): held → already-owned. Worn ⊆
+ * grimoire): held → already-owned. Worn ⊆
  * carried (wear never removes), and a dropped
  * garment's worn flag grants nothing, so presence is
  * the ownership source — the pack's presence, PLUS
@@ -271,29 +271,25 @@ export function craftOwnershipStatus(
       : 'available';
   }
 
-  // Singles: garments + apron + umbrella + journal + clay jar + grimoire.
+  // Singles: garments + apron + umbrella + journal + grimoire.
+  // The register lists UNIQUES and wearables — never VESSELS:
+  // a container is plural by nature (Adam's playtest ruling,
+  // 2026-11-01 — the clay jar sat here misfiled and refused
+  // its second craft; it and its water-jar form now craft
+  // as ordinary stackables, like the clay pot always did).
   const isSingle =
     output === ITEMS.apron ||
     output === ITEMS.umbrella ||
     output === ITEMS.journal ||
-    output === ITEMS.clayJar ||
     output === ITEMS.grimoire ||
     GARMENTS.some((g) => g.item === output);
   if (isSingle) {
-    // The clay jar has TWO forms (empty / filled with water):
-    // ownership counts either form, or a filled jar would leak
-    // a second jar through the listing.
-    const forms =
-      output === ITEMS.clayJar
-        ? [ITEMS.clayJar, ITEMS.waterJar]
-        : [output];
     const held =
-      forms.reduce((n, form) => n + inventory.count(form), 0) +
-      (outOfPack !== undefined && outOfPack !== null
-        ? forms.reduce(
-            (n, form) => n + (outOfPack.has(form) ? 1 : 0),
-            0,
-          )
+      inventory.count(output) +
+      (outOfPack !== undefined &&
+      outOfPack !== null &&
+      outOfPack.has(output)
+        ? 1
         : 0);
     return held >= 1 ? 'already-owned' : 'available';
   }

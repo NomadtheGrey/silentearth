@@ -1111,8 +1111,9 @@ const DRAFT_RECIPES: Recipe[] = [
       'jar.ts) swap the ids. When soup / brew recipes ' +
       'land, they consume water-jar and return the ' +
       'empty jar among their outputs (the multi-output ' +
-      'idiom) — none in this landing. Listed single ' +
-      '(crafting.ts): one jar, in either form. ' +
+      'idiom) — none in this landing. A VESSEL, plural ' +
+      'by nature (Adam, 2026-11-01): unlisted in ' +
+      'crafting.ts — she makes as many as storage wants. ' +
       'Quantities draft.',
   },
   {
