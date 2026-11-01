@@ -179,6 +179,26 @@ export interface SavedCompanion {
   lastFedDay: number | null;
 }
 
+/**
+ * The trust marker's projection (see CompanionState.factsFor):
+ * the three facts a fed-marker reads per individual.
+ */
+export interface CompanionFacts {
+  trust: number;
+  fedToday: boolean;
+  bond: CompanionBond;
+}
+
+/**
+ * THE fed-today derivation — one expression, read by
+ * feed()'s 'sated' refusal AND by factsFor's projection,
+ * so the marker and the refusal can never disagree
+ * (DEV's single-source ruling, 2026-11-01).
+ */
+function fedOnDay(record: SavedCompanion, day: number): boolean {
+  return record.lastFedDay === day;
+}
+
 /** Trust one accepted feeding earns (DRAFT). */
 export const TRUST_PER_FEEDING = 1;
 /** Trust the bond wants (DRAFT: several feedings, several days). */
@@ -266,6 +286,27 @@ export class CompanionState {
     return record ? { ...record } : undefined;
   }
 
+  /**
+   * The trust marker's projection (Background's marker,
+   * DEV-approved hosted form, 2026-11-01): the three
+   * facts a fed-marker reads, derived HERE where the
+   * records live — fedToday reads the SAME derivation
+   * feed()'s 'sated' refusal uses (fedOnDay, below), so
+   * the marker and the refusal can never disagree. Null
+   * when she has never successfully fed this individual
+   * (the animal is simply unfed). `day` is the shell's
+   * day counter, the same number feed() is handed.
+   */
+  factsFor(creatureId: string, day: number): CompanionFacts | null {
+    const record = this.records.get(creatureId);
+    if (!record) return null;
+    return {
+      trust: record.trust,
+      fedToday: fedOnDay(record, day),
+      bond: record.bond,
+    };
+  }
+
   /** Every record (the save snapshot reads this). */
   snapshot(): SavedCompanion[] {
     return [...this.records.values()].map((record) => ({ ...record }));
@@ -348,7 +389,7 @@ export class CompanionState {
     if (inventory.count(offered) < 1) {
       return { ok: false, code: 'not-held' };
     }
-    if (existing && existing.lastFedDay === day) {
+    if (existing && fedOnDay(existing, day)) {
       return { ok: false, code: 'sated' };
     }
     inventory.remove(offered, 1);
