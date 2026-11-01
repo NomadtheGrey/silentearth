@@ -102,7 +102,7 @@ export function emptyJar(
 // ---------------------------------------------------------------------------
 
 /** The ground the shell certifies at the pour point. */
-export type DumpTarget = 'dry' | 'mud';
+export type DumpTarget = 'dry' | 'mud' | 'water';
 
 /**
  * Dump outcome. `patch` names the ground the pour
@@ -121,17 +121,22 @@ export type DumpJarOutcome =
  * the jar itself returns to her pack empty — she
  * keeps the vessel. One jar = one stage (DRAFT): dry
  * ground becomes a mud patch, a mud patch becomes a
- * water patch. Ground outside the two named kinds
- * refuses plainly (the verb is not offered there;
- * the guard keeps the outcome honest regardless).
- * No hunger gate (an inventory move, the module's
- * standing idiom).
+ * water patch. A pour onto a WATER patch also
+ * consumes — it joins (saturates) the source, outcome
+ * patch 'water'; saturation's meaning in the patch
+ * state is Background's to define (the seam ruling,
+ * 2026-11-01: refusing would strand their saturate
+ * seat, grants being the consumption authority).
+ * Ground outside the three named kinds refuses
+ * plainly (the verb is not offered there; the guard
+ * keeps the outcome honest regardless). No hunger
+ * gate (an inventory move, the module's idiom).
  */
 export function dumpJar(
   inventory: PersonalInventory,
   target: DumpTarget,
 ): DumpJarOutcome {
-  if (target !== 'dry' && target !== 'mud') {
+  if (target !== 'dry' && target !== 'mud' && target !== 'water') {
     return { dumped: false, reason: 'Pouring it there does nothing.' };
   }
   if (inventory.count(ITEMS.waterJar) <= 0) {
