@@ -9529,6 +9529,33 @@ export default function App() {
   // PC-keys guard, and the Esc-hint condition below.
   const firstRunDialogOpen = bootSave === null && !firstRunDone;
 
+  // ANY DIALOG OPEN (touch surfaces, 2026-11-01): the one
+  // flag the mobile-dialog takeover and the collapsed
+  // quest card's seat both read. The dialog family = the
+  // five panels, Options, the intro/first-run dialogs,
+  // the pile modal, the site windows (ritual/upgrade
+  // ride selectedSiteId / craftingOpen), and the confirm
+  // + trap popups. On touch, while any of these stands,
+  // the dialog TAKES THE SCREEN (Adam: dialogs were
+  // claustrophobic — the world chrome stood behind and
+  // through them): TouchControls, the top door row, the
+  // seed strip, and the structure tag stand down, and
+  // the sheets rise (see the panels column). Desktop
+  // never reads this flag.
+  const anyDialogOpen =
+    inventoryOpen ||
+    craftingOpen ||
+    charmsOpen ||
+    companionsOpen ||
+    journalOpen ||
+    optionsOpen ||
+    introOpen ||
+    firstRunDialogOpen ||
+    selectedPile !== null ||
+    selectedSiteId !== null ||
+    (pendingTrapRecipe ?? null) !== null ||
+    pendingRemoveTarget !== null;
+
   // TRAP ROW (Adam, 2026-10-28): the nearest placed
   // trap within HARVEST_RANGE (2.5 m, the harvest
   // range — piles/chips range, no divergence),
@@ -12961,11 +12988,42 @@ export default function App() {
         ) : null}
       </HudShell>
 
+      {/* QUEST CARD, COLLAPSED SEAT (Adam's touch defect,
+          2026-11-01): the card's home is the HudShell stack,
+          which unmounts while collapsed — so on the phone a
+          quest she MARKED was invisible until Show HUD, the
+          placement card's disease exactly. The cure is the
+          placement bar's precedent: a second seat outside
+          the collapsed gate, top-left under the door row
+          (top-28 clears the row even when it wraps to two
+          lines on a narrow screen), carrying the FULL card
+          (the same component and
+          props as the stack seat — title, hint, component
+          progress; a mark she has to excavate defeats the
+          feature). The seats are exclusive by hudCollapsed:
+          exactly one card ever stands. It yields to an open
+          dialog (the takeover) like the rest of the chrome.
+          It sits at z-30, under the pause veil: a readout,
+          not a trapped action — resume brings it forward. */}
+      {hudCollapsed && cardQuestRow && !anyDialogOpen ? (
+        <div className="pointer-events-none absolute left-2 top-28 z-30 w-[calc(100vw-1rem)] max-w-[20rem]">
+          <QuestCard
+            title={cardQuestRow.title}
+            hint={cardQuestRow.hint}
+            components={cardQuestComponents}
+            marked={cardQuestRow.id === activeQuestId}
+            theme={lookThemes.world}
+          />
+        </div>
+      ) : null}
+
       {/* Touch HUD bar: collapsed = slim bar (Show HUD + the
         buttons that must stay tappable); expanded = a single
         Hide HUD button, since the stack carries the rest.
-        Desktop renders neither. */}
-      {isTouch ? (
+        Desktop renders neither. The whole row stands down
+        while a dialog is open (the takeover — the dialog
+        has its own Close and takes the screen). */}
+      {isTouch && !anyDialogOpen ? (
         hudCollapsed ? (
           <div className="pointer-events-auto absolute left-2 right-2 top-2 z-40 flex flex-wrap items-center gap-2">
             <button
@@ -13052,11 +13110,19 @@ export default function App() {
         )
       ) : null}
 
-      {/* Panels column (right side; bottom sheet on touch). */}
+      {/* Panels column (right side; bottom sheet on touch).
+          TOUCH SHEET HEIGHT (Adam, 2026-11-01 — dialogs
+          less claustrophobic): the sheet rises to 92dvh —
+          with the world chrome stood down behind it (the
+          anyDialogOpen takeover), the dialog takes the
+          screen instead of squeezing into 60vh over the
+          sticks. Inner self-caps rise with it (CraftingMenu,
+          the site sections, OptionsModal) so nothing clips
+          inside a taller sheet. Desktop unchanged. */}
       <div
         className={
           isTouch
-            ? 'pointer-events-auto absolute left-2 right-2 bottom-2 z-30 flex max-h-[60vh] flex-col gap-2 overflow-y-auto ' +
+            ? 'pointer-events-auto absolute left-2 right-2 bottom-2 z-30 flex max-h-[92dvh] flex-col gap-2 overflow-y-auto ' +
               touchScrollbar
             : 'pointer-events-auto absolute right-2 top-20 z-30 flex max-h-[calc(100vh-6rem)] w-80 max-w-[calc(100vw-1rem)] flex-col gap-2 overflow-y-auto'
         }
@@ -13195,7 +13261,8 @@ export default function App() {
                 <section
                   aria-label={`${contextSiteLabel ?? 'Stump'} upgrades`}
                   className={
-                    'max-h-[70vh] overflow-y-auto rounded-2xl p-2 ' +
+                    (isTouch ? 'max-h-[92dvh] ' : 'max-h-[70vh] ') +
+                    'overflow-y-auto rounded-2xl p-2 ' +
                     UI_THEMES[lookThemes.dialog].panel
                   }
                 >
@@ -13239,7 +13306,8 @@ export default function App() {
                 <section
                   aria-label={`${contextSiteLabel ?? 'Stump'} ritual`}
                   className={
-                    'max-h-[70vh] overflow-y-auto rounded-2xl p-2 ' +
+                    (isTouch ? 'max-h-[92dvh] ' : 'max-h-[70vh] ') +
+                    'overflow-y-auto rounded-2xl p-2 ' +
                     UI_THEMES[lookThemes.dialog].panel
                   }
                 >
@@ -13424,7 +13492,11 @@ export default function App() {
           label and the Current chip carry the notes' black
           backdrop (second defect, same report): bare text
           let the armed ghost's poles paint straight across
-          the words; the controls win visually too. */}
+          the words; the controls win visually too. On touch
+          the strip stands down while a dialog is open (the
+          takeover — its 'Current:' line collided with the
+          sheet's list headings in Adam's frame). */}
+      {!(isTouch && anyDialogOpen) ? (
       <div className="pointer-events-none absolute bottom-0 left-0 z-30 flex max-w-[100vw] flex-wrap items-center gap-2 p-4">
         <label
           htmlFor="seed-input"
@@ -13451,6 +13523,7 @@ export default function App() {
           <span className="rounded bg-black/45 px-2 py-1">Current: {seed}</span>
         </span>
       </div>
+      ) : null}
 
       {/* Controls help (desktop only — touch devices get the TouchControls cues). */}
       {isTouch ? null : (
@@ -13470,8 +13543,11 @@ export default function App() {
       {/* Touch controls (coarse-pointer devices only). Rendered
         below the z-30 HUD/panels/world buttons, so taps on
         those still land on them; the look field only catches
-        touches on open world. */}
-      {isTouch ? (
+        touches on open world. The layer stands down while
+        a dialog is open (the takeover): no sticks or USE/
+        JUMP buttons painting through a translucent sheet,
+        and no look drags turning the camera behind it. */}
+      {isTouch && !anyDialogOpen ? (
         <TouchControls
           onMove={applyTouchMove}
           onTurn={applyTurn}
@@ -14145,16 +14221,12 @@ export default function App() {
         tag's seat and hiding set (plus the journal and
         the teaching beat, the newer surfaces), with the
         tag itself derived per render above (structures
-        are static, so no poll). Display only. */}
-      {!inventoryOpen &&
-      !craftingOpen &&
-      !charmsOpen &&
-      !companionsOpen &&
-      !journalOpen &&
-      !optionsOpen &&
-      !introOpen &&
-      !pendingTrapRecipe &&
-      pendingRemoveTarget === null &&
+        are static, so no poll). Display only. Its dialog
+        terms now read the one anyDialogOpen flag (the
+        takeover's set — which also closes this tag's old
+        gaps: the pile modal and the site windows used to
+        leave it standing behind them). */}
+      {!anyDialogOpen &&
       fragmentBeat === null &&
       !paused ? (
         <StructureTag theme={lookThemes.world} tag={structureTag} />

@@ -265,7 +265,7 @@ export function OptionsModal({
           'absolute flex flex-col overflow-hidden rounded-2xl ' +
           t.panel +
           (comfortable
-            ? ' left-2 right-2 bottom-2 max-h-[70vh]'
+            ? ' left-2 right-2 bottom-2 max-h-[92dvh]'
             : ' left-1/2 top-1/2 w-[min(32rem,calc(100vw-2rem))] max-h-[80vh] -translate-x-1/2 -translate-y-1/2')
         }
         onClick={(e) => e.stopPropagation()}
