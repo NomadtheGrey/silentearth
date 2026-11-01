@@ -75,8 +75,11 @@
  *    superseding the emit half of the original brief).
  *    A recipe with placesTrap set (all five traps) never enters
  *    inventory: on a confirmed craft this helper consumes the
- *    ingredients and reports success via placedTrap {type} —
- *    and NOTHING else. It does not place, and it does not emit
+ *    ingredients and reports success via placedTrap {type}.
+ *    The one grant on this path is a recipe's stated SPOIL
+ *    (the pitfall's dirt, 2026-11-01 — see the spoil field):
+ *    granted by addPartial and reported, never the trap
+ *    itself. It does not place, and it does not emit
  *    'trap:placed' (the earlier callback-emit shape from
  *    e37234e/762af40 is REMOVED by this landing). SINGLE-CALLER
  *    RULE: the SHELL calls trapState.placeTrap(type, player.x,
@@ -202,6 +205,16 @@ export interface CraftExecutionResult {
    * guard is shell-side (Systems cannot read anchor state).
    */
   upgradedStump?: { type: string };
+  /**
+   * Present only when the recipe states spoil (the
+   * pitfall's dirt): what the craft threw up, granted
+   * into the pack by addPartial after consumption.
+   * `granted` is what the pack took; `remainder` is
+   * what did not fit — the shell piles it at her feet
+   * (the pit's edge); it is never voided. Absent for
+   * every spoil-less craft.
+   */
+  spoil?: { item: ItemId; granted: number; remainder: number };
   /** Owned tool after the craft, read from inventory ('none' if none). */
   owned: OwnedToolItem;
   /** Background-compatible tier of the owned tool, null for none. */
@@ -427,11 +440,28 @@ export function executeCraft(
         inventory.remove(held, 1);
       }
     }
+    // SPOIL (the pitfall's dirt): the report path's one
+    // grant, by addPartial AFTER consumption (the freed
+    // ingredient weight counts first). It cannot throw —
+    // what fits is granted, the rest rides the result
+    // for the shell to pile at her feet.
+    const spoilGrant = recipe.spoil
+      ? inventory.addPartial(recipe.spoil.item, recipe.spoil.quantity)
+      : undefined;
     return {
       output: { ...recipe.output },
       ...(recipe.placesTrap
         ? { placedTrap: { type: recipe.id } }
         : { upgradedStump: { type: recipe.id } }),
+      ...(spoilGrant && recipe.spoil
+        ? {
+            spoil: {
+              item: recipe.spoil.item,
+              granted: spoilGrant.granted,
+              remainder: spoilGrant.remainder,
+            },
+          }
+        : {}),
       owned: ownedToolItem(inventory),
       toolTier: ownedTier(inventory),
       harvestStage: ownedStage(inventory),

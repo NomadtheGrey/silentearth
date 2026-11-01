@@ -635,7 +635,7 @@ export const ITEM_DESCRIPTIONS: Readonly<Record<string, string>> = {
   clay: 'Clay. Pots, bricks, and daub — shaped, then fired.',
   flint: 'Strikes a fire fast. Kept, never consumed.',
   'old-stump': 'An old stump. A workstation where it stands, and an altar for the rites.',
-  dirt: 'Scooped earth. No known use yet.',
+  dirt: 'Scooped earth. What digging a pitfall throws up — and what fills one back in.',
   mud: 'Scooped mud. No known use yet.',
   grass: 'Cut grass. Fibre for pulp, and stuffing for bedding.',
   'salt-crystal': 'Salt from the flats. No known use yet.',

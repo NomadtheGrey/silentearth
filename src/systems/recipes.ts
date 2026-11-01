@@ -55,6 +55,7 @@ export const ITEMS = {
   tallow: 'tallow',
   cauldron: 'cauldron',
   // New items (2026-10-25 design work).
+  dirt: 'dirt',
   clay: 'clay',
   flint: 'flint',
   oldStump: 'old-stump',
@@ -339,6 +340,19 @@ export interface Recipe {
    * fresh crafts place.
    */
   placesTrap?: boolean;
+  /**
+   * Spoil (Adam, 2026-11-01 — the pitfall lifecycle):
+   * what the act of crafting THROWS UP, granted into
+   * the pack on a successful craft (the report path's
+   * one grant; see crafting-execution.ts). Digging a
+   * pit yields its dirt — the same dirt its filling-in
+   * later consumes (pitfall.ts reads THIS quantity as
+   * the fill cost, one source). What does not fit rides
+   * the result as a remainder for the shell to pile at
+   * her feet — the pit's edge; earth is never voided.
+   * Quantity DRAFT for the pin pass. First use: pitfall.
+   */
+  spoil?: { item: ItemId; quantity: number };
   /**
    * Stump-upgrade (Systems, 2026-10-28 — the Stumpy Workstation
    * fix; trap-report precedent). Crafting this recipe transforms
@@ -1211,6 +1225,7 @@ const DRAFT_RECIPES: Recipe[] = [
     placesTrap: true,
     requiresToolStage: 1,
     requiresSite: 'dry-land',
+    spoil: { item: ITEMS.dirt, quantity: 6 },
     notes:
       'DRAFT — BRAINSTORM, NOTHING PICKED. Dug with the spade, ' +
       'not the trowel; peat moss is the cover. No build cost ' +
