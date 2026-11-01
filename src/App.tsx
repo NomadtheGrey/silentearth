@@ -1866,6 +1866,7 @@ import {
 } from './systems/owned-tool';
 import {
   QUEST_ACTS,
+  QUEST_THREADS,
   evaluateQuests,
   emptyQuestFlags,
   questById,
@@ -5893,6 +5894,8 @@ export default function App() {
         act:
           QUEST_ACTS.find((act) => act.id === quest.act)?.name ??
           'Act I — Survival',
+        thread: QUEST_THREADS.find((thread) => thread.id === quest.thread)
+          ?.name,
         active: quest.id === activeQuestId,
       }))
     : undefined;

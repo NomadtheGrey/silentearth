@@ -42,6 +42,14 @@ export interface QuestDisplay {
    * wired, its button reads as the clear.
    */
   active?: boolean;
+  /**
+   * The quest's THREAD display name, as the caller
+   * stamps it from Systems' QUEST_THREADS (the thread
+   * folds chunk). The journal nests its folds by this
+   * name; flat lists ignore it. Omitted = threadless
+   * (renders under its act with no fold of its own).
+   */
+  thread?: string;
 }
 
 /** The act unassigned rows belong to (Adam's frame: the survival act). */
@@ -66,6 +74,32 @@ export function groupQuestsByAct(quests: QuestDisplay[]): QuestActGroup[] {
     const group = groups.find((candidate) => candidate.act === act);
     if (group) group.quests.push(quest);
     else groups.push({ act, quests: [quest] });
+  }
+  return groups;
+}
+
+/** One thread's slice of an act's quest list, for nested rendering. */
+export interface QuestThreadGroup {
+  /** Thread display name; '' for threadless rows. */
+  thread: string;
+  quests: QuestDisplay[];
+}
+
+/**
+ * Group one act's rows by thread, same law as the acts:
+ * first-appearance order (which is QUEST_THREADS' fold
+ * order, Systems having defined it as first appearance
+ * in the quest list), rows in list order inside.
+ */
+export function groupQuestsByThread(
+  quests: QuestDisplay[],
+): QuestThreadGroup[] {
+  const groups: QuestThreadGroup[] = [];
+  for (const quest of quests) {
+    const thread = quest.thread ?? '';
+    const group = groups.find((candidate) => candidate.thread === thread);
+    if (group) group.quests.push(quest);
+    else groups.push({ thread, quests: [quest] });
   }
   return groups;
 }

@@ -27,13 +27,14 @@
  * was hiding, not duplication.
  */
 
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
 
 import { UI_THEMES, type UiThemeName } from './themes';
 import {
   QuestLog,
   DEFAULT_QUEST_ACT,
   groupQuestsByAct,
+  groupQuestsByThread,
   type QuestDisplay,
 } from './QuestLog';
 
@@ -60,8 +61,9 @@ export interface JournalPanelProps {
   /**
    * The quest log the book carries (dialog audit #4):
    * the caller's mapped rows, rendered below the marks
-   * GROUPED BY ACT (Adam's amendments — one independent
-   * FOLD per act, rows in the caller's order inside it).
+   * as NESTED independent folds — by ACT, then by
+   * THREAD within the act (Adam's log design), rows in
+   * the caller's order inside their thread.
    * Omitted = marks only.
    */
   quests?: QuestDisplay[];
@@ -113,6 +115,40 @@ export function JournalPanel({
       const next = new Set(previous);
       if (next.has(act)) next.delete(act);
       else next.add(act);
+      return next;
+    });
+  // THREAD FOLDS (Adam's log design, nested): within an
+  // act, quests fold again by THREAD — independent of
+  // the act fold and of each other, same idiom. Default:
+  // the thread holding its act's first incomplete quest
+  // starts open, the rest folded — so an act unfolded by
+  // hand already shows its current thread (Wakings over
+  // Wake a Charm, in Act II). Keys are act + thread, so
+  // same-named threads in different acts never share a
+  // fold state.
+  const threadFoldKey = (act: string, thread: string) =>
+    act + '::' + thread;
+  const [collapsedThreads, setCollapsedThreads] =
+    useState<ReadonlySet<string>>(() => {
+      const closed = new Set<string>();
+      for (const group of groups) {
+        const current = group.quests.find((quest) => !quest.done);
+        for (const threadGroup of groupQuestsByThread(group.quests)) {
+          if (
+            threadGroup.thread !== '' &&
+            threadGroup.thread !== (current?.thread ?? '')
+          ) {
+            closed.add(threadFoldKey(group.act, threadGroup.thread));
+          }
+        }
+      }
+      return closed;
+    });
+  const toggleThreadFold = (key: string) =>
+    setCollapsedThreads((previous) => {
+      const next = new Set(previous);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
       return next;
     });
   const btn = comfortable
@@ -195,13 +231,53 @@ export function JournalPanel({
                     <span aria-hidden="true">{folded ? '▸ ' : '▾ '}</span>
                     {group.act}
                   </button>
-                  {!folded ? (
-                    <QuestLog
-                      quests={group.quests}
-                      theme={theme}
-                      onMarkQuest={onMarkQuest}
-                    />
-                  ) : null}
+                  {!folded
+                    ? groupQuestsByThread(group.quests).map(
+                        (threadGroup) => {
+                          if (threadGroup.thread === '') {
+                            return (
+                              <Fragment key="threadless">
+                                <QuestLog
+                                  quests={threadGroup.quests}
+                                  theme={theme}
+                                  onMarkQuest={onMarkQuest}
+                                />
+                              </Fragment>
+                            );
+                          }
+                          const key = threadFoldKey(
+                            group.act,
+                            threadGroup.thread,
+                          );
+                          const threadFolded = collapsedThreads.has(key);
+                          return (
+                            <div key={key} className="mt-1.5 ml-2">
+                              <button
+                                type="button"
+                                aria-expanded={!threadFolded}
+                                onClick={() => toggleThreadFold(key)}
+                                className={
+                                  'w-full pt-1 text-left text-xs font-medium ' +
+                                  t.heading
+                                }
+                              >
+                                <span aria-hidden="true">
+                                  {threadFolded ? '▸ ' : '▾ '}
+                                </span>
+                                {threadGroup.thread}
+                              </button>
+                              {!threadFolded ? (
+                                <QuestLog
+                                  quests={threadGroup.quests}
+                                  theme={theme}
+                                  onMarkQuest={onMarkQuest}
+                                />
+                              ) : null}
+                            </div>
+                          );
+                        },
+                      )
+                    : null}
                 </div>
               );
             })
