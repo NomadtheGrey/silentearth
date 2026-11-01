@@ -604,6 +604,14 @@ export function displayNameFor(item: ItemId): string {
  * (basket/apron/worn/trundle +lb). "No known use yet." is
  * AUTHORED per item below, never a fallback: an id missing
  * from this table returns undefined from descriptionFor().
+ * "Decorative." is likewise authored, per item: the tag
+ * Adam ruled for the use-less flowers (2026-11-01, the
+ * no-use census — the poison mushroom EXCLUDED by his
+ * word: a cauldron brew will use it). The tag is DRAFT
+ * like every line here; a landing that gives a tagged
+ * flower a use strikes its tag in the same push. The
+ * tagged set is registered in
+ * docs/decorative-register-2026-11-01.md.
  *
  * PRIMAL BONES ARE NOT HERE: the dynamic primal-bone-* ids
  * are covered by the bone note (UI precedence: boneNote
@@ -714,20 +722,21 @@ export const ITEM_DESCRIPTIONS: Readonly<Record<string, string>> = {
   // Camping.
   'sleeping-bag': 'Bedding you can carry. A bed wherever you stop. Woven at a loom.',
   tent: 'A portable shelter. Pitch it where you aim; pack it up when you move. Made at a workstation.',
-  // Flowers (three are food; the rest have no use yet).
-  'white-yarrow': 'A picked white yarrow. No known use yet.',
-  'gold-coneflower': 'A picked gold coneflower. No known use yet.',
-  'purple-clover': 'A picked purple clover. No known use yet.',
+  // Flowers (three are food; the rest are Decorative —
+  // the census tag, Adam 2026-11-01).
+  'white-yarrow': 'A picked white yarrow. Decorative.',
+  'gold-coneflower': 'A picked gold coneflower. Decorative.',
+  'purple-clover': 'A picked purple clover. Decorative.',
   'yellow-dandelion': 'Edible greens. Eat it to restore hunger.',
-  'pink-milkweed': 'A picked pink milkweed. No known use yet.',
-  'red-poppy': 'A picked red poppy. No known use yet.',
+  'pink-milkweed': 'A picked pink milkweed. Decorative.',
+  'red-poppy': 'A picked red poppy. Decorative.',
   'tall-sunflower': 'Eat it for the seeds — a small bite of food.',
-  'blue-aster': 'A picked blue aster. No known use yet.',
-  'white-trillium': 'A picked white trillium. No known use yet.',
+  'blue-aster': 'A picked blue aster. Decorative.',
+  'white-trillium': 'A picked white trillium. Decorative.',
   'wood-violet': 'A small edible flower. Eat it — a bite of food.',
-  'creek-iris': 'A picked creek iris. No known use yet.',
-  'white-water-lily': 'A picked white water lily. No known use yet.',
-  'meadow-flower': 'A picked meadow flower. No known use yet.',
+  'creek-iris': 'A picked creek iris. Decorative.',
+  'white-water-lily': 'A picked white water lily. Decorative.',
+  'meadow-flower': 'A picked meadow flower. Decorative.',
 };
 
 /**
