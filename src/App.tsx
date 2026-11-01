@@ -1944,9 +1944,16 @@ import {
   ascend,
   descend,
   enterCave,
+  enterUpstairs,
   exitCave,
+  exitUpstairs,
   type TravelOutcome,
 } from './game/dimensionTravel';
+import {
+  atticLayoutForKey,
+  isUpstairsKey,
+  upstairsMouthFor,
+} from './game/attics';
 import {
   placeCauldron as grantPlaceCauldron,
   pickupCauldron as grantPickupCauldron,
@@ -4839,6 +4846,32 @@ export default function App() {
         const visitMouth = (() => {
           if (visit === null || visit.mouthId === null) return undefined;
           const weights = (x: number, z: number) => gen.weightsAt(x, z);
+          if (isUpstairsKey(visit.key)) {
+            // UPSTAIRS BOOT (UI half, 2026-11-01): an
+            // upstairs save's mouthId carries the HOUSE
+            // KEY (dimensionState.enter's second seat). She
+            // wakes on the surface at that house's STAIR
+            // HEAD, facing DOWN the flight — the engine's
+            // own return-anchor formula (enterUpstairs
+            // seats the same seat + yaw on exit). An
+            // unresolvable house falls back whole, like
+            // the caves below.
+            const mouth = upstairsMouthFor(
+              String(gen.seed),
+              gen.findSpawn(),
+              weights,
+              visit.mouthId,
+            );
+            return mouth
+              ? {
+                  spot: mouth.stairHead,
+                  exitYaw: Math.atan2(
+                    mouth.stairHead.x - mouth.stairBase.x,
+                    mouth.stairHead.z - mouth.stairBase.z,
+                  ),
+                }
+              : undefined;
+          }
           if (visit.key === CAVE_DIMENSION_KEY) {
             return caveMouths(
               String(gen.seed),
@@ -10269,6 +10302,11 @@ export default function App() {
         id: string;
         distance: number;
       }
+    | {
+        kind: 'upstairs-enter' | 'upstairs-exit';
+        id: string;
+        distance: number;
+      }
     | { kind: 'home'; distance: number }
     | { kind: 'scry'; distance: number }
     | {
@@ -10562,7 +10600,13 @@ export default function App() {
     // Background's caves module, like the looms read
     // their singleton — no shell mirror.
     const considerCave = (
-      kind: 'cave-enter' | 'cave-exit' | 'cave-descend' | 'cave-climb',
+      kind:
+        | 'cave-enter'
+        | 'cave-exit'
+        | 'cave-descend'
+        | 'cave-climb'
+        | 'upstairs-enter'
+        | 'upstairs-exit',
       id: string,
       x: number,
       z: number,
@@ -10573,7 +10617,39 @@ export default function App() {
         challengers.push({ kind, id, distance: f.distance });
       }
     };
-    if (!dimensionState.isUnderground()) {
+    // UPSTAIRS TRAVEL (UI half, 2026-11-01): the
+    // farmhouses' stairs join the same race. dimensionState
+    // reads ANY non-surface key as "underground", so the
+    // upstairs arm must be read BEFORE the cave arms: inside
+    // an upstairs zone the only travel candidate is the way
+    // back DOWN — the zone layout's entry anchor (just
+    // inside the stair-head door she arrived at). On the
+    // surface, every farmhouse's STAIR HEAD is an entry
+    // candidate — the singular plus each family instance in
+    // reach — and the winner id is the HOUSE KEY, the id
+    // enterUpstairs routes by. Read live from Background's
+    // attics module, like the cave mouths read caves — no
+    // shell mirror.
+    const activeDimensionKey = dimensionState.activeKey();
+    if (isUpstairsKey(activeDimensionKey)) {
+      const gen = genRef.current;
+      if (gen) {
+        const layout = atticLayoutForKey(
+          String(gen.seed),
+          gen.findSpawn(),
+          (x, z) => gen.weightsAt(x, z),
+          activeDimensionKey,
+        );
+        if (layout) {
+          considerCave(
+            'upstairs-exit',
+            '',
+            layout.entryAnchor.x,
+            layout.entryAnchor.z,
+          );
+        }
+      }
+    } else if (!dimensionState.isUnderground()) {
       const gen = genRef.current;
       if (gen) {
         // PLURAL CAVES (2026-10-30): mouths arrive in ONE
@@ -10590,6 +10666,43 @@ export default function App() {
           HARVEST_RANGE,
         )) {
           considerCave('cave-enter', mouth.id, mouth.spot.x, mouth.spot.z);
+        }
+        // UPSTAIRS ENTRY: the singular's key is the bare
+        // 'farmhouse'; each family instance rides its own
+        // key. The rect is padded well past the race range
+        // (a stair head can be in range while its house's
+        // center is not); considerCave re-gates on the
+        // head's own facing + distance, exactly.
+        const houseKeys: string[] = ['farmhouse'];
+        const stairReach = HARVEST_RANGE + 16;
+        for (const inst of farmhouseInstancesInRect(
+          String(gen.seed),
+          gen.findSpawn(),
+          (x, z) => gen.weightsAt(x, z),
+          {
+            minX: player.x - stairReach,
+            maxX: player.x + stairReach,
+            minZ: player.z - stairReach,
+            maxZ: player.z + stairReach,
+          },
+        )) {
+          houseKeys.push(inst.key);
+        }
+        for (const houseKey of houseKeys) {
+          const mouth = upstairsMouthFor(
+            String(gen.seed),
+            gen.findSpawn(),
+            (x, z) => gen.weightsAt(x, z),
+            houseKey,
+          );
+          if (mouth) {
+            considerCave(
+              'upstairs-enter',
+              houseKey,
+              mouth.stairHead.x,
+              mouth.stairHead.z,
+            );
+          }
         }
       }
     } else {
@@ -10683,6 +10796,9 @@ export default function App() {
     'anchor-blocked': 'The way is blocked.',
     'wrong-dimension': 'The way is blocked.',
     'unknown-mouth': 'The way is blocked.',
+    // The upstairs arm's backstop (UI half, 2026-11-01):
+    // unreachable from a correct winner, like its cave kin.
+    'unknown-house': 'The way is blocked.',
   };
 
   // The travel press: compose Background's validated
@@ -10706,6 +10822,30 @@ export default function App() {
     } else {
       outcome = ascend(player);
     }
+    if (outcome.ok === false) {
+      const line = CAVE_TRAVEL_REFUSALS[outcome.reason] ?? 'The way is blocked.';
+      showFeedback(line, 'blocked');
+    }
+  };
+
+  // The upstairs press (UI half, 2026-11-01): the cave
+  // press's sibling — compose Background's validated
+  // upstairs travel from the faced winner. Entry routes
+  // by the winner's house key; exit needs no id (the
+  // engine kept her return anchor at entry). Refusals
+  // speak from the same table as the caves'.
+  const handleUpstairsTravel = (winner: {
+    kind: 'upstairs-enter' | 'upstairs-exit';
+    id: string;
+  }): void => {
+    const player = playerRef.current;
+    const renderer = rendererRef.current;
+    const gen = genRef.current;
+    if (!player || !renderer || !gen) return;
+    const outcome =
+      winner.kind === 'upstairs-enter'
+        ? enterUpstairs(renderer, player, gen, winner.id)
+        : exitUpstairs(renderer, player);
     if (outcome.ok === false) {
       const line = CAVE_TRAVEL_REFUSALS[outcome.reason] ?? 'The way is blocked.';
       showFeedback(line, 'blocked');
@@ -10879,6 +11019,10 @@ export default function App() {
       case 'cave-descend':
       case 'cave-climb':
         handleCaveTravel(winner);
+        break;
+      case 'upstairs-enter':
+      case 'upstairs-exit':
+        handleUpstairsTravel(winner);
         break;
       case 'home':
         setHomeMenuOpen(true);
@@ -12222,7 +12366,11 @@ export default function App() {
                     ? 'CLIMB'
                     : useWinner.kind === 'cave-exit'
                       ? 'EXIT'
-                      : useWinner.kind === 'scry'
+                      : useWinner.kind === 'upstairs-enter'
+                        ? 'GO UP'
+                        : useWinner.kind === 'upstairs-exit'
+                          ? 'GO DOWN'
+                          : useWinner.kind === 'scry'
                         ? 'SCRY'
                         : undefined;
 
