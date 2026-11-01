@@ -290,11 +290,18 @@ export const ITEM_WEIGHT_LB: Readonly<Record<string, number>> = {
   [ITEMS.shawl]: 1,
   [ITEMS.umbrella]: 1,
   [ITEMS.clayPot]: 1,
+  // Carryable traps (the trap table, Adam 2026-11-01) —
+  // DRAFT weights for the pin pass: the pot-trap IS a
+  // clay pot (1); the snare is stakes and cordage (1);
+  // the weir is the bulky one (2, at the 2 lb mark below).
+  [ITEMS.snare]: 1,
+  [ITEMS.potTrap]: 1,
   [ITEMS.clayJar]: 1,
   [ITEMS.waterJar]: 2,
   [ITEMS.grimoire]: 1,
   [ITEMS.journal]: 0.5,
   // 2 lb
+  [ITEMS.fishWeirTrap]: 2,
   [ITEMS.riverStone]: 2,
   [ITEMS.downedOak]: 2,
   [ITEMS.spade]: 2,
@@ -635,11 +642,11 @@ export const ITEM_DESCRIPTIONS: Readonly<Record<string, string>> = {
   clay: 'Clay. Pots, bricks, and daub — shaped, then fired.',
   flint: 'Strikes a fire fast. Kept, never consumed.',
   'old-stump': 'An old stump. A workstation where it stands, and an altar for the rites.',
-  dirt: 'Scooped earth. No known use yet.',
+  dirt: 'Scooped earth. What digging a pitfall throws up — and what fills one back in.',
   mud: 'Scooped mud. No known use yet.',
   grass: 'Cut grass. Fibre for pulp, and stuffing for bedding.',
   'salt-crystal': 'Salt from the flats. No known use yet.',
-  bone: 'A calcified fragment. No known use yet.',
+  bone: 'A calcified fragment. It answers Find a Bone, but no Waking knows its name.',
   // Tools (owning is using; the ladder gates harder ground).
   'garden-trowel': 'The first tool. Digs and works soft ground. Made at a workstation.',
   'sharp-trowel': 'The garden trowel, whetstone-sharp. Works ground the plain trowel cannot. Made at a workstation.',
@@ -667,8 +674,8 @@ export const ITEM_DESCRIPTIONS: Readonly<Record<string, string>> = {
   'writing-desk': 'A writing desk for the big book. The grimoire\'s workings are done standing at it. Made at a workstation.',
   // Crafted goods.
   'twined-cordage': 'Twined cord. It ties and binds half of everything you build.',
-  'clay-pot': 'A kiln-fired clay pot. Stores food — and sunk in a creek, it is a pot trap. Not a cooking pot.',
-  'clay-jar': 'A kiln-fired clay jar. Fill it at open water — soups and brews will want what\'s in it.',
+  'clay-pot': 'A kiln-fired clay pot. (Retired — the clay jar stands in its place.)',
+  'clay-jar': 'A kiln-fired clay jar — the one vessel. Fill it at open water; sunk in the creek it is a pot trap; poured on dry ground it makes mud, on mud it makes water. Soups and brews will want what\'s in it.',
   'water-jar': 'A clay jar filled with water. For soups and brews — and emptying it gives the jar back.',
   cauldron: 'A broad kiln-fired clay cauldron. Set it on a hearth — carcasses render, wax melts, and brews brew in it.',
   'clay-brick': 'A kiln-fired brick. No use for it yet.',
@@ -689,11 +696,12 @@ export const ITEM_DESCRIPTIONS: Readonly<Record<string, string>> = {
   'mossy-mittens': 'Worn against the cold. No extra carrying room. Woven at a loom.',
   'bog-boots': 'Worn in the bog. Drier feet, and less drag in the wet. Woven at a loom.',
   umbrella: 'Carried against the rain. Keeps the wet off. Made at a workstation.',
-  // Traps (crafting one sets it where you stand — fork B:
-  // each is built on its own ground, named in its line).
-  snare: 'Stakes and a loop. Set on dry ground where you craft it; it catches passing game.',
-  'fish-weir-trap': 'A woven funnel. Built standing in the water where you craft it; it catches passing game.',
-  'pot-trap': 'A clay pot sunk in the creek. Set standing in the water where you craft it; it catches passing game.',
+  // Traps (the trap table: three are carried and set
+  // later on their own ground; two are built where
+  // they stand — each line names which).
+  snare: 'Stakes and a loop. Carried, and set on dry ground; it catches passing game.',
+  'fish-weir-trap': 'A woven funnel. Carried, and set standing in the water; it catches passing game.',
+  'pot-trap': 'A clay jar, sunk in the creek. Carried, and set standing in the water; it catches passing game.',
   pitfall: 'A dug pit under a moss cover. Dug in dry ground where you craft it — digging one takes a spade-tier tool.',
   deadfall: 'Oak and stone, weighted to fall. Set on dry ground where you craft it; it catches passing game.',
   // Trap catches (not food; most render into tallow in the cauldron — frog and crayfish don't).

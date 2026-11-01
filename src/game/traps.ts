@@ -46,6 +46,16 @@ export const TRAP_DEFS: Record<TrapType, TrapDef> = {
   deadfall: { name: 'Deadfall', description: 'Oak + vine + river-stone weight.' },
 };
 
+/**
+ * THE SITE RULES LIVE IN THE RECIPE DATA (Systems'
+ * recipes.ts, requiresSite — the one source; DEV's (B)
+ * ruling, 2026-11-01): the carryable three read them at
+ * placement through Systems' trap-place grants, the
+ * site-built two at craft. No site table is kept here —
+ * a game-side copy of the recipe fact is exactly the
+ * second source that ruling retired.
+ */
+
 /** Runtime guard for values arriving from save data or the bus. */
 export function isTrapType(value: unknown): value is TrapType {
   return typeof value === 'string' && (TRAP_DEFS as Record<string, TrapDef | undefined>)[value] !== undefined;

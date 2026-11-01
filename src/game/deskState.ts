@@ -21,8 +21,15 @@
  * NO DESK ACTIONS: a desk is a SITE, not an action — the
  * grimoire resides on it and functions while she's at it
  * (Adam, pinned 2026-10-30), and its workings arrive with
- * the grimoire's design turn, so the entity shape is just
- * id + position. NO PICKUP either (Systems, flagged
+ * the grimoire's design turn. THE SEAT (2026-11-01): the
+ * entity carries whether the grimoire is seated on it —
+ * grimoire?: boolean, present only when true (the save's
+ * own write-only-when-true shape). Systems' desk.ts
+ * grants (seatGrimoire / takeGrimoire) decide; the shell
+ * flips the entity through setGrimoire ONLY on a grant's
+ * success, so the visible book can never lie about the
+ * seat. The book itself is renderer dressing on the
+ * desk's group while the flag stands. NO PICKUP either (Systems, flagged
  * follow-up: moving/removing a placed desk is Adam's word
  * later) — removeDesk exists for the same reason
  * removeAltar does: the shell and the save path need a
@@ -50,11 +57,13 @@
 
 import { bus } from './events';
 
-/** A placed desk entity. A site only; position is the whole state. */
+/** A placed desk entity: a site — position, plus the
+ *  grimoire seat (present only when the book is seated). */
 export interface PlacedDesk {
   id: string;
   x: number;
   z: number;
+  grimoire?: boolean;
 }
 
 class DeskState {
@@ -76,6 +85,27 @@ class DeskState {
     return true;
   }
 
+  /**
+   * Flip the grimoire seat (the shell's write path, on a
+   * Systems grant's success only). False on an unknown
+   * id. Emits 'desk:grimoire' on an actual change (the
+   * renderer rebuilds the desk's group — the book appears
+   * or lifts); a same-value call is an idempotent true
+   * with no event. Unseating DELETES the flag, so the
+   * record and the save keep the write-only-when-true
+   * shape.
+   */
+  setGrimoire(id: string, seated: boolean): boolean {
+    const desk = this.desks.get(id);
+    if (!desk) return false;
+    const current = desk.grimoire === true;
+    if (current === seated) return true;
+    if (seated) desk.grimoire = true;
+    else delete desk.grimoire;
+    bus.emit('desk:grimoire', { id, seated });
+    return true;
+  }
+
   get(id: string): PlacedDesk | undefined {
     const desk = this.desks.get(id);
     return desk ? { ...desk } : undefined;
@@ -86,7 +116,7 @@ class DeskState {
     return [...this.desks.values()].map((desk) => ({ ...desk }));
   }
 
-  restore(desks: ReadonlyArray<{ id?: string; x: number; z: number }>): void {
+  restore(desks: ReadonlyArray<{ id?: string; x: number; z: number; grimoire?: boolean }>): void {
     if (!Array.isArray(desks)) return;
     this.desks.clear();
     // Ceiling first: the counter must clear every provided
@@ -108,7 +138,9 @@ class DeskState {
         typeof desk.id === 'string' && desk.id !== ''
           ? desk.id
           : `desk:${++this.counter}`;
-      this.desks.set(id, { id, x: desk.x, z: desk.z });
+      const restored: PlacedDesk = { id, x: desk.x, z: desk.z };
+      if (desk.grimoire === true) restored.grimoire = true;
+      this.desks.set(id, restored);
     }
   }
 

@@ -342,7 +342,7 @@ export function CraftingMenu({
             aria-label="Close crafting menu"
             className={closeBtn}
           >
-            Close
+            Close [X]
           </button>
         ) : null}
       </div>

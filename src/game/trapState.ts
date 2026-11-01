@@ -34,6 +34,13 @@
  * (no per-trap emit; the caller rebuilds once) and drops
  * invalid records, the way save filters them.
  *
+ * REMOVAL (Adam's trap table, pinned 2026-11-01):
+ * removeTrap is the one removal primitive (fill /
+ * pick-up / dismantle — shell-composed, one caller per
+ * act). The placement-site gates live with Systems'
+ * grants + the recipe data (DEV's (B) ruling) — this
+ * state validates nothing about where a trap goes.
+ *
  * SCOPE: placement + catch state + hour trigger. setCatch is
  * the shell's write path; no bait setter yet (no baiting
  * mechanic exists — no dead API), no decay. checkHour is
@@ -76,11 +83,40 @@ class TrapState {
   /** Game-hour index last seen by checkHour (-1 = never checked). */
   private lastHourIndex = -1;
 
+  /**
+   * Place a trap at (x, z) — a FREE primitive, like
+   * placeFire (DEV's collision ruling, 2026-11-01,
+   * shape (B)): the placement-site validation lives
+   * with Systems' grants reading the recipe data
+   * (requiresSite, the one source) and the shell that
+   * speaks it — never in the placer. A site check lived
+   * here briefly (2a9fbfd) and came back out under that
+   * ruling; removeTrap (below) is that landing's part
+   * that stands.
+   */
   placeTrap(type: TrapType, x: number, z: number): PlacedTrap {
     const id = `trap:${type}:${++this.counter}`;
     const trap: PlacedTrap = { id, type, x, z, catch: null, baited: false };
     this.traps.set(id, trap);
     bus.emit('trap:placed', { id, type, x, z });
+    return trap;
+  }
+
+  /**
+   * Remove a placed trap — the one removal primitive,
+   * serving three shell-composed callers (the pitfall's
+   * fill after Systems' grant, a set carryable's
+   * pick-up, the deadfall's dismantle; single-caller
+   * rule per act, the placeTrap precedent reversed).
+   * Returns the removed record (the pick-up caller
+   * grants from it) or null for an unknown id; emits
+   * 'trap:removed' so the renderer's markers rebuild.
+   */
+  removeTrap(id: string): PlacedTrap | null {
+    const trap = this.traps.get(id);
+    if (!trap) return null;
+    this.traps.delete(id);
+    bus.emit('trap:removed', { id, type: trap.type });
     return trap;
   }
 

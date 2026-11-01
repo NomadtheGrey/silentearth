@@ -75,7 +75,7 @@ export function CharmsPanel({
             aria-label="Close charms"
             className={closeBtn}
           >
-            Close
+            Close [X]
           </button>
         ) : null}
       </div>

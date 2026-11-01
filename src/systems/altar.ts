@@ -25,6 +25,16 @@
 // one ritual set, two sites — but that set does not
 // exist yet, so nothing here branches on site.
 //
+// PARITY (Adam, 2026-11-01): 'Both types of altars
+// should work the same... BOTH REQUIRE THE
+// CONSECRATION.' The placed altar is a BASE, not a
+// born altar: its entity carries the same additions
+// record as a stump (save.ts SavedAltar.additions),
+// the consecration acts (stumpy-altar.ts) walk onto
+// it unchanged, and its grade derives from those
+// additions like any stump's — the born-grade-two
+// reading retired in stumpy-altar's siteGrade.
+//
 // LANE BOUNDARY (torch precedent): Systems owns ONLY the
 // recipe (recipes.ts) + the place grant below + the save
 // shape (save.ts SavedAltar, trap-save pattern: format

@@ -20,11 +20,18 @@
  * rule), so the list is mirrored here with that comment
  * as its provenance — and the probe asserts the mirror
  * matches rituals.ts text, so drift is caught, not silent.
- * SHREW EXCLUDED (flagged): shrew skull is outright
- * (first-boot grant) and a found shrew skull's stacking
- * is TBD per the ritual doc — including it would invent
- * stacking semantics. If DEV ever wants 18, it is a
- * one-list change here + the probe's expectation.
+ * SHREW JOINS (Adam, 2026-11-01: 'The shrew bone should
+ * be like any other.'): the retired first-boot grant was
+ * the shrew skull's only source, so the shrew takes its
+ * seat in this cycle like every other kind — appended
+ * LAST, after the Waking order, because its charm is
+ * outright (no ritual recipe: the mirror below carries
+ * this one named exception). The modulo change (21 → 22)
+ * re-deals ~95% of standing bone spots to different
+ * kinds (measured over three worlds before the ruling;
+ * the ruling accepts the re-deal class in advance).
+ * A found shrew skull's staging still refuses (Systems'
+ * stageBone) — its road is the charm path, as before.
  *
  * SHELL INSTRUCTION (for the grant path, DEV-sequenced):
  * resolve the kind from the HARVEST PAYLOAD position
@@ -38,12 +45,12 @@ import { deriveSeed } from './seed';
 
 /**
  * The 21 tier-1 Waking bone kinds, in RITUAL_RECIPES order
- * (day, night, twilight, moon, independent). Mirror of
- * Systems' list — see header. Shrew skull absent
- * deliberately (outright, no ritual). Muskrat, opossum,
- * vole, and squirrel joined 2026-10-31 (Systems' registry
- * first, this mirror second — the bones-for-the-boneless
- * build).
+ * (day, night, twilight, moon, independent), plus the
+ * shrew appended last (Adam, 2026-11-01 — see header).
+ * Mirror of Systems' list with that one named exception.
+ * Muskrat, opossum, vole, and squirrel joined 2026-10-31
+ * (Systems' registry first, this mirror second — the
+ * bones-for-the-boneless build).
  */
 export const BONE_KINDS: readonly string[] = [
   // DAY (sun).
@@ -72,6 +79,10 @@ export const BONE_KINDS: readonly string[] = [
   'rabbit-jaw',
   'beaver-incisor',
   'vole-skull',
+  // THE GIVEN ONE (Adam, 2026-11-01): no Waking recipe —
+  // its charm is outright — but its bone lies in the
+  // world like any other.
+  'shrew-skull',
 ];
 
 /**

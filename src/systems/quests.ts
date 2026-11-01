@@ -128,7 +128,7 @@ import type { PersonalInventory } from './inventory';
 import { FOOD_ITEMS } from './hunger';
 import { FIRST_CHARM_KIND, boneItemFor } from './charms';
 import { RITUAL_RECIPES } from './rituals';
-import { altarProgressFrom, isStumpyAltar } from './stumpy-altar';
+import { altarProgressFrom, isConsecratedAltar } from './stumpy-altar';
 
 /**
  * One placed fire, shell-mapped from the fire snapshot.
@@ -207,7 +207,7 @@ export interface QuestFacts {
   /**
    * Whether an altar stands — shell-mapped from the
    * altar state (a stump whose additions carry 'altar';
-   * Systems' isStumpyAltar reads it). OPTIONAL: absent
+   * Systems' consecration readers read it). OPTIONAL: absent
    * reads as none-standing for the one component that
    * consults it (wake-charm's road step), and quest
    * completion never depends on it — see that quest.
@@ -220,9 +220,23 @@ export interface QuestFacts {
    * counts the most steps; ties are indifferent, the
    * steps are what reads). OPTIONAL: absent reads as
    * no stump under transformation. Read by the
-   * raise-an-altar quest alone.
+   * raise-an-altar quest alone. ALTAR PARITY
+   * (2026-11-01): the list is the most-progressed
+   * altar BASE's additions, of either kind (stump or
+   * placed altar) — the shell's derivation widens to
+   * both bases; the steps are the same road.
    */
   altarAdditions?: readonly string[];
+  /**
+   * Whether ANY altar base stands fully consecrated
+   * (either flavor — altar parity, 2026-11-01).
+   * raise-an-altar's completion arm beside the
+   * additions reading: it covers a shell still
+   * feeding altarAdditions from one base while a
+   * consecrated other stands. OPTIONAL: absent reads
+   * as none.
+   */
+  altarConsecrated?: boolean;
   /**
    * How many Wakings stand recorded (the awakenings
    * record's length) — shell-mapped. OPTIONAL: absent
@@ -338,6 +352,17 @@ const BONE_ITEM_IDS: readonly string[] = [
  */
 const wakingDone = (facts: QuestFacts): boolean =>
   facts.flags.ritualCompleted || (facts.awakenings ?? 0) > 0;
+
+/**
+ * Raise an Altar's completion reading (altar parity,
+ * 2026-11-01): either base fully consecrated — read
+ * off the most-progressed base's additions, or off
+ * the altarConsecrated fact a shell feeds when its
+ * additions derivation still names one base.
+ */
+const altarComplete = (facts: QuestFacts): boolean =>
+  isConsecratedAltar(facts.altarAdditions ?? []) ||
+  facts.altarConsecrated === true;
 
 export const QUEST_DEFINITIONS: readonly QuestDefinition[] = [
   {
@@ -611,10 +636,14 @@ export const QUEST_DEFINITIONS: readonly QuestDefinition[] = [
     // start now). The altar is the act's WORKSTATION —
     // its own thread, The Altar, distinct from Wakings
     // (the rites worked at it). Components are the
-    // transformation's OWN ORDER, read off the stump
-    // additions by stumpy-altar's own readers
-    // (altarProgressFrom / isStumpyAltar) — no second
-    // account of the steps. Each step carries the
+    // consecration's OWN ORDER, read off the most-
+    // progressed base's additions by stumpy-altar's
+    // own readers (altarProgressFrom /
+    // isConsecratedAltar) — no second account of the
+    // steps; ALTAR PARITY (Adam, 2026-11-01): the
+    // base may be a found stump or a built altar —
+    // both require the consecration, and completion
+    // reads either (altarComplete). Each step carries the
     // road-step derivation (stands OR its own mark) so
     // an anomalous additions list can never un-check a
     // standing altar; in every state the transformation
@@ -625,27 +654,27 @@ export const QUEST_DEFINITIONS: readonly QuestDefinition[] = [
     // wake-charm's own derivation says so).
     thread: 'altar',
     act: 'witchery',
-    isDone: (facts) => isStumpyAltar(facts.altarAdditions ?? []),
+    isDone: (facts) => altarComplete(facts),
     components: [
       {
         id: 'ring-the-stones',
-        label: 'Ring a stump with river stones',
+        label: 'Ring the base with river stones',
         isDone: (facts) =>
-          isStumpyAltar(facts.altarAdditions ?? []) ||
+          altarComplete(facts) ||
           altarProgressFrom(facts.altarAdditions ?? []).stones,
       },
       {
         id: 'draw-the-glyph',
         label: 'Draw the glyph',
         isDone: (facts) =>
-          isStumpyAltar(facts.altarAdditions ?? []) ||
+          altarComplete(facts) ||
           altarProgressFrom(facts.altarAdditions ?? []).glyph,
       },
       {
         id: 'set-the-candle',
         label: 'Set the candle',
         isDone: (facts) =>
-          isStumpyAltar(facts.altarAdditions ?? []) ||
+          altarComplete(facts) ||
           altarProgressFrom(facts.altarAdditions ?? []).candle,
       },
     ],

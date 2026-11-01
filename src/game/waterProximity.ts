@@ -53,7 +53,9 @@
 
 import { riverCenterAt, riverParamsFor, RIVER_STEP, RIVER_WIDTH, type RiverParams } from './river';
 import { DISC_RADIUS } from './models';
+import { standingInWater, type WaterDisc } from './movement';
 import { CHUNK_SIZE } from '../constants';
+import { jarPatchState, PATCH_R_M } from './jarPatchState';
 import type { WorldGen } from './worldgen';
 
 /**
@@ -123,6 +125,16 @@ export function distanceToWater(gen: WorldGen, x: number, z: number): number {
       }
     }
   }
+  // Her hauled ponds count (the jar patches' composition,
+  // 2026-11-01): a placed WATER patch is water to this
+  // edge distance exactly as a pond is. Surface only.
+  if (!gen.dimensionKey) {
+    for (const patch of jarPatchState.all()) {
+      if (patch.kind !== 'water') continue;
+      const d = Math.hypot(patch.x - x, patch.z - z) - PATCH_R_M;
+      if (d < best) best = d;
+    }
+  }
   return best;
 }
 
@@ -163,5 +175,92 @@ export function stillWatersNear(gen: WorldGen, x: number, z: number, range: numb
       waters.push({ x: center.x, z: center.z, radius: RIVER_WIDTH / 2 });
     }
   }
+  // Placed WATER patches ride as still-water bodies of
+  // their own shape (the facing system's read — Scry and
+  // Fill Jar offer at her hauled pond as at wild water).
+  if (!gen.dimensionKey) {
+    for (const patch of jarPatchState.all()) {
+      if (patch.kind !== 'water') continue;
+      if (Math.hypot(patch.x - x, patch.z - z) <= range + PATCH_R_M) {
+        waters.push({ x: patch.x, z: patch.z, radius: PATCH_R_M });
+      }
+    }
+  }
   return waters;
+}
+
+/**
+ * The water discs (pond + standing water — the wading
+ * model's set, wider than this family's pond-only list)
+ * in the 3×3 chunks around (x, z), as movement.ts
+ * WaterDisc circles. The same scan the renderer's
+ * per-frame memo performs; here it is per-action priced,
+ * like the rest of the adapter family.
+ */
+export function waterDiscsNear(gen: WorldGen, x: number, z: number): WaterDisc[] {
+  const discs: WaterDisc[] = [];
+  const pcx = Math.floor(x / CHUNK_SIZE);
+  const pcz = Math.floor(z / CHUNK_SIZE);
+  for (let cx = pcx - 1; cx <= pcx + 1; cx++) {
+    for (let cz = pcz - 1; cz <= pcz + 1; cz++) {
+      for (const obj of gen.generateChunk(cx, cz).objects) {
+        if (obj.kind !== 'pond' && obj.kind !== 'standingWater') continue;
+        discs.push({ x: obj.x, z: obj.z, r: (DISC_RADIUS[obj.kind] ?? 1.0) * obj.scale });
+      }
+    }
+  }
+  // Placed WATER patches are wading discs too — so
+  // siteWaterFacts' inWater (which reads this set through
+  // standingInWater) answers true inside her hauled pond.
+  // MUD patches are NOT here: mud slows (the renderer's
+  // movement set carries it) but never answers inWater.
+  if (!gen.dimensionKey) {
+    for (const patch of jarPatchState.all()) {
+      if (patch.kind !== 'water') continue;
+      if (Math.abs(patch.x - x) <= CHUNK_SIZE * 1.5 && Math.abs(patch.z - z) <= CHUNK_SIZE * 1.5) {
+        discs.push({ x: patch.x, z: patch.z, r: PATCH_R_M });
+      }
+    }
+  }
+  return discs;
+}
+
+/** The site-water facts at a point (the trap gate's wire, 2026-11-01). */
+export interface SiteWaterFacts {
+  /** She is standing in water — the engine's wading fact itself. */
+  inWater: boolean;
+  /** A water edge is within creekRange (the crafting gate's fact). */
+  nearCreek: boolean;
+}
+
+/**
+ * The site-water facts at (x, z), from the engine's own
+ * water model — the supplier Systems' trap site-gates
+ * named (DEV routing, 2026-11-01): the weir and the pot
+ * trap belong IN water, the snare / pitfall / deadfall
+ * on dry land, and the shell computes these once at her
+ * position and passes them in (the same call also feeds
+ * crafting's nearCreek, which the shell has passed null
+ * until now).
+ *
+ * inWater IS movement.ts's standingInWater — the river
+ * ribbon (half width + the wading margin) or a pond /
+ * standing-water disc (+ margin) — composed from the
+ * adapter's data, never a second test that could drift
+ * from the wading she feels. nearCreek is the family's
+ * edge-distance fact at the scry range by default.
+ *
+ * A dimension generator (a cave) answers both false:
+ * cave pools are their own question, not this gate's.
+ */
+export function siteWaterFacts(
+  gen: WorldGen,
+  x: number,
+  z: number,
+  creekRange: number = SCRY_WATER_RANGE,
+): SiteWaterFacts {
+  if (gen.dimensionKey) return { inWater: false, nearCreek: false };
+  const inWater = standingInWater(paramsFor(gen), waterDiscsNear(gen, x, z), x, z);
+  const nearCreek = distanceToWater(gen, x, z) <= creekRange;
+  return { inWater, nearCreek };
 }

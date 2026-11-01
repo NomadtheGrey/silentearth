@@ -73,10 +73,13 @@
  * 5. TRAP CRAFTS REPORT, THEY DON'T GRANT — AND THEY DON'T
  *    PLACE OR EMIT EITHER (Adam, 2026-10-26; DEV correction,
  *    superseding the emit half of the original brief).
- *    A recipe with placesTrap set (all five traps) never enters
+ *    A recipe with placesTrap set (the site-built two) never enters
  *    inventory: on a confirmed craft this helper consumes the
- *    ingredients and reports success via placedTrap {type} —
- *    and NOTHING else. It does not place, and it does not emit
+ *    ingredients and reports success via placedTrap {type}.
+ *    The one grant on this path is a recipe's stated SPOIL
+ *    (the pitfall's dirt, 2026-11-01 — see the spoil field):
+ *    granted by addPartial and reported, never the trap
+ *    itself. It does not place, and it does not emit
  *    'trap:placed' (the earlier callback-emit shape from
  *    e37234e/762af40 is REMOVED by this landing). SINGLE-CALLER
  *    RULE: the SHELL calls trapState.placeTrap(type, player.x,
@@ -147,7 +150,7 @@ import {
   normalizeItemId,
   PersonalInventory,
 } from './inventory';
-import { RECIPES } from './recipes';
+import { RECIPES, effectiveInWater } from './recipes';
 import type { HungerState } from './hunger';
 import {
   ownedStage,
@@ -184,12 +187,15 @@ export interface CraftExecutionResult {
   output: { item: ItemId; quantity: number };
   /**
    * Present only for placesTrap crafts: the trap's type (recipe
-   * id — == its output item for all five traps). The shell
+   * id — == its output item for the site-built two). The shell
    * places it: trapState.placeTrap(type, player.x, player.z).
    * Systems never places and never emits. Absent for every
-   * ordinary grant craft.
+   * ordinary grant craft. When the shell supplied an AIM
+   * (the placement ruling: all placement goes to the
+   * crosshair's ground point within reach), x/z echo it —
+   * the shell places at the echo; absent, her feet govern.
    */
-  placedTrap?: { type: string };
+  placedTrap?: { type: string; x?: number; z?: number };
   /**
    * Present only for upgradesStump crafts: the upgraded
    * workbench's type (recipe id — == its output item, as with
@@ -202,6 +208,16 @@ export interface CraftExecutionResult {
    * guard is shell-side (Systems cannot read anchor state).
    */
   upgradedStump?: { type: string };
+  /**
+   * Present only when the recipe states spoil (the
+   * pitfall's dirt): what the craft threw up, granted
+   * into the pack by addPartial after consumption.
+   * `granted` is what the pack took; `remainder` is
+   * what did not fit — the shell piles it at her feet
+   * (the pit's edge); it is never voided. Absent for
+   * every spoil-less craft.
+   */
+  spoil?: { item: ItemId; granted: number; remainder: number };
   /** Owned tool after the craft, read from inventory ('none' if none). */
   owned: OwnedToolItem;
   /** Background-compatible tier of the owned tool, null for none. */
@@ -253,6 +269,8 @@ export function executeCraft(
   hunger: HungerState | null = null,
   nearCreek: boolean | null = null,
   site: SiteFacts | null = null,
+  aim: { x: number; z: number } | null = null,
+  outOfPack?: ReadonlySet<string> | null,
 ): CraftExecutionResult {
   // Ownership gate, FIRST (before hunger): an already-owned
   // or superseded recipe refuses with Adam's label and
@@ -260,7 +278,7 @@ export function executeCraft(
   // fact, not her state — it outranks the hunger message.
   // canCraft reports the same status (ok=false) for the
   // menu; this gate is the enforcement, never UI-only.
-  const ownership = craftOwnershipStatus(recipe, inventory);
+  const ownership = craftOwnershipStatus(recipe, inventory, outOfPack);
   if (ownership !== 'available') {
     throw new Error(
       `Cannot craft ${recipe.name}: ` +
@@ -326,21 +344,30 @@ export function executeCraft(
   }
 
   // Site gate (fork B, Adam 2026-11-01), before anything is
-  // consumed. A stated requiresSite reads where she stands
-  // from INPUT only (the creek gate's shape — Systems never
-  // computes where she stands). Null / omitted input leaves
+  // consumed. A stated requiresSite reads where the trap
+  // LANDS from INPUT only (the creek gate's shape — Systems
+  // never computes positions): the aimed point when an aim
+  // is supplied, else her feet (effectiveInWater — the
+  // placement ruling). Null / omitted input leaves
   // the gate OFF (transitional, like the creek gate until
-  // the water adapter lands). For a placesTrap recipe the
-  // craft IS the placement, so this gate is the trap's
-  // placement rule. Refusal copy is DRAFT for the pin pass.
-  if (site !== null && recipe.requiresSite !== undefined) {
-    if (recipe.requiresSite === 'in-water' && !site.inWater) {
+  // the water adapter lands). The CRAFT-side gate bites
+  // only where craft IS placement (placesTrap — the
+  // site-built two, per the trap table, Adam 2026-11-01);
+  // a carryable trap's site is its place grant's business
+  // (trap-place.ts reads the same data at placement).
+  // Refusal copy is DRAFT for the pin pass.
+  if (
+    site !== null &&
+    recipe.placesTrap === true &&
+    recipe.requiresSite !== undefined
+  ) {
+    if (recipe.requiresSite === 'in-water' && !effectiveInWater(site)) {
       throw new Error(
         `Cannot craft ${recipe.name}: built standing in the ` +
           `water — step into the creek first.`,
       );
     }
-    if (recipe.requiresSite === 'dry-land' && site.inWater) {
+    if (recipe.requiresSite === 'dry-land' && effectiveInWater(site)) {
       throw new Error(
         `Cannot craft ${recipe.name}: set on dry ground — ` +
           `step out of the water first.`,
@@ -427,11 +454,33 @@ export function executeCraft(
         inventory.remove(held, 1);
       }
     }
+    // SPOIL (the pitfall's dirt): the report path's one
+    // grant, by addPartial AFTER consumption (the freed
+    // ingredient weight counts first). It cannot throw —
+    // what fits is granted, the rest rides the result
+    // for the shell to pile at her feet.
+    const spoilGrant = recipe.spoil
+      ? inventory.addPartial(recipe.spoil.item, recipe.spoil.quantity)
+      : undefined;
     return {
       output: { ...recipe.output },
       ...(recipe.placesTrap
-        ? { placedTrap: { type: recipe.id } }
+        ? {
+            placedTrap: {
+              type: recipe.id,
+              ...(aim ? { x: aim.x, z: aim.z } : {}),
+            },
+          }
         : { upgradedStump: { type: recipe.id } }),
+      ...(spoilGrant && recipe.spoil
+        ? {
+            spoil: {
+              item: recipe.spoil.item,
+              granted: spoilGrant.granted,
+              remainder: spoilGrant.remainder,
+            },
+          }
+        : {}),
       owned: ownedToolItem(inventory),
       toolTier: ownedTier(inventory),
       harvestStage: ownedStage(inventory),
@@ -539,6 +588,7 @@ interface ChainContext {
   hunger: HungerState | null;
   nearCreek: boolean | null;
   site: SiteFacts | null;
+  outOfPack?: ReadonlySet<string> | null;
 }
 
 interface PlanState {
@@ -598,7 +648,7 @@ function planProducerBatch(
   // The validated path itself: every remaining gate (station,
   // hunger, ownership, tool stage, creek, capacity) speaks
   // with executeCraft's own voice, against the simulation.
-  executeCraft(producer, s.sim, ctx.station, ctx.hunger, ctx.nearCreek, ctx.site);
+  executeCraft(producer, s.sim, ctx.station, ctx.hunger, ctx.nearCreek, ctx.site, null, ctx.outOfPack);
   return { sim: s.sim, batches: [...s.batches, producer] };
 }
 
@@ -673,6 +723,7 @@ export function executeCraftChain(
   hunger: HungerState | null = null,
   nearCreek: boolean | null = null,
   site: SiteFacts | null = null,
+  outOfPack?: ReadonlySet<string> | null,
 ): CraftChainResult {
   const wanted = normalizeItemId(item);
   const ingredient = recipe.ingredients.find((i) => i.item === wanted);
@@ -686,7 +737,7 @@ export function executeCraftChain(
   if (before >= ingredient.quantity) {
     return { steps: [], crafted: { item: wanted, quantity: 0 } };
   }
-  const ctx: ChainContext = { station, hunger, nearCreek, site };
+  const ctx: ChainContext = { station, hunger, nearCreek, site, outOfPack };
   const planned = planEnsure(
     wanted,
     ingredient.quantity,
@@ -696,7 +747,7 @@ export function executeCraftChain(
   );
   const steps: CraftChainStep[] = [];
   for (const batchRecipe of planned.batches) {
-    executeCraft(batchRecipe, inventory, station, hunger, nearCreek, site);
+    executeCraft(batchRecipe, inventory, station, hunger, nearCreek, site, null, outOfPack);
     const last = steps[steps.length - 1];
     if (last !== undefined && last.recipeId === batchRecipe.id) {
       last.batches += 1;

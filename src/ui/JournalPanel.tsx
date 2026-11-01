@@ -168,7 +168,7 @@ export function JournalPanel({
             aria-label="Close journal"
             className={btn + t.button}
           >
-            Close
+            Close [X]
           </button>
         ) : null}
       </div>

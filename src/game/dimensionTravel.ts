@@ -44,6 +44,8 @@
  * generator cannot carry that context itself.
  */
 
+import { bus } from './events';
+import { CHUNK_SIZE } from '../constants';
 import { pushOutOfWalls, type SiteWallBox } from './sites';
 import {
   caveInstanceForKey,
@@ -93,6 +95,19 @@ function placeAt(player: PlayerController, anchor: CaveAnchor): void {
   player.x = anchor.x;
   player.z = anchor.z;
   player.restoreFacing({ yaw: anchor.yaw, pitch: 0 });
+  // A travel IS a move (DEV ruling, 2026-11-01): the
+  // walking emitter never sees a teleport, so anything
+  // listening for her position — the LocationChip first
+  // among them — lagged until her next step after every
+  // dimension travel, caves and upstairs alike. Every
+  // successful travel path seats her through here, so
+  // the emit lives here: one seam, every travel.
+  bus.emit('player:moved', {
+    x: player.x,
+    z: player.z,
+    chunkX: Math.floor(player.x / CHUNK_SIZE),
+    chunkZ: Math.floor(player.z / CHUNK_SIZE),
+  });
 }
 
 /**

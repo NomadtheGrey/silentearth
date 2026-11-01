@@ -310,6 +310,7 @@ export interface EventMap {
    * .snapshot() + this event.
    */
   'altar:placed': { id: string; x: number; z: number };
+  'altar:additions': { id: string; additions: string[] };
   /**
    * A placed altar was removed (altarState.removeAltar).
    * No removal UI exists in this order (label-only chip) —
@@ -334,6 +335,13 @@ export interface EventMap {
    * one ever does. Renderer rebuilds the placed group.
    */
   'desk:removed': { id: string };
+  /**
+   * A desk's grimoire seat flipped (deskState.setGrimoire,
+   * the shell's write path on a Systems grant's success).
+   * Renderer rebuilds the placed group — the visible book
+   * appears or lifts with the flag.
+   */
+  'desk:grimoire': { id: string; seated: boolean };
   /**
    * A cauldron was placed on a hearth
    * (cauldronState.placeCauldron, Adam 2026-10-30 — the
@@ -403,6 +411,12 @@ export interface EventMap {
    * one craft places two traps.
    */
   'trap:placed': { id: string; type: TrapType; x: number; z: number };
+  'trap:removed': { id: string; type: TrapType };
+  /** A jar patch was seated (jarPatchState.seat, the shell's
+   *  write path after Systems' dumpJar names the kind). */
+  'patch:seated': { id: string; kind: 'mud' | 'water'; x: number; z: number };
+  /** A mud patch rose to water (jarPatchState.rise). */
+  'patch:risen': { id: string; x: number; z: number };
   /**
    * A trap's catch changed (trapState.setCatch, the shell's write path:
    * set on caught hour-roll, cleared on granted collection; kind null =

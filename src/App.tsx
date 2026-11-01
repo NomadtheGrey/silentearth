@@ -332,7 +332,9 @@
  *   the shell's tracked coords; the biome is the engine's
  *   dominant id + its weight from the same ground weights
  *   the scaffold readout formats. FPS is shell-side rAF sampling (~1 update per
- *   second, never per frame; hidden-tab samples dropped),
+ *   second, never per frame; each window publishes its
+ *   average AND its worst frame gap, hidden-tab windows
+ *   marked interrupted rather than dropped),
  *   not a renderer instrument — the renderer is untouched.
  *   The pill is pointer-events-none and lives in the bottom
  *   ~36 px, clear of the stick and USE buttons (which end
@@ -1304,7 +1306,9 @@
  *   from the DRAFT constants — shrew's row now reads
  *   Systems' phrase; machinery BUILT in the
  *   shrew-effect bullet below (latch + multiplier
- *   wired, display live).
+ *   wired, display live). RETIRED 2026-11-01: the
+ *   boot grant above is gone (see the drop at the
+ *   boot effect) — awakenings are rite-earned only.
  *   Save: stagings + awakenings ride saveNow as-is +
  *   boot restore BEFORE construction (ritualSite
  *   restore derives site positions from altarState /
@@ -1669,6 +1673,7 @@ import {
   type CatCatchTable,
 } from './game/catRuntime';
 import { installGuideProbes } from './game/guideRuntime';
+import { installTrustFacts } from './game/trustMarkers';
 import {
   collectTrapCatch,
   catchItemFor,
@@ -1676,6 +1681,13 @@ import {
   resolveTrapHour,
 } from './systems/trap-catch';
 import type { TrapType } from './game/traps';
+import {
+  CARRYABLE_TRAPS,
+  dismantleTrap,
+  isCarryableTrap,
+  pickupTrap,
+  placeCarriedTrap,
+} from './systems/trap-place';
 import { placeTent, pickupTent } from './systems/camping';
 import { harvestHoney } from './systems/honey';
 import { harvestState } from './game/harvestState';
@@ -1697,7 +1709,7 @@ import {
   findCamps,
   CampDivination,
 } from './systems/divination';
-import { stillWatersNear } from './game/waterProximity';
+import { siteWaterFacts, stillWatersNear } from './game/waterProximity';
 import { NameSight } from './systems/name-sight';
 import { portionsForKind, lookKeyForTarget } from './ui/lookPortions';
 import { cycleSplit, cyclePhase, currentMoonPhase } from './game/sky';
@@ -1941,9 +1953,16 @@ import {
   ascend,
   descend,
   enterCave,
+  enterUpstairs,
   exitCave,
+  exitUpstairs,
   type TravelOutcome,
 } from './game/dimensionTravel';
+import {
+  atticLayoutForKey,
+  isUpstairsKey,
+  upstairsMouthFor,
+} from './game/attics';
 import {
   placeCauldron as grantPlaceCauldron,
   pickupCauldron as grantPickupCauldron,
@@ -1975,7 +1994,6 @@ import {
   GroundhogRest,
   WeatherWarning,
   bearCapacityBonusLb,
-  grantFirstCharm,
   groundhogWakeBonus,
   listCharms,
   mouseStorageBonus,
@@ -2114,6 +2132,11 @@ const PLACEABLE_IDS: ReadonlySet<string> = new Set([
   ITEMS.writingDesk,
   ITEMS.cauldron,
   ITEMS.tent,
+  // THE CARRYABLE TRAPS (the trap chunk, 2026-11-01):
+  // their pack rows carry the Place verb like every
+  // other placeable — the press arms the trap flow in
+  // handlePlaceItem, never the instant family.
+  ...CARRYABLE_TRAPS,
 ]);
 
 const FIRE_NAME: Record<FireType, string> = {
@@ -2197,6 +2220,15 @@ interface PlacementMode {
   houseType?: HouseType;
   /** True for a loom placement (loomState takes x/z only). */
   loom?: boolean;
+  /**
+   * The trap chunk (2026-11-01): a carried trap's type
+   * when the armed placement is a trap. The confirm runs
+   * Systems' placeCarriedTrap grant (the single placement
+   * gate) instead of the shell's own consume — the grant
+   * validates the site and consumes, the shell then seats
+   * via trapState.placeTrap.
+   */
+  trapType?: string;
 }
 
 /**
@@ -3244,6 +3276,16 @@ export default function App() {
   // world (Systems' save shape, serialize defaults it
   // false for old documents).
   const [journalLinked, setJournalLinked] = useState(false);
+  // THE LINK FLAG'S REF (parity rider, 2026-11-01):
+  // saveNow builds its document from render-scope state,
+  // so the Linking act's own save — and any flush bound
+  // to an older closure, the pagehide flush included —
+  // wrote the flag's PREVIOUS value: the link read
+  // linked in-session and was gone after every reload,
+  // on stumps exactly as on placed altars. The ref is
+  // the save's source (the questFlagsRef pattern); the
+  // state still drives the renders.
+  const journalLinkedRef = useRef(false);
   const [, setRitualVersion] = useState(0);
   const refreshRitual = () => {
     setRitualVersion((version) => version + 1);
@@ -3529,8 +3571,10 @@ export default function App() {
           // Without this, upgrades vanish on reload.
           stumps: stumpState.snapshot(),
           // JOURNAL LINK FLAG rides every save (Systems'
-          // shape; false until the Linking act sets it).
-          journalLinked,
+          // shape; false until the Linking act sets it) —
+          // read from the ref (see the flag's declaration):
+          // a render-scope read here wrote the stale value.
+          journalLinked: journalLinkedRef.current,
           // DIMENSION VISIT (cave close-out, 2026-10-30):
           // the visit a save is written in, from
           // dimensionState's snapshot — {key, mouthId}
@@ -4113,7 +4157,7 @@ export default function App() {
   useEffect(() => {
     if (cloudPendingNewGame === null) return;
     const onKeyDown = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') setCloudPendingNewGame(null);
+      if (e.key === 'Escape' || e.key === 'x' || e.key === 'X') setCloudPendingNewGame(null);
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
@@ -4357,12 +4401,36 @@ export default function App() {
     setPileAnchors(pileAnchorsNext);
     const mode = placementRef.current;
     if (mode) {
-      const player = playerRef.current;
+      // THE CROSSHAIR LAW GENERALIZED (Adam, 2026-11-01):
+      // the ghost anchors at the AIMED point — the
+      // crosshair's ground point inside the reach — for
+      // every armed placement; feet anchoring retired
+      // with feet placement. A groundless gaze carries
+      // no anchor (the ghost and its label hide until
+      // the gaze lands somewhere).
+      const aim = aimedPlacementPoint();
       setPlacementAnchor(
-        player ? projectAnchor(player.x, player.z, 'ground') : null,
+        aim ? projectAnchor(aim.x, aim.z, 'ground') : null,
+      );
+      // THE TERRAIN PAINT (joint with Background,
+      // 2026-11-01): Background's renderer paints the
+      // armed thing's own footprint outline at the same
+      // aimed point — the key is the placement's item id
+      // (the footprint table resolves shape game-side;
+      // house type spellings resolve there too), rotY 0
+      // because nothing in the placed family takes a
+      // rotation today, tint NEUTRAL standing (no real
+      // validity check exists for these placements — a
+      // green would be a lie). A groundless gaze clears
+      // the paint with the anchor.
+      rendererRef.current?.setPlacementPreview(
+        aim
+          ? { key: mode.itemId, x: aim.x, z: aim.z, rotY: 0, tint: 'neutral' }
+          : null,
       );
     } else {
       setPlacementAnchor(null);
+      rendererRef.current?.setPlacementPreview(null);
     }
   };
 
@@ -4524,6 +4592,16 @@ export default function App() {
             type: trap.type as TrapType,
           })),
         );
+        // RESTORED TRAPS ENTER THE ROW STATE (the trap
+        // chunk's drive catch, 2026-11-01): the traps
+        // useState initializer snapshotted trapState
+        // BEFORE this restore ran, and the state comment's
+        // re-read triggers are trap EVENTS — a trap
+        // restored from the save fires none, so without
+        // this refresh a reloaded set trap stood in the
+        // world with no faced doors (Check / Collect /
+        // Pick up / Dismantle) until the first hour roll.
+        refreshTrapsFromState();
         // STUMP SAVE WIRING (stumpy shell, 2026-10-28):
         // same restore-before-first-build pattern as
         // traps — stumpState.restore() is silent and
@@ -4541,7 +4619,8 @@ export default function App() {
         // JOURNAL LINK FLAG restore (altar transformation,
         // 2026-10-30): old saves carry no flag and read
         // false — the Linking simply offers itself again.
-        setJournalLinked(bootSaved.journalLinked === true);
+        journalLinkedRef.current = bootSaved.journalLinked === true;
+        setJournalLinked(journalLinkedRef.current);
         // WORLD-STATE SAVE WIRING (fires + harvest, same
         // restore-before-first-build pattern): fireState.
         // restore() is silent and REPLACES the old placeFire
@@ -4602,6 +4681,16 @@ export default function App() {
               id: altar.id as string,
               x: altar.x,
               z: altar.z,
+              // PARITY PERSISTENCE (2026-11-01): the
+              // consecration additions ride the boot map
+              // too — SavedAltar carries them and
+              // altarState.restore validates them, but
+              // this map dropped them, so a placed
+              // altar's consecration evaporated on
+              // reload while the save file kept it.
+              ...(altar.additions
+                ? { additions: [...altar.additions] }
+                : {}),
             })),
         );
         // PLACED-DESK SAVE WIRING (same restore-before-
@@ -4813,6 +4902,32 @@ export default function App() {
         const visitMouth = (() => {
           if (visit === null || visit.mouthId === null) return undefined;
           const weights = (x: number, z: number) => gen.weightsAt(x, z);
+          if (isUpstairsKey(visit.key)) {
+            // UPSTAIRS BOOT (UI half, 2026-11-01): an
+            // upstairs save's mouthId carries the HOUSE
+            // KEY (dimensionState.enter's second seat). She
+            // wakes on the surface at that house's STAIR
+            // HEAD, facing DOWN the flight — the engine's
+            // own return-anchor formula (enterUpstairs
+            // seats the same seat + yaw on exit). An
+            // unresolvable house falls back whole, like
+            // the caves below.
+            const mouth = upstairsMouthFor(
+              String(gen.seed),
+              gen.findSpawn(),
+              weights,
+              visit.mouthId,
+            );
+            return mouth
+              ? {
+                  spot: mouth.stairHead,
+                  exitYaw: Math.atan2(
+                    mouth.stairHead.x - mouth.stairBase.x,
+                    mouth.stairHead.z - mouth.stairBase.z,
+                  ),
+                }
+              : undefined;
+          }
           if (visit.key === CAVE_DIMENSION_KEY) {
             return caveMouths(
               String(gen.seed),
@@ -4943,38 +5058,37 @@ export default function App() {
     installGuideProbes({
       groveDiscovered: () => discoveryStateRef.current.groveDiscovered(),
     });
-    // FIRST-CHARM BOOT GRANT (outright, tier 1,
-    // GRANT-TO-LIST since Systems 9e9a9dd): runs
-    // AFTER the CharmState restore above, so a loaded
-    // awakening is never double-granted. Idempotent — a
-    // fresh save gains the shrew charm IN THE LIST; a
-    // loaded save with the awakening gains nothing.
-    // NO item is granted (no full-pack failure mode —
-    // the old addPartial gate is gone with the item),
-    // so a grant refreshes nothing in main inventory:
-    // it saves at once (the awakening is save data)
-    // and the panel reads the list live on open. The
-    // inventory param is LEGACY, IGNORED by Systems
-    // (void inventory) — still passed because the
-    // signature keeps it; its removal rides a Systems
-    // change, flagged to DEV (UI does not edit
-    // Systems files unclaimed).
-    const firstCharmGrant = grantFirstCharm(
-      inventory,
-      charmStateRef.current,
+    // TRUST MARKER INSTALL (Background's marker layer,
+    // 2026-11-01): the renderer's trust sprites read
+    // Systems' companion facts through this resolver.
+    // The closure reads the live CompanionState and
+    // the shell's own day source — the same
+    // snapshotSky().daysElapsed the feed path writes
+    // lastFedDay against — so the marker's fedToday
+    // can never drift a day off the records. One
+    // install, live for the session (the cat probes'
+    // pattern); ferals hold no record, so factsFor
+    // answers null for them by construction.
+    installTrustFacts((creatureId) =>
+      companionStateRef.current.factsFor(
+        creatureId,
+        rendererRef.current?.snapshotSky()?.daysElapsed ?? 0,
+      ),
     );
-    if (firstCharmGrant.granted > 0) {
-      saveNow();
-    }
+    // FIRST-CHARM BOOT GRANT — RETIRED (2026-11-01):
+    // the outright shrew grant is gone (Systems
+    // retired grantFirstCharm in charms.ts; this call
+    // site dropped in the same window so the batch
+    // composes green). Awakenings are rite-earned
+    // only now, and the quest facts' snapshot-length
+    // awakenings count is honest by construction —
+    // no origin re-point was needed after all.
     // Shrew effect boot sync (follow-up call path):
-    // runs whether or not the grant fired — a loaded
-    // save with the shrew in its list needs its 0.9
-    // multiplier from boot (multiplier is session
-    // state, never saved), and a boot hunger below 45
-    // while listed fires the latch fresh (she IS in
-    // the warning zone). No refreshInventory runs on
-    // the grant path anymore (grant-to-list grants no
-    // item) — this call is the sync, not a duplicate.
+    // a loaded save with the shrew in its list needs
+    // its 0.9 multiplier from boot (multiplier is
+    // session state, never saved), and a boot hunger
+    // below 45 while listed fires the latch fresh
+    // (she IS in the warning zone).
     syncShrewEffect();
     // Charm-hook boot sync: a loaded save's listed
     // charms need their hooks from boot (all five
@@ -5892,6 +6006,26 @@ export default function App() {
   // input, built once and read by both evaluateQuests
   // (the log) and questComponentsFor (the card) so the
   // two surfaces can never disagree about the world.
+  // THE ALTAR BASES (parity, 2026-11-01 — Adam: 'Both
+  // types of altars should work the same'): every base's
+  // additions, stump or placed, read once for the facts
+  // below. Progress between bases compares by step
+  // count (the steps seat in order, so the longest
+  // record is the furthest along).
+  const altarBasesAdditions: readonly string[][] = [
+    ...stumpState.snapshot().map((stump) => stump.additions),
+    ...altarState.snapshot().map((altar) => altar.additions ?? []),
+  ];
+  const mostProgressedAltarAdditions = altarBasesAdditions.reduce<
+    readonly string[]
+  >(
+    (best, additions) =>
+      additions.length > best.length ? additions : best,
+    [],
+  );
+  const anyAltarConsecrated = altarBasesAdditions.some((additions) =>
+    isStumpyAltar(additions),
+  );
   const questFacts: QuestFacts | undefined = inventory
     ? {
         inventory,
@@ -5905,12 +6039,18 @@ export default function App() {
         })),
         placedTorches: torchState.snapshot().length,
         flags: questFlags,
-        // THE ALTAR FACT (Systems' wiring note, consumed
-        // here by the card): any standing stumpy altar —
-        // wake-charm's road reads it mid-road.
-        altarRaised: stumpState
-          .snapshot()
-          .some((stump) => isStumpyAltar(stump.additions)),
+        // THE ALTAR FACTS (parity): a raised altar of
+        // EITHER base for wake-charm's road; the most-
+        // progressed base's additions and the any-base
+        // consecration for Raise an Altar, whose
+        // predicate (Systems' altarComplete) reads the
+        // additions through isConsecratedAltar or the
+        // consecrated flag — pre-parity the shell fed
+        // neither, so the quest could not complete
+        // from the shell on any base.
+        altarRaised: anyAltarConsecrated,
+        altarAdditions: mostProgressedAltarAdditions,
+        altarConsecrated: anyAltarConsecrated,
         // THE AWAKENINGS COUNT (Systems' latch chunk):
         // how many Wakings stand recorded — wake-charm
         // reads flag OR count, so a completed rite stays
@@ -5980,6 +6120,20 @@ export default function App() {
   >(null);
   const pendingTrapRecipe = pendingTrapRecipeId
     ? RECIPES.find((candidate) => candidate.id === pendingTrapRecipeId)
+    : undefined;
+  // THE CARRYABLE TRAPS' CRAFT CONFIRM (the trap chunk,
+  // 2026-11-01): a carryable trap's craft EXECUTES first
+  // (the trap lands in the pack — an ordinary grant), then
+  // this state asks the pinned table's question: place it
+  // right there, or keep it packed? Yes composes the
+  // placement at the aim; No (or Close) leaves it in the
+  // pack. Deliberately NOT the site-built pair's pre-craft
+  // confirm above — their No means never craft, the
+  // three's No means pack (Adam's trap table).
+  const [pendingCarriedTrap, setPendingCarriedTrap] =
+    useState<string | null>(null);
+  const pendingCarriedTrapRecipe = pendingCarriedTrap
+    ? RECIPES.find((candidate) => candidate.id === pendingCarriedTrap)
     : undefined;
   // PC-keys remove target (2026-10-28): the scatter target
   // Shift+E armed for the confirm dialog; null = no dialog.
@@ -6080,6 +6234,26 @@ export default function App() {
                 ? ` Owned tool is now ${result.owned}.`
                 : ''),
       );
+      // SPOIL (the trap chunk, 2026-11-01 — the no-void
+      // promise): a craft outcome carrying spoil has
+      // already granted what fit in the pack; the
+      // REMAINDER seats as a pile at her feet through
+      // pileState.drop (merge-safe by coords) instead of
+      // vanishing into a result nobody read. Today only
+      // the pitfall's dug earth rides this; the seat is
+      // the craft's own ground — the pit's edge.
+      if (result.spoil && result.spoil.remainder > 0) {
+        pileState.drop(
+          result.spoil.item,
+          result.spoil.remainder,
+          position.x,
+          position.z,
+        );
+        showFeedback(
+          `The leftover ${displayNameFor(result.spoil.item).toLowerCase()} piles at your feet.`,
+          'info',
+        );
+      }
       // QUEST FLAG (wiring follow-up, 2026-10-28): a craft
       // at a stump workstation sets craftedAtStump. The
       // 'workstation' id is the stump today (presence comes
@@ -6098,11 +6272,25 @@ export default function App() {
   };
 
   const handleCraft = (recipeId: string) => {
-    // Trap crafts confirm first ("Place trap here?") —
-    // keyed on the recipe's own placesTrap fact now, not
-    // the deleted shelf map's 'Traps' group (the same
-    // five recipes: snare, fish-weir-trap, pot-trap,
-    // pitfall, deadfall — verified against recipes.ts).
+    // THE CARRYABLE THREE (the trap chunk, 2026-11-01):
+    // their craft EXECUTES (the trap lands in the pack),
+    // then the confirm asks place-or-pack. Success is
+    // read off the pack itself — the craft's own error
+    // path (a thrown refusal) leaves the count unchanged
+    // and no question is asked over a failed craft.
+    if (isCarryableTrap(recipeId)) {
+      const before = inventory.count(recipeId);
+      executeCraftNow(recipeId);
+      if (inventory.count(recipeId) > before) {
+        setPendingCarriedTrap(recipeId);
+      }
+      return;
+    }
+    // Site-built trap crafts confirm first ("Place trap
+    // here?") — keyed on the recipe's own placesTrap fact
+    // (today: pitfall + deadfall only; the carryable
+    // three were re-shaped as carried items and take the
+    // branch above).
     if (SYSTEMS_RECIPE_BY_ID.get(recipeId)?.placesTrap) {
       setPendingTrapRecipeId(recipeId);
       return;
@@ -6202,6 +6390,138 @@ export default function App() {
     refreshTrapsFromState();
     refreshInventory();
     showFeedback(`Caught ${kind}!`, 'gain');
+  };
+
+  // THE CARRIED TRAP'S PLACEMENT COMPOSITION (the trap
+  // chunk, 2026-11-01): ONE composition for both doors
+  // (the craft confirm's Yes and the armed placement's
+  // confirm). The site facts are composed shell-side in
+  // Systems' SiteFacts shape — her feet's water fact and
+  // the AIM's water fact, both from Background's adapter;
+  // the grant's own reading rule (effectiveInWater)
+  // prefers the aim, per the placement ruling. Systems'
+  // placeCarriedTrap is the SINGLE placement gate
+  // (ruling (B)): it validates and consumes; only on its
+  // success does the shell seat the trap via the plain
+  // trapState.placeTrap. A refusal leaves the trap in her
+  // pack and its reason is the caller's to speak.
+  const composePlaceCarriedTrap = (
+    trapType: string,
+    target: { x: number; z: number },
+  ): { ok: true } | { ok: false; reason: string } => {
+    const player = playerRef.current;
+    const gen = genRef.current;
+    if (!player || !gen) return { ok: false, reason: 'Placement failed.' };
+    const site = {
+      inWater: siteWaterFacts(gen, player.x, player.z).inWater,
+      aimedInWater: siteWaterFacts(gen, target.x, target.z).inWater,
+    };
+    const outcome = placeCarriedTrap(inventory, trapType, site);
+    if (outcome.placed === false) {
+      return { ok: false, reason: outcome.reason };
+    }
+    trapState.placeTrap(trapType as TrapType, target.x, target.z);
+    return { ok: true };
+  };
+
+  // PICK UP A SET CARRYABLE (the trap chunk): Systems'
+  // pickupTrap grants through addPartial — a pack that
+  // cannot take the weight refuses and the trap STAYS
+  // set; the shell removes it from trap state only on a
+  // successful pick-up. Copy DRAFT.
+  const handlePickupTrap = (trapId: string) => {
+    const trap = trapState.get(trapId);
+    if (!trap) return;
+    const outcome = pickupTrap(inventory, trap.type);
+    if (outcome.picked === false) {
+      showFeedback(outcome.reason, 'blocked');
+      return;
+    }
+    trapState.removeTrap(trapId);
+    refreshTrapsFromState();
+    refreshInventory();
+    saveNow();
+    showFeedback(
+      `Picked up the ${TRAP_DEFS[trap.type].name}.`,
+      'gain',
+    );
+  };
+
+  // DISMANTLE A SET DEADFALL (the trap chunk; Adam's
+  // rule — removed, yields NOTHING: the logs were never
+  // hers to keep). Systems' dismantleTrap is the gate;
+  // the shell removes via removeTrap on its success.
+  // THE CATCH WAITS (DEV's ruling on the claim,
+  // 2026-11-01 — the pitfall-fill precedent): a catch
+  // is never destroyed as a side effect of a structural
+  // verb, so while the deadfall holds one, Dismantle
+  // refuses and Collect — its own standing door — goes
+  // first. The player chooses the loss or takes the
+  // catch; the verb never chooses for them. Copy DRAFT.
+  const handleDismantleTrap = (trapId: string) => {
+    const trap = trapState.get(trapId);
+    if (!trap) return;
+    if (trap.catch !== null) {
+      showFeedback('Collect the catch first.', 'blocked');
+      return;
+    }
+    const outcome = dismantleTrap(trap.type);
+    if (outcome.dismantled === false) {
+      showFeedback(outcome.reason, 'blocked');
+      return;
+    }
+    trapState.removeTrap(trapId);
+    refreshTrapsFromState();
+    saveNow();
+    showFeedback('Dismantled. Nothing to keep.', 'info');
+  };
+
+  // THE TRAP'S SECOND ACT (the trap chunk): the faced
+  // trap's R door and its pill row's second button run
+  // this one routing — a set carryable picks up, a set
+  // deadfall dismantles, the pitfall gets neither (it
+  // fills in; that lifecycle is its own piece).
+  const handleTrapSecondAct = (trapId: string) => {
+    const trap = trapState.get(trapId);
+    if (!trap) return;
+    if (isCarryableTrap(trap.type)) {
+      handlePickupTrap(trapId);
+    } else if (trap.type === ITEMS.deadfall) {
+      handleDismantleTrap(trapId);
+    }
+  };
+
+  // THE CARRYABLE CONFIRM'S TWO DOORS (the trap chunk):
+  // Yes places the just-crafted trap at the crosshair
+  // aim (the placement law) through the one composition;
+  // a refusal speaks and the trap stays in her pack,
+  // where the craft put it. No keeps it packed — the
+  // craft note already told her it was made.
+  const handleCarriedTrapPlaceYes = () => {
+    const trapType = pendingCarriedTrap;
+    setPendingCarriedTrap(null);
+    if (!trapType) return;
+    const target = aimedPlacementPoint();
+    if (target === null) {
+      showFeedback('Nowhere to set it down.', 'blocked');
+      return;
+    }
+    const outcome = composePlaceCarriedTrap(trapType, target);
+    if (outcome.ok === false) {
+      showFeedback(outcome.reason, 'blocked');
+      return;
+    }
+    refreshTrapsFromState();
+    refreshInventory();
+    saveNow();
+    showFeedback(
+      `Set the ${TRAP_DEFS[trapType as TrapType].name}.`,
+      'gain',
+    );
+  };
+
+  const handleCarriedTrapKeep = () => {
+    setPendingCarriedTrap(null);
   };
 
   // HIVE HARVEST (Adam, 2026-10-28): ONE harvest per
@@ -6445,7 +6765,22 @@ export default function App() {
   const handlePlaceAltar = () => {
     const player = playerRef.current;
     if (!player) return;
-    const outcome = grantPlaceAltar(inventory, player.x, player.z);
+    // THE CROSSHAIR LAW (Adam, 2026-11-01): the instant
+    // family places at the aim too — feet placement
+    // retires everywhere. A groundless gaze speaks the
+    // family's line, but only when she actually carries
+    // an altar (the grant's own refusal is the truer one
+    // for empty hands, the campfire pattern).
+    const target = aimedPlacementPoint();
+    if (target === null && inventory.count(ITEMS.altar) >= 1) {
+      setAltarNote('Nowhere to set it down.');
+      return;
+    }
+    const outcome = grantPlaceAltar(
+      inventory,
+      target?.x ?? player.x,
+      target?.z ?? player.z,
+    );
     // Equality check, not truthiness: non-strict tsc does
     // not narrow this union's boolean discriminant on
     // truthiness (see the torch Light button handler).
@@ -6469,7 +6804,20 @@ export default function App() {
   const handlePlaceDesk = () => {
     const player = playerRef.current;
     if (!player) return;
-    const outcome = grantPlaceDesk(inventory, player.x, player.z);
+    // THE CROSSHAIR LAW (Adam, 2026-11-01): the desk
+    // leaves her feet for the aim, like its altar twin —
+    // same groundless composition (the grant's refusal
+    // speaks for empty hands).
+    const target = aimedPlacementPoint();
+    if (target === null && inventory.count(ITEMS.writingDesk) >= 1) {
+      setDeskNote('Nowhere to set it down.');
+      return;
+    }
+    const outcome = grantPlaceDesk(
+      inventory,
+      target?.x ?? player.x,
+      target?.z ?? player.z,
+    );
     // Equality check, not truthiness: non-strict tsc does
     // not narrow this union's boolean discriminant on
     // truthiness (same note as handlePlaceAltar).
@@ -7315,13 +7663,16 @@ export default function App() {
       setRitualNote('No site there.');
       return;
     }
+    // BASE-BLIND (parity): the site's additions resolve
+    // from whichever record holds the base — the stump's
+    // by position, the placed altar's by its entity id.
     const additions: readonly string[] =
       site.kind === 'stump'
         ? (stumpState
             .snapshot()
             .find((record) => record.x === site.x && record.z === site.z)
             ?.additions ?? [])
-        : [];
+        : (altarState.get(siteId)?.additions ?? []);
     if (actId === 'link-journal') {
       const outcome = linkJournal(
         inventory,
@@ -7332,6 +7683,7 @@ export default function App() {
         setRitualNote(altarActVoice(outcome.reason));
         return;
       }
+      journalLinkedRef.current = true;
       setJournalLinked(true);
       setRitualNote('The books are linked.');
       saveNow();
@@ -7349,14 +7701,34 @@ export default function App() {
       setRitualNote(altarActVoice(outcome.reason));
       return;
     }
-    for (const addition of outcome.additions) {
-      stumpState.applyAddition(site.x, site.z, addition as StumpAddition);
+    // The grants return the shared step members
+    // ('altar-stones' / 'altar-glyph' / 'altar-candle'),
+    // which are exactly each base's own record dialect:
+    // the stump applies them one by one; the placed
+    // altar seats the widened record whole (altarState
+    // validates the members at the setter).
+    if (site.kind === 'stump') {
+      for (const addition of outcome.additions) {
+        stumpState.applyAddition(site.x, site.z, addition as StumpAddition);
+      }
+    } else {
+      altarState.setAdditions(siteId, [
+        ...additions,
+        ...outcome.additions,
+      ]);
     }
+    // The feed lines name the base she worked on (the
+    // altar's pair DRAFT for Adam's pin pass; the
+    // candle line already read both ways).
     setRitualNote(
       actId === 'place-stones'
-        ? 'The stones ring the stump.'
+        ? site.kind === 'stump'
+          ? 'The stones ring the stump.'
+          : 'The stones ring the altar.'
         : actId === 'draw-glyph'
-          ? 'The glyph darkens the bark.'
+          ? site.kind === 'stump'
+            ? 'The glyph darkens the bark.'
+            : 'The glyph is cut into the slab.'
           : 'The candle stands lit. This is an altar now.',
     );
     refreshInventory();
@@ -7633,6 +8005,28 @@ export default function App() {
       setInventoryOpen(false);
       return;
     }
+    // THE CARRYABLE TRAPS (the trap chunk, 2026-11-01):
+    // the pack's Place verb arms the crosshair flow like
+    // a house or hearth — chip + hoisted card confirm —
+    // with the trap arm on the mode. No footprint key
+    // exists for traps in Background's table, so no
+    // terrain outline paints; the chip is the preview
+    // and the card is the confirm of record.
+    if (isCarryableTrap(itemId)) {
+      const label =
+        inventoryItems.find((i) => i.id === itemId)?.name ?? itemId;
+      const mode: PlacementMode = {
+        itemId,
+        label,
+        trapType: itemId,
+      };
+      placementRef.current = mode;
+      setPlacement(mode);
+      setPlacementNote(null);
+      setInventoryOpen(false);
+      recomputeAnchors();
+      return;
+    }
     const fireType = FIRE_ITEM_TO_TYPE[itemId];
     const houseType = HOUSE_ITEM_TO_TYPE[itemId];
     const loom = itemId === ITEMS.loom;
@@ -7670,13 +8064,44 @@ export default function App() {
       setPlacementAnchor(null);
       return;
     }
+    // THE CROSSHAIR LAW (Adam, 2026-11-01): the confirm
+    // places where the ghost stands — the aimed point at
+    // the press. A groundless gaze refuses in the instant
+    // family's line and the mode STAYS armed (she aims
+    // again); standing on the station as it lands is over.
+    const target = aimedPlacementPoint();
+    if (target === null) {
+      setPlacementNote('Nowhere to set it down.');
+      return;
+    }
+    // THE TRAP ARM (the trap chunk): the grant is the
+    // gate — it validates the site and consumes. A
+    // refusal speaks on the placement note and the mode
+    // STAYS armed (the groundless-gaze precedent: she
+    // re-aims, e.g. at water for the weir). Success
+    // seats through the one composition and disarms.
+    if (mode.trapType) {
+      const outcome = composePlaceCarriedTrap(mode.trapType, target);
+      if (outcome.ok === false) {
+        setPlacementNote(outcome.reason);
+        return;
+      }
+      placementRef.current = null;
+      setPlacement(null);
+      setPlacementAnchor(null);
+      setPlacementNote(null);
+      refreshTrapsFromState();
+      refreshInventory();
+      saveNow();
+      return;
+    }
     try {
       if (mode.fireType) {
-        fireState.placeFire(mode.fireType, player.x, player.z);
+        fireState.placeFire(mode.fireType, target.x, target.z);
       } else if (mode.houseType) {
-        shelterState.placeHouse(mode.houseType, player.x, player.z);
+        shelterState.placeHouse(mode.houseType, target.x, target.z);
       } else if (mode.loom) {
-        loomState.placeLoom(player.x, player.z);
+        loomState.placeLoom(target.x, target.z);
       }
       inventory.remove(mode.itemId, 1);
     } catch (error) {
@@ -7700,69 +8125,12 @@ export default function App() {
     setPlacementNote(null);
   };
 
-  // HOUSE-UPGRADE PRESS (Adam, 2026-10-28): mirrors
-  // handlePlaceConfirm (cost gate → act → consume →
-  // clear mode → refresh + save; catch → note, mode
-  // stays) with shelterState.upgradeHouse in place
-  // of placeHouse. setHouse ONLY if a store already
-  // exists (homeStoresRef.current.get — deliberately
-  // NOT getHomeStore, which lazy-creates: a
-  // never-deposited house needs no update, and a
-  // future first deposit creates its store from the
-  // new type — DEV-accepted refinement over the
-  // primitive doc's getHomeStore wording). Contents
-  // ride the preserved id (stores keyed by id;
-  // save/restore by id/order — nothing moves or
-  // drops). House visuals ride the primitive + the
-  // existing house render path (no new subscription
-  // — press-driven refresh covers it; the primitive
-  // emits 'shelter:upgraded', camp arrows are NOT
-  // subscribed). False from upgradeHouse (shouldn't
-  // happen — the pill shows only for upgradeable)
-  // → failure: note + mode stays.
-  const handleUpgradePress = (target: NonNullable<typeof upgradePill>) => {
-    const mode = placementRef.current;
-    if (!mode) return;
-    const player = playerRef.current;
-    if (!player) return;
-    if (inventory.count(mode.itemId) < 1) {
-      setPlacementNote(
-        'Nothing to place — that item is no longer carried.',
-      );
-      placementRef.current = null;
-      setPlacement(null);
-      setPlacementAnchor(null);
-      return;
-    }
-    try {
-      const upgraded = shelterState.upgradeHouse(
-        target.houseId,
-        target.carriedType,
-      );
-      if (!upgraded) {
-        setPlacementNote('That house cannot be upgraded.');
-        return;
-      }
-      homeStoresRef.current
-        .get(target.houseId)
-        ?.setHouse(HOUSE_TYPE_TO_ITEM[target.carriedType]);
-      inventory.remove(mode.itemId, 1);
-    } catch (error) {
-      setPlacementNote(
-        error instanceof Error ? error.message : 'Placement failed.',
-      );
-      return;
-    }
-    placementRef.current = null;
-    setPlacement(null);
-    setPlacementAnchor(null);
-    setPlacementNote(null);
-    if (shelterHouseId === target.houseId) {
-      applyShelterHouse(target.houseId);
-    }
-    refreshInventory();
-    saveNow();
-  };
+  // HOUSE UPGRADES ARE NOT PLACEMENTS (Adam, 2026-11-01):
+  // the armed-placement upgrade press that lived here is
+  // OUT — upgrading happens on the standing house where
+  // it stands, through the home menu's Upgrade row
+  // (handleHomeMenuAction's upgrade arm). A fresh
+  // placement is a fresh placement, whatever it faces.
 
   const handleEatItem = (itemId: string) => {
     // Raw cook-required food never reaches eat(): the press
@@ -8112,7 +8480,7 @@ export default function App() {
             ? undefined
             : 'Needs carried snap wood',
         },
-        { id: 'close', label: 'Close' },
+        { id: 'close', label: 'Close [X]' },
       ];
     }
     if (fire.lighting?.method === 'flint') {
@@ -8121,7 +8489,7 @@ export default function App() {
           id: 'click-flint',
           label: `Click flint (${fire.lighting.clicks} of 3)`,
         },
-        { id: 'close', label: 'Close' },
+        { id: 'close', label: 'Close [X]' },
       ];
     }
     if (fire.lighting?.method === 'friction') {
@@ -8135,7 +8503,7 @@ export default function App() {
               ? undefined
               : 'Wait for the wait to end, then rub',
         },
-        { id: 'close', label: 'Close' },
+        { id: 'close', label: 'Close [X]' },
       ];
     }
     const hasFlint = inventory.count(ITEMS.flint) > 0;
@@ -8151,7 +8519,7 @@ export default function App() {
         label: 'Light with friction (slow)',
         hint: 'Rub, wait, rub',
       },
-      { id: 'close', label: 'Close' },
+      { id: 'close', label: 'Close [X]' },
     ];
   };
 
@@ -8321,7 +8689,7 @@ export default function App() {
   // the torch menu's shape, over the shell store.
   const tentMenuActions = (): ContextAction[] => [
     { id: 'take-down', label: 'Take down' },
-    { id: 'close', label: 'Close' },
+    { id: 'close', label: 'Close [X]' },
   ];
 
   const handleTentAction = (tentId: string, actionId: string) => {
@@ -8359,7 +8727,7 @@ export default function App() {
   // up + Close — the tent menu's shape.
   const cauldronMenuActions = (): ContextAction[] => [
     { id: 'pick-up', label: 'Pick up cauldron' },
-    { id: 'close', label: 'Close' },
+    { id: 'close', label: 'Close [X]' },
   ];
 
   const handleCauldronAction = (hearthId: string, actionId: string) => {
@@ -9029,7 +9397,7 @@ export default function App() {
     // unified surfaces (her pack panel's Deposit /
     // Withdraw, one tap away at home). Revisit only on
     // Adam's word.
-    actions.push({ id: 'close', label: 'Close' });
+    actions.push({ id: 'close', label: 'Close [X]' });
     return actions;
   };
 
@@ -9086,74 +9454,10 @@ export default function App() {
   const homeAnchor = homeChipAnchor ?? homeFallbackAnchor;
   const homeChipVisible = sheltered && homeAnchor !== null && !paused;
 
-  // HOUSE-UPGRADE PILL (Adam, 2026-10-28): while
-  // placing a house item, the faced upgradeable house
-  // gets an "Upgrade to {carried}" chip at the house
-  // (home-chip pattern, inline in the overlay).
-  // Candidates = placed houses with tier BELOW the
-  // carried tier (ANY-higher — woven over lean-to
-  // skips thatch; next-tier-only is a one-line
-  // narrowing, NOT built). RANGE = center distance
-  // ≤ SHELTER_RADIUS 6 m (footprints to 6.5 m wide,
-  // so HARVEST_RANGE 2.5 m would miss big houses).
-  // CONE = angle < 45° via dot product (forward =
-  // (sin facing, cos facing); dot > cos45° =
-  // Math.SQRT1_2); d = 0 counts as faced. NO
-  // hysteresis v1. Tie-break: nearest distance,
-  // exact tie → first in snapshot order. Same-or-
-  // higher → no pill, feet "Place here" stands. NO
-  // paused guard (buttons, not canvas taps —
-  // placement buttons work while paused today).
-  // Capacity: the pill shows NO capacity number —
-  // engine HOUSE_DEFS (woven 200 / smallWooden 400)
-  // vs Systems' table (175 / 250) diverges; pin
-  // pass reconciles the tables. Per-render derivation
-  // (home-chip precedent) — no new subscription.
-  const upgradePill = (() => {
-    const mode = placement;
-    const player = playerRef.current;
-    if (!mode?.houseType || !player) return null;
-    const carriedTier = HOUSE_LADDER.indexOf(mode.houseType);
-    if (carriedTier === -1) return null;
-    const facingX = Math.sin(player.facing);
-    const facingZ = Math.cos(player.facing);
-    let best: {
-      houseId: string;
-      carriedType: HouseType;
-      placedName: string;
-      carriedName: string;
-      x: number;
-      z: number;
-    } | null = null;
-    let bestDistance = Infinity;
-    for (const house of shelterState.snapshot()) {
-      const placedTier = HOUSE_LADDER.indexOf(house.type);
-      if (placedTier === -1 || placedTier >= carriedTier) continue;
-      const dx = house.x - player.x;
-      const dz = house.z - player.z;
-      const d = Math.hypot(dx, dz);
-      if (d > SHELTER_RADIUS) continue;
-      if (d > 0) {
-        const dot = (facingX * dx + facingZ * dz) / d;
-        if (dot <= Math.SQRT1_2) continue;
-      }
-      if (d < bestDistance) {
-        bestDistance = d;
-        best = {
-          houseId: house.id,
-          carriedType: mode.houseType,
-          placedName: HOUSE_DEFS[house.type].name,
-          carriedName: HOUSE_DEFS[mode.houseType].name,
-          x: house.x,
-          z: house.z,
-        };
-      }
-    }
-    return best;
-  })();
-  const upgradePillAnchor = upgradePill
-    ? projectAnchor(upgradePill.x, upgradePill.z, 'scatter')
-    : null;
+  // NO UPGRADE PILL (Adam, 2026-11-01): upgrades are not
+  // placements — the faced-house upgrade derivation that
+  // lived here is OUT. The home menu's Upgrade row is
+  // the one upgrade door.
 
   // Nearby pile for the Inventory modal's pickup section
   // (Adam, 2026-10-28): the NEAREST pile in range from
@@ -9294,7 +9598,10 @@ export default function App() {
               record.x === selectedSitePosition.x &&
               record.z === selectedSitePosition.z,
           )?.additions ?? [])
-      : [];
+      : selectedSitePosition?.kind === 'altar' &&
+          selectedSiteId !== null
+        ? (altarState.get(selectedSiteId)?.additions ?? [])
+        : [];
   const selectedSiteProgress = altarProgressFrom(selectedSiteAdditions);
   const selectedSiteGrade =
     selectedSitePosition === null
@@ -9409,7 +9716,10 @@ export default function App() {
               record.x === contextSitePosition.x &&
               record.z === contextSitePosition.z,
           )?.additions ?? [])
-      : [];
+      : contextSitePosition?.kind === 'altar' &&
+          craftContextSiteId !== null
+        ? (altarState.get(craftContextSiteId)?.additions ?? [])
+        : [];
   const contextSiteProgress = altarProgressFrom(contextSiteAdditions);
   const contextSiteGrade =
     contextSitePosition === null
@@ -9463,16 +9773,28 @@ export default function App() {
   // digit dispatch reads the SAME list the panel
   // renders. The makings at a stump live in the CONTEXT
   // acts list (the fold — stumps no longer select, so
-  // this selected list never sees one); here, at an
-  // altar site: while the books are unlinked and the
-  // ground is altar-grade (grade 2 — a made Altar; a
-  // Stumpy Altar reaches the same act through the
-  // context list), the Linking.
+  // this selected list never sees one); at a PLACED
+  // altar they live HERE (parity, 2026-11-01): the
+  // altar's own panel is its door, the same three steps
+  // in the same order, off the same progress reading.
+  // And at either altar at grade 2, while the books are
+  // unlinked, the Linking.
   const selectedSiteActs: { id: string; label: string }[] = (() => {
     if (selectedSiteId === null || selectedSitePosition === null) {
       return [];
     }
     const acts: { id: string; label: string }[] = [];
+    if (selectedSitePosition.kind === 'altar') {
+      if (!selectedSiteProgress.stones) {
+        acts.push({ id: 'place-stones', label: 'Place the Stones' });
+      }
+      if (!selectedSiteProgress.glyph) {
+        acts.push({ id: 'draw-glyph', label: 'Draw the Glyph' });
+      }
+      if (!selectedSiteProgress.candle) {
+        acts.push({ id: 'set-candle', label: 'Set the Candle' });
+      }
+    }
     if (selectedSiteGrade === 2 && !journalLinked) {
       acts.push({ id: 'link-journal', label: 'Link the Journal' });
     }
@@ -9602,6 +9924,7 @@ export default function App() {
     selectedPile !== null ||
     selectedSiteId !== null ||
     (pendingTrapRecipe ?? null) !== null ||
+    pendingCarriedTrap !== null ||
     pendingRemoveTarget !== null;
 
   // TRAP ROW (Adam, 2026-10-28): the nearest placed
@@ -9633,6 +9956,7 @@ export default function App() {
       optionsOpen ||
       introOpen ||
       pendingTrapRecipe ||
+      pendingCarriedTrap !== null ||
       pendingRemoveTarget !== null ||
       pendingRite !== null ||
       fragmentBeat !== null ||
@@ -9658,6 +9982,15 @@ export default function App() {
         nearest.catch !== null
           ? `Collect ${nearest.catch}`
           : `Check ${TRAP_DEFS[nearest.type].name}`,
+      // THE SECOND ACT'S NAME (the trap chunk): the row
+      // below Collect names what R (or a tap) will do —
+      // a door is spoken, never hidden. The pitfall
+      // carries none.
+      secondLabel: isCarryableTrap(nearest.type)
+        ? `Pick up ${TRAP_DEFS[nearest.type].name}`
+        : nearest.type === ITEMS.deadfall
+          ? `Dismantle ${TRAP_DEFS[nearest.type].name}`
+          : undefined,
     };
   })();
 
@@ -9705,6 +10038,7 @@ export default function App() {
       optionsOpen ||
       introOpen ||
       pendingTrapRecipe ||
+      pendingCarriedTrap !== null ||
       pendingRemoveTarget !== null ||
       pendingRite !== null ||
       fragmentBeat !== null ||
@@ -9741,6 +10075,18 @@ export default function App() {
   // the stacked panel burying the world, so the game leads and
   // the panels are one tap away. Desktop never collapses.
   const [hudCollapsed, setHudCollapsed] = useState(isTouch);
+  // QUEST CARD DISMISSAL (Adam, 2026-11-01 — the task
+  // chip gains its Close [X]): dismissal is keyed to
+  // the quest the card is SHOWING. The press records
+  // that quest's id and the card stays down while the
+  // card would show that same quest; it returns when
+  // what it would show changes — a different quest
+  // marked, the mark cleared, or the current quest
+  // advancing. No instant reappearance through the
+  // unmarked fallback: the fallback is exactly what
+  // the dismissal key holds down.
+  const [dismissedCardQuestId, setDismissedCardQuestId] =
+    useState<string | null>(null);
 
   // Options font (see the header): shell-owned UI setting,
   // persisted in its own localStorage key — never the Systems
@@ -9777,7 +10123,21 @@ export default function App() {
   // its own Enter/Esc, the single Esc path.
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent): void => {
-      if (e.key !== 'Escape') return;
+      // X CLOSES (Adam, 2026-11-01): X joins Escape in
+      // this handler — wherever Esc closes the topmost
+      // dialog, X does the same act (one close, two
+      // doors, never a close-all). X inherits the CLOSE
+      // half only: with nothing open it does NOT take
+      // Esc's open-Options act (see the fallthrough).
+      // A modified X (Ctrl/Cmd/Alt) is a shortcut, not
+      // the key — it never closes.
+      const isEscape = e.key === 'Escape';
+      const isX =
+        (e.key === 'x' || e.key === 'X') &&
+        !e.ctrlKey &&
+        !e.metaKey &&
+        !e.altKey;
+      if (!isEscape && !isX) return;
       const target = e.target as HTMLElement | null;
       const tag = target?.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
@@ -9789,6 +10149,7 @@ export default function App() {
         optionsOpen ||
         introOpen ||
         pendingTrapRecipe ||
+        pendingCarriedTrap !== null ||
         pendingRemoveTarget !== null ||
         pendingRite !== null ||
         fragmentBeat !== null ||
@@ -9846,7 +10207,9 @@ export default function App() {
         setInventoryOpen(false);
         return;
       }
-      setOptionsOpen(true);
+      // Nothing open: Escape opens Options (Adam's
+      // pin); X does nothing — the close half only.
+      if (isEscape) setOptionsOpen(true);
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
@@ -9854,6 +10217,7 @@ export default function App() {
     optionsOpen,
     introOpen,
     pendingTrapRecipe,
+    pendingCarriedTrap,
     pendingRemoveTarget,
     pendingRite,
     fragmentBeat,
@@ -9911,6 +10275,7 @@ export default function App() {
       firstRunDialogOpen ||
       introOpen ||
       pendingTrapRecipe ||
+      pendingCarriedTrap !== null ||
       pendingRemoveTarget !== null
     ) {
       return true;
@@ -10014,6 +10379,7 @@ export default function App() {
     if (!anyOpen) return;
     const dialogUp =
       pendingTrapRecipeId !== null ||
+      pendingCarriedTrap !== null ||
       pendingRemoveTarget !== null ||
       pendingRite !== null ||
       fragmentBeat !== null ||
@@ -10132,6 +10498,7 @@ export default function App() {
     optionsOpen,
     introOpen,
     pendingTrapRecipe,
+    pendingCarriedTrap,
     pendingRemoveTarget,
     pendingRite,
     fragmentBeat,
@@ -10273,7 +10640,8 @@ export default function App() {
   // behind her"). Candidates are in range (per-kind caps
   // as the rows use: HARVEST_RANGE; home via
   // shelterHouseId) AND faced — the game's existing faced
-  // definition, the upgrade pill's (46a617d): forward =
+  // definition (born with 46a617d's upgrade pill, retired
+  // 2026-11-01 — the definition stands): forward =
   // (sin facing, cos facing) from player.facing — one
   // read in every camera mode (first-person facing
   // tracks the look, third is travel direction, behind
@@ -10323,6 +10691,11 @@ export default function App() {
     | { kind: 'cauldron'; id: string; distance: number }
     | {
         kind: 'cave-enter' | 'cave-exit' | 'cave-descend' | 'cave-climb';
+        id: string;
+        distance: number;
+      }
+    | {
+        kind: 'upstairs-enter' | 'upstairs-exit';
         id: string;
         distance: number;
       }
@@ -10619,7 +10992,13 @@ export default function App() {
     // Background's caves module, like the looms read
     // their singleton — no shell mirror.
     const considerCave = (
-      kind: 'cave-enter' | 'cave-exit' | 'cave-descend' | 'cave-climb',
+      kind:
+        | 'cave-enter'
+        | 'cave-exit'
+        | 'cave-descend'
+        | 'cave-climb'
+        | 'upstairs-enter'
+        | 'upstairs-exit',
       id: string,
       x: number,
       z: number,
@@ -10630,7 +11009,39 @@ export default function App() {
         challengers.push({ kind, id, distance: f.distance });
       }
     };
-    if (!dimensionState.isUnderground()) {
+    // UPSTAIRS TRAVEL (UI half, 2026-11-01): the
+    // farmhouses' stairs join the same race. dimensionState
+    // reads ANY non-surface key as "underground", so the
+    // upstairs arm must be read BEFORE the cave arms: inside
+    // an upstairs zone the only travel candidate is the way
+    // back DOWN — the zone layout's entry anchor (just
+    // inside the stair-head door she arrived at). On the
+    // surface, every farmhouse's STAIR HEAD is an entry
+    // candidate — the singular plus each family instance in
+    // reach — and the winner id is the HOUSE KEY, the id
+    // enterUpstairs routes by. Read live from Background's
+    // attics module, like the cave mouths read caves — no
+    // shell mirror.
+    const activeDimensionKey = dimensionState.activeKey();
+    if (isUpstairsKey(activeDimensionKey)) {
+      const gen = genRef.current;
+      if (gen) {
+        const layout = atticLayoutForKey(
+          String(gen.seed),
+          gen.findSpawn(),
+          (x, z) => gen.weightsAt(x, z),
+          activeDimensionKey,
+        );
+        if (layout) {
+          considerCave(
+            'upstairs-exit',
+            '',
+            layout.entryAnchor.x,
+            layout.entryAnchor.z,
+          );
+        }
+      }
+    } else if (!dimensionState.isUnderground()) {
       const gen = genRef.current;
       if (gen) {
         // PLURAL CAVES (2026-10-30): mouths arrive in ONE
@@ -10647,6 +11058,43 @@ export default function App() {
           HARVEST_RANGE,
         )) {
           considerCave('cave-enter', mouth.id, mouth.spot.x, mouth.spot.z);
+        }
+        // UPSTAIRS ENTRY: the singular's key is the bare
+        // 'farmhouse'; each family instance rides its own
+        // key. The rect is padded well past the race range
+        // (a stair head can be in range while its house's
+        // center is not); considerCave re-gates on the
+        // head's own facing + distance, exactly.
+        const houseKeys: string[] = ['farmhouse'];
+        const stairReach = HARVEST_RANGE + 16;
+        for (const inst of farmhouseInstancesInRect(
+          String(gen.seed),
+          gen.findSpawn(),
+          (x, z) => gen.weightsAt(x, z),
+          {
+            minX: player.x - stairReach,
+            maxX: player.x + stairReach,
+            minZ: player.z - stairReach,
+            maxZ: player.z + stairReach,
+          },
+        )) {
+          houseKeys.push(inst.key);
+        }
+        for (const houseKey of houseKeys) {
+          const mouth = upstairsMouthFor(
+            String(gen.seed),
+            gen.findSpawn(),
+            (x, z) => gen.weightsAt(x, z),
+            houseKey,
+          );
+          if (mouth) {
+            considerCave(
+              'upstairs-enter',
+              houseKey,
+              mouth.stairHead.x,
+              mouth.stairHead.z,
+            );
+          }
         }
       }
     } else {
@@ -10740,6 +11188,9 @@ export default function App() {
     'anchor-blocked': 'The way is blocked.',
     'wrong-dimension': 'The way is blocked.',
     'unknown-mouth': 'The way is blocked.',
+    // The upstairs arm's backstop (UI half, 2026-11-01):
+    // unreachable from a correct winner, like its cave kin.
+    'unknown-house': 'The way is blocked.',
   };
 
   // The travel press: compose Background's validated
@@ -10763,6 +11214,30 @@ export default function App() {
     } else {
       outcome = ascend(player);
     }
+    if (outcome.ok === false) {
+      const line = CAVE_TRAVEL_REFUSALS[outcome.reason] ?? 'The way is blocked.';
+      showFeedback(line, 'blocked');
+    }
+  };
+
+  // The upstairs press (UI half, 2026-11-01): the cave
+  // press's sibling — compose Background's validated
+  // upstairs travel from the faced winner. Entry routes
+  // by the winner's house key; exit needs no id (the
+  // engine kept her return anchor at entry). Refusals
+  // speak from the same table as the caves'.
+  const handleUpstairsTravel = (winner: {
+    kind: 'upstairs-enter' | 'upstairs-exit';
+    id: string;
+  }): void => {
+    const player = playerRef.current;
+    const renderer = rendererRef.current;
+    const gen = genRef.current;
+    if (!player || !renderer || !gen) return;
+    const outcome =
+      winner.kind === 'upstairs-enter'
+        ? enterUpstairs(renderer, player, gen, winner.id)
+        : exitUpstairs(renderer, player);
     if (outcome.ok === false) {
       const line = CAVE_TRAVEL_REFUSALS[outcome.reason] ?? 'The way is blocked.';
       showFeedback(line, 'blocked');
@@ -10937,6 +11412,10 @@ export default function App() {
       case 'cave-climb':
         handleCaveTravel(winner);
         break;
+      case 'upstairs-enter':
+      case 'upstairs-exit':
+        handleUpstairsTravel(winner);
+        break;
       case 'home':
         setHomeMenuOpen(true);
         break;
@@ -10981,6 +11460,13 @@ export default function App() {
         break;
       case 'tent':
         handleTentAction(winner.id, 'take-down');
+        break;
+      case 'trap':
+        // The trap's second act (the trap chunk): pick
+        // up a set carryable, dismantle a set deadfall —
+        // the one routing the pill row's second button
+        // also runs.
+        handleTrapSecondAct(winner.id);
         break;
       case 'home': {
         const rest = homeMenuActions().find((a) => a.id === 'rest');
@@ -11171,6 +11657,7 @@ export default function App() {
       pendingRite !== null ||
       fragmentBeat !== null ||
       pendingTrapRecipe !== null ||
+      pendingCarriedTrap !== null ||
       cloudPendingBring !== null ||
       cloudPendingRemove !== null ||
       cloudPendingRestore !== null ||
@@ -11197,6 +11684,7 @@ export default function App() {
     pendingRite,
     fragmentBeat,
     pendingTrapRecipe,
+    pendingCarriedTrap,
     cloudPendingBring,
     cloudPendingRemove,
     cloudPendingRestore,
@@ -11241,6 +11729,7 @@ export default function App() {
         optionsOpen ||
         introOpen ||
         pendingTrapRecipe ||
+        pendingCarriedTrap !== null ||
         pendingRemoveTarget !== null ||
         pendingRite !== null ||
         fragmentBeat !== null ||
@@ -11358,6 +11847,7 @@ export default function App() {
     optionsOpen,
     introOpen,
     pendingTrapRecipe,
+    pendingCarriedTrap,
     pendingRemoveTarget,
     pendingRite,
     fragmentBeat,
@@ -11417,6 +11907,7 @@ export default function App() {
         optionsOpen ||
         introOpen ||
         pendingTrapRecipe ||
+        pendingCarriedTrap !== null ||
         pendingRemoveTarget !== null ||
         pendingRite !== null ||
         fragmentBeat !== null ||
@@ -11448,6 +11939,7 @@ export default function App() {
     optionsOpen,
     introOpen,
     pendingTrapRecipe,
+    pendingCarriedTrap,
     pendingRemoveTarget,
     pendingRite,
     fragmentBeat,
@@ -11605,32 +12097,58 @@ export default function App() {
   // FPS, shell-side (see the header): a requestAnimationFrame
   // sampler, not a renderer instrument — the renderer is
   // untouched. State updates about once a second, never per
-  // frame, so the chip does not churn the HUD. A sample
-  // spanning hidden-tab time (rAF pauses when hidden) is
-  // dropped instead of showing a bogus low number.
-  const [fps, setFps] = useState<number | null>(null);
+  // frame, so the chip does not churn the HUD. The window
+  // publishes its AVERAGE and its WORST single frame gap
+  // side by side (the FPS witness, 2026-11-01): the average
+  // alone smoothed Adam's hitch away ('60 FPS while
+  // hitching' — a per-frame throw aborts a frame, not the
+  // average). A window spanning hidden-tab time (rAF
+  // pauses when hidden, elapsed >= 2000) drops the
+  // average but still publishes the worst, marked
+  // interrupted — a stall shows as a stall, a hidden tab
+  // as an interruption, neither as silence. The worst
+  // resets per window: a fresh witness each second, not
+  // a sticky old hitch.
+  const [fps, setFps] = useState<{
+    avg: number | null;
+    worst: number;
+    interrupted: boolean;
+  } | null>(null);
   useEffect(() => {
     let raf = 0;
     let frames = 0;
     let start = performance.now();
+    let last = start;
+    let worst = 0;
     const tick = (now: number): void => {
       // PAUSE GATE: discard paused frames instead of sampling
       // them, so the chip never reports a pause-inflated number
-      // and resume starts a fresh sample window.
+      // and resume starts a fresh sample window (the worst
+      // resets too — the resume gap never pollutes it).
       if (pausedRef.current) {
         frames = 0;
         start = now;
+        last = now;
+        worst = 0;
         raf = requestAnimationFrame(tick);
         return;
       }
       frames += 1;
+      if (now - last > worst) worst = now - last;
+      last = now;
       const elapsed = now - start;
       if (elapsed >= 1000) {
-        if (elapsed < 2000) {
-          setFps(Math.round((frames * 1000) / elapsed));
-        }
+        const interrupted = elapsed >= 2000;
+        setFps({
+          avg: interrupted
+            ? null
+            : Math.round((frames * 1000) / elapsed),
+          worst: Math.round(worst),
+          interrupted,
+        });
         frames = 0;
         start = now;
+        worst = 0;
       }
       raf = requestAnimationFrame(tick);
     };
@@ -12279,7 +12797,11 @@ export default function App() {
                     ? 'CLIMB'
                     : useWinner.kind === 'cave-exit'
                       ? 'EXIT'
-                      : useWinner.kind === 'scry'
+                      : useWinner.kind === 'upstairs-enter'
+                        ? 'GO UP'
+                        : useWinner.kind === 'upstairs-exit'
+                          ? 'GO DOWN'
+                          : useWinner.kind === 'scry'
                         ? 'SCRY'
                         : undefined;
 
@@ -12315,6 +12837,58 @@ export default function App() {
       </div>
     </>
   );
+
+  // THE PLACEMENT CARD, HOISTED (the kiln defect,
+  // Adam + DEV, 2026-11-01): the card renders only while
+  // a placement is armed, and while armed it is the one
+  // live confirm in the game — so it takes the stack's
+  // FIRST seat on every pointer, above the meta block
+  // and the doors. The law: A CONFIRM NEVER SITS IN A
+  // SCROLL FOLD. (Measured cause: seated last, the card
+  // painted at y[753,805] on a desktop window — 'Place
+  // here' off-screen at 768 and 600 tall alike, while
+  // the armed ghost stood mute at her feet.) Unarmed,
+  // the stack renders exactly as before.
+  const placementCard = placement ? (
+    <div className="rounded bg-black/45 px-2 py-1 text-sm">
+      <p>Placing {placement.label} where you aim.</p>
+      <div className="mt-1 flex gap-2">
+        <button
+          type="button"
+          onClick={handlePlaceConfirm}
+          className={
+            isTouch
+              ? 'rounded bg-moss-deep px-3 py-2 text-sm min-h-[44px] hover:bg-moss'
+              : 'rounded bg-moss-deep px-2 py-0.5 text-xs hover:bg-moss'
+          }
+        >
+          Place there
+          {!isTouch ? (
+            <span
+              aria-hidden="true"
+              className={'ml-1 ' + KEY_BADGE_CLASS}
+            >
+              Enter
+            </span>
+          ) : null}
+        </button>
+        <button
+          type="button"
+          onClick={handlePlaceCancel}
+          className={
+            isTouch
+              ? 'rounded bg-moss-deep px-3 py-2 text-sm min-h-[44px] hover:bg-moss'
+              : 'rounded bg-moss-deep px-2 py-0.5 text-xs hover:bg-moss'
+          }
+        >
+          Cancel
+        </button>
+      </div>
+      {placementNote ? (
+        <p className="mt-1 text-xs text-red-300">{placementNote}</p>
+      ) : null}
+    </div>
+  ) : null;
 
   return (
     <div
@@ -12545,22 +13119,6 @@ export default function App() {
             </button>
           </WorldAnchor>
         ) : null}
-        {upgradePill && upgradePillAnchor ? (
-          <WorldAnchor
-            x={upgradePillAnchor.x}
-            y={upgradePillAnchor.y}
-            interactive
-          >
-            <button
-              type="button"
-              onClick={() => handleUpgradePress(upgradePill)}
-              aria-label={`Upgrade ${upgradePill.placedName} to ${upgradePill.carriedName}`}
-              className="flex min-h-[44px] items-center rounded-full bg-black/60 px-2 py-1 text-sm text-stone-100"
-            >
-              Upgrade to {upgradePill.carriedName}
-            </button>
-          </WorldAnchor>
-        ) : null}
         {homeMenuOpen && homeHouse !== undefined && homeAnchor ? (
           <WorldAnchor x={homeAnchor.x} y={homeAnchor.y} interactive>
             <ContextMenu theme={lookThemes.world}
@@ -12666,7 +13224,12 @@ export default function App() {
             x={placementAnchor.x}
             y={placementAnchor.y}
             label={placement.label}
-            valid
+            onConfirm={handlePlaceConfirm}
+            hint={
+              !isTouch
+                ? 'Enter or click to place · Esc to cancel'
+                : undefined
+            }
           />
         ) : null}
         {/* The world-anchored harvest progress bar RETIRED
@@ -12694,6 +13257,7 @@ export default function App() {
           stationAnchor={stationAnchor}
           trap={presentedTrap}
           onCollectTrap={handleCollectTrap}
+          onSecondTrap={handleTrapSecondAct}
           hive={presentedHive}
           onHarvestHive={handleHarvestHive}
           loom={presentedLoom}
@@ -12843,6 +13407,7 @@ export default function App() {
               : 'pointer-events-auto m-2 max-w-sm'
           }
         >
+          {placementCard}
           {!isTouch ? stackMeta : null}
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <button
@@ -12999,7 +13564,7 @@ export default function App() {
             />
           </div>
             </div>
-          {cardQuestRow ? (
+          {cardQuestRow && cardQuestRow.id !== dismissedCardQuestId ? (
             <div className="mt-2">
               <QuestCard
                 title={cardQuestRow.title}
@@ -13007,6 +13572,7 @@ export default function App() {
                 components={cardQuestComponents}
                 marked={cardQuestRow.id === activeQuestId}
                 theme={lookThemes.world}
+                onClose={() => setDismissedCardQuestId(cardQuestRow.id)}
               />
             </div>
           ) : null}
@@ -13039,54 +13605,70 @@ export default function App() {
               openCraftingPanel, so the stump keeps ONE
               door, the dialog, which names the stump in
               its own heading. StationPanel is deleted. */}
-          {placement ? (
-            <div className="mt-2 rounded bg-black/45 px-2 py-1 text-sm">
-              <p>Placing {placement.label} at your feet.</p>
-              <div className="mt-1 flex gap-2">
-                {/* UPGRADE PILL: one confirm at a time —
-                    while the pill shows, feet placement
-                    hides (the pill IS the confirm). */}
-                {upgradePill ? null : (
-                  <button
-                    type="button"
-                    onClick={handlePlaceConfirm}
-                    className={
-                      isTouch
-                        ? 'rounded bg-moss-deep px-3 py-2 text-sm min-h-[44px] hover:bg-moss'
-                        : 'rounded bg-moss-deep px-2 py-0.5 text-xs hover:bg-moss'
-                    }
-                  >
-                    Place here
-                    {!isTouch ? (
-                      <span
-                        aria-hidden="true"
-                        className={'ml-1 ' + KEY_BADGE_CLASS}
-                      >
-                        Enter
-                      </span>
-                    ) : null}
-                  </button>
-                )}
-                <button
-                  type="button"
-                  onClick={handlePlaceCancel}
-                  className={
-                    isTouch
-                      ? 'rounded bg-moss-deep px-3 py-2 text-sm min-h-[44px] hover:bg-moss'
-                      : 'rounded bg-moss-deep px-2 py-0.5 text-xs hover:bg-moss'
-                  }
-                >
-                  Cancel
-                </button>
-              </div>
-              {placementNote ? (
-                <p className="mt-1 text-xs text-red-300">{placementNote}</p>
-              ) : null}
-            </div>
-          ) : null}
+          {/* The placement card's old seat stood here,
+              LAST in the stack — the kiln defect's fold
+              (see placementCard's hoisting note above). */}
           {/* Touch seat for the meta block: LAST in the
               stack (DEFECT 3 — the working parts lead). */}
           {isTouch ? stackMeta : null}
+          {/* Seed controls. THE STRIP FOLLOWS THE
+              CONTENT (Adam's overlap defect + DEV's idiom,
+              2026-11-01): this row used to sit in an
+              absolute bottom-left seat outside the stack,
+              and the stack — whose height is its content,
+              unbounded on desktop — grew down into it: at
+              full wardrobe the wardrobe's last rows flowed
+              underneath the strip and it painted over them
+              (measured: stack content bottom y=668 at both
+              768 and 600 tall; the strip's top at 696 at
+              768 — 28 px of clearance — and at 528 at 600,
+              covering the stack's last ~140 px). Now the
+              strip takes the stack's LAST seat in flow,
+              after every working part on both pointers, so
+              it follows the content by construction and
+              can never overlap it at any window height.
+              PHONE STRIP history (Adam's defect report,
+              2026-11-01, preserved): the row wraps, the
+              Current line takes its OWN row (it can no
+              longer reach bottom-center at any width), the
+              input is narrower, and the container is
+              pointer-transparent except the real controls —
+              the label and the Current line never take a
+              tap. The label and the Current chip carry the
+              notes' black backdrop (bare text let the armed
+              ghost's poles paint straight across the
+              words). On touch the strip stands down while
+              a dialog is open (the takeover — its
+              'Current:' line collided with the sheet's
+              list headings in Adam's frame). */}
+          {!(isTouch && anyDialogOpen) ? (
+          <div className="pointer-events-none mt-3 flex max-w-[100vw] flex-wrap items-center gap-2">
+            <label
+              htmlFor="seed-input"
+              className="rounded bg-black/45 px-2 py-1 text-xs opacity-70"
+            >
+              World seed:
+            </label>
+            <input
+              id="seed-input"
+              value={seedInput}
+              onChange={(e) => setSeedInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') regenerate();
+              }}
+              className="pointer-events-auto bg-[#1e241c] border border-moss-deep px-2 py-1 text-xs w-40 outline-none"
+            />
+            <button
+              onClick={() => regenerate()}
+              className="pointer-events-auto bg-moss-deep hover:bg-moss px-3 py-1 text-xs"
+            >
+              Regenerate
+            </button>
+            <span className="w-full text-xs opacity-60">
+              <span className="rounded bg-black/45 px-2 py-1">Current: {seed}</span>
+            </span>
+          </div>
+          ) : null}
         </div>
         ) : null}
       </HudShell>
@@ -13108,7 +13690,10 @@ export default function App() {
           dialog (the takeover) like the rest of the chrome.
           It sits at z-30, under the pause veil: a readout,
           not a trapped action — resume brings it forward. */}
-      {hudCollapsed && cardQuestRow && !anyDialogOpen ? (
+      {hudCollapsed &&
+      cardQuestRow &&
+      cardQuestRow.id !== dismissedCardQuestId &&
+      !anyDialogOpen ? (
         <div className="pointer-events-none absolute left-2 top-28 z-30 w-[calc(100vw-1rem)] max-w-[20rem]">
           <QuestCard
             title={cardQuestRow.title}
@@ -13116,6 +13701,7 @@ export default function App() {
             components={cardQuestComponents}
             marked={cardQuestRow.id === activeQuestId}
             theme={lookThemes.world}
+            onClose={() => setDismissedCardQuestId(cardQuestRow.id)}
           />
         </div>
       ) : null}
@@ -13581,52 +14167,6 @@ export default function App() {
         ) : null}
       </div>
 
-      {/* Seed controls. PHONE STRIP (Adam's defect report,
-          2026-11-01): this row used to run ~450 px across the
-          bottom in one unwrapped line, so on a phone-landscape
-          screen its 'Current:' label painted across the armed
-          placement ghost at bottom-center and the row's box
-          swallowed the ground there. Now the strip wraps, the
-          Current line takes its OWN row at the far left (it
-          can no longer reach bottom-center at any width), the
-          input is narrower, and the container is
-          pointer-transparent except the real controls — the
-          label and the Current line never take a tap. The
-          label and the Current chip carry the notes' black
-          backdrop (second defect, same report): bare text
-          let the armed ghost's poles paint straight across
-          the words; the controls win visually too. On touch
-          the strip stands down while a dialog is open (the
-          takeover — its 'Current:' line collided with the
-          sheet's list headings in Adam's frame). */}
-      {!(isTouch && anyDialogOpen) ? (
-      <div className="pointer-events-none absolute bottom-0 left-0 z-30 flex max-w-[100vw] flex-wrap items-center gap-2 p-4">
-        <label
-          htmlFor="seed-input"
-          className="rounded bg-black/45 px-2 py-1 text-xs opacity-70"
-        >
-          World seed:
-        </label>
-        <input
-          id="seed-input"
-          value={seedInput}
-          onChange={(e) => setSeedInput(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') regenerate();
-          }}
-          className="pointer-events-auto bg-[#1e241c] border border-moss-deep px-2 py-1 text-xs w-40 outline-none"
-        />
-        <button
-          onClick={() => regenerate()}
-          className="pointer-events-auto bg-moss-deep hover:bg-moss px-3 py-1 text-xs"
-        >
-          Regenerate
-        </button>
-        <span className="w-full text-xs opacity-60">
-          <span className="rounded bg-black/45 px-2 py-1">Current: {seed}</span>
-        </span>
-      </div>
-      ) : null}
 
       {/* Controls help (desktop only — touch devices get the TouchControls cues). */}
       {isTouch ? null : (
@@ -13639,6 +14179,7 @@ export default function App() {
         <p>R — 2nd Interact</p>
         <p>RMB — Place lit torch</p>
         <p>Esc — Options</p>
+        <p>X — Close dialog</p>
         {cameraMode === 'first' && <p>Click the world to capture the mouse</p>}
       </div>
       )}
@@ -14123,6 +14664,52 @@ export default function App() {
         </Popup>
       ) : null}
 
+      {/* The carryable trap's post-craft confirm (the trap
+        chunk, 2026-11-01): the craft already executed —
+        the trap is IN her pack — and the pinned table's
+        question is place-or-pack. Yes composes the
+        placement at the aim; No or Close keeps it packed.
+        Same Popup shell, same button sizing as the
+        site-built confirm above; the semantics differ
+        (nothing here can un-craft). Copy DRAFT. */}
+      {pendingCarriedTrapRecipe ? (
+        <Popup theme={lookThemes.dialog}
+          open={true}
+          title="PLACE TRAP HERE?"
+          onClose={handleCarriedTrapKeep}
+          comfortable={isTouch}
+        >
+          <p className="text-sm text-stone-200">
+            Place the {pendingCarriedTrapRecipe.name} here, or keep
+            it in your pack?
+          </p>
+          <div className="mt-3 flex gap-2">
+            <button
+              type="button"
+              onClick={handleCarriedTrapPlaceYes}
+              className={
+                isTouch
+                  ? 'min-h-[44px] rounded bg-moss-deep px-3 py-2 text-sm hover:bg-moss'
+                  : 'rounded bg-moss-deep px-2 py-0.5 text-xs hover:bg-moss'
+              }
+            >
+              Place it
+            </button>
+            <button
+              type="button"
+              onClick={handleCarriedTrapKeep}
+              className={
+                isTouch
+                  ? 'min-h-[44px] rounded bg-[#44403c] px-3 py-2 text-sm hover:bg-[#57534e]'
+                  : 'rounded bg-[#44403c] px-2 py-0.5 text-xs hover:bg-[#57534e]'
+              }
+            >
+              Keep in pack
+            </button>
+          </div>
+        </Popup>
+      ) : null}
+
       {/* Scry button: appears at still water (DEV split —
         visibility on movement, reveal on press). Bottom-
         centre, the PausedIndicator's seat — the two never
@@ -14159,8 +14746,6 @@ export default function App() {
           — so an armed placement on the phone showed the ghost
           but no reachable Place here, only a 'Show HUD' hunt.
           This bar is the confirm's touch door: same handlers,
-          same one-confirm law (while the upgrade pill shows,
-          it is the confirm and the bar carries only Cancel),
           seated in the bottom-center actor family above the
           ghost's seat — Scry yields the family while a
           placement is armed (its guard above). Shown only in
@@ -14205,18 +14790,16 @@ export default function App() {
       pendingRemoveTarget === null ? (
         <div className="pointer-events-auto absolute bottom-24 left-1/2 z-50 -translate-x-1/2 rounded bg-black/60 px-3 py-2 text-center">
           <p className="text-sm text-stone-100">
-            Placing {placement.label} at your feet.
+            Placing {placement.label} where you aim.
           </p>
           <div className="mt-1 flex justify-center gap-2">
-            {upgradePill ? null : (
-              <button
-                type="button"
-                onClick={handlePlaceConfirm}
-                className="min-h-[44px] rounded bg-moss-deep px-3 py-2 text-sm hover:bg-moss"
-              >
-                Place here
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={handlePlaceConfirm}
+              className="min-h-[44px] rounded bg-moss-deep px-3 py-2 text-sm hover:bg-moss"
+            >
+              Place there
+            </button>
             <button
               type="button"
               onClick={handlePlaceCancel}
