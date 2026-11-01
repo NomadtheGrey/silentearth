@@ -6,9 +6,12 @@
 // carried, and SET later under a Place verb; a set one
 // picks back up into the pack. The other two are
 // SITE-BUILT (deadfall, pitfall): their craft is their
-// placement, and this module refuses them — the
-// pitfall's only removal is its fill (pitfall.ts); a
-// set deadfall's recovery is not yet ruled.
+// placement, and the carried verbs refuse them — the
+// pitfall's removal is its fill (pitfall.ts); the
+// deadfall's is the DISMANTLE below (Adam via DEV,
+// 2026-11-01): taken apart where it stands, yields
+// nothing — the logs were never hers to keep, she
+// only rigged found weight.
 //
 // This file is the GRANTS (the desk/cauldron idiom:
 // outcome records, validate before mutating, failure
@@ -125,4 +128,40 @@ export function pickupTrap(
     return { picked: false, reason: 'No room in the pack for it.' };
   }
   return { picked: true, granted: 1 };
+}
+
+/** Dismantle outcome. On success the shell removes via removeTrap. */
+export type DismantleTrapOutcome =
+  | { dismantled: true; type: string }
+  | { dismantled: false; reason: string };
+
+/**
+ * Dismantle a set DEADFALL where it stands (Adam via
+ * DEV, 2026-11-01): removed, yields NOTHING — the logs
+ * were never hers to keep, she only rigged found
+ * weight. State-blind by design (the grant does not
+ * know the trap's catch — a catch held in a trap is
+ * collected first or lost with it; that composition
+ * is the shell's verb order, as with the fill), no
+ * inventory contact, no gate. Every other type
+ * refuses toward its own removal: the carryable
+ * three pick up, the pitfall fills in.
+ */
+export function dismantleTrap(trapType: string): DismantleTrapOutcome {
+  if (trapType === ITEMS.pitfall) {
+    return {
+      dismantled: false,
+      reason: 'A pitfall is filled in, not dismantled.',
+    };
+  }
+  if (isCarryableTrap(trapType)) {
+    return {
+      dismantled: false,
+      reason: 'That trap picks up — it is carried, not dismantled.',
+    };
+  }
+  if (trapType !== ITEMS.deadfall) {
+    return { dismantled: false, reason: 'Not a trap she can take apart.' };
+  }
+  return { dismantled: true, type: trapType };
 }
