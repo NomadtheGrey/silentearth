@@ -26,6 +26,19 @@
  * (stumps are felled-tree objects, not this entity) and
  * activates with rituals, not here.
  *
+ * PARITY (Adam, 2026-11-01: 'Both types of altars should
+ * work the same — just 2 flavors for the same thing'):
+ * the placed altar now carries the CONSECRATION record —
+ * additions, the same ordered step members the stump's
+ * dressing reads ('altar-stones' / 'altar-glyph' /
+ * 'altar-candle') — sparse on the record (present only
+ * while non-empty), mirroring Systems' SavedAltar
+ * .additions. The grade derives from the additions on
+ * Systems' side for both bases; this state only HOLDS
+ * the record and reports its changes ('altar:additions'),
+ * so the shell's base-blind consecration acts can seat
+ * the steps on a placed altar exactly as on a stump.
+ *
  * SAVE SHAPE (proposal for Systems — mirrors SavedTorch):
  * SavedAltar { id, x, z }; boot calls altarState.restore
  * (saved.altars) BEFORE renderer construction (fire/torch
@@ -39,11 +52,21 @@
 
 import { bus } from './events';
 
-/** A placed altar entity. A site only; position is the whole state. */
+/** A placed altar entity: a site — position, plus the
+ *  consecration additions once its acts begin (sparse:
+ *  the field is absent until the first step seats). */
 export interface PlacedAltar {
   id: string;
   x: number;
   z: number;
+  additions?: string[];
+}
+
+/** Copy a record without aliasing its additions array. */
+function copyAltar(altar: PlacedAltar): PlacedAltar {
+  return altar.additions
+    ? { ...altar, additions: [...altar.additions] }
+    : { ...altar };
 }
 
 class AltarState {
@@ -67,12 +90,36 @@ class AltarState {
 
   get(id: string): PlacedAltar | undefined {
     const altar = this.altars.get(id);
-    return altar ? { ...altar } : undefined;
+    return altar ? copyAltar(altar) : undefined;
   }
 
   /** Copies, never aliases (trap snapshot precedent). */
   snapshot(): PlacedAltar[] {
-    return [...this.altars.values()].map((altar) => ({ ...altar }));
+    return [...this.altars.values()].map(copyAltar);
+  }
+
+  /**
+   * Seat (or clear) an altar's consecration additions —
+   * the desk setGrimoire pattern: false on an unknown
+   * id; an unchanged set is an idempotent true with NO
+   * event; an empty set DELETES the field (the record
+   * returns to bare, the sparse shape both saves write);
+   * a real change emits 'altar:additions' with a copy.
+   * The shell calls this only after Systems' base-blind
+   * consecration grant succeeds.
+   */
+  setAdditions(id: string, additions: readonly string[]): boolean {
+    const altar = this.altars.get(id);
+    if (!altar) return false;
+    const next = additions.filter((a) => typeof a === 'string' && a !== '');
+    const current = altar.additions ?? [];
+    if (next.length === current.length && next.every((a, i) => a === current[i])) {
+      return true;
+    }
+    if (next.length === 0) delete altar.additions;
+    else altar.additions = next;
+    bus.emit('altar:additions', { id, additions: [...next] });
+    return true;
   }
 
   restore(altars: ReadonlyArray<PlacedAltar>): void {
@@ -83,7 +130,17 @@ class AltarState {
       if (!altar || typeof altar !== 'object') continue;
       if (typeof altar.id !== 'string' || altar.id === '') continue;
       if (!Number.isFinite(altar.x) || !Number.isFinite(altar.z)) continue;
-      this.altars.set(altar.id, { id: altar.id, x: altar.x, z: altar.z });
+      const record: PlacedAltar = { id: altar.id, x: altar.x, z: altar.z };
+      // Additions pass through whole (string members
+      // only; an empty result leaves the record bare —
+      // pre-parity saves load exactly as they saved).
+      if (Array.isArray(altar.additions)) {
+        const adds = altar.additions.filter(
+          (a) => typeof a === 'string' && a !== '',
+        );
+        if (adds.length > 0) record.additions = adds;
+      }
+      this.altars.set(altar.id, record);
       const suffix = Number(altar.id.split(':').pop());
       if (Number.isFinite(suffix) && suffix > maxSuffix) maxSuffix = suffix;
     }

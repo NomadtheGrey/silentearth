@@ -27,7 +27,7 @@ import type { WorldGen } from './worldgen';
 import { PlayerController } from './player';
 import { marshWeight } from './biomes';
 import { SOURCE_FOR_KIND } from './objects';
-import { buildAltarGroup, buildAnimal, buildCampArrow, buildCandle, buildCatchProp, buildCauldronGroup, buildDeskGroup, buildEdgeArrow, buildKindGeometry, buildStagedBone, buildStumpDressing, buildSunflowerHeadGeometry, buildTorch, buildUmbrella, buildWitch, ALTAR_CANDLE_X, ALTAR_CANDLE_Z, CANDLE_FLAME_Y, DISC_GROUND_LIFT_M, DISC_RADIUS, STUMP_TOP_Y, sunflowerHeadMatrix, sunflowerHeadOrientation, TORCH_FLAME_Y, vertexLambert } from './models';
+import { buildAltarGroup, buildAnimal, buildCampArrow, buildCandle, buildCatchProp, buildCauldronGroup, buildDeskGroup, buildEdgeArrow, buildKindGeometry, buildStagedBone, buildStumpDressing, buildSunflowerHeadGeometry, buildTorch, buildUmbrella, buildWitch, ALTAR_CANDLE_X, ALTAR_CANDLE_Z, ALTAR_SLAB_TOP_Y, ALTAR_TABLE_CANDLE_X, ALTAR_TABLE_CANDLE_Z, CANDLE_FLAME_Y, DISC_GROUND_LIFT_M, DISC_RADIUS, STUMP_TOP_Y, sunflowerHeadMatrix, sunflowerHeadOrientation, TORCH_FLAME_Y, vertexLambert } from './models';
 import { placementFootprintFor, type PlacementPreview, type PlacementTint } from './placementFootprints';
 import {
   markerStateFor,
@@ -841,6 +841,7 @@ export class WorldRenderer {
       bus.on('torch:removed', rebuild),
       bus.on('altar:placed', rebuild),
       bus.on('altar:removed', rebuild),
+      bus.on('altar:additions', rebuild),
       bus.on('desk:placed', rebuild),
       bus.on('desk:removed', rebuild),
       bus.on('desk:grimoire', rebuild),
@@ -2102,15 +2103,21 @@ export class WorldRenderer {
    * dressing mesh. Anchored off the same models constants
    * the dressing build uses, so light and flame can't drift.
    */
-  private addAltarCandleLight(x: number, z: number): void {
+  private addAltarCandleLight(
+    x: number,
+    z: number,
+    dx: number = ALTAR_CANDLE_X,
+    dz: number = ALTAR_CANDLE_Z,
+    flameY: number = STUMP_TOP_Y + CANDLE_FLAME_Y,
+  ): void {
     const light = new THREE.PointLight(
       CANDLE_LIGHT_COLOR,
       CANDLE_LIGHT_INTENSITY,
       CANDLE_LIGHT_DISTANCE,
       CANDLE_LIGHT_DECAY,
     );
-    light.position.set(x + ALTAR_CANDLE_X, STUMP_TOP_Y + CANDLE_FLAME_Y, z + ALTAR_CANDLE_Z);
-    light.userData.phase = flamePhase(x + ALTAR_CANDLE_X, z + ALTAR_CANDLE_Z);
+    light.position.set(x + dx, flameY, z + dz);
+    light.userData.phase = flamePhase(x + dx, z + dz);
     this.scene.add(light);
     this.altarCandleLights.push(light);
   }
@@ -2504,17 +2511,29 @@ export class WorldRenderer {
     }
     for (const altar of altarState.snapshot()) {
       // Made ritual altar (Adam 2026-10-27 — placeable +
-      // visible ONLY, no ritual actions): the stone-table +
-      // clay-bowl graphic, sitting on the ground at the
-      // placed position. Scene-level like all placed
-      // entities — chunk reload never touches it, and save
-      // restore rebuilds it via the constructor's initial
-      // rebuildPlacedGroup (altarState.restore first). No
-      // light: an altar is not a light source.
+      // visible): the stone-table + clay-bowl graphic at
+      // the placed position, wearing its consecration
+      // additions since the parity ruling (2026-11-01 —
+      // the same record the stump dressing reads, so the
+      // two flavors dress by one derivation). Scene-level
+      // like all placed entities — chunk reload never
+      // touches it, and save restore rebuilds it via the
+      // constructor's initial rebuildPlacedGroup
+      // (altarState.restore first). The candle, once set,
+      // gains its scene light like a stump's.
       const ag = new THREE.Group();
       ag.position.set(altar.x, 0, altar.z);
-      ag.add(buildAltarGroup());
+      ag.add(buildAltarGroup(altar.additions ?? []));
       group.add(ag);
+      if (altar.additions?.includes('altar-candle')) {
+        this.addAltarCandleLight(
+          altar.x,
+          altar.z,
+          ALTAR_TABLE_CANDLE_X,
+          ALTAR_TABLE_CANDLE_Z,
+          ALTAR_SLAB_TOP_Y + CANDLE_FLAME_Y,
+        );
+      }
     }
     for (const desk of deskState.snapshot()) {
       // Placed writing desk (Adam 2026-10-30 — placeable +
@@ -2608,10 +2627,14 @@ export class WorldRenderer {
    * per staged site, lying flat. Placement, measured at
    * build (flagged constants, not magic): made altar →
    * slab top 0.84 + bone half-height 0.05 = 0.89, offset
-   * z +0.37 so the bone lies beside the bowl (bowl radius
-   * 0.3, bone half-width 0.05 → clears by 0.02, inside the
-   * 0.45 slab edge); stump → stump top 0.6 (baseY 0.3 +
-   * geometry top 0.3) + 0.05 = 0.65, centred on the stump.
+   * z +0.33 so the bone lies beside the bowl (the bowl's
+   * radius at the bone's height is ~0.22 → clears by
+   * ~0.06; since the parity dressing, the glyph ring on
+   * the slab at r 0.42 bounds the other side → clears
+   * its strokes by ~0.02; the table candle at x −0.52
+   * stands clear of the bone's x-span entirely); stump
+   * → stump top 0.6 (baseY 0.3 + geometry top 0.3) +
+   * 0.05 = 0.65, centred on the stump.
    * Boulder stagings draw NOTHING (no boulder objects
    * exist yet) — the state still holds them, and Systems'
    * completion logic reads state, not this group. Own
@@ -2637,7 +2660,7 @@ export class WorldRenderer {
       if (staged.site.kind === 'boulder') continue;
       const bone = buildStagedBone();
       if (staged.site.kind === 'altar') {
-        bone.position.set(staged.site.x, 0.89, staged.site.z + 0.37);
+        bone.position.set(staged.site.x, 0.89, staged.site.z + 0.33);
       } else {
         bone.position.set(staged.site.x, 0.65, staged.site.z);
       }

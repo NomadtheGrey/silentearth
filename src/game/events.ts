@@ -310,6 +310,7 @@ export interface EventMap {
    * .snapshot() + this event.
    */
   'altar:placed': { id: string; x: number; z: number };
+  'altar:additions': { id: string; additions: string[] };
   /**
    * A placed altar was removed (altarState.removeAltar).
    * No removal UI exists in this order (label-only chip) —
