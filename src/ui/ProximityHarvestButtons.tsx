@@ -300,6 +300,23 @@ export interface ProximityHarvestButtonsProps {
   /** Called with the fragment id for a fragment-row press. */
   onTranscribe?: (id: string) => void;
   /**
+   * The faced desk, caller-derived (null = no row).
+   * Renders LAST in the column (after the fragment
+   * row), even with zero harvest targets. The trap's
+   * two-row shape: the label is the E act (seat or
+   * take the grimoire); secondLabel, when present, is
+   * the R act (read the seated book).
+   */
+  desk?: {
+    id: string;
+    label: string;
+    secondLabel?: string;
+  } | null;
+  /** Called with the desk id for a desk-row press. */
+  onDesk?: (id: string) => void;
+  /** Called with the desk id for a second-act press. */
+  onSecondDesk?: (id: string) => void;
+  /**
    * Show PC key badges on the keyed rows (trap row "E",
    * hive row "E", loom row "E", creature row "E" — USE dispatches to the faced target's
    * common action, Adam 2026-10-29). Caller passes
@@ -332,11 +349,22 @@ export function ProximityHarvestButtons({
   onCreature,
   fragment,
   onTranscribe,
+  desk,
+  onDesk,
+  onSecondDesk,
   showKeyHints = false,
   theme = 'mire',
 }: ProximityHarvestButtonsProps) {
   const t = UI_THEMES[theme];
-  if (targets.length === 0 && !trap && !hive && !loom && !creature && !fragment) {
+  if (
+    targets.length === 0 &&
+    !trap &&
+    !hive &&
+    !loom &&
+    !creature &&
+    !fragment &&
+    !desk
+  ) {
     return null;
   }
   // Dirt-row suppression (Adam, 2026-10-28): the ground row
@@ -543,6 +571,48 @@ export function ProximityHarvestButtons({
               className={KEY_BADGE_CLASS}
             >
               E
+            </span>
+          ) : null}
+        </button>
+      ) : null}
+      {desk && onDesk ? (
+        <button
+          type="button"
+          onClick={() => onDesk(desk.id)}
+          aria-label={desk.label}
+          className={
+            'flex min-h-[44px] items-center gap-2 rounded-full px-3 py-1.5 text-sm shadow-lg transition-transform hover:scale-105 ' +
+            t.panel
+          }
+        >
+          <span className="font-medium">{desk.label}</span>
+          {showKeyHints ? (
+            <span
+              aria-hidden="true"
+              className={KEY_BADGE_CLASS}
+            >
+              E
+            </span>
+          ) : null}
+        </button>
+      ) : null}
+      {desk && desk.secondLabel && onSecondDesk ? (
+        <button
+          type="button"
+          onClick={() => onSecondDesk(desk.id)}
+          aria-label={desk.secondLabel}
+          className={
+            'flex min-h-[44px] items-center gap-2 rounded-full px-3 py-1.5 text-sm shadow-lg transition-transform hover:scale-105 ' +
+            t.panel
+          }
+        >
+          <span className="font-medium">{desk.secondLabel}</span>
+          {showKeyHints ? (
+            <span
+              aria-hidden="true"
+              className={KEY_BADGE_CLASS}
+            >
+              R
             </span>
           ) : null}
         </button>
