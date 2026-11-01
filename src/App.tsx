@@ -1915,7 +1915,11 @@ import {
   siteGrade,
 } from './systems/stumpy-altar';
 import { deskState, type PlacedDesk as PlacedDeskEntity } from './game/deskState';
-import { placeDesk as grantPlaceDesk } from './systems/desk';
+import {
+  placeDesk as grantPlaceDesk,
+  seatGrimoire,
+  takeGrimoire,
+} from './systems/desk';
 import {
   cauldronState,
   type PlacedCauldron as PlacedCauldronEntity,
@@ -2178,6 +2182,12 @@ const QUEST_HINTS: Record<string, string> = {
   'better-house': 'Raise a thatch hut.',
   'find-bone': 'Find a bone.',
   'wake-charm': 'Complete a Waking ritual.',
+  // ALTAR PARITY (the desk claim's rider, 2026-11-01):
+  // the step wording names the BASE, never one base —
+  // a found stump or a built altar both carry the
+  // consecration. DRAFT for Adam's pin pass.
+  'raise-an-altar':
+    'Consecrate a stump or a built altar: ring the base with river stones, draw the glyph, set the candle.',
 };
 
 /**
@@ -2301,10 +2311,14 @@ const FOOD_IDS: ReadonlySet<string> = new Set([
 const TORCH_IDS: ReadonlySet<string> = new Set([ITEMS.torch]);
 
 /**
- * Her books (First-Fragment Presentation, 2026-10-31):
- * the journal and the grimoire both carry the Read verb
- * — the linked-books law makes them one door to the
- * journal's tally surface.
+ * Her books (First-Fragment Presentation, 2026-10-31;
+ * THE READ GATE, Adam, 2026-11-01): both rows carry
+ * the Read verb, but the doors differ now — the JOURNAL
+ * is the field reader (its row opens the tally panel
+ * anywhere); the GRIMOIRE is read at its desk (seated +
+ * faced, the camp act on the desk winner's R), and its
+ * carried row's Read speaks that rule instead of
+ * opening anything. Carried = transport only.
  */
 // The jar build: the water-jar row carries the Dump
 // verb (the pour's aim arm). The empty jar carries
@@ -2802,8 +2816,10 @@ export default function App() {
   const [companionsOpen, setCompanionsOpen] = useState(false);
   // JOURNAL (First-Fragment Presentation, 2026-10-31):
   // the tally panel — a radio-family member like its
-  // siblings, opened by the Read verb on her journal /
-  // grimoire rows (no HUD door of its own).
+  // siblings, opened by the Read verb on her journal
+  // row and by the seated desk's Read (the grimoire's
+  // camp act, the read gate 2026-11-01) — no HUD door
+  // of its own.
   const [journalOpen, setJournalOpen] = useState(false);
   // The panel's mirror of CompanionState (records are
   // ref-state; the mirror is what renders). Refreshed at
@@ -4880,6 +4896,14 @@ export default function App() {
             ...(typeof desk.id === 'string' && desk.id !== ''
               ? { id: desk.id }
               : {}),
+            // The grimoire seat rides too (the desk
+            // build's fix, Systems-verified): the map
+            // shaped only {x, z, id?}, so a seated book
+            // evaporated at boot — not carried, not
+            // seated, and uniqueness would have let a
+            // second be crafted. Write-only-when-true,
+            // the shape's own law.
+            ...(desk.grimoire === true ? { grimoire: true } : {}),
           })),
         );
         // PLACED-CAULDRON SAVE WIRING (same restore-
@@ -6366,6 +6390,10 @@ export default function App() {
         inventory,
         availableStations.length > 0 ? availableStations : null,
         hunger,
+        null,
+        null,
+        null,
+        grimoireOutOfPack(),
       );
       // SINGLE-CALLER RULE (DEV correction, superseding the
       // emit half of the original brief): Systems never places
@@ -6497,6 +6525,9 @@ export default function App() {
         inventory,
         availableStations.length > 0 ? availableStations : null,
         hunger,
+        null,
+        null,
+        grimoireOutOfPack(),
       );
       setCraftNote(
         result.crafted.quantity > 0
@@ -6668,6 +6699,71 @@ export default function App() {
       handleDismantleTrap(trapId);
     }
   };
+
+  // THE GRIMOIRE'S SEAT (the desk build, 2026-11-01):
+  // Systems' grants decide against a DeskSeat view of
+  // the entity; the shell flips the entity through
+  // deskState.setGrimoire ONLY on a grant's success, so
+  // the visible book can never lie about the seat.
+  // Refusals speak verbatim; the success lines are
+  // DRAFT for Adam's pin pass.
+  const handleDeskAct = (deskId: string) => {
+    const desk = deskState.get(deskId);
+    if (!desk) return;
+    if (desk.grimoire === true) {
+      const outcome = takeGrimoire(inventory, { grimoire: true });
+      if (outcome.taken === false) {
+        showFeedback(outcome.reason, 'blocked');
+        return;
+      }
+      deskState.setGrimoire(deskId, false);
+      refreshInventory();
+      saveNow();
+      showFeedback('Took the grimoire back.', 'gain');
+      return;
+    }
+    const outcome = seatGrimoire(inventory, {});
+    if (outcome.seated === false) {
+      showFeedback(outcome.reason, 'blocked');
+      return;
+    }
+    deskState.setGrimoire(deskId, true);
+    refreshInventory();
+    saveNow();
+    showFeedback('The grimoire rests on the desk.', 'info');
+  };
+
+  // The desk's second act (the read gate): Read at a
+  // seated desk opens the tally panel — the linked-
+  // books law's one door, now a camp act. A bare desk
+  // has no second act.
+  const handleDeskRead = (deskId: string) => {
+    if (deskState.get(deskId)?.grimoire === true) {
+      openJournalPanel();
+    }
+  };
+
+  // The pack rows' Read verb (the read gate): the
+  // journal opens its panel anywhere; the grimoire
+  // carried speaks the desk rule — transport only.
+  const handleReadItem = (id: string) => {
+    if (id === ITEMS.grimoire) {
+      showFeedback('The grimoire is read at its desk.', 'blocked');
+      return;
+    }
+    openJournalPanel();
+  };
+
+  // UNIQUENESS, OUT OF PACK (Systems' ask, the desk
+  // build): the grimoire SEATED on any desk counts as
+  // owned for the listed-single law, so its recipe
+  // reads already-owned while the book rests — the
+  // shell passes the set into canCraft / executeCraft
+  // / executeCraftChain at every call.
+  const grimoireOutOfPack = (): ReadonlySet<string> | null =>
+    deskState.snapshot().some((desk) => desk.grimoire === true)
+      ? new Set<string>([ITEMS.grimoire])
+      : null;
 
   // THE CARRYABLE CONFIRM'S TWO DOORS (the trap chunk):
   // Yes places the just-crafted trap at the crosshair
@@ -10897,6 +10993,7 @@ export default function App() {
     | { kind: 'site'; siteId: string; distance: number }
     | { kind: 'fire' | 'tent' | 'torch' | 'loom'; id: string; distance: number }
     | { kind: 'cauldron'; id: string; distance: number }
+    | { kind: 'desk'; id: string; distance: number }
     | {
         kind: 'cave-enter' | 'cave-exit' | 'cave-descend' | 'cave-climb';
         id: string;
@@ -11162,6 +11259,29 @@ export default function App() {
     // from Background's singleton like the looms.
     for (const cauldron of cauldronState.snapshot()) {
       considerPlaced('cauldron', cauldron.hearthId, cauldron.x, cauldron.z);
+    }
+    // PLACED DESKS (the grimoire's seat, 2026-11-01):
+    // a desk joins the race ONLY when a verb is live —
+    // seated (Take / Read) or bare with the book in her
+    // pack (Place). A bare desk and empty hands is
+    // silence by the design's own sentence (a second
+    // desk offers nothing to empty hands — the book is
+    // where it is), so it is not even a range candidate
+    // for the ground gate: narrow candidacy, the
+    // creature pattern. Read live from the singleton
+    // (the loom idiom — no shell mirror).
+    for (const desk of deskState.snapshot()) {
+      if (
+        desk.grimoire !== true &&
+        inventory.count(ITEMS.grimoire) <= 0
+      ) {
+        continue;
+      }
+      const f = facingOf(desk.x, desk.z);
+      if (f.distance <= HARVEST_RANGE) anyCandidateInRange = true;
+      if (f.isFaced && f.distance <= HARVEST_RANGE) {
+        challengers.push({ kind: 'desk', id: desk.id, distance: f.distance });
+      }
     }
     // COMPANIONS (Piece B, 2026-10-31): the faced
     // creature joins the race ONLY when a verb is live
@@ -11614,6 +11734,13 @@ export default function App() {
       case 'cauldron':
         setSelectedCauldronHearthId(winner.id);
         break;
+      case 'desk':
+        // The desk's E (the grimoire's seat): seat the
+        // carried book on a bare desk, take it back
+        // from a seated one — the same act the desk
+        // pill runs.
+        handleDeskAct(winner.id);
+        break;
       case 'cave-enter':
       case 'cave-exit':
       case 'cave-descend':
@@ -11684,6 +11811,12 @@ export default function App() {
         // the one routing the pill row's second button
         // also runs.
         handleTrapSecondAct(winner.id);
+        break;
+      case 'desk':
+        // The desk's second act (the read gate): Read
+        // the seated grimoire — the camp act that opens
+        // the tally panel at its desk.
+        handleDeskRead(winner.id);
         break;
       case 'home': {
         const rest = homeMenuActions().find((a) => a.id === 'rest');
@@ -12499,8 +12632,10 @@ export default function App() {
     // site never reports a present station as missing.
     const checks =
       availableStations.length > 0
-        ? availableStations.map((s) => canCraft(recipe, inventory, s))
-        : [canCraft(recipe, inventory, null)];
+        ? availableStations.map((s) =>
+            canCraft(recipe, inventory, s, null, null, grimoireOutOfPack()),
+          )
+        : [canCraft(recipe, inventory, null, null, null, grimoireOutOfPack())];
     const check =
       checks.find((c) => c.ok) ??
       checks.find((c) => !c.stationMismatch) ??
@@ -12797,6 +12932,22 @@ export default function App() {
     useWinner?.kind === 'fragment'
       ? { id: useWinner.fragmentId, label: 'Transcribe the mark' }
       : null;
+  // THE DESK'S PILLS (the grimoire's seat, 2026-11-01):
+  // the trap's two-row shape — E seats or takes (the
+  // design's pinned pair), R reads a seated book (the
+  // read gate's camp act). Labels DRAFT. The press runs
+  // the stored pick's acts, the very acts E and R
+  // perform (the contract).
+  const presentedDesk =
+    useWinner?.kind === 'desk'
+      ? deskState.get(useWinner.id)?.grimoire === true
+        ? {
+            id: useWinner.id,
+            label: 'Take grimoire',
+            secondLabel: 'Read the grimoire',
+          }
+        : { id: useWinner.id, label: 'Place grimoire' }
+      : null;
   // THE STRUCTURE TAG (2026-10-31): the nearest FACED
   // singular within the tag range, derived per render
   // (structures are static; her position state rides
@@ -13004,6 +13155,10 @@ export default function App() {
                   ? 'KRAFT'
                 : useWinner.kind === 'cauldron'
                   ? 'RENDER'
+                  : useWinner.kind === 'desk'
+                    ? deskState.get(useWinner.id)?.grimoire === true
+                      ? 'TAKE'
+                      : 'PLACE'
                   : useWinner.kind === 'fire'
                     ? fireWinnerLabel
                   : useWinner.kind === 'torch'
@@ -13547,6 +13702,17 @@ export default function App() {
           onTranscribe={() => {
             if (useWinner?.kind === 'fragment') {
               handleTranscribe(useWinner);
+            }
+          }}
+          desk={presentedDesk}
+          onDesk={() => {
+            if (useWinner?.kind === 'desk') {
+              handleDeskAct(useWinner.id);
+            }
+          }}
+          onSecondDesk={() => {
+            if (useWinner?.kind === 'desk') {
+              handleDeskRead(useWinner.id);
             }
           }}
           showKeyHints={!isTouch}
@@ -14141,7 +14307,7 @@ export default function App() {
             lightableIds={TORCH_IDS}
             onLightItem={handleLightTorchItem}
             readableIds={READABLE_BOOK_IDS}
-            onReadItem={() => openJournalPanel()}
+            onReadItem={handleReadItem}
             dumpableIds={DUMPABLE_IDS}
             onDumpItem={() => handleDumpItem()}
             storage={storageSection}
