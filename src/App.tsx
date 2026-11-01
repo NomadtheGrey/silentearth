@@ -4122,7 +4122,7 @@ export default function App() {
   useEffect(() => {
     if (cloudPendingNewGame === null) return;
     const onKeyDown = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') setCloudPendingNewGame(null);
+      if (e.key === 'Escape' || e.key === 'x' || e.key === 'X') setCloudPendingNewGame(null);
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
@@ -8151,7 +8151,7 @@ export default function App() {
             ? undefined
             : 'Needs carried snap wood',
         },
-        { id: 'close', label: 'Close' },
+        { id: 'close', label: 'Close [X]' },
       ];
     }
     if (fire.lighting?.method === 'flint') {
@@ -8160,7 +8160,7 @@ export default function App() {
           id: 'click-flint',
           label: `Click flint (${fire.lighting.clicks} of 3)`,
         },
-        { id: 'close', label: 'Close' },
+        { id: 'close', label: 'Close [X]' },
       ];
     }
     if (fire.lighting?.method === 'friction') {
@@ -8174,7 +8174,7 @@ export default function App() {
               ? undefined
               : 'Wait for the wait to end, then rub',
         },
-        { id: 'close', label: 'Close' },
+        { id: 'close', label: 'Close [X]' },
       ];
     }
     const hasFlint = inventory.count(ITEMS.flint) > 0;
@@ -8190,7 +8190,7 @@ export default function App() {
         label: 'Light with friction (slow)',
         hint: 'Rub, wait, rub',
       },
-      { id: 'close', label: 'Close' },
+      { id: 'close', label: 'Close [X]' },
     ];
   };
 
@@ -8360,7 +8360,7 @@ export default function App() {
   // the torch menu's shape, over the shell store.
   const tentMenuActions = (): ContextAction[] => [
     { id: 'take-down', label: 'Take down' },
-    { id: 'close', label: 'Close' },
+    { id: 'close', label: 'Close [X]' },
   ];
 
   const handleTentAction = (tentId: string, actionId: string) => {
@@ -8398,7 +8398,7 @@ export default function App() {
   // up + Close — the tent menu's shape.
   const cauldronMenuActions = (): ContextAction[] => [
     { id: 'pick-up', label: 'Pick up cauldron' },
-    { id: 'close', label: 'Close' },
+    { id: 'close', label: 'Close [X]' },
   ];
 
   const handleCauldronAction = (hearthId: string, actionId: string) => {
@@ -9068,7 +9068,7 @@ export default function App() {
     // unified surfaces (her pack panel's Deposit /
     // Withdraw, one tap away at home). Revisit only on
     // Adam's word.
-    actions.push({ id: 'close', label: 'Close' });
+    actions.push({ id: 'close', label: 'Close [X]' });
     return actions;
   };
 
@@ -9716,6 +9716,18 @@ export default function App() {
   // the stacked panel burying the world, so the game leads and
   // the panels are one tap away. Desktop never collapses.
   const [hudCollapsed, setHudCollapsed] = useState(isTouch);
+  // QUEST CARD DISMISSAL (Adam, 2026-11-01 — the task
+  // chip gains its Close [X]): dismissal is keyed to
+  // the quest the card is SHOWING. The press records
+  // that quest's id and the card stays down while the
+  // card would show that same quest; it returns when
+  // what it would show changes — a different quest
+  // marked, the mark cleared, or the current quest
+  // advancing. No instant reappearance through the
+  // unmarked fallback: the fallback is exactly what
+  // the dismissal key holds down.
+  const [dismissedCardQuestId, setDismissedCardQuestId] =
+    useState<string | null>(null);
 
   // Options font (see the header): shell-owned UI setting,
   // persisted in its own localStorage key — never the Systems
@@ -9752,7 +9764,21 @@ export default function App() {
   // its own Enter/Esc, the single Esc path.
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent): void => {
-      if (e.key !== 'Escape') return;
+      // X CLOSES (Adam, 2026-11-01): X joins Escape in
+      // this handler — wherever Esc closes the topmost
+      // dialog, X does the same act (one close, two
+      // doors, never a close-all). X inherits the CLOSE
+      // half only: with nothing open it does NOT take
+      // Esc's open-Options act (see the fallthrough).
+      // A modified X (Ctrl/Cmd/Alt) is a shortcut, not
+      // the key — it never closes.
+      const isEscape = e.key === 'Escape';
+      const isX =
+        (e.key === 'x' || e.key === 'X') &&
+        !e.ctrlKey &&
+        !e.metaKey &&
+        !e.altKey;
+      if (!isEscape && !isX) return;
       const target = e.target as HTMLElement | null;
       const tag = target?.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
@@ -9821,7 +9847,9 @@ export default function App() {
         setInventoryOpen(false);
         return;
       }
-      setOptionsOpen(true);
+      // Nothing open: Escape opens Options (Adam's
+      // pin); X does nothing — the close half only.
+      if (isEscape) setOptionsOpen(true);
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
@@ -13132,7 +13160,7 @@ export default function App() {
             />
           </div>
             </div>
-          {cardQuestRow ? (
+          {cardQuestRow && cardQuestRow.id !== dismissedCardQuestId ? (
             <div className="mt-2">
               <QuestCard
                 title={cardQuestRow.title}
@@ -13140,6 +13168,7 @@ export default function App() {
                 components={cardQuestComponents}
                 marked={cardQuestRow.id === activeQuestId}
                 theme={lookThemes.world}
+                onClose={() => setDismissedCardQuestId(cardQuestRow.id)}
               />
             </div>
           ) : null}
@@ -13199,7 +13228,10 @@ export default function App() {
           dialog (the takeover) like the rest of the chrome.
           It sits at z-30, under the pause veil: a readout,
           not a trapped action — resume brings it forward. */}
-      {hudCollapsed && cardQuestRow && !anyDialogOpen ? (
+      {hudCollapsed &&
+      cardQuestRow &&
+      cardQuestRow.id !== dismissedCardQuestId &&
+      !anyDialogOpen ? (
         <div className="pointer-events-none absolute left-2 top-28 z-30 w-[calc(100vw-1rem)] max-w-[20rem]">
           <QuestCard
             title={cardQuestRow.title}
@@ -13207,6 +13239,7 @@ export default function App() {
             components={cardQuestComponents}
             marked={cardQuestRow.id === activeQuestId}
             theme={lookThemes.world}
+            onClose={() => setDismissedCardQuestId(cardQuestRow.id)}
           />
         </div>
       ) : null}
@@ -13730,6 +13763,7 @@ export default function App() {
         <p>R — 2nd Interact</p>
         <p>RMB — Place lit torch</p>
         <p>Esc — Options</p>
+        <p>X — Close dialog</p>
         {cameraMode === 'first' && <p>Click the world to capture the mouse</p>}
       </div>
       )}

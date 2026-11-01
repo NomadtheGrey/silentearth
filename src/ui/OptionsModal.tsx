@@ -244,7 +244,7 @@ export function OptionsModal({
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') onClose?.();
+      if (e.key === 'Escape' || e.key === 'x' || e.key === 'X') onClose?.();
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);

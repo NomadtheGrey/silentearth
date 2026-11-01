@@ -133,7 +133,7 @@ export function CompanionsPanel({
             aria-label="Close companions"
             className={btn + t.button}
           >
-            Close
+            Close [X]
           </button>
         ) : null}
       </div>

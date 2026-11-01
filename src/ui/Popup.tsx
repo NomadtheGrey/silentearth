@@ -74,7 +74,7 @@ export function Popup({
   useEffect(() => {
     if (!open) return;
     const onKeyDown = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') {
+      if (e.key === 'Escape' || e.key === 'x' || e.key === 'X') {
         onClose?.();
         return;
       }
@@ -122,7 +122,7 @@ export function Popup({
                   aria-label="Close dialog"
                   className={'rounded px-2 py-1 text-sm ' + t.button}
                 >
-                  Close
+                  Close [X]
                 </button>
                 <button
                   type="button"

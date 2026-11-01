@@ -328,7 +328,7 @@ export function InventoryPanel({
             aria-label="Close inventory"
             className={closeBtn}
           >
-            Close
+            Close [X]
           </button>
         ) : null}
       </div>

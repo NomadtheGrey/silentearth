@@ -93,7 +93,7 @@ export function ContextMenu({
             aria-label="Close menu"
             className={'rounded px-1.5 py-0.5 text-xs ' + t.button}
           >
-            Close
+            Close [X]
           </button>
         ) : null}
       </div>
