@@ -317,12 +317,15 @@ export interface Recipe {
    * placement. 'in-water' = standing in the water (the
    * weir, the creek-sunk pot); 'dry-land' = NOT standing
    * in water (stakes, a dug pit, a weighted rig).
-   * Checked by canCraft + executeCraft ONLY when the
-   * shell supplies the site facts (SiteFacts input); a
-   * null / omitted input leaves the gate OFF
-   * (transitional, the creek rule's exact shape — until
-   * the water adapter lands, the shell cannot say where
-   * she stands, so the craft proceeds meanwhile).
+   * Checked ONLY when the shell supplies the site facts
+   * (SiteFacts input); a null / omitted input leaves the
+   * gate OFF (transitional, the creek rule's exact shape).
+   * WHERE it is checked follows the trap table (Adam,
+   * 2026-11-01): at CRAFT for site-built recipes
+   * (placesTrap — craft is placement), by canCraft +
+   * executeCraft; at PLACEMENT for the carryable three,
+   * by the place grant (trap-place.ts). This field is
+   * the one source either way.
    */
   requiresSite?: SiteRequirement;
   /**
@@ -334,7 +337,11 @@ export interface Recipe {
    * player.x, player.z) on that result (single-caller rule:
    * that call is the one and only placer). The shell's "Place
    * trap here?" confirm gates BEFORE execution (No = abort,
-   * nothing consumed). First use: all five traps. Trap items
+   * nothing consumed). First use: THE SITE-BUILT TWO
+   * (deadfall + pitfall) — the trap table (Adam, 2026-11-01)
+   * made the other three CARRYABLE: their crafts grant the
+   * item, and their requiresSite is read at PLACEMENT by
+   * the place grant (trap-place.ts), not at craft. Trap items
    * already sitting in an inventory from earlier saves stay
    * items for now (flagged edge, not solved here) — only
    * fresh crafts place.
@@ -1175,14 +1182,14 @@ const DRAFT_RECIPES: Recipe[] = [
     output: { item: ITEMS.snare, quantity: 1 },
     ingredients: [i(ITEMS.tenderVines, 2), i(ITEMS.snapWood, 2)],
     station: 'hand',
-    placesTrap: true,
     requiresSite: 'dry-land',
     notes:
-      'DRAFT — BRAINSTORM, NOTHING PICKED. Stakes. Hand-crafted ' +
-      'on dry ground (fork B, Adam 2026-11-01: the craft is the ' +
-      'placement, and stakes do not hold standing in water). ' +
-      'No workstation needed (Adam\'s ruling, 2026-10-26: traps ' +
-      'are hand-crafted, cordage precedent).',
+      'DRAFT — BRAINSTORM, NOTHING PICKED. Stakes. CARRYABLE ' +
+      '(trap table, Adam 2026-11-01): hand-crafted anywhere, ' +
+      'carried, and SET on dry ground — requiresSite is read ' +
+      'at PLACEMENT for the carryable three, at craft for the ' +
+      'site-built two. No workstation needed (Adam\'s ruling, ' +
+      '2026-10-26: traps are hand-crafted, cordage precedent).',
   },
   {
     id: 'fish-weir-trap',
@@ -1191,14 +1198,15 @@ const DRAFT_RECIPES: Recipe[] = [
     output: { item: ITEMS.fishWeirTrap, quantity: 1 },
     ingredients: [i(ITEMS.tenderVines, 6), i(ITEMS.snapWood, 4)],
     station: 'hand',
-    placesTrap: true,
     requiresSite: 'in-water',
     notes:
-      'DRAFT — BRAINSTORM, NOTHING PICKED. Woven funnel, built ' +
-      'standing in the water it fishes (fork B, Adam ' +
-      '2026-11-01: a weir belongs in the water — craft it ' +
-      'there where it goes). No workstation needed (Adam\'s ' +
-      'ruling, 2026-10-26: traps are hand-crafted).',
+      'DRAFT — BRAINSTORM, NOTHING PICKED. Woven funnel. ' +
+      'CARRYABLE (trap table, Adam 2026-11-01): hand-crafted ' +
+      'anywhere, carried, and SET standing in the water it ' +
+      'fishes — his weir sentence, at placement: a weir ' +
+      'belongs in the water, so it is set there where it ' +
+      'goes. No workstation needed (Adam\'s ruling, ' +
+      '2026-10-26: traps are hand-crafted).',
   },
   {
     id: 'pot-trap',
@@ -1207,13 +1215,13 @@ const DRAFT_RECIPES: Recipe[] = [
     output: { item: ITEMS.potTrap, quantity: 1 },
     ingredients: [i(ITEMS.clayPot, 1)],
     station: 'hand',
-    placesTrap: true,
     requiresSite: 'in-water',
     notes:
       'DRAFT — BRAINSTORM, NOTHING PICKED. 1 clay pot, sunk in ' +
-      'the creek — set standing in its water (fork B, Adam ' +
-      '2026-11-01). No workstation needed (Adam\'s ruling, ' +
-      '2026-10-26: traps are hand-crafted).',
+      'the creek. CARRYABLE (trap table, Adam 2026-11-01): ' +
+      'hand-crafted anywhere, carried, and SET standing in ' +
+      'the creek water. No workstation needed (Adam\'s ' +
+      'ruling, 2026-10-26: traps are hand-crafted).',
   },
   {
     id: 'pitfall',

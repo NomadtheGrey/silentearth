@@ -73,7 +73,7 @@
  * 5. TRAP CRAFTS REPORT, THEY DON'T GRANT — AND THEY DON'T
  *    PLACE OR EMIT EITHER (Adam, 2026-10-26; DEV correction,
  *    superseding the emit half of the original brief).
- *    A recipe with placesTrap set (all five traps) never enters
+ *    A recipe with placesTrap set (the site-built two) never enters
  *    inventory: on a confirmed craft this helper consumes the
  *    ingredients and reports success via placedTrap {type}.
  *    The one grant on this path is a recipe's stated SPOIL
@@ -187,7 +187,7 @@ export interface CraftExecutionResult {
   output: { item: ItemId; quantity: number };
   /**
    * Present only for placesTrap crafts: the trap's type (recipe
-   * id — == its output item for all five traps). The shell
+   * id — == its output item for the site-built two). The shell
    * places it: trapState.placeTrap(type, player.x, player.z).
    * Systems never places and never emits. Absent for every
    * ordinary grant craft.
@@ -343,10 +343,17 @@ export function executeCraft(
   // from INPUT only (the creek gate's shape — Systems never
   // computes where she stands). Null / omitted input leaves
   // the gate OFF (transitional, like the creek gate until
-  // the water adapter lands). For a placesTrap recipe the
-  // craft IS the placement, so this gate is the trap's
-  // placement rule. Refusal copy is DRAFT for the pin pass.
-  if (site !== null && recipe.requiresSite !== undefined) {
+  // the water adapter lands). The CRAFT-side gate bites
+  // only where craft IS placement (placesTrap — the
+  // site-built two, per the trap table, Adam 2026-11-01);
+  // a carryable trap's site is its place grant's business
+  // (trap-place.ts reads the same data at placement).
+  // Refusal copy is DRAFT for the pin pass.
+  if (
+    site !== null &&
+    recipe.placesTrap === true &&
+    recipe.requiresSite !== undefined
+  ) {
     if (recipe.requiresSite === 'in-water' && !site.inWater) {
       throw new Error(
         `Cannot craft ${recipe.name}: built standing in the ` +

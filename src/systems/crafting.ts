@@ -364,13 +364,19 @@ export function canCraft(
   const creekMismatch =
     recipe.requiresCreek === true && nearCreek === false;
 
-  // Site rule (fork B): a stated requiresSite mismatches only
-  // when the shell positively supplies where she stands and
-  // she stands wrong for it — 'in-water' wants inWater true,
-  // 'dry-land' wants it false. Null input leaves the gate off
-  // (transitional — see Recipe.requiresSite).
+  // Site rule (fork B + the trap table): a stated requiresSite
+  // mismatches only when the shell positively supplies where
+  // she stands and she stands wrong for it — 'in-water' wants
+  // inWater true, 'dry-land' wants it false. Null input leaves
+  // the gate off (transitional — see Recipe.requiresSite).
+  // The CRAFT-side check bites only where craft IS placement
+  // (placesTrap, the site-built two); a carryable trap's site
+  // is read at placement by its grant, never here, or the
+  // menu would refuse a weir's craft on dry land it is only
+  // being carried across.
   const siteMismatch =
     site !== null &&
+    recipe.placesTrap === true &&
     recipe.requiresSite !== undefined &&
     (recipe.requiresSite === 'in-water' ? !site.inWater : site.inWater);
 

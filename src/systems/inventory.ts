@@ -290,11 +290,18 @@ export const ITEM_WEIGHT_LB: Readonly<Record<string, number>> = {
   [ITEMS.shawl]: 1,
   [ITEMS.umbrella]: 1,
   [ITEMS.clayPot]: 1,
+  // Carryable traps (the trap table, Adam 2026-11-01) —
+  // DRAFT weights for the pin pass: the pot-trap IS a
+  // clay pot (1); the snare is stakes and cordage (1);
+  // the weir is the bulky one (2, at the 2 lb mark below).
+  [ITEMS.snare]: 1,
+  [ITEMS.potTrap]: 1,
   [ITEMS.clayJar]: 1,
   [ITEMS.waterJar]: 2,
   [ITEMS.grimoire]: 1,
   [ITEMS.journal]: 0.5,
   // 2 lb
+  [ITEMS.fishWeirTrap]: 2,
   [ITEMS.riverStone]: 2,
   [ITEMS.downedOak]: 2,
   [ITEMS.spade]: 2,
@@ -689,11 +696,12 @@ export const ITEM_DESCRIPTIONS: Readonly<Record<string, string>> = {
   'mossy-mittens': 'Worn against the cold. No extra carrying room. Woven at a loom.',
   'bog-boots': 'Worn in the bog. Drier feet, and less drag in the wet. Woven at a loom.',
   umbrella: 'Carried against the rain. Keeps the wet off. Made at a workstation.',
-  // Traps (crafting one sets it where you stand — fork B:
-  // each is built on its own ground, named in its line).
-  snare: 'Stakes and a loop. Set on dry ground where you craft it; it catches passing game.',
-  'fish-weir-trap': 'A woven funnel. Built standing in the water where you craft it; it catches passing game.',
-  'pot-trap': 'A clay pot sunk in the creek. Set standing in the water where you craft it; it catches passing game.',
+  // Traps (the trap table: three are carried and set
+  // later on their own ground; two are built where
+  // they stand — each line names which).
+  snare: 'Stakes and a loop. Carried, and set on dry ground; it catches passing game.',
+  'fish-weir-trap': 'A woven funnel. Carried, and set standing in the water; it catches passing game.',
+  'pot-trap': 'A clay pot, sunk in the creek. Carried, and set standing in the water; it catches passing game.',
   pitfall: 'A dug pit under a moss cover. Dug in dry ground where you craft it — digging one takes a spade-tier tool.',
   deadfall: 'Oak and stone, weighted to fall. Set on dry ground where you craft it; it catches passing game.',
   // Trap catches (not food; most render into tallow in the cauldron — frog and crayfish don't).
