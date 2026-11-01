@@ -47,7 +47,7 @@ import {
   stepActors,
 } from './companionRuntime';
 import { catActor, catGlowOn, clearCat, ensureCat, installCatPreyAccess, stepCat } from './catRuntime';
-import { clearGuide, guideActor, guideVisible, GUIDE_SIT_IN_M, stageGuide, stepGuide } from './guideRuntime';
+import { clearGuide, guideActor, guideVisible, seatYFor, stageGuide, stepGuide } from './guideRuntime';
 import { exodusBats, stepExodus } from './exodusRuntime';
 import { crowGlowIntensity, CROW_GLOW_EMISSIVE } from './crow';
 import type { CrowTier } from './crow';
@@ -1256,12 +1256,13 @@ export class WorldRenderer {
     ensureCat(village.hearthHouse.hearthSpot.x, village.hearthHouse.hearthSpot.z);
     const grove = groveSite(String(gen.seed), gen.findSpawn(), (x, z) => gen.weightsAt(x, z).dominant);
     // The grove seat reads the grove's own nearest tree
-    // crown (the acceptance fix — no flat height).
+    // crown through the one seat law (seatYFor — ON the
+    // crown's top, never sunk in it).
     const grovePerch = this.treePointNear(grove.center.x, grove.center.z, 12);
     stageGuide(
       grove.center.x,
       grove.center.z,
-      grovePerch ? grovePerch.crownY - GUIDE_SIT_IN_M : undefined,
+      grovePerch ? seatYFor(grovePerch) : undefined,
     );
   }
 

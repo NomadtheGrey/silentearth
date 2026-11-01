@@ -128,17 +128,22 @@ export const GUIDE_BOW_FRACTION = 0.3;
  *  3.75 floated her above half the crowns near his
  *  dusk spot and buried her in the rest — crowns there
  *  run 2.49–4.64 m): perchNear returns the crown, and
- *  she sits GUIDE_SIT_IN_M into it. */
+ *  she seats ON it (the seat law below). */
 export const GUIDE_PERCH_HEIGHT_M = 3.75;
-/** How far into the crown's top she sits (m, DRAFT):
- *  feet in the foliage, body out — perched IN the
- *  tree, not on it, not inside it. */
-export const GUIDE_SIT_IN_M = 0.35;
 
-/** A perch point's seat height: its crown minus the
- *  sit-in, or the fallback when no crown is known. */
+/** A perch point's seat height: the crown's own top,
+ *  or the fallback when no crown is known. THE SEAT
+ *  LAW IS VISIBILITY (Adam, 2026-11-01): he is not
+ *  concerned about perch height — the float never
+ *  bothered him; the failure he names is the opposite,
+ *  'if the raven is buried in the tree, can't see it
+ *  there, that's no good.' So she perches ON TOP of
+ *  her crown, feet at its top surface, her whole body
+ *  proud of the foliage — a touch high beats hidden.
+ *  (The 0.35 sit-in this replaces risked exactly the
+ *  burial on fuller crowns.) */
 export function seatYFor(perch: { crownY?: number }): number {
-  return perch.crownY != null ? perch.crownY - GUIDE_SIT_IN_M : GUIDE_PERCH_HEIGHT_M;
+  return perch.crownY != null ? perch.crownY : GUIDE_PERCH_HEIGHT_M;
 }
 /** The biased fallback's search centre sits this far
  *  (m) toward the Grove from her, with this radius —
