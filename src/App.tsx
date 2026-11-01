@@ -2013,7 +2013,9 @@ import {
   HungerWarning,
   crowGlowTier,
   FIRST_CHARM_KIND,
+  FIRST_CHARM_ITEM,
   FIRST_CHARM_EFFECT,
+  wakeShrewFromBone,
 } from './systems/charms';
 import { crowPileArrow, type CrowTier } from './game/crow';
 import { CrowArrows } from './ui/CrowArrows';
@@ -2324,6 +2326,11 @@ const TORCH_IDS: ReadonlySet<string> = new Set([ITEMS.torch]);
 // verb (the pour's aim arm). The empty jar carries
 // none — filling lives on the water's own pill.
 const DUMPABLE_IDS: ReadonlySet<string> = new Set(['water-jar']);
+
+// The shrew's wake door: the found shrew skull's row
+// carries the Wake verb — Systems' charm-path grant,
+// surfaceless since the gift retired (c6ee842).
+const WAKEABLE_IDS: ReadonlySet<string> = new Set([FIRST_CHARM_ITEM]);
 
 const READABLE_BOOK_IDS: ReadonlySet<string> = new Set([
   ITEMS.journal,
@@ -6761,6 +6768,31 @@ export default function App() {
     if (deskState.get(deskId)?.grimoire === true) {
       openJournalPanel();
     }
+  };
+
+  // THE SHREW'S WAKE DOOR (2026-11-01): the charm
+  // path's shell surface. The verb stands on every
+  // carried skull — the grant decides, and a spare
+  // skull after the waking hears its refusal verbatim
+  // ('The shrew already stands woken.'). On success
+  // the shell runs the rite's own bookkeeping (the
+  // completion check's sync set) and speaks the
+  // rite's own line form; refreshInventory carries
+  // syncShrewEffect, so the woken warning starts now.
+  const handleWakeItem = (id: string) => {
+    if (id !== FIRST_CHARM_ITEM) return;
+    const outcome = wakeShrewFromBone(inventory, charmStateRef.current);
+    if (outcome.woke === false) {
+      showFeedback(outcome.reason, 'blocked');
+      return;
+    }
+    syncCharmHooks();
+    syncCrowTier();
+    syncCharmBonuses();
+    syncDeerWarning();
+    refreshInventory();
+    saveNow();
+    showFeedback(`The ${boneDisplayFor(FIRST_CHARM_KIND)} awakens.`, 'gain');
   };
 
   // The pack rows' Read verb (the read gate): the
@@ -14338,6 +14370,8 @@ export default function App() {
             onReadItem={handleReadItem}
             dumpableIds={DUMPABLE_IDS}
             onDumpItem={() => handleDumpItem()}
+            wakeableIds={WAKEABLE_IDS}
+            onWakeItem={handleWakeItem}
             storage={storageSection}
             onDepositItem={handleDepositItem}
             onDropItem={handleDropItem}
