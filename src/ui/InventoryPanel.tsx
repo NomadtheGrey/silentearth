@@ -130,6 +130,13 @@ export interface InventoryPanelProps {
   dumpableIds?: ReadonlySet<string>;
   onDumpItem?: (id: string) => void;
   /**
+   * The shrew's wake door: rows whose item carries a
+   * Wake verb (the found shrew skull), and its press.
+   * The caller owns the grant; this layer only reports.
+   */
+  wakeableIds?: ReadonlySet<string>;
+  onWakeItem?: (id: string) => void;
+  /**
    * Home-storage section, shown when the caller opens one
    * (sheltered at a placed house). Omitted = personal list
    * only, no Deposit buttons.
@@ -226,6 +233,8 @@ export function InventoryPanel({
   onReadItem,
   dumpableIds,
   onDumpItem,
+  wakeableIds,
+  onWakeItem,
   storage,
   onDepositItem,
   onDropItem,
@@ -268,6 +277,9 @@ export function InventoryPanel({
     if ((dumpableIds?.has(item.id) ?? false) && onDumpItem) {
       verbs.push({ id: 'dump', label: 'Dump', ariaLabel: `Dump ${item.name}` });
     }
+    if ((wakeableIds?.has(item.id) ?? false) && onWakeItem) {
+      verbs.push({ id: 'wake', label: 'Wake', ariaLabel: `Wake ${item.name}` });
+    }
     if (storage !== undefined && onDepositItem) {
       verbs.push({
         id: 'deposit',
@@ -297,6 +309,7 @@ export function InventoryPanel({
     else if (verbId === 'light') onLightItem?.(itemId);
     else if (verbId === 'read') onReadItem?.(itemId);
     else if (verbId === 'dump') onDumpItem?.(itemId);
+    else if (verbId === 'wake') onWakeItem?.(itemId);
     else if (verbId === 'deposit') onDepositItem?.(itemId);
     else if (verbId === 'drop-one') onDropItem?.(itemId);
     else if (verbId === 'drop-all') onDropAllItem?.(itemId);
@@ -327,9 +340,16 @@ export function InventoryPanel({
         ]
       : [];
   return (
-    <section aria-label="Inventory" className={'@container rounded-2xl p-3 ' + t.panel}>
+    <section
+      aria-label={
+        storage !== undefined ? `${storage.label} inventory` : 'Inventory'
+      }
+      className={'@container rounded-2xl p-3 ' + t.panel}
+    >
       <div className="mb-1 flex items-center justify-between gap-2">
-        <h2 className={'text-base font-semibold ' + t.heading}>Inventory</h2>
+        <h2 className={'text-base font-semibold ' + t.heading}>
+          {storage !== undefined ? `${storage.label} inventory` : 'Inventory'}
+        </h2>
         {onClose ? (
           <button
             type="button"
@@ -493,9 +513,10 @@ export function InventoryPanel({
       {storage !== undefined ? (
         <>
           <VineDivider className="mb-2 mt-3" />
-          <h3 className={'text-base font-semibold ' + t.heading}>
-            Home storage — {storage.label}
-          </h3>
+          {/* No sub-header: in the storage-headed mode
+              the panel's own title names the house
+              ('<House name> inventory' — hut storage,
+              2026-11-01); the capacity line speaks next. */}
           {storage.capacityText ? (
             <p className={'mb-2 text-sm ' + t.muted}>
               {storage.capacityText}

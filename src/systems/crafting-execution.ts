@@ -151,6 +151,7 @@ import {
   PersonalInventory,
 } from './inventory';
 import { RECIPES, effectiveInWater } from './recipes';
+import { recordCraftedUse } from './knowledge-register';
 import type { HungerState } from './hunger';
 import {
   ownedStage,
@@ -462,6 +463,7 @@ export function executeCraft(
     const spoilGrant = recipe.spoil
       ? inventory.addPartial(recipe.spoil.item, recipe.spoil.quantity)
       : undefined;
+    recordCraftedUse(recipe.id);
     return {
       output: { ...recipe.output },
       ...(recipe.placesTrap
@@ -489,6 +491,7 @@ export function executeCraft(
   }
 
   const output = craftIntoInventory(recipe, inventory, engineStation);
+  recordCraftedUse(recipe.id);
 
   // Owned tier is read from the inventory — no equip step, no
   // separate state to update. A crafted tool is owned by virtue of

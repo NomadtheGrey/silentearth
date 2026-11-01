@@ -25,6 +25,15 @@
  * filter — nearest loaded instance, day or night.
  * The pill mirrors the scatter tag exactly (FrogHint
  * styling, non-interactive, pointer-events-none).
+ *
+ * NAMED ENTRIES (tag claim, 2026-11-01): a feed item
+ * may carry its own display name, which wins over the
+ * capitalized kind — the guide raven rides this (the
+ * shell composes Background's guideTagSeat into the
+ * feed as { kind: 'crow', name: 'Raven' }; the bird is
+ * a singular special, deliberately not in the engine's
+ * visible-animals list, and 'Raven' is Adam's word for
+ * it while the engine kind stays 'crow').
  */
 
 import { useEffect, useRef, useState } from 'react';
@@ -33,7 +42,13 @@ import { UI_THEMES, type UiThemeName } from './themes';
 
 export interface AnimalTagProps {
   /** Live feed of loaded-chunk animals (Background's getter). */
-  getAnimals: () => { kind: string; x: number; z: number }[];
+  getAnimals: () => {
+    kind: string;
+    /** Own display name, when the entry carries one (named entries win). */
+    name?: string;
+    x: number;
+    z: number;
+  }[];
   /** Live player position (for distance). */
   getPlayerPos: () => { x: number; z: number };
   /** Screen projection (App's projectAnchor, 'scatter' kind). */
@@ -65,7 +80,12 @@ export function AnimalTag({ getAnimals, getPlayerPos, project, theme = 'mire' }:
   useEffect(() => {
     const tick = () => {
       const player = getPlayerPosRef.current();
-      let nearest: { kind: string; x: number; z: number } | null = null;
+      let nearest: {
+        kind: string;
+        name?: string;
+        x: number;
+        z: number;
+      } | null = null;
       let nearestDistance = Infinity;
       for (const animal of getAnimalsRef.current()) {
         if (!Number.isFinite(animal.x) || !Number.isFinite(animal.z)) continue;
@@ -89,7 +109,8 @@ export function AnimalTag({ getAnimals, getPlayerPos, project, theme = 'mire' }:
         return;
       }
       const name =
-        nearest.kind.charAt(0).toUpperCase() + nearest.kind.slice(1);
+        nearest.name ??
+        (nearest.kind.charAt(0).toUpperCase() + nearest.kind.slice(1));
       setTag((prev) =>
         prev !== null &&
         prev.name === name &&
