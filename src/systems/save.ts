@@ -173,6 +173,7 @@ import { normalizeItemId } from './inventory';
 // owns it; save.ts imports it — no second mirror to drift,
 // the placed-torch id nuance taught us that lesson).
 import type { SavedNameLook } from './name-sight';
+import type { KnowledgeSnapshot } from './knowledge-register';
 // Single source for the ritual records (rituals.ts /
 // charms.ts own them; save.ts imports them — no second
 // mirror to drift, the placed-torch id lesson).
@@ -595,6 +596,9 @@ export interface SaveData {
   tents: SavedTent[];
   /** Partial-true-name look counts; [] for old saves. */
   nameSight: SavedNameLook[];
+  /** Known-facts register (met items + known recipe
+   * uses); empty for old saves. */
+  knowledge: KnowledgeSnapshot;
   /** Ritual stagings (site + kind + steps); [] for old saves. */
   stagings: SavedRitualStaging[];
   /** Charm awakenings (kind + tier); [] for old saves. */
@@ -803,6 +807,16 @@ export interface SaveDraft {
     key: string;
     looks: number;
   }>;
+  /**
+   * Known-facts register from knowledgeSnapshot().
+   * OPTIONAL so existing saveNow call sites keep
+   * compiling unchanged until the App wiring lands
+   * (same pattern as nameSight above).
+   */
+  knowledge?: {
+    metItems?: ReadonlyArray<string>;
+    knownUseRecipes?: ReadonlyArray<string>;
+  };
   /**
    * Ritual stagings from StagingBook.snapshot() +
    * awakenings from CharmState.snapshot(). OPTIONAL so
@@ -1133,6 +1147,13 @@ export function serializeSave(draft: SaveDraft): SaveData {
       key: entry.key,
       looks: entry.looks,
     })),
+    // Known-facts register: written AS-IS (id strings
+    // verbatim). Invalid entries are restoreKnowledge()'s
+    // problem, not serialize's.
+    knowledge: {
+      metItems: [...(draft.knowledge?.metItems ?? [])],
+      knownUseRecipes: [...(draft.knowledge?.knownUseRecipes ?? [])],
+    },
     // Ritual stagings + awakenings: written AS-IS (records
     // verbatim, no filtering, no normalization — site keys
     // and bone kinds are caller-defined, not inventory
@@ -1822,6 +1843,29 @@ export function deserializeSave(value: unknown): SaveData | null {
         nameSight.push({ key: entry.key, looks: entry.looks as number });
       }
     }
+    // The known-facts register is optional on read, same
+    // additive-field rule: an old v1 save without it loads
+    // empty. Non-record / non-array members load empty —
+    // the section drops, the document survives; non-string
+    // entries drop here AND again in restoreKnowledge().
+    const knowledge: KnowledgeSnapshot = {
+      metItems: [],
+      knownUseRecipes: [],
+    };
+    if (isRecord(value.knowledge)) {
+      if (Array.isArray(value.knowledge.metItems)) {
+        for (const entry of value.knowledge.metItems) {
+          if (typeof entry === 'string') knowledge.metItems.push(entry);
+        }
+      }
+      if (Array.isArray(value.knowledge.knownUseRecipes)) {
+        for (const entry of value.knowledge.knownUseRecipes) {
+          if (typeof entry === 'string') {
+            knowledge.knownUseRecipes.push(entry);
+          }
+        }
+      }
+    }
     // Ritual stagings + awakenings are optional on read,
     // same additive-field rule: old v1 saves without them
     // load with stagings: [] + awakenings: []. Non-array
@@ -1961,6 +2005,7 @@ export function deserializeSave(value: unknown): SaveData | null {
       discovery,
       tents,
       nameSight,
+      knowledge,
       stagings,
       awakenings,
       ...(quests !== undefined ? { quests } : {}),

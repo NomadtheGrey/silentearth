@@ -43,6 +43,14 @@ export interface BuildRecord {
 
 const ALL_RECORDS: BuildRecord[] = [
   {
+    merge: 'Merge #58',
+    pr: 95,
+    sha: '5d49473',
+    date: '2026-11-01',
+    what: 'The naming merge \u2014 the world learns to say what things are, and the cloud panel learns to stop hiding them. THE TAG LAW FILLS IN: the ground, the traps, and the stump by its ROLE (a workstation stump and an altar stump wear their working names now, not \u2018Stump\u2019), and the raven herself, tagged \u2018Raven\u2019 from the seat her own layer composes \u2014 and a feral animal names itself at a look, \u2018Feral Fox\u2019, the cat and the companions exempt as built. THE CHARM PATH GETS ITS DOOR: a carried shrew skull carries a Wake verb (the waking rite stood surfaceless since the first-charm gift retired). HUT STORAGE: two doors, one bound dialog. THE KNOWLEDGE REGISTER lands, and this record names the pair honestly \u2014 as first built, the register broke the boot on a module cycle; the repair (the register moved to a leaf module) ships in this same merge, the break and the fix both verified A/B before either shipped. THE CLOUD PANEL IS UNGATED, the rework\u2019s opening pass: your words and your parked save stand on words, not on the cloud switch; the re-enable door exists; the retired hold\u2019s remains and the adopt door are gone; and an empty shelf announces itself plainly, the new-game case in the two-case words.',
+    why: 'Adam plays by reading the world \u2014 a thing he cannot name, or a door he cannot find, is a thing the game has not finished building. This merge finishes several at once: identification is the tag\u2019s job for everything he faces, and the words that own his saves stand in plain sight where they belong, the way he ruled them.',
+  },
+  {
     merge: 'Merge #57',
     pr: 95,
     sha: 'd144540',

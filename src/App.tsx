@@ -1672,7 +1672,8 @@ import {
   setCatBond,
   type CatCatchTable,
 } from './game/catRuntime';
-import { installGuideProbes } from './game/guideRuntime';
+import { guideTagSeat, installGuideProbes } from './game/guideRuntime';
+import { discFeaturesInRect } from './game/discs';
 import { installTrustFacts } from './game/trustMarkers';
 import {
   collectTrapCatch,
@@ -1692,7 +1693,11 @@ import { fillJar, dumpJar } from './systems/clay-jar';
 import { placeTent, pickupTent } from './systems/camping';
 import { harvestHoney } from './systems/honey';
 import { harvestState } from './game/harvestState';
-import { SOURCE_BY_ID, type ToolTier } from './game/objects';
+import {
+  SOURCE_BY_ID,
+  SOURCE_FOR_KIND,
+  type ToolTier,
+} from './game/objects';
 import type { FireType } from './game/fire';
 import { FLINT_CLICKS, FRICTION_WAIT_MS } from './game/fire';
 import {
@@ -1844,7 +1849,6 @@ import {
 } from './systems/save';
 import {
   CLOUD_BASE_URL,
-  adoptWords,
   adoptWordSet,
   armMirror,
   bringHere,
@@ -1989,6 +1993,7 @@ import {
   TRUST_FOR_BOND,
   dietFor,
   isFeedable,
+  isFeral,
   provisioningCatchesFor,
   snatchFish,
   type CompanionStance,
@@ -2013,7 +2018,9 @@ import {
   HungerWarning,
   crowGlowTier,
   FIRST_CHARM_KIND,
+  FIRST_CHARM_ITEM,
   FIRST_CHARM_EFFECT,
+  wakeShrewFromBone,
 } from './systems/charms';
 import { crowPileArrow, type CrowTier } from './game/crow';
 import { CrowArrows } from './ui/CrowArrows';
@@ -2325,6 +2332,11 @@ const TORCH_IDS: ReadonlySet<string> = new Set([ITEMS.torch]);
 // none — filling lives on the water's own pill.
 const DUMPABLE_IDS: ReadonlySet<string> = new Set(['water-jar']);
 
+// The shrew's wake door: the found shrew skull's row
+// carries the Wake verb — Systems' charm-path grant,
+// surfaceless since the gift retired (c6ee842).
+const WAKEABLE_IDS: ReadonlySet<string> = new Set([FIRST_CHARM_ITEM]);
+
 const READABLE_BOOK_IDS: ReadonlySet<string> = new Set([
   ITEMS.journal,
   ITEMS.grimoire,
@@ -2372,6 +2384,13 @@ function formatLb(pounds: number): string {
  * This constant stays the single point that decides it.
  */
 const TITLE_WEIGHT_UNIT = 'lb';
+
+// TAG RANGES (tag claim, 2026-11-01 — DRAFT for Adam's
+// pin pass): the ground tag and the trap tag read at
+// the creature tag's cap (AnimalTag's TAG_RANGE_M) —
+// one reading distance for every name in the world.
+const GROUND_TAG_RANGE_M = 32;
+const TRAP_TAG_RANGE_M = 32;
 
 /**
  * One inventory row's title-row meta (the one-liner that
@@ -2827,6 +2846,13 @@ export default function App() {
   const [chunkCount, setChunkCount] = useState(0);
   const [switching, setSwitching] = useState(false);
   const [inventoryOpen, setInventoryOpen] = useState(false);
+  // HUT STORAGE (the storage dialog's binding,
+  // 2026-11-01): the house the storage-headed pack is
+  // bound to, written ONLY at open (openInventoryPanel
+  // — every pack door rides it, the home menu's
+  // Storage row included, so the doors agree by
+  // construction). Null = the plain pack.
+  const [storageHouseId, setStorageHouseId] = useState<string | null>(null);
   const [craftingOpen, setCraftingOpen] = useState(false);
   const [charmsOpen, setCharmsOpen] = useState(false);
   // COMPANIONS (build 1, 2026-10-31): the fourth panel —
@@ -4037,8 +4063,30 @@ export default function App() {
       refreshCloudState();
       return;
     }
-    // Reveal only: no module call until words are chosen
-    // (opt-in completes via turnOn/enterWords).
+    // THE RE-ENABLE DOOR (the ungate pass, 2026-11-01):
+    // a device HOLDING words turns truly back on here —
+    // turnOn with the device's own stored words is the
+    // module's only enable write, and without this call
+    // the toggle was reveal-only forever (the
+    // diagnosis's CRITICAL: the only road back in was a
+    // cloud load's adoption side effect, wearing the
+    // BROUGHT words). A wordless device stays
+    // reveal-only: its opt-in completes via
+    // turnOn/enterWords when words are chosen.
+    const held = getWords();
+    if (held !== null) {
+      const res = turnOn(held);
+      if (!res.ok) {
+        setCloudNote(
+          res.reason ?? 'Could not turn cloud back on.',
+        );
+        return;
+      }
+      setCloudNote(null);
+      refreshCloudState();
+      void refreshCloudList();
+      return;
+    }
     setCloudNote(null);
   };
 
@@ -4074,45 +4122,13 @@ export default function App() {
     void refreshCloudList();
   };
 
-  // ADOPT EXISTING WORDS (Adam, 2026-10-31: "let's get
-  // the words first"): switch this device's identity to
-  // words he already has. Validation is the module's —
-  // a refusal shows plainly and changes nothing. On
-  // success the identity display + the cloud list
-  // re-point to the ADOPTED shelf (refreshCloudList
-  // reads the stored words, which are now the adopted
-  // ones), so he immediately sees what's on it.
-  // Adoption never mirrors: the module holds mirroring
-  // until a deliberate arm (DEV ruling, 2026-10-31).
-  // Copy is DRAFT for Adam's pin pass.
-  const handleCloudAdoptWords = (input: string) => {
-    const res = adoptWords(input);
-    if (res.ok === false) {
-      setCloudNote(res.reason ?? 'Could not switch words.');
-      return;
-    }
-    setCloudNote(
-      'Now using these words — you are looking at that shelf.',
-    );
-    refreshCloudState();
-    void refreshCloudList();
-  };
-
-  // The deliberate arm after an adoption hold: copying
-  // resumes for the current shelf. A manual sync does
-  // NOT clear the hold (by design) — this button is the
-  // only panel path that arms.
-  const handleArmMirroring = () => {
-    const res = armMirror();
-    if (res.ok === false) {
-      setCloudNote(res.reason ?? 'Could not start copying.');
-      return;
-    }
-    setCloudNote(
-      'Copying is on — this device will copy its world to this shelf when it saves.',
-    );
-    refreshCloudState();
-  };
+  // RETIRED (2026-11-01): handleCloudAdoptWords and
+  // handleArmMirroring — the adopt door and the arm
+  // button left the panel with Adam's rulings (word
+  // changing is a future feature, designed separately;
+  // the hold itself was retired for the timestamp
+  // guard). armMirror still runs on the restore path
+  // below, where a deliberate application arms copying.
 
   const runCloudBring = async (
     slot: string,
@@ -4358,8 +4374,6 @@ export default function App() {
     onToggle: handleCloudToggle,
     onGenerateWords: handleCloudGenerateWords,
     onEnterWords: handleCloudEnterWords,
-    onAdoptWords: handleCloudAdoptWords,
-    onArmMirroring: handleArmMirroring,
     onRefreshList: () => {
       void refreshCloudList();
     },
@@ -6763,6 +6777,31 @@ export default function App() {
     }
   };
 
+  // THE SHREW'S WAKE DOOR (2026-11-01): the charm
+  // path's shell surface. The verb stands on every
+  // carried skull — the grant decides, and a spare
+  // skull after the waking hears its refusal verbatim
+  // ('The shrew already stands woken.'). On success
+  // the shell runs the rite's own bookkeeping (the
+  // completion check's sync set) and speaks the
+  // rite's own line form; refreshInventory carries
+  // syncShrewEffect, so the woken warning starts now.
+  const handleWakeItem = (id: string) => {
+    if (id !== FIRST_CHARM_ITEM) return;
+    const outcome = wakeShrewFromBone(inventory, charmStateRef.current);
+    if (outcome.woke === false) {
+      showFeedback(outcome.reason, 'blocked');
+      return;
+    }
+    syncCharmHooks();
+    syncCrowTier();
+    syncCharmBonuses();
+    syncDeerWarning();
+    refreshInventory();
+    saveNow();
+    showFeedback(`The ${boneDisplayFor(FIRST_CHARM_KIND)} awakens.`, 'gain');
+  };
+
   // The pack rows' Read verb (the read gate): the
   // journal opens its panel anywhere; the grimoire
   // carried speaks the desk rule — transport only.
@@ -7259,6 +7298,15 @@ export default function App() {
   // modal guards), never swapped out, never swapped
   // in by a panel key.
   const openInventoryPanel = () => {
+    // STORAGE BINDING (hut storage): the dialog binds
+    // the house she is sheltered in AT OPEN — or no
+    // house (the plain pack). Written here and nowhere
+    // else, so every door (I, the touch button, the
+    // doors row, the home menu's Storage row) opens
+    // the same dialog on the same house.
+    setStorageHouseId(
+      sheltered && shelterHouseId !== null ? shelterHouseId : null,
+    );
     setInventoryOpen(true);
     setCraftingOpen(false);
     setCharmsOpen(false);
@@ -8510,9 +8558,19 @@ export default function App() {
     return store;
   };
 
+  // The bound storage house, live only while she
+  // stands sheltered at it — transfers never act
+  // from afar, and the dialog's head stands only
+  // while she is home at the bound house.
+  const boundStorageHouseId = (): string | null =>
+    storageHouseId !== null && shelterHouseId === storageHouseId
+      ? storageHouseId
+      : null;
+
   const handleDepositItem = (itemId: string) => {
-    if (!shelterHouseId) return;
-    const store = getHomeStore(shelterHouseId);
+    const houseId = boundStorageHouseId();
+    if (!houseId) return;
+    const store = getHomeStore(houseId);
     if (!store) {
       setStorageNote('No home storage here.');
       return;
@@ -8523,7 +8581,7 @@ export default function App() {
       // exists only for carried stacks).
       store.add(itemId, 1);
       inventory.remove(itemId, 1);
-      homeStoreItemsRef.current.get(shelterHouseId)?.add(itemId);
+      homeStoreItemsRef.current.get(houseId)?.add(itemId);
       inventory.setWorn(wardrobe.wornItemIds());
       setWornGarments(wardrobe.wornGarments());
       setStorageNote(null);
@@ -8537,8 +8595,9 @@ export default function App() {
   };
 
   const handleWithdrawItem = (itemId: string) => {
-    if (!shelterHouseId) return;
-    const store = getHomeStore(shelterHouseId);
+    const houseId = boundStorageHouseId();
+    if (!houseId) return;
+    const store = getHomeStore(houseId);
     if (!store) {
       setStorageNote('No home storage here.');
       return;
@@ -8550,7 +8609,7 @@ export default function App() {
       inventory.add(itemId, 1);
       store.remove(itemId, 1);
       if (store.count(itemId) === 0) {
-        homeStoreItemsRef.current.get(shelterHouseId)?.delete(itemId);
+        homeStoreItemsRef.current.get(houseId)?.delete(itemId);
       }
       inventory.setWorn(wardrobe.wornItemIds());
       setWornGarments(wardrobe.wornGarments());
@@ -9506,6 +9565,14 @@ export default function App() {
       setHomeMenuOpen(false);
       return;
     }
+    if (actionId === 'storage') {
+      // The menu's storage door: close the menu, open
+      // the pack — the opener binds this house (the
+      // menu only stands while she shelters here).
+      setHomeMenuOpen(false);
+      openInventoryPanel();
+      return;
+    }
     if (actionId === 'rest') {
       handleSleep();
       refreshInventory();
@@ -9605,13 +9672,12 @@ export default function App() {
   const capacityNote =
     capacityBonus > 0 ? `Carrying bonus +${capacityBonus} lb` : undefined;
 
-  // Home-storage section for the sheltering house, when
-  // sheltered: rows come from the HomeStorage counts (the
-  // shell tracks only the id universe, since HomeStorage
-  // exposes counts, not a snapshot). Unsheltered = no
-  // section, no Deposit buttons — storage is reached at
-  // home, not from afar. Transfers refresh the personal list
-  // above, which re-renders this derivation.
+  // Home-storage for the sheltering house: the store
+  // the HOME MENU's upgrade row prices against (that
+  // menu's own keying — the sheltering house, bound or
+  // not). Rows come from the HomeStorage counts (the
+  // shell tracks only the id universe, since
+  // HomeStorage exposes counts, not a snapshot).
   const openHomeStore =
     shelterHouseId !== null
       ? (homeStoresRef.current.get(shelterHouseId) ?? null)
@@ -9620,15 +9686,32 @@ export default function App() {
     shelterHouseId !== null
       ? (homeStoreItemsRef.current.get(shelterHouseId) ?? new Set<string>())
       : new Set<string>();
+  // THE STORAGE DIALOG'S CONTENT (hut storage,
+  // 2026-11-01): derived from the BINDING, not from
+  // proximity — standing sheltered no longer grows a
+  // section in the pack by itself (the proximity
+  // section is RETIRED). The bound house must still
+  // be the sheltering house: she cannot reach into a
+  // house she has walked away from, so leaving
+  // un-heads the panel to the plain pack, and the
+  // binding is re-read fresh at the next open.
+  const boundStore =
+    storageHouseId !== null && shelterHouseId === storageHouseId
+      ? (homeStoresRef.current.get(storageHouseId) ?? null)
+      : null;
+  const boundIds =
+    storageHouseId !== null && shelterHouseId === storageHouseId
+      ? (homeStoreItemsRef.current.get(storageHouseId) ?? new Set<string>())
+      : new Set<string>();
   const storageSection =
-    sheltered && shelterHouseId !== null
+    storageHouseId !== null && shelterHouseId === storageHouseId
       ? {
-          label: shelterHouseName ?? shelterHouseId,
+          label: shelterHouseName ?? storageHouseId,
           items:
-            openHomeStore === null
+            boundStore === null
               ? []
-              : [...openHomeIds]
-                  .filter((id) => openHomeStore.count(id) > 0)
+              : [...boundIds]
+                  .filter((id) => boundStore.count(id) > 0)
                   .map((id) => ({
                     id,
                     // Same display rule as panel rows above:
@@ -9641,10 +9724,15 @@ export default function App() {
                     // one itemNoteFor helper — descriptor
                     // wiring, 2026-10-29).
                     note: itemNoteFor(id, charmStateRef.current),
-                    quantityText: String(openHomeStore.count(id)),
+                    quantityText: String(boundStore.count(id)),
+                    // DEV rider (hut storage): the
+                    // dialog's rows speak weights like
+                    // the pack's — the FORMAT PIN's
+                    // typography over the stored count.
+                    titleMeta: pileTitleMetaFor(id, boundStore.count(id)),
                   })),
           capacityText:
-            openHomeStore === null
+            boundStore === null
               ? 'Home storage — empty until first deposit'
               : // POUNDS (Adam, 2026-10-28 — "pounds here
                 // and going forward"): used()/capacity()
@@ -9652,7 +9740,7 @@ export default function App() {
                 // the header names the unit. Null-store
                 // text unchanged; per-kind counts below
                 // are item quantities, not pounds.
-                `Stored ${openHomeStore.used()} lb / ${openHomeStore.capacity()} lb`,
+                `Stored ${boundStore.used()} lb / ${boundStore.capacity()} lb`,
           note: storageNote,
           onWithdrawItem: handleWithdrawItem,
         }
@@ -9717,6 +9805,14 @@ export default function App() {
     // unified surfaces (her pack panel's Deposit /
     // Withdraw, one tap away at home). Revisit only on
     // Adam's word.
+    // STORAGE ROW (hut storage, 2026-11-01): the
+    // menu's own door into the storage dialog — its
+    // press closes the menu and calls the pack's one
+    // opener, which binds this house at open, so the
+    // menu door and the I key open the same dialog on
+    // the same house by construction. The rows read
+    // [1] Sleep, [2] Upgrade, [3] Storage, [4] Close.
+    actions.push({ id: 'storage', label: 'Storage' });
     actions.push({ id: 'close', label: 'Close [X]' });
     return actions;
   };
@@ -13079,6 +13175,95 @@ export default function App() {
     }
     return best;
   })();
+
+  // THE GROUND TAG (tag claim, 2026-11-01 — the TAG
+  // LAW: anything visible names itself when faced;
+  // mystery only where designed): the flat ground
+  // discs name themselves. Derivation: Background's
+  // disc query around her — FEET-IN-DISC FIRST (a
+  // disc she stands in names itself regardless of
+  // facing), else the nearest FACED disc centre
+  // (winner cone) inside the range cap. The name is
+  // the def's own (SOURCE_FOR_KIND — 'Ash', 'Pond',
+  // 'Silt Bed'...), never a coined table; the plate
+  // sits at the disc centre, painted by the same
+  // StructureTag plate the singulars use. Dimension
+  // gens answer truthfully through the query (cave
+  // pools name themselves underground).
+  const groundTag = ((): { name: string; x: number; y: number } | null => {
+    const player = playerRef.current;
+    if (!player) return null;
+    const gen = genRef.current;
+    if (!gen) return null;
+    const features = discFeaturesInRect(gen, {
+      minX: player.x - GROUND_TAG_RANGE_M,
+      maxX: player.x + GROUND_TAG_RANGE_M,
+      minZ: player.z - GROUND_TAG_RANGE_M,
+      maxZ: player.z + GROUND_TAG_RANGE_M,
+    });
+    const forwardX = Math.sin(player.facing);
+    const forwardZ = Math.cos(player.facing);
+    let inDisc: { name: string; x: number; z: number } | null = null;
+    let inDistance = Infinity;
+    let facedBest: { name: string; x: number; z: number } | null = null;
+    let facedDistance = Infinity;
+    for (const feature of features) {
+      const name = SOURCE_FOR_KIND[feature.kind]?.name;
+      if (!name) continue;
+      const dx = feature.x - player.x;
+      const dz = feature.z - player.z;
+      const distance = Math.hypot(dx, dz);
+      if (distance <= feature.r) {
+        if (distance < inDistance) {
+          inDisc = { name, x: feature.x, z: feature.z };
+          inDistance = distance;
+        }
+        continue;
+      }
+      if (distance > GROUND_TAG_RANGE_M || distance >= facedDistance) continue;
+      const faced =
+        distance < 1 ||
+        (dx * forwardX + dz * forwardZ) / distance > Math.SQRT1_2;
+      if (!faced) continue;
+      facedBest = { name, x: feature.x, z: feature.z };
+      facedDistance = distance;
+    }
+    const pick = inDisc ?? facedBest;
+    if (!pick) return null;
+    const anchor = projectAnchor(pick.x, pick.z, 'scatter');
+    if (!anchor) return null;
+    return { name: pick.name, x: anchor.x, y: anchor.y };
+  })();
+
+  // THE TRAP TAG (tag claim): a placed trap names
+  // itself when faced — TRAP_DEFS' own name, display
+  // only — at reading distance, beyond the winner
+  // row's leash. The trap the row already names is
+  // suppressed here (one name per thing).
+  const trapTag = ((): { name: string; x: number; y: number } | null => {
+    const player = playerRef.current;
+    if (!player) return null;
+    const forwardX = Math.sin(player.facing);
+    const forwardZ = Math.cos(player.facing);
+    let best: { name: string; x: number; y: number } | null = null;
+    let bestDistance = Infinity;
+    for (const trap of traps) {
+      if (presentedTrap?.id === trap.id) continue;
+      const dx = trap.x - player.x;
+      const dz = trap.z - player.z;
+      const distance = Math.hypot(dx, dz);
+      if (distance > TRAP_TAG_RANGE_M || distance >= bestDistance) continue;
+      const faced =
+        distance < 1 ||
+        (dx * forwardX + dz * forwardZ) / distance > Math.SQRT1_2;
+      if (!faced) continue;
+      const anchor = projectAnchor(trap.x, trap.z, 'scatter');
+      if (!anchor) continue;
+      best = { name: TRAP_DEFS[trap.type].name, x: anchor.x, y: anchor.y };
+      bestDistance = distance;
+    }
+    return best;
+  })();
   // THE JOURNAL'S ROWS (First-Fragment Presentation):
   // one row per BEGUN mark (Systems' snapshot lists
   // begun marks only — the panel invents nothing),
@@ -13475,16 +13660,40 @@ export default function App() {
             </WorldAnchor>
           </Fragment>
         ))}
-        {stumpAnchors.map(({ siteId, x, y }) => (
-          <Fragment key={siteId}>
-            <WorldAnchor x={x} y={y} interactive>
-              <AltarChip
-                label="Stump"
-                onSelect={() => openStumpContext(siteId)}
-              />
-            </WorldAnchor>
-          </Fragment>
-        ))}
+        {(() => {
+          // STUMP ROLE TAGS (Adam, 2026-11-01 — 'Tag
+          // needs fixed'): the chip names the stump's
+          // CURRENT role — a consecrated stump is
+          // 'Stumpy Altar' (the context label's
+          // altar-first precedence), a workstation
+          // stump 'Stumpy Workstation', a plain stump
+          // 'Stump'. Roles read live from stumpState
+          // by site id at render.
+          const stumpRecords = new Map(
+            stumpState.snapshot().map((record) => [
+              record.siteId,
+              record.additions,
+            ]),
+          );
+          return stumpAnchors.map(({ siteId, x, y }) => {
+            const additions = stumpRecords.get(siteId) ?? [];
+            const label = isStumpyAltar(additions)
+              ? 'Stumpy Altar'
+              : additions.includes('workstation')
+                ? 'Stumpy Workstation'
+                : 'Stump';
+            return (
+              <Fragment key={siteId}>
+                <WorldAnchor x={x} y={y} interactive>
+                  <AltarChip
+                    label={label}
+                    onSelect={() => openStumpContext(siteId)}
+                  />
+                </WorldAnchor>
+              </Fragment>
+            );
+          });
+        })()}
         {pileAnchors.map(({ pile, x, y }) => {
           const total = pile.stacks.reduce(
             (sum, stack) => sum + stack.quantity,
@@ -14338,6 +14547,8 @@ export default function App() {
             onReadItem={handleReadItem}
             dumpableIds={DUMPABLE_IDS}
             onDumpItem={() => handleDumpItem()}
+            wakeableIds={WAKEABLE_IDS}
+            onWakeItem={handleWakeItem}
             storage={storageSection}
             onDepositItem={handleDepositItem}
             onDropItem={handleDropItem}
@@ -15447,7 +15658,11 @@ export default function App() {
       {!anyDialogOpen &&
       fragmentBeat === null &&
       !paused ? (
-        <StructureTag theme={lookThemes.world} tag={structureTag} />
+        <>
+          <StructureTag theme={lookThemes.world} tag={structureTag} />
+          <StructureTag theme={lookThemes.world} tag={groundTag} />
+          <StructureTag theme={lookThemes.world} tag={trapTag} />
+        </>
       ) : null}
 
       {!inventoryOpen &&
@@ -15460,7 +15675,50 @@ export default function App() {
       pendingRemoveTarget === null &&
       !paused ? (
         <AnimalTag theme={lookThemes.world}
-          getAnimals={() => rendererRef.current?.getVisibleAnimals() ?? []}
+          getAnimals={() => {
+            const animals = (
+              rendererRef.current?.getVisibleAnimals() ?? []
+            ).map((animal) =>
+              // THE FERAL DRESS (Adam, 2026-11-01: "If the
+              // fox is feral, put that in the tag."): a
+              // feral creature's plate carries its nature
+              // as a named entry, composed here where
+              // Systems' isFeral may be read (a pure fact
+              // of the stable spawn id). The dress is a
+              // WILD-road fact: her companions are not
+              // dressed (the module frames feral as the
+              // wild road's category), and the cat is
+              // exempt entirely — the module's own law:
+              // the feral distinction does not reach her.
+              animal.cat || animal.companion || !isFeral(animal.id)
+                ? animal
+                : {
+                    ...animal,
+                    name: `Feral ${animal.kind.charAt(0).toUpperCase()}${animal.kind.slice(1)}`,
+                  },
+            );
+            // THE GUIDE RAVEN (tag claim): Background's
+            // seat snapshot joins the feed as a NAMED
+            // entry — the tag reads 'Raven' (Adam's
+            // word; the engine kind stays 'crow'), under
+            // the same nearest-within-range rule as
+            // every creature. Visibility (perched /
+            // flying / departing; surface only) is
+            // composed in their layer; the shell only
+            // names it.
+            const seat = guideTagSeat();
+            return seat
+              ? [
+                  ...animals,
+                  {
+                    kind: 'crow' as const,
+                    name: 'Raven',
+                    x: seat.x,
+                    z: seat.z,
+                  },
+                ]
+              : animals;
+          }}
           getPlayerPos={() => {
             const player = playerRef.current;
             return player ? { x: player.x, z: player.z } : { x: 0, z: 0 };
