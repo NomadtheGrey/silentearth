@@ -487,9 +487,12 @@ function buildFarmhousePlan(
   feat('hearthStone', inst.hearthStone.x, inst.hearthStone.z, 0, 1.25, inst.theta + Math.PI / 5);
 
   // Dressing: standing houses shed a little rubble at
-  // their feet; a ransacked house's disorder is INSIDE
-  // (scattered where the flight happened) plus a spill
-  // at the door.
+  // their feet. A RANSACKED house's disorder is the
+  // authored set (Models' ransacked wave): toppled
+  // table, chair, shelf, opened crate and drawers, the
+  // spilled barrel — a plan-shuffled subset seated on
+  // the ground floor, east of the stair run, plus one
+  // rubble spill at the door where the flight went out.
   const rubbleAt = (lx: number, lz: number): void => {
     const w = toWorld(lx, lz);
     feat('rubble', w.x, w.z, 0, 0.7 + rand() * 0.6, rand() * Math.PI);
@@ -505,9 +508,34 @@ function buildFarmhousePlan(
       else rubbleAt(L / 2 + 0.8, -D / 2 + t * D);
     }
   } else {
-    const n = 2 + Math.floor(inst.dressing * 2);
+    const RANSACKED_SET: ScatterKind[] = [
+      'farmTableToppled',
+      'farmChairToppled',
+      'farmShelfToppled',
+      'farmCrateOpen',
+      'farmDrawersOpen',
+      'farmBarrelSpilled',
+    ];
+    const roster = [...RANSACKED_SET];
+    for (let i = roster.length - 1; i > 0; i--) {
+      const j = Math.floor(rand() * (i + 1));
+      [roster[i], roster[j]] = [roster[j], roster[i]];
+    }
+    // Seats as fractions of (L, D), clear of the stair
+    // run in the north-west and of the walls.
+    const SEATS: readonly (readonly [number, number])[] = [
+      [0.28, -0.22],
+      [-0.02, 0.24],
+      [0.3, 0.26],
+      [-0.08, -0.28],
+      [0.12, 0.02],
+      [-0.26, 0.05],
+    ];
+    const n = Math.min(roster.length, 3 + Math.floor(inst.dressing * 3.99));
     for (let i = 0; i < n; i++) {
-      rubbleAt(-L / 2 + 0.6 + rand() * (L - 1.2), -D / 2 + 0.6 + rand() * (D - 1.2));
+      const [fx, fz] = SEATS[i];
+      const w = toWorld(fx * L, fz * D);
+      feat(roster[i], w.x, w.z, 0, 1, inst.theta + Math.floor(rand() * 4) * (Math.PI / 2));
     }
     const out = { lx: door.lx * 1.15, lz: door.lz * 1.15 };
     rubbleAt(out.lx, out.lz);
