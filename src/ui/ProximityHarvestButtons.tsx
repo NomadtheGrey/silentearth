@@ -244,9 +244,22 @@ export interface ProximityHarvestButtonsProps {
    * harvest buttons, before the hive row when one
    * follows, even with zero harvest targets.
    */
-  trap?: { id: string; label: string } | null;
+  trap?: {
+    id: string;
+    label: string;
+    /**
+     * The trap's second act (the trap chunk, 2026-11-01):
+     * its spoken name ('Pick up Snare' / 'Dismantle
+     * Deadfall'). Absent = no second row (the pitfall).
+     * The caller owns the routing; this row only reports
+     * the press through onSecondTrap.
+     */
+    secondLabel?: string;
+  } | null;
   /** Called with the trap id for a trap-row press. */
   onCollectTrap?: (id: string) => void;
+  /** Called with the trap id for a second-act press. */
+  onSecondTrap?: (id: string) => void;
   /**
    * Nearest wild hive in range, caller-derived (null =
    * no row — gated or none in range). Renders LAST in
@@ -310,6 +323,7 @@ export function ProximityHarvestButtons({
   stationAnchor,
   trap,
   onCollectTrap,
+  onSecondTrap,
   hive,
   onHarvestHive,
   loom,
@@ -424,6 +438,27 @@ export function ProximityHarvestButtons({
               className={KEY_BADGE_CLASS}
             >
               E
+            </span>
+          ) : null}
+        </button>
+      ) : null}
+      {trap && trap.secondLabel && onSecondTrap ? (
+        <button
+          type="button"
+          onClick={() => onSecondTrap(trap.id)}
+          aria-label={trap.secondLabel}
+          className={
+            'flex min-h-[44px] items-center gap-2 rounded-full px-3 py-1.5 text-sm shadow-lg transition-transform hover:scale-105 ' +
+            t.panel
+          }
+        >
+          <span className="font-medium">{trap.secondLabel}</span>
+          {showKeyHints ? (
+            <span
+              aria-hidden="true"
+              className={KEY_BADGE_CLASS}
+            >
+              R
             </span>
           ) : null}
         </button>

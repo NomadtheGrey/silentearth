@@ -1679,6 +1679,13 @@ import {
   resolveTrapHour,
 } from './systems/trap-catch';
 import type { TrapType } from './game/traps';
+import {
+  CARRYABLE_TRAPS,
+  dismantleTrap,
+  isCarryableTrap,
+  pickupTrap,
+  placeCarriedTrap,
+} from './systems/trap-place';
 import { placeTent, pickupTent } from './systems/camping';
 import { harvestHoney } from './systems/honey';
 import { harvestState } from './game/harvestState';
@@ -1700,7 +1707,7 @@ import {
   findCamps,
   CampDivination,
 } from './systems/divination';
-import { stillWatersNear } from './game/waterProximity';
+import { siteWaterFacts, stillWatersNear } from './game/waterProximity';
 import { NameSight } from './systems/name-sight';
 import { portionsForKind, lookKeyForTarget } from './ui/lookPortions';
 import { cycleSplit, cyclePhase, currentMoonPhase } from './game/sky';
@@ -2123,6 +2130,11 @@ const PLACEABLE_IDS: ReadonlySet<string> = new Set([
   ITEMS.writingDesk,
   ITEMS.cauldron,
   ITEMS.tent,
+  // THE CARRYABLE TRAPS (the trap chunk, 2026-11-01):
+  // their pack rows carry the Place verb like every
+  // other placeable — the press arms the trap flow in
+  // handlePlaceItem, never the instant family.
+  ...CARRYABLE_TRAPS,
 ]);
 
 const FIRE_NAME: Record<FireType, string> = {
@@ -2206,6 +2218,15 @@ interface PlacementMode {
   houseType?: HouseType;
   /** True for a loom placement (loomState takes x/z only). */
   loom?: boolean;
+  /**
+   * The trap chunk (2026-11-01): a carried trap's type
+   * when the armed placement is a trap. The confirm runs
+   * Systems' placeCarriedTrap grant (the single placement
+   * gate) instead of the shell's own consume — the grant
+   * validates the site and consumes, the shell then seats
+   * via trapState.placeTrap.
+   */
+  trapType?: string;
 }
 
 /**
@@ -4557,6 +4578,16 @@ export default function App() {
             type: trap.type as TrapType,
           })),
         );
+        // RESTORED TRAPS ENTER THE ROW STATE (the trap
+        // chunk's drive catch, 2026-11-01): the traps
+        // useState initializer snapshotted trapState
+        // BEFORE this restore ran, and the state comment's
+        // re-read triggers are trap EVENTS — a trap
+        // restored from the save fires none, so without
+        // this refresh a reloaded set trap stood in the
+        // world with no faced doors (Check / Collect /
+        // Pick up / Dismantle) until the first hour roll.
+        refreshTrapsFromState();
         // STUMP SAVE WIRING (stumpy shell, 2026-10-28):
         // same restore-before-first-build pattern as
         // traps — stumpState.restore() is silent and
@@ -6039,6 +6070,20 @@ export default function App() {
   const pendingTrapRecipe = pendingTrapRecipeId
     ? RECIPES.find((candidate) => candidate.id === pendingTrapRecipeId)
     : undefined;
+  // THE CARRYABLE TRAPS' CRAFT CONFIRM (the trap chunk,
+  // 2026-11-01): a carryable trap's craft EXECUTES first
+  // (the trap lands in the pack — an ordinary grant), then
+  // this state asks the pinned table's question: place it
+  // right there, or keep it packed? Yes composes the
+  // placement at the aim; No (or Close) leaves it in the
+  // pack. Deliberately NOT the site-built pair's pre-craft
+  // confirm above — their No means never craft, the
+  // three's No means pack (Adam's trap table).
+  const [pendingCarriedTrap, setPendingCarriedTrap] =
+    useState<string | null>(null);
+  const pendingCarriedTrapRecipe = pendingCarriedTrap
+    ? RECIPES.find((candidate) => candidate.id === pendingCarriedTrap)
+    : undefined;
   // PC-keys remove target (2026-10-28): the scatter target
   // Shift+E armed for the confirm dialog; null = no dialog.
   // The dialog owns its Enter/Esc; the App Esc listener
@@ -6138,6 +6183,26 @@ export default function App() {
                 ? ` Owned tool is now ${result.owned}.`
                 : ''),
       );
+      // SPOIL (the trap chunk, 2026-11-01 — the no-void
+      // promise): a craft outcome carrying spoil has
+      // already granted what fit in the pack; the
+      // REMAINDER seats as a pile at her feet through
+      // pileState.drop (merge-safe by coords) instead of
+      // vanishing into a result nobody read. Today only
+      // the pitfall's dug earth rides this; the seat is
+      // the craft's own ground — the pit's edge.
+      if (result.spoil && result.spoil.remainder > 0) {
+        pileState.drop(
+          result.spoil.item,
+          result.spoil.remainder,
+          position.x,
+          position.z,
+        );
+        showFeedback(
+          `The leftover ${displayNameFor(result.spoil.item).toLowerCase()} piles at your feet.`,
+          'info',
+        );
+      }
       // QUEST FLAG (wiring follow-up, 2026-10-28): a craft
       // at a stump workstation sets craftedAtStump. The
       // 'workstation' id is the stump today (presence comes
@@ -6156,11 +6221,25 @@ export default function App() {
   };
 
   const handleCraft = (recipeId: string) => {
-    // Trap crafts confirm first ("Place trap here?") —
-    // keyed on the recipe's own placesTrap fact now, not
-    // the deleted shelf map's 'Traps' group (the same
-    // five recipes: snare, fish-weir-trap, pot-trap,
-    // pitfall, deadfall — verified against recipes.ts).
+    // THE CARRYABLE THREE (the trap chunk, 2026-11-01):
+    // their craft EXECUTES (the trap lands in the pack),
+    // then the confirm asks place-or-pack. Success is
+    // read off the pack itself — the craft's own error
+    // path (a thrown refusal) leaves the count unchanged
+    // and no question is asked over a failed craft.
+    if (isCarryableTrap(recipeId)) {
+      const before = inventory.count(recipeId);
+      executeCraftNow(recipeId);
+      if (inventory.count(recipeId) > before) {
+        setPendingCarriedTrap(recipeId);
+      }
+      return;
+    }
+    // Site-built trap crafts confirm first ("Place trap
+    // here?") — keyed on the recipe's own placesTrap fact
+    // (today: pitfall + deadfall only; the carryable
+    // three were re-shaped as carried items and take the
+    // branch above).
     if (SYSTEMS_RECIPE_BY_ID.get(recipeId)?.placesTrap) {
       setPendingTrapRecipeId(recipeId);
       return;
@@ -6260,6 +6339,138 @@ export default function App() {
     refreshTrapsFromState();
     refreshInventory();
     showFeedback(`Caught ${kind}!`, 'gain');
+  };
+
+  // THE CARRIED TRAP'S PLACEMENT COMPOSITION (the trap
+  // chunk, 2026-11-01): ONE composition for both doors
+  // (the craft confirm's Yes and the armed placement's
+  // confirm). The site facts are composed shell-side in
+  // Systems' SiteFacts shape — her feet's water fact and
+  // the AIM's water fact, both from Background's adapter;
+  // the grant's own reading rule (effectiveInWater)
+  // prefers the aim, per the placement ruling. Systems'
+  // placeCarriedTrap is the SINGLE placement gate
+  // (ruling (B)): it validates and consumes; only on its
+  // success does the shell seat the trap via the plain
+  // trapState.placeTrap. A refusal leaves the trap in her
+  // pack and its reason is the caller's to speak.
+  const composePlaceCarriedTrap = (
+    trapType: string,
+    target: { x: number; z: number },
+  ): { ok: true } | { ok: false; reason: string } => {
+    const player = playerRef.current;
+    const gen = genRef.current;
+    if (!player || !gen) return { ok: false, reason: 'Placement failed.' };
+    const site = {
+      inWater: siteWaterFacts(gen, player.x, player.z).inWater,
+      aimedInWater: siteWaterFacts(gen, target.x, target.z).inWater,
+    };
+    const outcome = placeCarriedTrap(inventory, trapType, site);
+    if (outcome.placed === false) {
+      return { ok: false, reason: outcome.reason };
+    }
+    trapState.placeTrap(trapType as TrapType, target.x, target.z);
+    return { ok: true };
+  };
+
+  // PICK UP A SET CARRYABLE (the trap chunk): Systems'
+  // pickupTrap grants through addPartial — a pack that
+  // cannot take the weight refuses and the trap STAYS
+  // set; the shell removes it from trap state only on a
+  // successful pick-up. Copy DRAFT.
+  const handlePickupTrap = (trapId: string) => {
+    const trap = trapState.get(trapId);
+    if (!trap) return;
+    const outcome = pickupTrap(inventory, trap.type);
+    if (outcome.picked === false) {
+      showFeedback(outcome.reason, 'blocked');
+      return;
+    }
+    trapState.removeTrap(trapId);
+    refreshTrapsFromState();
+    refreshInventory();
+    saveNow();
+    showFeedback(
+      `Picked up the ${TRAP_DEFS[trap.type].name}.`,
+      'gain',
+    );
+  };
+
+  // DISMANTLE A SET DEADFALL (the trap chunk; Adam's
+  // rule — removed, yields NOTHING: the logs were never
+  // hers to keep). Systems' dismantleTrap is the gate;
+  // the shell removes via removeTrap on its success.
+  // THE CATCH WAITS (DEV's ruling on the claim,
+  // 2026-11-01 — the pitfall-fill precedent): a catch
+  // is never destroyed as a side effect of a structural
+  // verb, so while the deadfall holds one, Dismantle
+  // refuses and Collect — its own standing door — goes
+  // first. The player chooses the loss or takes the
+  // catch; the verb never chooses for them. Copy DRAFT.
+  const handleDismantleTrap = (trapId: string) => {
+    const trap = trapState.get(trapId);
+    if (!trap) return;
+    if (trap.catch !== null) {
+      showFeedback('Collect the catch first.', 'blocked');
+      return;
+    }
+    const outcome = dismantleTrap(trap.type);
+    if (outcome.dismantled === false) {
+      showFeedback(outcome.reason, 'blocked');
+      return;
+    }
+    trapState.removeTrap(trapId);
+    refreshTrapsFromState();
+    saveNow();
+    showFeedback('Dismantled. Nothing to keep.', 'info');
+  };
+
+  // THE TRAP'S SECOND ACT (the trap chunk): the faced
+  // trap's R door and its pill row's second button run
+  // this one routing — a set carryable picks up, a set
+  // deadfall dismantles, the pitfall gets neither (it
+  // fills in; that lifecycle is its own piece).
+  const handleTrapSecondAct = (trapId: string) => {
+    const trap = trapState.get(trapId);
+    if (!trap) return;
+    if (isCarryableTrap(trap.type)) {
+      handlePickupTrap(trapId);
+    } else if (trap.type === ITEMS.deadfall) {
+      handleDismantleTrap(trapId);
+    }
+  };
+
+  // THE CARRYABLE CONFIRM'S TWO DOORS (the trap chunk):
+  // Yes places the just-crafted trap at the crosshair
+  // aim (the placement law) through the one composition;
+  // a refusal speaks and the trap stays in her pack,
+  // where the craft put it. No keeps it packed — the
+  // craft note already told her it was made.
+  const handleCarriedTrapPlaceYes = () => {
+    const trapType = pendingCarriedTrap;
+    setPendingCarriedTrap(null);
+    if (!trapType) return;
+    const target = aimedPlacementPoint();
+    if (target === null) {
+      showFeedback('Nowhere to set it down.', 'blocked');
+      return;
+    }
+    const outcome = composePlaceCarriedTrap(trapType, target);
+    if (outcome.ok === false) {
+      showFeedback(outcome.reason, 'blocked');
+      return;
+    }
+    refreshTrapsFromState();
+    refreshInventory();
+    saveNow();
+    showFeedback(
+      `Set the ${TRAP_DEFS[trapType as TrapType].name}.`,
+      'gain',
+    );
+  };
+
+  const handleCarriedTrapKeep = () => {
+    setPendingCarriedTrap(null);
   };
 
   // HIVE HARVEST (Adam, 2026-10-28): ONE harvest per
@@ -7719,6 +7930,28 @@ export default function App() {
       setInventoryOpen(false);
       return;
     }
+    // THE CARRYABLE TRAPS (the trap chunk, 2026-11-01):
+    // the pack's Place verb arms the crosshair flow like
+    // a house or hearth — chip + hoisted card confirm —
+    // with the trap arm on the mode. No footprint key
+    // exists for traps in Background's table, so no
+    // terrain outline paints; the chip is the preview
+    // and the card is the confirm of record.
+    if (isCarryableTrap(itemId)) {
+      const label =
+        inventoryItems.find((i) => i.id === itemId)?.name ?? itemId;
+      const mode: PlacementMode = {
+        itemId,
+        label,
+        trapType: itemId,
+      };
+      placementRef.current = mode;
+      setPlacement(mode);
+      setPlacementNote(null);
+      setInventoryOpen(false);
+      recomputeAnchors();
+      return;
+    }
     const fireType = FIRE_ITEM_TO_TYPE[itemId];
     const houseType = HOUSE_ITEM_TO_TYPE[itemId];
     const loom = itemId === ITEMS.loom;
@@ -7764,6 +7997,27 @@ export default function App() {
     const target = aimedPlacementPoint();
     if (target === null) {
       setPlacementNote('Nowhere to set it down.');
+      return;
+    }
+    // THE TRAP ARM (the trap chunk): the grant is the
+    // gate — it validates the site and consumes. A
+    // refusal speaks on the placement note and the mode
+    // STAYS armed (the groundless-gaze precedent: she
+    // re-aims, e.g. at water for the weir). Success
+    // seats through the one composition and disarms.
+    if (mode.trapType) {
+      const outcome = composePlaceCarriedTrap(mode.trapType, target);
+      if (outcome.ok === false) {
+        setPlacementNote(outcome.reason);
+        return;
+      }
+      placementRef.current = null;
+      setPlacement(null);
+      setPlacementAnchor(null);
+      setPlacementNote(null);
+      refreshTrapsFromState();
+      refreshInventory();
+      saveNow();
       return;
     }
     try {
@@ -9577,6 +9831,7 @@ export default function App() {
     selectedPile !== null ||
     selectedSiteId !== null ||
     (pendingTrapRecipe ?? null) !== null ||
+    pendingCarriedTrap !== null ||
     pendingRemoveTarget !== null;
 
   // TRAP ROW (Adam, 2026-10-28): the nearest placed
@@ -9608,6 +9863,7 @@ export default function App() {
       optionsOpen ||
       introOpen ||
       pendingTrapRecipe ||
+      pendingCarriedTrap !== null ||
       pendingRemoveTarget !== null ||
       pendingRite !== null ||
       fragmentBeat !== null ||
@@ -9633,6 +9889,15 @@ export default function App() {
         nearest.catch !== null
           ? `Collect ${nearest.catch}`
           : `Check ${TRAP_DEFS[nearest.type].name}`,
+      // THE SECOND ACT'S NAME (the trap chunk): the row
+      // below Collect names what R (or a tap) will do —
+      // a door is spoken, never hidden. The pitfall
+      // carries none.
+      secondLabel: isCarryableTrap(nearest.type)
+        ? `Pick up ${TRAP_DEFS[nearest.type].name}`
+        : nearest.type === ITEMS.deadfall
+          ? `Dismantle ${TRAP_DEFS[nearest.type].name}`
+          : undefined,
     };
   })();
 
@@ -9680,6 +9945,7 @@ export default function App() {
       optionsOpen ||
       introOpen ||
       pendingTrapRecipe ||
+      pendingCarriedTrap !== null ||
       pendingRemoveTarget !== null ||
       pendingRite !== null ||
       fragmentBeat !== null ||
@@ -9790,6 +10056,7 @@ export default function App() {
         optionsOpen ||
         introOpen ||
         pendingTrapRecipe ||
+        pendingCarriedTrap !== null ||
         pendingRemoveTarget !== null ||
         pendingRite !== null ||
         fragmentBeat !== null ||
@@ -9857,6 +10124,7 @@ export default function App() {
     optionsOpen,
     introOpen,
     pendingTrapRecipe,
+    pendingCarriedTrap,
     pendingRemoveTarget,
     pendingRite,
     fragmentBeat,
@@ -9914,6 +10182,7 @@ export default function App() {
       firstRunDialogOpen ||
       introOpen ||
       pendingTrapRecipe ||
+      pendingCarriedTrap !== null ||
       pendingRemoveTarget !== null
     ) {
       return true;
@@ -10017,6 +10286,7 @@ export default function App() {
     if (!anyOpen) return;
     const dialogUp =
       pendingTrapRecipeId !== null ||
+      pendingCarriedTrap !== null ||
       pendingRemoveTarget !== null ||
       pendingRite !== null ||
       fragmentBeat !== null ||
@@ -10135,6 +10405,7 @@ export default function App() {
     optionsOpen,
     introOpen,
     pendingTrapRecipe,
+    pendingCarriedTrap,
     pendingRemoveTarget,
     pendingRite,
     fragmentBeat,
@@ -11097,6 +11368,13 @@ export default function App() {
       case 'tent':
         handleTentAction(winner.id, 'take-down');
         break;
+      case 'trap':
+        // The trap's second act (the trap chunk): pick
+        // up a set carryable, dismantle a set deadfall —
+        // the one routing the pill row's second button
+        // also runs.
+        handleTrapSecondAct(winner.id);
+        break;
       case 'home': {
         const rest = homeMenuActions().find((a) => a.id === 'rest');
         if (rest && rest.disabled !== true) handleHomeMenuAction('rest');
@@ -11286,6 +11564,7 @@ export default function App() {
       pendingRite !== null ||
       fragmentBeat !== null ||
       pendingTrapRecipe !== null ||
+      pendingCarriedTrap !== null ||
       cloudPendingBring !== null ||
       cloudPendingRemove !== null ||
       cloudPendingRestore !== null ||
@@ -11312,6 +11591,7 @@ export default function App() {
     pendingRite,
     fragmentBeat,
     pendingTrapRecipe,
+    pendingCarriedTrap,
     cloudPendingBring,
     cloudPendingRemove,
     cloudPendingRestore,
@@ -11356,6 +11636,7 @@ export default function App() {
         optionsOpen ||
         introOpen ||
         pendingTrapRecipe ||
+        pendingCarriedTrap !== null ||
         pendingRemoveTarget !== null ||
         pendingRite !== null ||
         fragmentBeat !== null ||
@@ -11473,6 +11754,7 @@ export default function App() {
     optionsOpen,
     introOpen,
     pendingTrapRecipe,
+    pendingCarriedTrap,
     pendingRemoveTarget,
     pendingRite,
     fragmentBeat,
@@ -11532,6 +11814,7 @@ export default function App() {
         optionsOpen ||
         introOpen ||
         pendingTrapRecipe ||
+        pendingCarriedTrap !== null ||
         pendingRemoveTarget !== null ||
         pendingRite !== null ||
         fragmentBeat !== null ||
@@ -11563,6 +11846,7 @@ export default function App() {
     optionsOpen,
     introOpen,
     pendingTrapRecipe,
+    pendingCarriedTrap,
     pendingRemoveTarget,
     pendingRite,
     fragmentBeat,
@@ -12854,6 +13138,7 @@ export default function App() {
           stationAnchor={stationAnchor}
           trap={presentedTrap}
           onCollectTrap={handleCollectTrap}
+          onSecondTrap={handleTrapSecondAct}
           hive={presentedHive}
           onHarvestHive={handleHarvestHive}
           loom={presentedLoom}
@@ -14255,6 +14540,52 @@ export default function App() {
               }
             >
               No
+            </button>
+          </div>
+        </Popup>
+      ) : null}
+
+      {/* The carryable trap's post-craft confirm (the trap
+        chunk, 2026-11-01): the craft already executed —
+        the trap is IN her pack — and the pinned table's
+        question is place-or-pack. Yes composes the
+        placement at the aim; No or Close keeps it packed.
+        Same Popup shell, same button sizing as the
+        site-built confirm above; the semantics differ
+        (nothing here can un-craft). Copy DRAFT. */}
+      {pendingCarriedTrapRecipe ? (
+        <Popup theme={lookThemes.dialog}
+          open={true}
+          title="PLACE TRAP HERE?"
+          onClose={handleCarriedTrapKeep}
+          comfortable={isTouch}
+        >
+          <p className="text-sm text-stone-200">
+            Place the {pendingCarriedTrapRecipe.name} here, or keep
+            it in your pack?
+          </p>
+          <div className="mt-3 flex gap-2">
+            <button
+              type="button"
+              onClick={handleCarriedTrapPlaceYes}
+              className={
+                isTouch
+                  ? 'min-h-[44px] rounded bg-moss-deep px-3 py-2 text-sm hover:bg-moss'
+                  : 'rounded bg-moss-deep px-2 py-0.5 text-xs hover:bg-moss'
+              }
+            >
+              Place it
+            </button>
+            <button
+              type="button"
+              onClick={handleCarriedTrapKeep}
+              className={
+                isTouch
+                  ? 'min-h-[44px] rounded bg-[#44403c] px-3 py-2 text-sm hover:bg-[#57534e]'
+                  : 'rounded bg-[#44403c] px-2 py-0.5 text-xs hover:bg-[#57534e]'
+              }
+            >
+              Keep in pack
             </button>
           </div>
         </Popup>
