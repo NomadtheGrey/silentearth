@@ -1233,6 +1233,15 @@ export class WorldRenderer {
    * distributed cave mouths' facades. Extracted from the
    * constructor's closure (Companions Build 1) so both
    * consumers read the same walls.
+   *
+   * CONTRACT: returns NULL in open country (wallsNear
+   * Sites' "no walls" answer — the player's step guards
+   * it by design). Any consumer feeding the result to an
+   * iterator must coerce (?? []) at its seam: the cat /
+   * companion pushWalls closures passed the null straight
+   * into pushOutOfWalls and threw 'not iterable' every
+   * frame those actors stepped away from sites — Adam's
+   * hitch-to-freeze, main #53, fixed 2026-11-01.
    */
   private siteWallsAt(x: number, z: number) {
     let sites = this.sites;
@@ -2748,7 +2757,7 @@ export class WorldRenderer {
       night,
       dimensionActive: !!this.gen.dimensionKey,
       speedAt: (x, z) => this.companionSpeedAt(x, z),
-      pushWalls: (x, z) => pushOutOfWalls(x, z, this.siteWallsAt(x, z), 0.3),
+      pushWalls: (x, z) => pushOutOfWalls(x, z, this.siteWallsAt(x, z) ?? [], 0.3),
       coverNear: (x, z, r) => this.coverPointNear(x, z, r),
     });
     if (!this.companionGroup) {
@@ -2791,7 +2800,7 @@ export class WorldRenderer {
           night,
           dimensionActive: !!this.gen.dimensionKey,
           speedAt: (x, z) => this.companionSpeedAt(x, z),
-          pushWalls: (x, z) => pushOutOfWalls(x, z, this.siteWallsAt(x, z), 0.3),
+          pushWalls: (x, z) => pushOutOfWalls(x, z, this.siteWallsAt(x, z) ?? [], 0.3),
           coverNear: (x, z, r) => this.coverPointNear(x, z, r),
         });
         if (!this.catGroup) {
