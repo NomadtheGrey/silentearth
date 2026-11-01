@@ -13420,9 +13420,16 @@ export default function App() {
           can no longer reach bottom-center at any width), the
           input is narrower, and the container is
           pointer-transparent except the real controls — the
-          label and the Current line never take a tap. */}
+          label and the Current line never take a tap. The
+          label and the Current chip carry the notes' black
+          backdrop (second defect, same report): bare text
+          let the armed ghost's poles paint straight across
+          the words; the controls win visually too. */}
       <div className="pointer-events-none absolute bottom-0 left-0 z-30 flex max-w-[100vw] flex-wrap items-center gap-2 p-4">
-        <label htmlFor="seed-input" className="text-xs opacity-70">
+        <label
+          htmlFor="seed-input"
+          className="rounded bg-black/45 px-2 py-1 text-xs opacity-70"
+        >
           World seed:
         </label>
         <input
@@ -13440,7 +13447,9 @@ export default function App() {
         >
           Regenerate
         </button>
-        <span className="w-full text-xs opacity-60">Current: {seed}</span>
+        <span className="w-full text-xs opacity-60">
+          <span className="rounded bg-black/45 px-2 py-1">Current: {seed}</span>
+        </span>
       </div>
 
       {/* Controls help (desktop only — touch devices get the TouchControls cues). */}
@@ -13979,9 +13988,32 @@ export default function App() {
           the collapsed state; expanded, the stack card is on
           screen and is the door. Hidden with any panel/modal
           open, like the rest of the seat family, so it never
-          paints over a bottom sheet. */}
-      {isTouch &&
-      hudCollapsed &&
+          paints over a bottom sheet.
+          SECOND DEFECT, same day (Adam's phone, 'Blah'): the
+          bar was missing in the very state it was built for.
+          The seat conditions, not the seat, were wrong: the
+          bar keyed on isTouch and stood down while PAUSED —
+          but the auto-pause latch (blur / tab hidden, Adam's
+          2026-10-26 ruling; resume is tap-only) fires on a
+          phone for a screenshot, a notification shade, an
+          app switch, so an armed placement routinely sits
+          PAUSED with its ghost and label up and — the card
+          unmounted, the bar stood down — no confirm and no
+          cancel anywhere. And a desktop HUD collapsed by
+          hand hit the isTouch gate the same way. The law
+          now: the bar stands in EVERY armed + collapsed
+          state — touch or not, paused or not (placing and
+          cancelling are save-side writes the pause never
+          gated anywhere else; the stack card carries no
+          pause guard either). Panels/modals still hide it:
+          those are deliberate states with their own doors.
+          The bar also outranks the pause VEIL (z-50 over
+          its z-40 full-screen tap layer): the veil keeps
+          tap-to-resume everywhere else, but the bar's own
+          buttons take their taps — Adam's ruling on this
+          defect was that the buttons and the bar win,
+          visually and for taps. */}
+      {hudCollapsed &&
       placement !== null &&
       !inventoryOpen &&
       !craftingOpen &&
@@ -13991,9 +14023,8 @@ export default function App() {
       !optionsOpen &&
       !introOpen &&
       !pendingTrapRecipe &&
-      pendingRemoveTarget === null &&
-      !paused ? (
-        <div className="pointer-events-auto absolute bottom-24 left-1/2 z-40 -translate-x-1/2 rounded bg-black/60 px-3 py-2 text-center">
+      pendingRemoveTarget === null ? (
+        <div className="pointer-events-auto absolute bottom-24 left-1/2 z-50 -translate-x-1/2 rounded bg-black/60 px-3 py-2 text-center">
           <p className="text-sm text-stone-100">
             Placing {placement.label} at your feet.
           </p>

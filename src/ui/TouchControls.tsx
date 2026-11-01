@@ -312,9 +312,23 @@ export function TouchControls({
           onTouchEnd={handleLookEnd}
           onTouchCancel={handleLookCancel}
         >
+          {/* LOOK CUE SEAT (Adam's phone defect, 2026-11-01):
+              the cue used to hang at top-1/3 while every other
+              member of the right cluster anchors to the
+              bottom — on a short landscape screen the
+              top-anchored cue drifted down into the turn
+              stick's airspace and the knob, dragged up,
+              painted over it (the stick renders after the
+              field). The cue now sits on the cluster's own
+              bottom-anchored grid: left of the turn disc with
+              clearance for the knob's full 40 px travel plus
+              its overhang, below the USE/JUMP/PLACE row —
+              geometry that holds at any aspect, because
+              everything it must clear is bottom/right
+              anchored too. */}
           {!lookUsed ? (
-            <div className="pointer-events-none absolute right-8 top-1/3 flex flex-col items-center gap-1 opacity-80">
-              <div className="flex h-16 w-16 items-center justify-center rounded-full border-2 border-[#f0ead6]/70 bg-black/30 text-xs text-[#f0ead6]">
+            <div className="pointer-events-none absolute bottom-[8.75rem] right-44 flex flex-col items-center gap-1 opacity-80">
+              <div className="flex h-16 w-16 items-center justify-center rounded-full border-2 border-[#f0ead6]/70 bg-black/55 text-xs text-[#f0ead6]">
                 LOOK
               </div>
               <span className="text-xs tracking-widest text-[#f0ead6]">
@@ -334,7 +348,7 @@ export function TouchControls({
       >
         <div
           className={
-            'relative flex h-32 w-32 items-center justify-center rounded-full border-2 bg-black/30 ' +
+            'relative flex h-32 w-32 items-center justify-center rounded-full border-2 bg-black/55 ' +
             (stickUsed
               ? 'border-[#f0ead6]/50'
               : 'border-[#f0ead6]/80 animate-pulse')
@@ -369,7 +383,7 @@ export function TouchControls({
       >
         <div
           className={
-            'relative flex h-32 w-32 items-center justify-center rounded-full border-2 bg-black/30 ' +
+            'relative flex h-32 w-32 items-center justify-center rounded-full border-2 bg-black/55 ' +
             (turnUsed
               ? 'border-[#f0ead6]/50'
               : 'border-[#f0ead6]/80 animate-pulse')
