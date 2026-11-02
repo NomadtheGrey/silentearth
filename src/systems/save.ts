@@ -544,6 +544,19 @@ export interface SavedFacing {
 /** Default look: the facing default for saves predating it. */
 export const DEFAULT_SAVED_FACING: SavedFacing = { yaw: 0, pitch: 0 };
 
+/**
+ * The hosted spell record's saved shape — a verbatim
+ * mirror of game/weatherSpells.ts's WeatherSpellRecord.
+ * If that record's shape ever changes, this mirror and
+ * the lenient reader below change in the same landing.
+ */
+export interface SavedWeather {
+  kind: 'dry' | 'wet' | 'inclement';
+  startDay: number;
+  lengthDays: number;
+  index: number;
+}
+
 export interface SaveData {
   version: typeof SAVE_VERSION;
   savedAt: number;
@@ -602,6 +615,13 @@ export interface SaveData {
   knowledge: KnowledgeSnapshot;
   /** Her cold / wet gauges; 0/0 for old saves. */
   coldWet: ColdWetSnapshot;
+  /** The sky's spell record (Background's W1 machine),
+   * HOSTED VERBATIM: Systems seats the field, the
+   * machine owns its meaning (weatherSpells.ts's
+   * WeatherSpellRecord, mirrored here so this file
+   * imports nothing from game/). Null for old saves
+   * and fresh worlds until the machine seats one. */
+  weather: SavedWeather | null;
   /** Ritual stagings (site + kind + steps); [] for old saves. */
   stagings: SavedRitualStaging[];
   /** Charm awakenings (kind + tier); [] for old saves. */
@@ -828,6 +848,17 @@ export interface SaveDraft {
     cold?: number;
     wet?: number;
   };
+  /**
+   * The spell record from weatherStateSnapshot(),
+   * hosted verbatim. OPTIONAL, same wiring-later
+   * pattern; null/absent writes a null field.
+   */
+  weather?: {
+    kind: 'dry' | 'wet' | 'inclement';
+    startDay: number;
+    lengthDays: number;
+    index: number;
+  } | null;
   /**
    * Ritual stagings from StagingBook.snapshot() +
    * awakenings from CharmState.snapshot(). OPTIONAL so
@@ -1180,6 +1211,27 @@ export function serializeSave(draft: SaveDraft): SaveData {
           ? draft.coldWet.wet
           : 0,
     },
+    // The spell record: written AS-IS when the draft
+    // carries a well-shaped one (kind + finite numbers);
+    // anything else writes null rather than poison the
+    // document — the machine re-seats a fresh spell for
+    // a null record at world install.
+    weather:
+      draft.weather !== null &&
+      draft.weather !== undefined &&
+      (draft.weather.kind === 'dry' ||
+        draft.weather.kind === 'wet' ||
+        draft.weather.kind === 'inclement') &&
+      Number.isFinite(draft.weather.startDay) &&
+      Number.isFinite(draft.weather.lengthDays) &&
+      Number.isFinite(draft.weather.index)
+        ? {
+            kind: draft.weather.kind,
+            startDay: draft.weather.startDay,
+            lengthDays: draft.weather.lengthDays,
+            index: draft.weather.index,
+          }
+        : null,
     // Ritual stagings + awakenings: written AS-IS (records
     // verbatim, no filtering, no normalization — site keys
     // and bone kinds are caller-defined, not inventory
@@ -1912,6 +1964,33 @@ export function deserializeSave(value: unknown): SaveData | null {
             : 0,
       };
     }
+    // The spell record is optional on read, same
+    // additive-field rule: an old v1 save without it
+    // loads null and the machine seats a fresh spell.
+    // A malformed record (unknown kind, non-finite
+    // member) loads as null — the record drops whole,
+    // the document survives; semantic validation is
+    // the machine's own seatWeatherState.
+    let weather: SavedWeather | null = null;
+    if (isRecord(value.weather)) {
+      const w = value.weather;
+      if (
+        (w.kind === 'dry' || w.kind === 'wet' || w.kind === 'inclement') &&
+        typeof w.startDay === 'number' &&
+        Number.isFinite(w.startDay) &&
+        typeof w.lengthDays === 'number' &&
+        Number.isFinite(w.lengthDays) &&
+        typeof w.index === 'number' &&
+        Number.isFinite(w.index)
+      ) {
+        weather = {
+          kind: w.kind,
+          startDay: w.startDay,
+          lengthDays: w.lengthDays,
+          index: w.index,
+        };
+      }
+    }
     // Ritual stagings + awakenings are optional on read,
     // same additive-field rule: old v1 saves without them
     // load with stagings: [] + awakenings: []. Non-array
@@ -2053,6 +2132,7 @@ export function deserializeSave(value: unknown): SaveData | null {
       nameSight,
       knowledge,
       coldWet,
+      weather,
       stagings,
       awakenings,
       ...(quests !== undefined ? { quests } : {}),
