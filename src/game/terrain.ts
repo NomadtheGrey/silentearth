@@ -14,20 +14,14 @@
  *   to download, no asset pipeline). The renderer wraps them in a
  *   THREE.DataTexture; this module itself never touches the DOM, so it
  *   is deterministic and testable in Node as well as in the browser.
- * - One texture per biome (+ one for marsh ground character): seeded
- *   speckle dots and grain over a NEUTRAL WHITE base, so the texture is
- *   brightness-only detail. It once started from the biome's own ground
- *   color; that double-applied the color the vertex blend already
- *   carries (biomes.ts groundColorAt), so the rendered ground stepped
- *   hard at chunk borders where the dominant biome flips and every
- *   biome read darker and muddier than designed (Adam, 2026-11-02 —
- *   the biome-blending fix: some places should look muddy, not all).
- *   All ground color now comes from the vertex blend alone (weights,
- *   marsh tint, wetness darkening); per-biome character survives as
- *   the seeded speckle pattern, which differs per (seed, biome). The
- *   renderer picks a chunk's texture from its dominant biome (marsh
- *   texture when marsh character dominates); a pattern change at a
- *   border is brightness-only, so no color seam is introduced.
+ * - One texture per biome (+ one for marsh ground character), generated
+ *   from the biome's own ground color palette with seeded speckle dots
+ *   and grain. The renderer picks a chunk's texture from its dominant
+ *   biome (marsh texture when marsh character dominates) and keeps the
+ *   vertex-color blend underneath — so the continuous blend still carries
+ *   the biome transition, and the texture is a detail layer on top of it,
+ *   not a replacement for it. Where neighboring chunks share a dominant
+ *   biome they share one texture, so no new chunk seam is introduced.
  * - Everything is seeded: the same (seed, biome) always produces the
  *   same pixels. NO Math.random anywhere — the seeded streams come from
  *   src/game/seed.ts, exactly like worldgen.
@@ -35,6 +29,7 @@
  *   per biome per renderer (not per chunk), tiled by UV repeat.
  */
 
+import { BIOME_BY_ID, MARSH_GROUND_COLOR } from './biomes';
 import { deriveSeed, mulberry32 } from './seed';
 import type { BiomeId } from '../types';
 
@@ -52,6 +47,10 @@ export interface GroundTextureData {
   data: Uint8Array;
 }
 
+function rgb(color: number): [number, number, number] {
+  return [(color >> 16) & 0xff, (color >> 8) & 0xff, color & 0xff];
+}
+
 function clamp255(v: number): number {
   return Math.max(0, Math.min(255, Math.round(v)));
 }
@@ -66,16 +65,13 @@ export function createBiomeTexture(
   seed: string,
   size: number = TEXTURE_SIZE,
 ): GroundTextureData {
-  // Neutral white base (Adam, 2026-11-02): the renderer multiplies this
-  // texture over the vertex-color blend, so any color here lands ON TOP
-  // of the blend's own color — the old per-biome base did exactly that,
-  // stepping at chunk borders and muddying every biome. Brightness
-  // only: the speckles and grain below shade the white, never tint it.
+  const baseColor = id === 'marsh' ? MARSH_GROUND_COLOR : BIOME_BY_ID[id].groundColor;
+  const [br, bg, bb] = rgb(baseColor);
   const data = new Uint8Array(size * size * 4);
   for (let i = 0; i < size * size; i++) {
-    data[i * 4] = 255;
-    data[i * 4 + 1] = 255;
-    data[i * 4 + 2] = 255;
+    data[i * 4] = br;
+    data[i * 4 + 1] = bg;
+    data[i * 4 + 2] = bb;
     data[i * 4 + 3] = 255;
   }
 
