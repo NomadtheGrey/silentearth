@@ -14076,6 +14076,17 @@ export default function App() {
         </p>
         <p>Ground here: {biomeText}</p>
         <p>Chunks loaded: {chunkCount}</p>
+        {/* FPS in the meta block too (Adam, 2026-11-02, from his SE
+            Notes): shown in BOTH places for now — here and in the
+            LocationChip — from the one fps sample, same wording. */}
+        <p>
+          FPS:{' '}
+          {fps === null
+            ? '—'
+            : fps.interrupted
+              ? `interrupted · worst ${fps.worst.toLocaleString('en-US')} ms`
+              : `${fps.avg} · worst ${fps.worst.toLocaleString('en-US')} ms`}
+        </p>
         <p>Seed: {seed}</p>
         <p>Owned tool: {ownedItem}</p>
       </div>
@@ -14741,6 +14752,70 @@ export default function App() {
         >
           {placementCard}
           {dumpCard}
+          {/* SEAT (Adam, 2026-11-02, from his SE Notes): the
+              status bars — health, hunger, cold, wet — stand at
+              the TOP of the stack, directly under the transient
+              cards, out of the way of the view. The row below is
+              the DEFECT 3 unit, moved whole: its internal
+              landscape rail arrangement is untouched. */}
+          {/* VITALS + CARD ROW (DEFECT 3): on touch
+              landscape these stand side by side — vitals
+              in a fixed rail, the quest card flexing
+              beside them — because a short screen cannot
+              stack both inside the visible slice. The
+              wrappers are plain blocks everywhere else,
+              so portrait and desktop stacking are
+              unchanged. */}
+          <div
+            className={
+              isTouch
+                ? 'landscape:flex landscape:items-start landscape:gap-3 landscape:-mt-1'
+                : ''
+            }
+          >
+            <div
+              className={
+                isTouch ? 'landscape:w-[11rem] landscape:shrink-0' : ''
+              }
+            >
+          <div className="mt-3">
+            <WitchHealth />
+          </div>
+          <div className="mt-2">
+            <HungerIndicator
+              stage={hungerStage}
+              value={hungerValue}
+              warningActive={hungerWarningActive}
+              warningFlash={hungerWarningFlash}
+            />
+          </div>
+          <div className="mt-2">
+            <WeatherWitness
+              theme={lookThemes.world}
+              cold={coldWetUi.cold}
+              wet={coldWetUi.wet}
+            />
+          </div>
+          <div className="mt-2">
+            <StormWarning
+              active={deerWarningActive}
+              flash={deerWarningFlash}
+            />
+          </div>
+            </div>
+          {cardQuestRow && cardQuestRow.id !== dismissedCardQuestId ? (
+            <div className="mt-2">
+              <QuestCard
+                title={cardQuestRow.title}
+                hint={cardQuestRow.hint}
+                components={cardQuestComponents}
+                marked={cardQuestRow.id === activeQuestId}
+                theme={lookThemes.world}
+                onClose={() => setDismissedCardQuestId(cardQuestRow.id)}
+              />
+            </div>
+          ) : null}
+          </div>
           {!isTouch ? stackMeta : null}
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <button
@@ -14858,64 +14933,6 @@ export default function App() {
                 </span>
               ) : null}
             </button>
-          </div>
-          {/* VITALS + CARD ROW (DEFECT 3): on touch
-              landscape these stand side by side — vitals
-              in a fixed rail, the quest card flexing
-              beside them — because a short screen cannot
-              stack both inside the visible slice. The
-              wrappers are plain blocks everywhere else,
-              so portrait and desktop stacking are
-              unchanged. */}
-          <div
-            className={
-              isTouch
-                ? 'landscape:flex landscape:items-start landscape:gap-3 landscape:-mt-1'
-                : ''
-            }
-          >
-            <div
-              className={
-                isTouch ? 'landscape:w-[11rem] landscape:shrink-0' : ''
-              }
-            >
-          <div className="mt-3">
-            <WitchHealth />
-          </div>
-          <div className="mt-2">
-            <HungerIndicator
-              stage={hungerStage}
-              value={hungerValue}
-              warningActive={hungerWarningActive}
-              warningFlash={hungerWarningFlash}
-            />
-          </div>
-          <div className="mt-2">
-            <WeatherWitness
-              theme={lookThemes.world}
-              cold={coldWetUi.cold}
-              wet={coldWetUi.wet}
-            />
-          </div>
-          <div className="mt-2">
-            <StormWarning
-              active={deerWarningActive}
-              flash={deerWarningFlash}
-            />
-          </div>
-            </div>
-          {cardQuestRow && cardQuestRow.id !== dismissedCardQuestId ? (
-            <div className="mt-2">
-              <QuestCard
-                title={cardQuestRow.title}
-                hint={cardQuestRow.hint}
-                components={cardQuestComponents}
-                marked={cardQuestRow.id === activeQuestId}
-                theme={lookThemes.world}
-                onClose={() => setDismissedCardQuestId(cardQuestRow.id)}
-              />
-            </div>
-          ) : null}
           </div>
           <ForageHint stage={hungerStage} />
           <div className="mt-2">
