@@ -571,7 +571,7 @@ export const SOURCES: HarvestSourceDef[] = [
     primaryYield: 'SNAP_WOOD',
     secondaryYields: [SPORES_25, ELDERBERRIES_50],
     provenance: 'draft',
-    biomes: ['mirewood', 'oldfieldRise', 'tanglewood', 'deepBog', 'creekBottom', 'saltFlat'],
+    biomes: ['mirewood', 'oldfieldRise', 'tanglewood', 'deepBog', 'creekBottom', 'fen', 'scrub'],
     mesh: { shape: 'bush', color: 0x3f5a2c, baseY: 0.45 },
   },
   // THE LOG MERGER (Adam, 2026-11-02): the downed oak
@@ -612,7 +612,7 @@ export const SOURCES: HarvestSourceDef[] = [
       successMessage: 'The log yields a sound piece.',
     },
     provenance: 'draft',
-    biomes: ['mirewood', 'oldfieldRise', 'tanglewood', 'deepBog', 'creekBottom', 'saltFlat'],
+    biomes: ['mirewood', 'oldfieldRise', 'tanglewood', 'deepBog', 'creekBottom', 'fen', 'scrub'],
     mesh: { shape: 'log', color: 0x5a4028, baseY: 0.24 },
   },
   {
@@ -685,6 +685,34 @@ export const SOURCES: HarvestSourceDef[] = [
     provenance: 'draft',
     biomes: ['mirewood', 'oldfieldRise', 'tanglewood'],
     mesh: { shape: 'tree', color: 0x4a2e18, extraColor: 0x2f4a26, baseY: 0.8, extraY: 2.4 },
+  },
+  // The pine (Adam, 2026-11-02, the biome landing — 'We
+  // can add in pine trees at any time here'): Scrub's
+  // dressed silhouette. Mechanically it is the standing
+  // tree entire — same pinned axe permit, same felling
+  // lifecycle, same snap-wood yield; only the shape
+  // differs (the shape-slot pattern: a kind override in
+  // the geometry builder). Trees stayed generic the
+  // same morning this landed — the pine is a DRESSING
+  // per biome, not a tree type with its own rules.
+  {
+    id: 'standingPine',
+    kind: 'pineTree',
+    name: 'Standing Pine',
+    description:
+      'A pine, standing in the dry scrub country — straighter and ' +
+      'narrower than the broadleaf trees, with the same axe work ' +
+      'and the same wood in it. It fells to a stump like any tree.',
+    harvestable: true,
+    permitTier: 'axeTrowel',
+    permitFamily: 'axe',
+    removable: true,
+    fellOnHarvest: true,
+    primaryYield: 'SNAP_WOOD',
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['scrub'],
+    mesh: { shape: 'tree', color: 0x4a3420, extraColor: 0x2e4a38, baseY: 0.8, extraY: 2.4 },
   },
   {
     id: 'groveOak',
@@ -2397,7 +2425,7 @@ export const SOURCES: HarvestSourceDef[] = [
     primaryYield: 'SNAP_WOOD',
     secondaryYields: [SPORES_25],
     provenance: 'prototype',
-    biomes: ['mirewood', 'oldfieldRise', 'tanglewood', 'deepBog', 'creekBottom', 'saltFlat'],
+    biomes: ['mirewood', 'oldfieldRise', 'tanglewood', 'deepBog', 'creekBottom', 'fen', 'scrub'],
     mesh: { shape: 'stick', color: 0x7a5a34, baseY: 0.55 },
   },
   {
@@ -2417,7 +2445,7 @@ export const SOURCES: HarvestSourceDef[] = [
       successMessage: 'The vines finally snap free.',
     },
     provenance: 'prototype',
-    biomes: ['mirewood', 'tanglewood', 'creekBottom', 'oldfieldRise', 'deepBog', 'saltFlat'],
+    biomes: ['mirewood', 'tanglewood', 'creekBottom', 'oldfieldRise', 'deepBog', 'scrub'],
     mesh: { shape: 'vine', color: 0x6a8a3a, baseY: 0.5 },
   },
   {
@@ -2431,7 +2459,7 @@ export const SOURCES: HarvestSourceDef[] = [
     primaryYield: 'PEAT_MOSS',
     secondaryYields: [SPORES_25],
     provenance: 'prototype',
-    biomes: ['deepBog', 'mirewood', 'creekBottom', 'oldfieldRise', 'tanglewood', 'saltFlat'],
+    biomes: ['deepBog', 'mirewood', 'creekBottom', 'oldfieldRise', 'tanglewood', 'fen'],
     mesh: { shape: 'disc', color: 0x4a6b2f, baseY: 0 },
   },
   {
@@ -2466,14 +2494,14 @@ export const SOURCES: HarvestSourceDef[] = [
       },
     ],
     provenance: 'prototype',
-    biomes: ['creekBottom', 'mirewood', 'deepBog', 'oldfieldRise', 'saltFlat'],
+    biomes: ['creekBottom', 'mirewood', 'deepBog', 'oldfieldRise', 'fen'],
     mesh: { shape: 'disc', color: 0x6b5b43, baseY: 0 },
   },
   // DENSITY DIRECTION (Adam, 2026-10-26, expectation — "I would
   // think"): river stone is RELATIVELY EASY TO FIND — common,
   // not rare. This balances the high stone demand from deadfall
   // counterweights. The tunable is the riverStone mix weight per
-  // biome in biomes.ts (creekBottom 0.15 and saltFlat 0.20 are
+  // biome in biomes.ts (creekBottom 0.15 and scrub 0.14 are
   // the richest today; most biomes sit at 0.02–0.05). Density
   // number TBD — no weight changed here; when stone sources are
   // next touched, raise toward common and flag the number.
@@ -2496,7 +2524,7 @@ export const SOURCES: HarvestSourceDef[] = [
       },
     ],
     provenance: 'prototype',
-    biomes: ['creekBottom', 'oldfieldRise', 'saltFlat', 'mirewood', 'deepBog', 'tanglewood'],
+    biomes: ['creekBottom', 'oldfieldRise', 'scrub', 'fen', 'mirewood', 'deepBog', 'tanglewood'],
     mesh: { shape: 'stone', color: 0x8a8a86, baseY: 0.15 },
   },
   // FLINT (Adam, 2026-10-27: "let's be able to find Flint" — the
@@ -2528,7 +2556,7 @@ export const SOURCES: HarvestSourceDef[] = [
     secondaryYields: [],
     renewal: 'taken',
     provenance: 'draft',
-    biomes: ['mirewood', 'deepBog', 'oldfieldRise', 'creekBottom', 'tanglewood', 'saltFlat', 'meadow', 'forest'],
+    biomes: ['mirewood', 'deepBog', 'oldfieldRise', 'creekBottom', 'tanglewood', 'scrub', 'meadow', 'forest'],
     mesh: { shape: 'stone', color: 0x232326, baseY: 0.10 },
   },
   // DEPLETION (Adam, 2026-10-29, PINNED — "bones don't grow
@@ -2554,27 +2582,8 @@ export const SOURCES: HarvestSourceDef[] = [
     secondaryYields: [],
     renewal: 'taken',
     provenance: 'prototype',
-    biomes: ['saltFlat', 'deepBog', 'creekBottom', 'oldfieldRise', 'mirewood', 'tanglewood'],
+    biomes: ['scrub', 'fen', 'deepBog', 'creekBottom', 'oldfieldRise', 'mirewood', 'tanglewood'],
     mesh: { shape: 'bone', color: 0xe8e0cc, baseY: 0.08 },
-  },
-  {
-    id: 'saltCrust',
-    kind: 'saltCrystal',
-    name: 'Salt Crust',
-    description: 'Sharp, grey mineral deposits found where moisture has evaporated. High potency.',
-    harvestable: true,
-    permitTier: 'hand',
-    primaryYield: 'SALT_CRYSTAL',
-    secondaryYields: [
-      {
-        item: 'SPORES',
-        chance: 0.4,
-        message: 'The crystals hum as they crumble, releasing dense spores.',
-      },
-    ],
-    provenance: 'prototype',
-    biomes: ['saltFlat', 'oldfieldRise'],
-    mesh: { shape: 'crystal', color: 0xd8e8e8, baseY: 0.2 },
   },
   {
     id: 'oldStump',
@@ -2969,7 +2978,7 @@ export const SOURCES: HarvestSourceDef[] = [
     primaryYield: 'ACORNS',
     secondaryYields: [],
     provenance: 'draft',
-    biomes: ['tanglewood', 'mirewood', 'oldfieldRise', 'saltFlat'],
+    biomes: ['tanglewood', 'mirewood', 'oldfieldRise', 'fen', 'scrub'],
     mesh: { shape: 'acornCluster', color: 0x6b4a2f, extraColor: 0x4a2e18, baseY: 0.08 },
   },
   {

@@ -43,7 +43,7 @@ export interface WorldGen {
 const SCATTER_KINDS: ScatterKind[] = [
   'bush', 'log', 'bogPatch', 'standingWater', 'tree',
   'snapWood', 'tenderVines', 'peatMoss', 'riverSilt', 'riverStone',
-  'bone', 'saltCrystal',
+  'bone', 'pineTree',
   // Fill-in landing (2026-10-25): stump, reed, marshGrass, bogGrowth.
   'stump', 'reed', 'marshGrass', 'bogGrowth',
   // Meadow/forest landing (2026-10-26): flower, tallTree (scenery only).
@@ -133,7 +133,9 @@ export interface ClusterGrove {
  * The grove (if any) deriving from grid cell (gx, gz) — a pure
  * function of the seed, the biome weights, and the registered
  * sites. The biome mask (Adam's tentative shape): no groves
- * where saltFlat or deepBog dominates; the full spectrum where
+ * where deepBog or fen dominates (the salt flat stood in
+ * this line until it retired, 2026-11-02 — open wet and
+ * treeless ground grows no stands); the full spectrum where
  * woodland carries; small groves only in meadow / oldfieldRise
  * country (hedgerow character). DEV's condition: a centre
  * whose radius would overlap a site's clear footprint is
@@ -152,7 +154,7 @@ export function groveForCell(
   const x = (gx + 0.5) * CLUSTER_CELL_M + (rand() * 2 - 1) * jitter;
   const z = (gz + 0.5) * CLUSTER_CELL_M + (rand() * 2 - 1) * jitter;
   const w = weightsAtPos(x, z);
-  if (w.dominant === 'saltFlat' || w.dominant === 'deepBog') return null;
+  if (w.dominant === 'deepBog' || w.dominant === 'fen') return null;
   const woodland =
     (w.weights.forest ?? 0) + (w.weights.tanglewood ?? 0) + (w.weights.mirewood ?? 0);
   let tier: 'full' | 'small' | null = null;

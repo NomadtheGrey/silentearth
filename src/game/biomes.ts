@@ -125,7 +125,7 @@ export const BIOMES: BiomeDef[] = [
     mix: {
       bush: 0.20, tree: 0.18, snapWood: 0.15, tenderVines: 0.10, log: 0.10,
       riverStone: 0.10, bone: 0.05, peatMoss: 0.05,
-      riverSilt: 0.02, saltCrystal: 0.02, bogPatch: 0.01, standingWater: 0.01,
+      riverSilt: 0.02, bogPatch: 0.01, standingWater: 0.01,
       stump: 0.02, appleTree: 0.06, flint: 0.08, flower: 0.08, beehive: 0.02,
       // Flowers landing (2026-10-28): new kinds, pink untouched.
       yarrow: 0.01, dandelion: 0.01, milkweed: 0.005, poppy: 0.02, sunflower: 0.02, aster: 0.015,
@@ -175,21 +175,47 @@ export const BIOMES: BiomeDef[] = [
     },
   },
   {
-    id: 'saltFlat',
-    name: 'Salt Flat',
-    groundColor: 0xb8b0a0,
-    density: 0.50,
+    id: 'fen',
+    name: 'Fen',
+    groundColor: 0x5c6636,
+    density: 0.7,
     mix: {
-      saltCrystal: 0.30, riverStone: 0.20, bone: 0.15, riverSilt: 0.10,
-      bush: 0.05, snapWood: 0.05, log: 0.06, peatMoss: 0.03,
-      standingWater: 0.02, tenderVines: 0.04,
-      flint: 0.03,
+      reed: 0.22, marshGrass: 0.18, standingWater: 0.14, peatMoss: 0.08,
+      bogPatch: 0.06, riverSilt: 0.05, bogGrowth: 0.04, snapWood: 0.04,
+      bush: 0.04, log: 0.03, edibleMushroom: 0.03, poisonMushroom: 0.03,
+      pond: 0.02, riverStone: 0.02, bone: 0.01,
     },
-    // The odd dry one: mineral crust, salt crystals, bone.
+    // The wet middle (Adam, 2026-11-02, the biome landing):
+    // open reedy wetland between Mirewood and the outright
+    // bog — the ground the marsh overlay used to gesture at,
+    // standing as a biome of its own. Scatter is the
+    // existing vocabulary only; no new items ride it.
     anchor: {
-      mineral: { at: 0.92, sigma: 0.22 },
-      wetness: { at: 0.15, sigma: 0.25 },
-      elevation: { at: 0.50, sigma: 0.30 },
+      wetness: { at: 0.75, sigma: 0.21 },
+      elevation: { at: 0.40, sigma: 0.28 },
+      density: { at: 0.38, sigma: 0.26 },
+    },
+  },
+  {
+    id: 'scrub',
+    name: 'Scrub',
+    groundColor: 0x8a8558,
+    density: 0.6,
+    mix: {
+      bush: 0.22, riverStone: 0.14, pineTree: 0.10, snapWood: 0.08,
+      flint: 0.05, bone: 0.04, log: 0.04, tree: 0.03, flower: 0.03,
+      tenderVines: 0.03, stump: 0.01,
+    },
+    // The dry middle (Adam, 2026-11-02, the biome landing):
+    // low bush, stone, sparse trees — and pines, the one
+    // dressed silhouette, where the mineral soil runs
+    // mid. The mineral axis earns its keep here (its
+    // second honest user after the salt flat it was
+    // seeded for retired the same day).
+    anchor: {
+      wetness: { at: 0.25, sigma: 0.20 },
+      mineral: { at: 0.50, sigma: 0.27 },
+      density: { at: 0.42, sigma: 0.25 },
     },
   },
   {
@@ -319,6 +345,10 @@ export function createFields(seed: string): (x: number, z: number) => Fields {
   };
 }
 
+/** The floodplain margin boost (DRAFT — Adam's pin pass):
+ *  how much wider creekBottom reads beside its creeks. */
+export const FLOODPLAIN_BOOST = 1.8;
+
 /** Normalized per-biome weights at a world position. Sums to 1. */
 export function weightsAt(fields: Fields): BiomeWeights {
   const raw = new Map<BiomeId, number>();
@@ -334,6 +364,20 @@ export function weightsAt(fields: Fields): BiomeWeights {
     }
     // Mirewood floor: the mire is the background matrix, never fully absent.
     if (biome.id === 'mirewood') affinity = Math.max(affinity, 0.08);
+    // FLOODPLAIN (Adam, 2026-11-02, the biome landing): the
+    // creek's wide hand — not a biome, a treatment. Beside
+    // the creek lines (the field running MID, its margin
+    // band) on wet ground, creekBottom's reach widens: the
+    // floodplain is the flat the water claims when it
+    // rises, so the bottom's affinity gains a margin
+    // factor peaked off-line (gauss at creek 0.65) and
+    // scaled by the wetness fit. On the line itself the
+    // band reads zero — the core anchor already owns it.
+    if (biome.id === 'creekBottom') {
+      const marginBand = Math.exp(-0.5 * (((fields.creek - 0.65) / 0.18) ** 2));
+      const wetFit = Math.exp(-0.5 * (((fields.wetness - 0.7) / 0.3) ** 2));
+      affinity *= 1 + FLOODPLAIN_BOOST * marginBand * wetFit;
+    }
     raw.set(biome.id, affinity);
     total += affinity;
   }

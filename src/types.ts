@@ -25,7 +25,8 @@ export type BiomeId =
   | 'oldfieldRise'
   | 'creekBottom'
   | 'tanglewood'
-  | 'saltFlat'
+  | 'fen'
+  | 'scrub'
   | 'meadow'
   | 'forest';
 
@@ -58,7 +59,6 @@ export type ScatterKind =
   | 'riverSilt'
   | 'riverStone'
   | 'bone'
-  | 'saltCrystal'
   | 'stump'
   | 'reed'
   | 'marshGrass'
