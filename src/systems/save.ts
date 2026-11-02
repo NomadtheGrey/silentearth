@@ -174,6 +174,7 @@ import { normalizeItemId } from './inventory';
 // the placed-torch id nuance taught us that lesson).
 import type { SavedNameLook } from './name-sight';
 import type { KnowledgeSnapshot } from './knowledge-register';
+import type { ColdWetSnapshot } from './cold-wet';
 // Single source for the ritual records (rituals.ts /
 // charms.ts own them; save.ts imports them — no second
 // mirror to drift, the placed-torch id lesson).
@@ -599,6 +600,8 @@ export interface SaveData {
   /** Known-facts register (met items + known recipe
    * uses); empty for old saves. */
   knowledge: KnowledgeSnapshot;
+  /** Her cold / wet gauges; 0/0 for old saves. */
+  coldWet: ColdWetSnapshot;
   /** Ritual stagings (site + kind + steps); [] for old saves. */
   stagings: SavedRitualStaging[];
   /** Charm awakenings (kind + tier); [] for old saves. */
@@ -816,6 +819,14 @@ export interface SaveDraft {
   knowledge?: {
     metItems?: ReadonlyArray<string>;
     knownUseRecipes?: ReadonlyArray<string>;
+  };
+  /**
+   * Her cold / wet gauges from ColdWetState.snapshot().
+   * OPTIONAL, same wiring-later pattern.
+   */
+  coldWet?: {
+    cold?: number;
+    wet?: number;
   };
   /**
    * Ritual stagings from StagingBook.snapshot() +
@@ -1153,6 +1164,21 @@ export function serializeSave(draft: SaveDraft): SaveData {
     knowledge: {
       metItems: [...(draft.knowledge?.metItems ?? [])],
       knownUseRecipes: [...(draft.knowledge?.knownUseRecipes ?? [])],
+    },
+    // Cold / wet gauges: finite-guarded here (a NaN
+    // would poison the JSON document); range is the
+    // state's own clamp, applied at construction.
+    coldWet: {
+      cold:
+        typeof draft.coldWet?.cold === 'number' &&
+        Number.isFinite(draft.coldWet.cold)
+          ? draft.coldWet.cold
+          : 0,
+      wet:
+        typeof draft.coldWet?.wet === 'number' &&
+        Number.isFinite(draft.coldWet.wet)
+          ? draft.coldWet.wet
+          : 0,
     },
     // Ritual stagings + awakenings: written AS-IS (records
     // verbatim, no filtering, no normalization — site keys
@@ -1866,6 +1892,26 @@ export function deserializeSave(value: unknown): SaveData | null {
         }
       }
     }
+    // Her cold / wet gauges are optional on read, same
+    // additive-field rule: an old v1 save without them
+    // loads 0/0. A non-record field or non-finite member
+    // loads as 0 — the section drops, the document
+    // survives; range clamping is ColdWetState's own.
+    let coldWet: ColdWetSnapshot = { cold: 0, wet: 0 };
+    if (isRecord(value.coldWet)) {
+      coldWet = {
+        cold:
+          typeof value.coldWet.cold === 'number' &&
+          Number.isFinite(value.coldWet.cold)
+            ? value.coldWet.cold
+            : 0,
+        wet:
+          typeof value.coldWet.wet === 'number' &&
+          Number.isFinite(value.coldWet.wet)
+            ? value.coldWet.wet
+            : 0,
+      };
+    }
     // Ritual stagings + awakenings are optional on read,
     // same additive-field rule: old v1 saves without them
     // load with stagings: [] + awakenings: []. Non-array
@@ -2006,6 +2052,7 @@ export function deserializeSave(value: unknown): SaveData | null {
       tents,
       nameSight,
       knowledge,
+      coldWet,
       stagings,
       awakenings,
       ...(quests !== undefined ? { quests } : {}),
