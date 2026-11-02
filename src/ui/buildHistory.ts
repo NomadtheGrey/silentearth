@@ -43,6 +43,14 @@ export interface BuildRecord {
 
 const ALL_RECORDS: BuildRecord[] = [
   {
+    merge: 'Merge #66',
+    pr: 95,
+    sha: '0780072',
+    date: '2026-11-02',
+    what: 'BLENDING REVERTED \u2014 Merge #64\u2019s neutral-texture fix (Option A) is undone whole: the ground detail textures are painted from each biome\u2019s own ground color again, exactly as they were before #64. The smooth vertex-color blend underneath never changed and does not change now.',
+    why: 'Adam\u2019s verdict from play, the same afternoon #64 landed: everything looked like desert \u2014 Mirewood reading as sand. The texture layer the fix removed was carrying color the world wanted; brightness-only detail over the vertex blend washed every biome toward the same pale ground. The seam #64 chased is an open question again, and it reopens only on his word \u2014 the other two options stand written in the blending notes.',
+  },
+  {
     merge: 'Merge #65',
     pr: 95,
     sha: '1a60d63',
