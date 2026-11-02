@@ -128,12 +128,17 @@ export const TENT_SHELTER_MULTIPLIER = 0.85;
 /** Standing within this of a tent center counts as tent-sheltered (DRAFT; matches HARVEST_RANGE). */
 export const TENT_SHELTER_RADIUS_M = 2.5;
 
-/** A placed house entity. */
+/** A placed house entity. rotY is the placement facing
+ *  (Adam, 2026-11-02: 'Let's have the house door face
+ *  the player') — every house builder puts its door on
+ *  the local +z face, so the record's yaw turns that
+ *  face toward whoever placed it. Absent reads as 0. */
 export interface PlacedHouse {
   id: string;
   type: HouseType;
   x: number;
   z: number;
+  rotY?: number;
 }
 
 /**
@@ -211,11 +216,11 @@ class ShelterState {
   private houses = new Map<string, PlacedHouse>();
   private counter = 0;
 
-  placeHouse(type: HouseType, x: number, z: number): PlacedHouse {
+  placeHouse(type: HouseType, x: number, z: number, rotY = 0): PlacedHouse {
     const id = `house:${type}:${++this.counter}`;
-    const house: PlacedHouse = { id, type, x, z };
+    const house: PlacedHouse = { id, type, x, z, rotY };
     this.houses.set(id, house);
-    bus.emit('shelter:placed', { id, type, x, z });
+    bus.emit('shelter:placed', { id, type, x, z, rotY });
     return house;
   }
 

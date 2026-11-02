@@ -95,6 +95,50 @@ const FOOTPRINTS: Record<string, PlacementFootprint> = {
   deadfall: { shape: 'rect', w: 0.9, d: 0.35 },
 };
 
+/** THE YAW REGISTER (2026-11-02, Adam's placement
+ *  report — the ghost did not turn with her): the kinds
+ *  whose PLACED side takes a facing today, so the ghost
+ *  may honestly rotate for them. The renderer applies
+ *  the preview's rotY only for these; every other kind's
+ *  ghost stands at 0, matching its placed form exactly.
+ *  A kind joins this register in the same landing that
+ *  teaches its placed state to carry rotY — never
+ *  before. (Fires take yaw on their placed side too,
+ *  but their outlines are round or square, where a
+ *  rotated ghost reads no different; the register
+ *  governs the GHOST, so they are not listed here.) */
+export const PLACEMENT_YAW_KINDS: ReadonlySet<string> = new Set([
+  'loom',
+  'writing-desk',
+]);
+
+/** Does this placeable's ghost rotate with her facing?
+ *  Houses take yaw too (Adam, 2026-11-02: 'Let's have
+ *  the house door face the player') — their keys are
+ *  house item ids or type names, resolved the same way
+ *  placementFootprintFor resolves them. A square outline
+ *  alone would hide the rotation, so the renderer marks
+ *  the door side on house ghosts (placementIsHouse). */
+export function placementTakesYaw(key: string): boolean {
+  if (PLACEMENT_YAW_KINDS.has(key)) return true;
+  return key in HOUSE_ITEM_KEYS || key in HOUSE_DEFS;
+}
+
+/** Is this placeable a house (any ladder type)? The
+ *  ghost draws its DOOR TICK for these: a notch on the
+ *  local +z edge — the side every house builder puts
+ *  its door/opening on, and the side that faces her at
+ *  placement (rotY = her yaw points local +z at her). */
+export function placementIsHouse(key: string): boolean {
+  return key in HOUSE_ITEM_KEYS || key in HOUSE_DEFS;
+}
+
+/** The local +z extent of a footprint (the door edge's
+ *  distance from center): rect depth half, circle r. */
+export function footprintDoorExtent(fp: PlacementFootprint): number {
+  return fp.shape === 'circle' ? fp.r : fp.d / 2;
+}
+
 /** House item ids (Systems' spellings) -> their defs. */
 const HOUSE_ITEM_KEYS: Record<string, HouseType> = {
   'primitive-lean-to': 'leanTo',

@@ -28,7 +28,7 @@ import { PlayerController } from './player';
 import { marshWeight } from './biomes';
 import { SOURCE_FOR_KIND } from './objects';
 import { buildAltarGroup, buildAnimal, buildCampArrow, buildCandle, buildCatchProp, buildCauldronGroup, buildDeskGroup, buildEdgeArrow, buildKindGeometry, buildStagedBone, buildStumpDressing, buildSunflowerHeadGeometry, buildTorch, buildUmbrella, buildWitch, ALTAR_CANDLE_X, ALTAR_CANDLE_Z, ALTAR_SLAB_TOP_Y, ALTAR_TABLE_CANDLE_X, ALTAR_TABLE_CANDLE_Z, CANDLE_FLAME_Y, DISC_GROUND_LIFT_M, DISC_RADIUS, STUMP_TOP_Y, sunflowerHeadMatrix, sunflowerHeadOrientation, TORCH_FLAME_Y, vertexLambert } from './models';
-import { placementFootprintFor, type PlacementPreview, type PlacementTint } from './placementFootprints';
+import { footprintDoorExtent, placementFootprintFor, placementIsHouse, placementTakesYaw, type PlacementPreview, type PlacementTint } from './placementFootprints';
 import {
   markerStateFor,
   markerStateKey,
@@ -639,6 +639,7 @@ export class WorldRenderer {
    */
   private previewGroup: THREE.Group | null = null;
   private previewMesh: THREE.Mesh | null = null;
+  private previewTickMesh: THREE.Mesh | null = null;
   private previewShapeKey = '';
   /**
    * Trust markers (2026-11-01): one sprite per marked
@@ -1097,6 +1098,12 @@ export class WorldRenderer {
         (this.previewMesh.material as THREE.Material).dispose();
         this.previewMesh = null;
       }
+      if (this.previewTickMesh) {
+        this.previewGroup.remove(this.previewTickMesh);
+        this.previewTickMesh.geometry.dispose();
+        (this.previewTickMesh.material as THREE.Material).dispose();
+        this.previewTickMesh = null;
+      }
       const band = 0.07;
       let geometry: THREE.BufferGeometry;
       if (fp.shape === 'circle') {
@@ -1135,9 +1142,32 @@ export class WorldRenderer {
       });
       this.previewMesh = new THREE.Mesh(geometry, material);
       this.previewGroup.add(this.previewMesh);
+      // THE DOOR TICK (Adam, 2026-11-02): a house's outline
+      // is square or round — rotation is invisible in the
+      // band alone, and the door side is the whole point
+      // of the house's yaw. A filled notch straddling the
+      // local +z edge (the side every house builder puts
+      // its door on, and the side facing her at rotY =
+      // her yaw) makes the ghost SAY which side gets the
+      // door. Same paint, same group, so it turns with
+      // the outline and tints with nothing — neutral,
+      // like the band.
+      if (placementIsHouse(preview.key)) {
+        const tickGeo = new THREE.PlaneGeometry(0.55, 0.22);
+        tickGeo.rotateX(-Math.PI / 2);
+        const tick = new THREE.Mesh(tickGeo, material.clone());
+        tick.position.set(0, 0.001, footprintDoorExtent(fp));
+        this.previewTickMesh = tick;
+        this.previewGroup.add(tick);
+      }
     }
     this.previewGroup.position.set(preview.x, PLACEMENT_PREVIEW_LIFT_M, preview.z);
-    this.previewGroup.rotation.y = preview.rotY;
+    // Yaw honesty (2026-11-02): the ghost turns with her
+    // facing ONLY where the placed side takes that facing
+    // (the footprints register) — elsewhere it stands at
+    // the placed form's own 0, never promising a rotation
+    // the station will not land with.
+    this.previewGroup.rotation.y = placementTakesYaw(preview.key) ? preview.rotY : 0;
     this.previewGroup.visible = true;
   }
 
@@ -2480,6 +2510,7 @@ export class WorldRenderer {
     for (const fire of fireState.snapshot()) {
       const fg = new THREE.Group();
       fg.position.set(fire.x, 0, fire.z);
+      fg.rotation.y = fire.rotY ?? 0;
       const lit = fire.lit && FIRE_DEFS[fire.type].flameWhenLit;
       if (fire.type === 'campfire') {
         // Visible pile of sticks (Adam 2026-10-27 — the old flat
@@ -2545,6 +2576,10 @@ export class WorldRenderer {
       const f = def.footprint;
       const hg = new THREE.Group();
       hg.position.set(house.x, 0, house.z);
+      // The door faces the placer (Adam, 2026-11-02):
+      // every house builder's door stands on local +z,
+      // and the record's yaw turns that face to her.
+      hg.rotation.y = house.rotY ?? 0;
       if (house.type === 'leanTo') {
         hg.add(houseCyl(0.07, 0.07, 2.2, 0x6b4a2f, -f / 2, 1.1, 0));
         hg.add(houseCyl(0.07, 0.07, 2.2, 0x6b4a2f, f / 2, 1.1, 0));
@@ -2667,6 +2702,7 @@ export class WorldRenderer {
       // diagonal brace, and a cloth roll at the foot.
       const lg = new THREE.Group();
       lg.position.set(loom.x, 0, loom.z);
+      lg.rotation.y = loom.rotY ?? 0;
       lg.add(cyl(0.06, 0.06, 1.6, 0x6b4a2f, -0.7, 0.8, 0));
       lg.add(cyl(0.06, 0.06, 1.6, 0x6b4a2f, 0.7, 0.8, 0));
       lg.add(box(1.6, 0.1, 0.1, 0x6b4a2f, 0, 1.6, 0));
@@ -2739,6 +2775,7 @@ export class WorldRenderer {
       // design aside, not built, and no candle is drawn.
       const dg = new THREE.Group();
       dg.position.set(desk.x, 0, desk.z);
+      dg.rotation.y = desk.rotY ?? 0;
       dg.add(buildDeskGroup());
       // The seated grimoire (2026-11-01): a closed book on
       // the top while the entity's flag stands — the flag
