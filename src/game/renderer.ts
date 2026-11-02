@@ -28,7 +28,7 @@ import { PlayerController } from './player';
 import { marshWeight } from './biomes';
 import { SOURCE_FOR_KIND } from './objects';
 import { buildAltarGroup, buildAnimal, buildCampArrow, buildCandle, buildCatchProp, buildCauldronGroup, buildDeskGroup, buildEdgeArrow, buildKindGeometry, buildStagedBone, buildStumpDressing, buildSunflowerHeadGeometry, buildTorch, buildUmbrella, buildWitch, ALTAR_CANDLE_X, ALTAR_CANDLE_Z, ALTAR_SLAB_TOP_Y, ALTAR_TABLE_CANDLE_X, ALTAR_TABLE_CANDLE_Z, CANDLE_FLAME_Y, DISC_GROUND_LIFT_M, DISC_RADIUS, STUMP_TOP_Y, sunflowerHeadMatrix, sunflowerHeadOrientation, TORCH_FLAME_Y, vertexLambert } from './models';
-import { placementFootprintFor, type PlacementPreview, type PlacementTint } from './placementFootprints';
+import { placementFootprintFor, placementTakesYaw, type PlacementPreview, type PlacementTint } from './placementFootprints';
 import {
   markerStateFor,
   markerStateKey,
@@ -1137,7 +1137,12 @@ export class WorldRenderer {
       this.previewGroup.add(this.previewMesh);
     }
     this.previewGroup.position.set(preview.x, PLACEMENT_PREVIEW_LIFT_M, preview.z);
-    this.previewGroup.rotation.y = preview.rotY;
+    // Yaw honesty (2026-11-02): the ghost turns with her
+    // facing ONLY where the placed side takes that facing
+    // (the footprints register) — elsewhere it stands at
+    // the placed form's own 0, never promising a rotation
+    // the station will not land with.
+    this.previewGroup.rotation.y = placementTakesYaw(preview.key) ? preview.rotY : 0;
     this.previewGroup.visible = true;
   }
 
@@ -2480,6 +2485,7 @@ export class WorldRenderer {
     for (const fire of fireState.snapshot()) {
       const fg = new THREE.Group();
       fg.position.set(fire.x, 0, fire.z);
+      fg.rotation.y = fire.rotY ?? 0;
       const lit = fire.lit && FIRE_DEFS[fire.type].flameWhenLit;
       if (fire.type === 'campfire') {
         // Visible pile of sticks (Adam 2026-10-27 — the old flat
@@ -2667,6 +2673,7 @@ export class WorldRenderer {
       // diagonal brace, and a cloth roll at the foot.
       const lg = new THREE.Group();
       lg.position.set(loom.x, 0, loom.z);
+      lg.rotation.y = loom.rotY ?? 0;
       lg.add(cyl(0.06, 0.06, 1.6, 0x6b4a2f, -0.7, 0.8, 0));
       lg.add(cyl(0.06, 0.06, 1.6, 0x6b4a2f, 0.7, 0.8, 0));
       lg.add(box(1.6, 0.1, 0.1, 0x6b4a2f, 0, 1.6, 0));
@@ -2739,6 +2746,7 @@ export class WorldRenderer {
       // design aside, not built, and no candle is drawn.
       const dg = new THREE.Group();
       dg.position.set(desk.x, 0, desk.z);
+      dg.rotation.y = desk.rotY ?? 0;
       dg.add(buildDeskGroup());
       // The seated grimoire (2026-11-01): a closed book on
       // the top while the entity's flag stands — the flag

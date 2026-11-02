@@ -3976,6 +3976,7 @@ export default function App() {
             type: fire.type,
             x: fire.x,
             z: fire.z,
+            rotY: fire.rotY ?? 0,
             lit: fire.lit,
             lighting: fire.lighting,
           })),
@@ -3998,6 +3999,7 @@ export default function App() {
           looms: loomState.snapshot().map((loom) => ({
             x: loom.x,
             z: loom.z,
+            rotY: loom.rotY ?? 0,
           })),
           // PILE SAVE WIRING (multi-kind, 2026-10-27): the
           // live pile set rides every save as stacks +
@@ -5076,15 +5078,19 @@ export default function App() {
       // armed thing's own footprint outline at the same
       // aimed point — the key is the placement's item id
       // (the footprint table resolves shape game-side;
-      // house type spellings resolve there too), rotY 0
-      // because nothing in the placed family takes a
-      // rotation today, tint NEUTRAL standing (no real
-      // validity check exists for these placements — a
-      // green would be a lie). A groundless gaze clears
-      // the paint with the anchor.
+      // house type spellings resolve there too). THE YAW
+      // (2026-11-02, Adam's placement report): the payload
+      // carries her view yaw — the renderer turns the
+      // ghost with it ONLY for kinds whose placed side
+      // takes a facing (the footprints yaw register), so
+      // the outline never promises a rotation the station
+      // will not land with. Tint NEUTRAL standing (no
+      // real validity check exists for these placements
+      // — a green would be a lie). A groundless gaze
+      // clears the paint with the anchor.
       rendererRef.current?.setPlacementPreview(
         aim
-          ? { key: mode.itemId, x: aim.x, z: aim.z, rotY: 0, tint: 'neutral' }
+          ? { key: mode.itemId, x: aim.x, z: aim.z, rotY: playerRef.current?.yaw ?? 0, tint: 'neutral' }
           : null,
       );
     } else {
@@ -5381,6 +5387,7 @@ export default function App() {
           (bootSaved.desks ?? []).map((desk) => ({
             x: desk.x,
             z: desk.z,
+            rotY: desk.rotY ?? 0,
             ...(typeof desk.id === 'string' && desk.id !== ''
               ? { id: desk.id }
               : {}),
@@ -5558,7 +5565,7 @@ export default function App() {
         }
         for (const loom of saved.looms) {
           try {
-            loomState.placeLoom(loom.x, loom.z);
+            loomState.placeLoom(loom.x, loom.z, loom.rotY ?? 0);
           } catch {
             // Same skip rule as fires.
           }
@@ -7637,7 +7644,7 @@ export default function App() {
       setDeskNote(outcome.reason);
       return;
     }
-    deskState.placeDesk(outcome.desk.x, outcome.desk.z);
+    deskState.placeDesk(outcome.desk.x, outcome.desk.z, playerRef.current?.yaw ?? 0);
     refreshInventory();
     saveNow();
     setDeskNote('Placed a writing desk.');
@@ -8857,7 +8864,7 @@ export default function App() {
         return;
       }
       try {
-        fireState.placeFire('campfire', target.x, target.z);
+        fireState.placeFire('campfire', target.x, target.z, playerRef.current?.yaw ?? 0);
         inventory.remove(itemId, 1);
       } catch (error) {
         setFireNote(
@@ -8963,11 +8970,11 @@ export default function App() {
     }
     try {
       if (mode.fireType) {
-        fireState.placeFire(mode.fireType, target.x, target.z);
+        fireState.placeFire(mode.fireType, target.x, target.z, playerRef.current?.yaw ?? 0);
       } else if (mode.houseType) {
         shelterState.placeHouse(mode.houseType, target.x, target.z);
       } else if (mode.loom) {
-        loomState.placeLoom(target.x, target.z);
+        loomState.placeLoom(target.x, target.z, playerRef.current?.yaw ?? 0);
       }
       inventory.remove(mode.itemId, 1);
     } catch (error) {

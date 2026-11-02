@@ -220,6 +220,9 @@ export interface SavedFire {
   type: string;
   x: number;
   z: number;
+  /** Placement facing (2026-11-02, the yaw path);
+   *  absent on pre-yaw saves, reads as 0. */
+  rotY?: number;
   /** Recorded; restore brings fires back unlit (see header). */
   lit: boolean;
   /** Lighting in progress; null when the fire is not lighting. */
@@ -250,6 +253,8 @@ export interface SavedHouse {
 export interface SavedLoom {
   x: number;
   z: number;
+  /** Placement facing (2026-11-02, the yaw path). */
+  rotY?: number;
 }
 
 /**
@@ -365,6 +370,8 @@ export interface SavedAltar {
 export interface SavedDesk {
   x: number;
   z: number;
+  /** Placement facing (2026-11-02, the yaw path). */
+  rotY?: number;
   id?: string;
   /** True when THE grimoire rests on this desk (the seat). */
   grimoire?: boolean;
@@ -658,6 +665,8 @@ export interface SaveDraft {
     type: string;
     x: number;
     z: number;
+    /** Placement facing (2026-11-02, the yaw path). */
+    rotY?: number;
     lit: boolean;
     lighting?: SavedLightingProcess | null;
   }>;
@@ -667,7 +676,7 @@ export interface SaveDraft {
     z: number;
     contents: ReadonlyArray<{ item: string; quantity: number }>;
   }>;
-  looms: ReadonlyArray<{ x: number; z: number }>;
+  looms: ReadonlyArray<{ x: number; z: number; rotY?: number }>;
   /**
    * World-state fields (Background's persistence seams,
    * a39f47f). ALL OPTIONAL so existing saveNow call sites
@@ -746,6 +755,7 @@ export interface SaveDraft {
   desks?: ReadonlyArray<{
     x: number;
     z: number;
+    rotY?: number;
     id?: string;
     grimoire?: boolean;
   }>;
@@ -1010,6 +1020,7 @@ export function serializeSave(draft: SaveDraft): SaveData {
       type: fire.type,
       x: fire.x,
       z: fire.z,
+      ...(typeof fire.rotY === 'number' && Number.isFinite(fire.rotY) ? { rotY: fire.rotY } : {}),
       lit: fire.lit,
       // Lighting in progress, as-is (null when not lighting).
       // The engine's validLighting() validates on restore.
@@ -1065,7 +1076,11 @@ export function serializeSave(draft: SaveDraft): SaveData {
       z: house.z,
       contents: normalizeStacks(house.contents),
     })),
-    looms: draft.looms.map((loom) => ({ x: loom.x, z: loom.z })),
+    looms: draft.looms.map((loom) => ({
+      x: loom.x,
+      z: loom.z,
+      ...(typeof loom.rotY === 'number' && Number.isFinite(loom.rotY) ? { rotY: loom.rotY } : {}),
+    })),
     // Traps: written AS-IS (ids + types verbatim, no filtering,
     // no normalization — trap ids/types are not inventory ids).
     // Invalid entries are restore()'s problem, not serialize's:
@@ -1127,6 +1142,7 @@ export function serializeSave(draft: SaveDraft): SaveData {
     desks: (draft.desks ?? []).map((desk) => ({
       x: desk.x,
       z: desk.z,
+      ...(typeof desk.rotY === 'number' && Number.isFinite(desk.rotY) ? { rotY: desk.rotY } : {}),
       ...(desk.id !== undefined ? { id: desk.id } : {}),
       ...(desk.grimoire === true ? { grimoire: true } : {}),
     })),
@@ -1399,6 +1415,9 @@ export function deserializeSave(value: unknown): SaveData | null {
         type: entry.type,
         x: entry.x,
         z: entry.z,
+        ...(typeof (entry as { rotY?: unknown }).rotY === 'number' && Number.isFinite((entry as { rotY: number }).rotY)
+          ? { rotY: (entry as { rotY: number }).rotY }
+          : {}),
         lit: entry.lit === true,
         lighting: isRecord(entry.lighting)
           ? (entry.lighting as unknown as SavedLightingProcess)
@@ -1429,7 +1448,14 @@ export function deserializeSave(value: unknown): SaveData | null {
     const looms: SavedLoom[] = [];
     for (const entry of value.looms) {
       if (!isPosition(entry)) return null;
-      looms.push({ x: entry.x, z: entry.z });
+      looms.push({
+        x: entry.x,
+        z: entry.z,
+        ...(typeof (entry as unknown as { rotY?: unknown }).rotY === 'number' &&
+        Number.isFinite((entry as unknown as { rotY: number }).rotY)
+          ? { rotY: (entry as unknown as { rotY: number }).rotY }
+          : {}),
+      });
     }
     // Piles are optional on read: an old v1 save without them
     // loads with piles: []. When present, a malformed entry
@@ -1680,6 +1706,9 @@ export function deserializeSave(value: unknown): SaveData | null {
         desks.push({
           x: entry.x as number,
           z: entry.z as number,
+          ...(typeof entry.rotY === 'number' && Number.isFinite(entry.rotY)
+            ? { rotY: entry.rotY as number }
+            : {}),
           ...(typeof entry.id === 'string'
             ? { id: entry.id as string }
             : {}),

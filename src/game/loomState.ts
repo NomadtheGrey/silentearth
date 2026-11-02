@@ -40,22 +40,26 @@
 
 import { bus } from './events';
 
-/** A placed loom entity. */
+/** A placed loom entity. rotY is the placement facing
+ *  (2026-11-02 — Adam's placement report: the ghost
+ *  turns with her, and the loom lands as the ghost
+ *  stood). Absent on pre-yaw saves; reads as 0. */
 export interface PlacedLoom {
   id: string;
   x: number;
   z: number;
+  rotY?: number;
 }
 
 class LoomState {
   private looms = new Map<string, PlacedLoom>();
   private counter = 0;
 
-  placeLoom(x: number, z: number): PlacedLoom {
+  placeLoom(x: number, z: number, rotY = 0): PlacedLoom {
     const id = `loom:${++this.counter}`;
-    const loom: PlacedLoom = { id, x, z };
+    const loom: PlacedLoom = { id, x, z, rotY };
     this.looms.set(id, loom);
-    bus.emit('loom:placed', { id, x, z });
+    bus.emit('loom:placed', { id, x, z, rotY });
     return loom;
   }
 

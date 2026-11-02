@@ -95,6 +95,28 @@ const FOOTPRINTS: Record<string, PlacementFootprint> = {
   deadfall: { shape: 'rect', w: 0.9, d: 0.35 },
 };
 
+/** THE YAW REGISTER (2026-11-02, Adam's placement
+ *  report — the ghost did not turn with her): the kinds
+ *  whose PLACED side takes a facing today, so the ghost
+ *  may honestly rotate for them. The renderer applies
+ *  the preview's rotY only for these; every other kind's
+ *  ghost stands at 0, matching its placed form exactly.
+ *  A kind joins this register in the same landing that
+ *  teaches its placed state to carry rotY — never
+ *  before. (Fires take yaw on their placed side too,
+ *  but their outlines are round or square, where a
+ *  rotated ghost reads no different; the register
+ *  governs the GHOST, so they are not listed here.) */
+export const PLACEMENT_YAW_KINDS: ReadonlySet<string> = new Set([
+  'loom',
+  'writing-desk',
+]);
+
+/** Does this placeable's ghost rotate with her facing? */
+export function placementTakesYaw(key: string): boolean {
+  return PLACEMENT_YAW_KINDS.has(key);
+}
+
 /** House item ids (Systems' spellings) -> their defs. */
 const HOUSE_ITEM_KEYS: Record<string, HouseType> = {
   'primitive-lean-to': 'leanTo',

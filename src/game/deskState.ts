@@ -63,6 +63,9 @@ export interface PlacedDesk {
   id: string;
   x: number;
   z: number;
+  /** Placement facing (2026-11-02, the yaw path — see
+   *  PlacedLoom.rotY). Absent reads as 0. */
+  rotY?: number;
   grimoire?: boolean;
 }
 
@@ -70,11 +73,11 @@ class DeskState {
   private desks = new Map<string, PlacedDesk>();
   private counter = 0;
 
-  placeDesk(x: number, z: number): PlacedDesk {
+  placeDesk(x: number, z: number, rotY = 0): PlacedDesk {
     const id = `desk:${++this.counter}`;
-    const desk: PlacedDesk = { id, x, z };
+    const desk: PlacedDesk = { id, x, z, rotY };
     this.desks.set(id, desk);
-    bus.emit('desk:placed', { id, x, z });
+    bus.emit('desk:placed', { id, x, z, rotY });
     return desk;
   }
 
@@ -116,7 +119,7 @@ class DeskState {
     return [...this.desks.values()].map((desk) => ({ ...desk }));
   }
 
-  restore(desks: ReadonlyArray<{ id?: string; x: number; z: number; grimoire?: boolean }>): void {
+  restore(desks: ReadonlyArray<{ id?: string; x: number; z: number; rotY?: number; grimoire?: boolean }>): void {
     if (!Array.isArray(desks)) return;
     this.desks.clear();
     // Ceiling first: the counter must clear every provided
@@ -139,6 +142,7 @@ class DeskState {
           ? desk.id
           : `desk:${++this.counter}`;
       const restored: PlacedDesk = { id, x: desk.x, z: desk.z };
+      if (Number.isFinite(desk.rotY)) restored.rotY = desk.rotY;
       if (desk.grimoire === true) restored.grimoire = true;
       this.desks.set(id, restored);
     }
