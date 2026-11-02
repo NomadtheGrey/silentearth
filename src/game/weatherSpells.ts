@@ -25,6 +25,19 @@
  *   rides: a wet spell rains harder in the bog); inclement
  *   → max(field, INCLEMENT_FLOOR). Spell edges cross-fade
  *   over EDGE_DAYS so nothing pops.
+ * - THE SEEDED WOBBLE (Adam, 2026-11-02): inside a wet
+ *   or inclement spell the intensity BREATHES — a slow
+ *   seeded sine (period WOBBLE_PERIOD_DAYS, depth
+ *   WOBBLE_DEPTH of the standing intensity) phased by
+ *   the spell's own index, so the same spell wobbles
+ *   identically on every device and a mid-spell reload
+ *   is seamless. Dry spells never wobble (their target
+ *   is 0, and 0 modulated is 0). THE FLOOR IS PRE-
+ *   WOBBLE (lane's call, named for the pin pass): the
+ *   floor guarantees a spell's standing character; the
+ *   wobble is texture over it, so an inclement spell
+ *   may LULL below the floor (to floor × (1 − depth))
+ *   but its standing strength always reaches it.
  * - FIRST WEEK PLEASANT (Adam, 2026-10-28): while the
  *   WORLD's day count is under FIRST_WEEK_DAYS, inclement
  *   cannot roll (a spell is judged by the day it BEGINS);
@@ -104,6 +117,10 @@ export const EDGE_DAYS = 0.05;
 export const INCLEMENT_HARSHNESS_LIFT = 0.15;
 /** Intensity above which rain reads as raining (the render's gate). */
 export const RAIN_VISIBLE_INTENSITY = 0.05;
+/** The wobble's period in days — 0.25 = six game-hours (DRAFT). */
+export const WOBBLE_PERIOD_DAYS = 0.25;
+/** The wobble's depth: a lull falls to (1 − depth) of standing (DRAFT). */
+export const WOBBLE_DEPTH = 0.45;
 
 /** Spell length ranges in days, by kind (ALL DRAFT). */
 export const SPELL_LENGTH_DAYS: Record<WeatherSpellKind, [number, number]> = {
@@ -228,6 +245,15 @@ export function stepWeather(ctx: { gen: WorldGen; playerX: number; playerZ: numb
   let target = 0;
   if (cur.kind === 'wet') target = field.rain;
   else if (cur.kind === 'inclement') target = Math.max(field.rain, INCLEMENT_FLOOR);
+  if (cur.kind !== 'dry' && target > 0) {
+    // The seeded wobble: showers and lulls within the
+    // spell, phased by the spell's own index (determin-
+    // istic on every device; seamless across a reload —
+    // the record and the sky clock are both persisted).
+    const phase = roll01(worldSeed, cur.index, 'wobble') * Math.PI * 2;
+    const w = 0.5 + 0.5 * Math.sin((ctx.dayFloat / WOBBLE_PERIOD_DAYS) * Math.PI * 2 + phase);
+    target *= 1 - WOBBLE_DEPTH * (1 - w);
+  }
   let intensity = target;
   const sinceEdge = ctx.dayFloat - blendDay;
   if (sinceEdge >= 0 && sinceEdge < EDGE_DAYS) {
