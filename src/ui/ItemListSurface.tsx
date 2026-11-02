@@ -181,6 +181,14 @@ export interface ItemListSurfaceProps {
   comfortable?: boolean;
   /** Look for the surface. Default "mire". */
   theme?: UiThemeName;
+  /**
+   * ITEM INFO CARD (2026-11-01): when passed, every row
+   * carries a small info affordance (ⓘ) ahead of its
+   * verbs; pressing it asks the caller to open the
+   * item's detail card. The surface renders no facts —
+   * the card is the caller's. Omitted = no affordance.
+   */
+  onInfoItem?: (item: InventoryItem) => void;
 }
 
 export function ItemListSurface({
@@ -200,6 +208,7 @@ export function ItemListSurface({
   onVisibleVerbs,
   comfortable = false,
   theme = 'mire',
+  onInfoItem,
 }: ItemListSurfaceProps) {
   const t = UI_THEMES[theme];
   const actionBtn = comfortable
@@ -359,6 +368,16 @@ export function ItemListSurface({
           </span>
         ) : null}
         <span className="flex flex-wrap gap-1 @xl:col-start-3 @xl:row-start-1">
+          {onInfoItem ? (
+            <button
+              type="button"
+              onClick={() => onInfoItem(item)}
+              aria-label={`About ${item.name}`}
+              className={glyphBtn}
+            >
+              <span aria-hidden="true">ⓘ</span>
+            </button>
+          ) : null}
           {verbsFor(item).map((verb) => {
             const hint = nextHint();
             if (verb.glyph) {

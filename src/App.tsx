@@ -1873,6 +1873,11 @@ import {
   turnOn,
 } from './systems/cloudSaves';
 import {
+  itemFactsFor,
+  knowledgeSnapshot,
+  restoreKnowledge,
+} from './systems/knowledge';
+import {
   type CloudParkedSave,
   type CloudSaveRow,
 } from './ui/CloudSavePanel';
@@ -3864,6 +3869,12 @@ export default function App() {
           // serialize writes them verbatim, restore
           // validates on load). Knowledge survives refresh.
           nameSight: nameSightRef.current.snapshot(),
+          // KNOWN-FACTS SAVE WIRING (the info card's
+          // amendment, 2026-11-01): the register rides
+          // every save on the nameSight pattern, or the
+          // card would read true in-session and empty
+          // after a reload.
+          knowledge: knowledgeSnapshot(),
           // WORLD-STATE SAVE WIRING: harvest state, sky
           // cycle, and facing ride every save (all three
           // draft fields optional — serialize defaults
@@ -3975,6 +3986,14 @@ export default function App() {
   // offer itself is a question, never an auto-load.
   const [cloudWakeOffer, setCloudWakeOffer] =
     useState<ShelfFresherFacts | null>(null);
+  // ITEM INFO CARD (Adam's pin; claim 4ac343ed +
+  // amendment 089f148d): the item whose detail card
+  // stands, opened from any row of the unified surface
+  // (pack / hut storage / piles / crafting). The shell
+  // composes the card's facts at render from Systems'
+  // register — the surface components render none.
+  const [itemInfoId, setItemInfoId] = useState<string | null>(null);
+  const openItemInfo = (id: string) => setItemInfoId(id);
   const cloudWakeOfferLatchedRef = useRef<string | null>(null);
   const [cloudPendingRestore, setCloudPendingRestore] =
     useState<SaveData | null>(null);
@@ -5208,6 +5227,21 @@ export default function App() {
         // boot-effect run cannot re-restore over gameplay
         // looks (guarded by the same check as traps).
         nameSightRef.current.restore(bootSaved.nameSight ?? []);
+        // KNOWN-FACTS BOOT WIRING: the register restores
+        // beside nameSight (boot-only; clears + rebuilds).
+        // The save's shape is readonly; the register's
+        // snapshot wants plain arrays — spread, as
+        // serializeSave itself does.
+        restoreKnowledge(
+          bootSaved.knowledge
+            ? {
+                metItems: [...(bootSaved.knowledge.metItems ?? [])],
+                knownUseRecipes: [
+                  ...(bootSaved.knowledge.knownUseRecipes ?? []),
+                ],
+              }
+            : undefined,
+        );
       }
     }
     const renderer = new WorldRenderer(container, gen, player);
@@ -11055,7 +11089,9 @@ export default function App() {
       cloudPendingRestore !== null ||
       cloudPendingNewGame !== null ||
       cloudConflictPrompt !== null ||
-      cloudWakeOffer !== null;
+      cloudWakeOffer !== null ||
+      itemInfoId !== null ||
+      itemInfoId !== null;
     if (dialogUp) return;
     const off = bus.on('player:moved', ({ x, z }) => {
       const p = { x, z };
@@ -12407,6 +12443,7 @@ export default function App() {
     cloudPendingNewGame,
     cloudConflictPrompt,
     cloudWakeOffer,
+    itemInfoId,
     paused,
   ]);
 
@@ -13168,6 +13205,10 @@ export default function App() {
         : check.ownership === 'available'
           ? undefined
           : CRAFT_OWNERSHIP_LABELS[check.ownership],
+      // ITEM INFO CARD: the row's affordance opens the
+      // card for the item this recipe MAKES.
+      outputItemId: recipe.output.item,
+      outputItemName: displayNameFor(recipe.output.item),
       availabilityNote,
       icon:
         recipe.output.item === UMBRELLA_ITEM_ID ? (
@@ -14744,6 +14785,7 @@ export default function App() {
             const pileModel = pileModalModel(selectedPile);
             return (
               <PileInventoryModal theme={lookThemes.world}
+                onInfoItem={(item) => openItemInfo(item.id)}
                 title={
                   selectedPile.stacks.length === 1
                     ? `${displayNameFor(selectedPile.stacks[0].item)} × ${selectedPile.stacks[0].quantity}`
@@ -14783,6 +14825,7 @@ export default function App() {
         ) : null}
         {inventoryOpen ? (
           <InventoryPanel theme={lookThemes.world}
+            onInfoItem={(item) => openItemInfo(item.id)}
             items={inventoryItems.filter(
               (item) => !wornGear.ids.has(normalizeItemId(item.id as ItemId)),
             )}
@@ -14871,6 +14914,7 @@ export default function App() {
               </div>
               {craftDoor === 'craft' ? (
                 <CraftingMenu theme={lookThemes.dialog}
+                  onInfoItem={openItemInfo}
                   recipes={orderedCraftingRecipes}
                   sections={craftingSections}
                   stationNote={stationNote}
@@ -15013,6 +15057,7 @@ export default function App() {
             </div>
           ) : (
             <CraftingMenu theme={lookThemes.dialog}
+              onInfoItem={openItemInfo}
               recipes={orderedCraftingRecipes}
               sections={craftingSections}
               stationNote={stationNote}
@@ -15648,6 +15693,73 @@ export default function App() {
                 Not now
               </button>
             </div>
+          </div>
+        ) : null}
+      </Popup>
+
+      {/* ITEM INFO CARD: opened from any row of the
+        unified surface. Every fact is composed here,
+        shell-side — name and catalogue id never gate;
+        the description is the row note's own rule
+        (itemNoteFor); the known-facts sections read
+        Systems' register and show the hole plainly
+        where nothing is known yet. Copy DRAFT. */}
+      <Popup theme={lookThemes.dialog}
+        open={itemInfoId !== null}
+        title={
+          itemInfoId !== null
+            ? displayNameFor(normalizeItemId(itemInfoId))
+            : ''
+        }
+        onClose={() => setItemInfoId(null)}
+        comfortable={isTouch}
+      >
+        {itemInfoId !== null ? (
+          <div className="flex flex-col gap-3 p-3 text-sm">
+            <p className="text-xs opacity-80">
+              Catalogue: {normalizeItemId(itemInfoId)}
+            </p>
+            {itemNoteFor(itemInfoId, charmStateRef.current) ? (
+              <p>{itemNoteFor(itemInfoId, charmStateRef.current)}</p>
+            ) : null}
+            <p>
+              Weight: {formatLb(weightOf(normalizeItemId(itemInfoId)))}{' '}
+              lb each
+              {inventory.count(itemInfoId as ItemId) > 0
+                ? ` — you carry ${inventory.count(itemInfoId as ItemId)}, ${formatLb(weightOf(normalizeItemId(itemInfoId)) * inventory.count(itemInfoId as ItemId))} lb in all.`
+                : '.'}
+            </p>
+            {(() => {
+              const facts = itemFactsFor(normalizeItemId(itemInfoId));
+              return (
+                <>
+                  <div>
+                    <p className="font-medium">Where it comes from</p>
+                    {facts.sources.length > 0 ? (
+                      <ul className="list-disc pl-5">
+                        {facts.sources.map((line) => (
+                          <li key={line}>{line}</li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="opacity-80">Not yet known.</p>
+                    )}
+                  </div>
+                  <div>
+                    <p className="font-medium">What it's for</p>
+                    {facts.uses.length > 0 ? (
+                      <ul className="list-disc pl-5">
+                        {facts.uses.map((line) => (
+                          <li key={line}>{line}</li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="opacity-80">Not yet known.</p>
+                    )}
+                  </div>
+                </>
+              );
+            })()}
           </div>
         ) : null}
       </Popup>
