@@ -169,6 +169,24 @@ export class ColdWetState {
     return { cold: this.cold, wet: this.wet };
   }
 
+  /**
+   * The witness's poll (W3, UI): both gauges as
+   * { value, stage } in the hunger meter's idiom, read
+   * on the shell's vitals cadence. A stage CHANGE is
+   * observable as the stage string differing between
+   * polls — the shell edge-detects from this alone and
+   * never re-derives a threshold.
+   */
+  vitals(): {
+    cold: { value: number; stage: ColdStage };
+    wet: { value: number; stage: WetStage };
+  } {
+    return {
+      cold: { value: this.cold, stage: this.coldStage() },
+      wet: { value: this.wet, stage: this.wetStage() },
+    };
+  }
+
   /** Advance both gauges by dtSeconds under one facts record. */
   tick(dtSeconds: number, facts: ColdWetFacts): void {
     if (!Number.isFinite(dtSeconds) || dtSeconds <= 0) return;
