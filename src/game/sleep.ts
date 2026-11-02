@@ -69,6 +69,7 @@ import { shelterAt, shelterState } from './shelter';
 import { cycleSplit } from './sky';
 import { trapState } from './trapState';
 import { SEASON_START_MONTH } from './weather';
+import { currentWeatherFacts } from './weatherSpells';
 
 /** Why a sleep press granted nothing. Fail-loud, one reason. */
 export type SleepFailedReason = 'not-night' | 'no-sky';
@@ -84,7 +85,8 @@ export interface SleepListenerDeps {
    * renderer.restoreSky({ cycleT: 0 }).
    */
   restoreDawn: () => void;
-  /** Month for the day/night split. Defaults to SEASON_START_MONTH. */
+  /** Month for the day/night split. Defaults to the LIVE
+   *  month (W1 — the spell machine's), else the season start. */
   month?: number;
 }
 
@@ -99,8 +101,12 @@ export interface SleepListenerDeps {
  * injected restoreDawn).
  */
 export function createSleepListener(deps: SleepListenerDeps): () => void {
-  const month = deps.month ?? SEASON_START_MONTH;
   return bus.on('sleep:requested', ({ x, z }) => {
+    // Read per request, not at creation: since W1 the
+    // month drifts with the world's days, and a frozen
+    // September split would judge day/night by a season
+    // the sky no longer shows.
+    const month = deps.month ?? currentWeatherFacts()?.month ?? SEASON_START_MONTH;
     const cycleT = deps.getCycleT();
     if (cycleT === null || !Number.isFinite(cycleT)) {
       bus.emit('sleep:failed', { x, z, reason: 'no-sky' });

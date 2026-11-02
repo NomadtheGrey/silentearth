@@ -48,6 +48,7 @@ import {
 } from './companionRuntime';
 import { catActor, catGlowOn, clearCat, ensureCat, installCatPreyAccess, stepCat } from './catRuntime';
 import { clearGuide, guideActor, guideVisible, seatYFor, stageGuide, stepGuide } from './guideRuntime';
+import { currentWeatherFacts, seatWeatherState, stepWeather, weatherStateSnapshot, RAIN_VISIBLE_INTENSITY, type WeatherSpellRecord } from './weatherSpells';
 import { exodusBats, stepExodus } from './exodusRuntime';
 import { crowGlowIntensity, CROW_GLOW_EMISSIVE } from './crow';
 import type { CrowTier } from './crow';
@@ -453,6 +454,16 @@ export const CAMP_ARROW_BOB = 0.5;
 export const CAMP_EDGE_DEPTH = 8;
 /** Base exponential fog density (the woods' murk, lane-decided). */
 export const FOG_DENSITY = 0.008;
+/** Rain fog lift at full intensity (W1, DRAFT): standing
+ *  rain thickens the air by this factor over the base. */
+export const RAIN_FOG_LIFT = 0.6;
+/** Precipitation rig sizes (W1, DRAFT presentation). */
+export const RAIN_STREAK_COUNT = 650;
+export const RAIN_SPLASH_COUNT = 220;
+/** Half-extent of the rain volume around her, metres. */
+export const RAIN_BOX_M = 15;
+/** Height of the rain volume, metres. */
+export const RAIN_HEIGHT_M = 18;
 /** Cave fog (dimensions, 2026-10-30): thick and near, so
  *  the dark closes in a few chambers out. */
 export const CAVE_FOG_DENSITY = 0.05;
@@ -671,6 +682,11 @@ export class WorldRenderer {
   private coverMemo = new Map<string, { x: number; z: number }[]>();
   /** The guide's layer (a single crow mesh) + its tree-point memo. */
   private guideGroup: THREE.Group | null = null;
+  /** Precipitation rig (W1): built lazily on first rain. */
+  private rainGroup: THREE.Group | null = null;
+  private rainStreaks: THREE.Points | null = null;
+  private rainSplashes: THREE.Points | null = null;
+  private rainSplashLife: Float32Array | null = null;
   private treeMemo = new Map<string, { x: number; z: number; crownY: number }[]>();
   /** The bat exodus layer: pooled bat meshes keyed by bat id. */
   private exodusGroup: THREE.Group | null = null;
@@ -1271,17 +1287,25 @@ export class WorldRenderer {
    * 10-31): the first and last ~2 game-hours of the day
    * arc, read off the sky rig's own clock. The cycle
    * starts at dawn; dusk ends where the day fraction
-   * ends (September's fraction — the calendar's month
-   * drift is not built, and September is the world's
-   * standing start). Width DRAFT.
+   * ends — read at the LIVE month since W1 (the season
+   * drifts now; September is only the start). Width
+   * DRAFT.
    */
+  /** The live month (W1): the spell machine's derived
+   *  month once it has stepped, else the season start.
+   *  Every season-shaped reading (day split, sun path)
+   *  reads this, so the whole world ages together. */
+  private liveMonth(): number {
+    return currentWeatherFacts()?.month ?? SEASON_START_MONTH;
+  }
+
   private guideWindowOpen(): boolean {
     const sky = this.sky;
     if (!sky) return false;
     const t = sky.cycleT;
     const w = 2 / 24;
     if (t <= w) return true;
-    const f = dayFraction(SEASON_START_MONTH);
+    const f = dayFraction(this.liveMonth());
     return t >= f - w && t <= f;
   }
 
@@ -1291,7 +1315,7 @@ export class WorldRenderer {
     if (!sky) return false;
     const t = sky.cycleT;
     const w = 2 / 24;
-    const f = dayFraction(SEASON_START_MONTH);
+    const f = dayFraction(this.liveMonth());
     return t >= f - w && t <= f;
   }
 
@@ -1542,6 +1566,158 @@ export class WorldRenderer {
     this.sky?.restore(snap);
   }
 
+  /**
+   * Weather save seam (W1) — the sky seam's twin: the
+   * spell record is HOSTED state (Systems seats the save
+   * field in their W2 pass). weatherRecord() returns the
+   * record to persist; restoreWeather(rec) re-seats it
+   * after setWorldGen has seated a fresh opening spell
+   * (a null/undefined record leaves the fresh seat — old
+   * saves carry no weather field).
+   */
+  weatherRecord(): WeatherSpellRecord | null {
+    return weatherStateSnapshot();
+  }
+
+  restoreWeather(rec: WeatherSpellRecord | null | undefined): void {
+    if (!rec) return;
+    seatWeatherState(rec, String(this.gen.seed));
+  }
+
+  /**
+   * The precipitation rig (W1's render half): rain you
+   * can SEE — a volume of falling streaks around her,
+   * recycled as they fall, plus splash flecks where the
+   * rain strikes the ground (the ground's answer in v1;
+   * a true wet-earth terrain tint waits on the biome
+   * reconciliation's material census, as claimed). The
+   * volume follows her; count and opacity ride the
+   * spell's intensity, so a light wet spell drizzles and
+   * an inclement one pours. Surface only — no rain falls
+   * in caves or upstairs. Scatter here is VISUAL
+   * randomness (Math.random), never worldgen.
+   */
+  private buildRainRig(): void {
+    const streakCanvas = document.createElement('canvas');
+    streakCanvas.width = 16;
+    streakCanvas.height = 64;
+    const sctx = streakCanvas.getContext('2d')!;
+    const grad = sctx.createLinearGradient(0, 0, 0, 64);
+    grad.addColorStop(0, 'rgba(255,255,255,0)');
+    grad.addColorStop(0.35, 'rgba(255,255,255,0.85)');
+    grad.addColorStop(1, 'rgba(255,255,255,0)');
+    sctx.fillStyle = grad;
+    sctx.fillRect(6, 0, 4, 64);
+    const streakTex = new THREE.CanvasTexture(streakCanvas);
+    const splashCanvas = document.createElement('canvas');
+    splashCanvas.width = 32;
+    splashCanvas.height = 32;
+    const pctx = splashCanvas.getContext('2d')!;
+    pctx.strokeStyle = 'rgba(255,255,255,0.9)';
+    pctx.lineWidth = 3;
+    pctx.beginPath();
+    pctx.arc(16, 16, 10, 0, Math.PI * 2);
+    pctx.stroke();
+    pctx.fillStyle = 'rgba(255,255,255,0.9)';
+    pctx.beginPath();
+    pctx.arc(16, 16, 3, 0, Math.PI * 2);
+    pctx.fill();
+    const splashTex = new THREE.CanvasTexture(splashCanvas);
+
+    const group = new THREE.Group();
+    const streakPos = new Float32Array(RAIN_STREAK_COUNT * 3);
+    for (let i = 0; i < RAIN_STREAK_COUNT; i++) {
+      streakPos[i * 3] = (Math.random() * 2 - 1) * RAIN_BOX_M;
+      streakPos[i * 3 + 1] = Math.random() * RAIN_HEIGHT_M;
+      streakPos[i * 3 + 2] = (Math.random() * 2 - 1) * RAIN_BOX_M;
+    }
+    const streakGeo = new THREE.BufferGeometry();
+    streakGeo.setAttribute('position', new THREE.BufferAttribute(streakPos, 3));
+    const streakMat = new THREE.PointsMaterial({
+      size: 0.6,
+      map: streakTex,
+      transparent: true,
+      opacity: 0,
+      color: 0xb9c9d8,
+      depthWrite: false,
+      sizeAttenuation: true,
+    });
+    this.rainStreaks = new THREE.Points(streakGeo, streakMat);
+    group.add(this.rainStreaks);
+
+    const splashPos = new Float32Array(RAIN_SPLASH_COUNT * 3);
+    this.rainSplashLife = new Float32Array(RAIN_SPLASH_COUNT);
+    for (let i = 0; i < RAIN_SPLASH_COUNT; i++) {
+      splashPos[i * 3] = (Math.random() * 2 - 1) * RAIN_BOX_M;
+      splashPos[i * 3 + 1] = 0.05;
+      splashPos[i * 3 + 2] = (Math.random() * 2 - 1) * RAIN_BOX_M;
+      this.rainSplashLife[i] = Math.random() * 0.35;
+    }
+    const splashGeo = new THREE.BufferGeometry();
+    splashGeo.setAttribute('position', new THREE.BufferAttribute(splashPos, 3));
+    const splashMat = new THREE.PointsMaterial({
+      size: 0.28,
+      map: splashTex,
+      transparent: true,
+      opacity: 0,
+      color: 0xcfe0ee,
+      depthWrite: false,
+      sizeAttenuation: true,
+    });
+    this.rainSplashes = new THREE.Points(splashGeo, splashMat);
+    group.add(this.rainSplashes);
+
+    group.visible = false;
+    this.rainGroup = group;
+    this.scene.add(group);
+  }
+
+  /** Per-frame precipitation: gate, follow, fall, splash. */
+  private updateRain(dt: number, intensity: number, wind: number): void {
+    const raining = intensity > RAIN_VISIBLE_INTENSITY && !this.gen.dimensionKey;
+    if (!raining) {
+      if (this.rainGroup) this.rainGroup.visible = false;
+      return;
+    }
+    if (!this.rainGroup) this.buildRainRig();
+    const group = this.rainGroup!;
+    group.visible = true;
+    group.position.set(this.player.x, 0, this.player.z);
+
+    const streaks = this.rainStreaks!;
+    const sp = streaks.geometry.getAttribute('position') as THREE.BufferAttribute;
+    const fall = (9 + 7 * intensity) * dt;
+    const drift = (1 + wind * 4) * dt;
+    const arr = sp.array as Float32Array;
+    for (let i = 0; i < RAIN_STREAK_COUNT; i++) {
+      let y = arr[i * 3 + 1] - fall * (0.8 + ((i * 37) % 10) / 25);
+      if (y < 0) y += RAIN_HEIGHT_M;
+      arr[i * 3 + 1] = y;
+      let x = arr[i * 3] + drift;
+      if (x > RAIN_BOX_M) x -= RAIN_BOX_M * 2;
+      arr[i * 3] = x;
+    }
+    sp.needsUpdate = true;
+    const streakMat = streaks.material as THREE.PointsMaterial;
+    streakMat.opacity = 0.18 + 0.5 * intensity;
+    streaks.geometry.setDrawRange(0, Math.floor(RAIN_STREAK_COUNT * (0.25 + 0.75 * intensity)));
+
+    const splashes = this.rainSplashes!;
+    const pp = splashes.geometry.getAttribute('position') as THREE.BufferAttribute;
+    const parr = pp.array as Float32Array;
+    const life = this.rainSplashLife!;
+    for (let i = 0; i < RAIN_SPLASH_COUNT; i++) {
+      life[i] -= dt * (1.2 + intensity);
+      if (life[i] <= 0) {
+        parr[i * 3] = (Math.random() * 2 - 1) * RAIN_BOX_M;
+        parr[i * 3 + 2] = (Math.random() * 2 - 1) * RAIN_BOX_M;
+        life[i] = 0.2 + Math.random() * 0.3;
+      }
+    }
+    pp.needsUpdate = true;
+    (splashes.material as THREE.PointsMaterial).opacity = 0.55 * intensity;
+  }
+
   /** Ground detail texture for a chunk: the dominant biome's procedural
    *  texture, or the marsh texture when marsh ground character dominates
    *  the chunk center. The vertex-color blend underneath still carries
@@ -1630,6 +1806,12 @@ export class WorldRenderer {
     // (disposed is already true there) — dispose() removes the
     // rig itself below instead of rebuilding it.
     if (!this.disposed) this.sky?.setSeed(String(gen.seed));
+    // Weather spells (W1): a new world seats the machine
+    // fresh — its opening spell is a rolled dry spell
+    // (the pleasant week starts fair). A save restore
+    // re-seats the persisted record via restoreWeather
+    // after install, as with the sky.
+    seatWeatherState(null, String(gen.seed));
     this.proximity.setGen(this.gen);
     this.disposeGroundTextures();
     for (const [key, loaded] of this.chunks) {
@@ -2028,7 +2210,7 @@ export class WorldRenderer {
       if (loaded.sunflowerHeads) { any = true; break; }
     }
     if (!any) return;
-    const orientation = sunflowerHeadOrientation(this.sky?.cycleT ?? 0, SEASON_START_MONTH);
+    const orientation = sunflowerHeadOrientation(this.sky?.cycleT ?? 0, this.liveMonth());
     const now = Date.now();
     const m = new THREE.Matrix4();
     for (const loaded of this.chunks.values()) {
@@ -3502,15 +3684,25 @@ export class WorldRenderer {
       this.camera.lookAt(this.player.x, this.player.yOffset, this.player.z);
     }
 
-    // Sky: day/night driver + sun/moon/stars/clouds + lights.
-    // Month stays the season-start input (no calendar yet — see
-    // sky.ts); weather is the seasonal query at her position.
+    // Weather spells (W1): the machine steps on the sky
+    // rig's OWN clock (daysElapsed + cycleT — no second
+    // clock), and the sky + the weather query read the
+    // LIVE month the machine derives, so the season
+    // finally advances and fronts move. (Before W1 the
+    // month was the season-start constant everywhere.)
+    const dayFloat = this.sky ? this.sky.daysElapsed + this.sky.cycleT : 0;
+    const wf = stepWeather({ gen: this.gen, playerX: this.player.x, playerZ: this.player.z, dayFloat });
+    // Sky: day/night driver + sun/moon/stars/clouds + lights;
+    // weather is the seasonal query at her position.
     this.sky?.update(dt, {
-      month: SEASON_START_MONTH,
-      weather: seasonalWeatherAt(this.gen, this.player.x, this.player.z, SEASON_START_MONTH),
+      month: wf.month,
+      weather: seasonalWeatherAt(this.gen, this.player.x, this.player.z, wf.month),
+      rain: wf.rainIntensity,
       playerX: this.player.x,
       playerZ: this.player.z,
     });
+    // Precipitation (W1): the spell's rain, rendered.
+    this.updateRain(dt, wf.rainIntensity, wf.wind);
 
     // Bat wing bone — night way-finding (tier-1 charm,
     // DRAFT factor): fog thins at night while carried +
@@ -3529,9 +3721,12 @@ export class WorldRenderer {
           : CAVE_FOG_DENSITY;
       } else {
         const night = this.sky?.nightFactor ?? 0;
+        // Standing rain thickens the air (W1, DRAFT lift),
+        // under the bat's thinning as before.
+        const base = FOG_DENSITY * (1 + RAIN_FOG_LIFT * wf.rainIntensity);
         fog.density = this.batNightWayfinding
-          ? FOG_DENSITY * (1 - (1 - BAT_FOG_FACTOR) * night)
-          : FOG_DENSITY;
+          ? base * (1 - (1 - BAT_FOG_FACTOR) * night)
+          : base;
       }
     }
 

@@ -1885,7 +1885,20 @@ import {
   clothingRemaining,
   stormApproaching,
   SEASON_START_MONTH,
+  DAY_NIGHT_CYCLE_MINUTES,
 } from './game/weather';
+import {
+  currentWeatherFacts,
+} from './game/weatherSpells';
+import {
+  ColdWetState,
+  type ColdWetFacts,
+} from './systems/cold-wet';
+import {
+  WeatherWitness,
+  type ColdStageKey,
+  type WetStageKey,
+} from './ui/WeatherWitness';
 import {
   ownedStage,
   ownedTier,
@@ -2647,6 +2660,36 @@ export default function App() {
   // with the meter.
   const [hungerValue, setHungerValue] = useState<number>(hunger.value());
 
+  // The shell owns the one cold/wet meter pair, like the
+  // one hunger meter (W2/W3 of the weather build, Systems'
+  // ColdWetState; DEV's composition settlement 2026-11-02):
+  // built here from the save's gauges, ticked on the 1 s
+  // clock below with facts the shell composes, seated in
+  // every save. The witness reads this state; nothing else
+  // keeps a cold or wet value anywhere.
+  const coldWetRef = useRef<ColdWetState | null>(null);
+  if (coldWetRef.current === null) {
+    coldWetRef.current = new ColdWetState(bootSave?.coldWet);
+  }
+  const coldWet = coldWetRef.current;
+  const [coldWetUi, setColdWetUi] = useState<{
+    cold: { value: number; stage: ColdStageKey };
+    wet: { value: number; stage: WetStageKey };
+  }>(() => coldWet.vitals());
+  // The LocationChip's reserved second line (date +
+  // weather word), composed on the same 1 s cadence from
+  // W1's facts; null until the first facts land, so the
+  // chip renders no second line before the world steps.
+  const [chipLine, setChipLine] = useState<string | null>(null);
+  // Edge memory for the witness's feed lines: the stages
+  // and rain state the last tick saw. Null = unseated;
+  // the first tick seats them silently.
+  const coldWetEdgesRef = useRef<{
+    cold: ColdStageKey;
+    wet: WetStageKey;
+    raining: boolean;
+  } | null>(null);
+
   // The shell owns the one wardrobe, like the one inventory and
   // the one hunger meter. Wear/remove go through it; capacity
   // follows via inventory.setWorn (see the handlers below).
@@ -2672,6 +2715,158 @@ export default function App() {
   const [wornGarments, setWornGarments] = useState<WornGarment[]>(() =>
     wardrobe.wornGarments(),
   );
+
+  // THE WEATHER COMPOSITION (W3; DEV's settlement: one
+  // composition, shell-owned). One facts record per tick,
+  // built from the live reads at her position: W1's
+  // atmospheric half (currentWeatherFacts — stepped by
+  // the renderer on the sky's own clock), the engine's
+  // shelterAt (houses + tents, best-of), fire warmth from
+  // fireState's lit fires on the module header's draft
+  // curve (full within 2.5 m, none past 5 m, linear
+  // between; torches are not PlacedFires and do not
+  // count in v1), immersion from siteWaterFacts (wading
+  // only — the engine has no swimming), and the
+  // wardrobe's worn set. Null when the weather has not
+  // stepped yet (no world) — the gauges simply don't
+  // tick, they never tick on invented facts.
+  const composeColdWetFacts = (
+    x: number,
+    z: number,
+  ): ColdWetFacts | null => {
+    const wf = currentWeatherFacts();
+    if (!wf || !genRef.current) return null;
+    const shelter = shelterAt(
+      x,
+      z,
+      shelterState.snapshot(),
+      placedTentsRef.current,
+    );
+    let fireWarmth = 0;
+    for (const fire of fireState.snapshot()) {
+      if (!fire.lit) continue;
+      const d = Math.hypot(fire.x - x, fire.z - z);
+      const w = d <= 2.5 ? 1 : d >= 5 ? 0 : (5 - d) / 2.5;
+      if (w > fireWarmth) fireWarmth = w;
+    }
+    return {
+      rainIntensity: wf.rainIntensity,
+      wind: wf.wind,
+      harshness: wf.harshness,
+      cold: wf.cold,
+      spell: wf.spell,
+      immersion: siteWaterFacts(genRef.current, x, z).inWater
+        ? 'wading'
+        : 'none',
+      shelterMultiplier: shelter.multiplier,
+      fireWarmth,
+      worn: wardrobe.wornItemIds(),
+    };
+  };
+
+  // The chip's date line from W1's clock (DRAFT form —
+  // the W4 pin pass settles weekday/year): the world
+  // opened Sep 1 = Day 1, months run 30 days on the
+  // spell machine's axis. The weather word names the
+  // precipitation AT HER — read, never inferred.
+  const MONTH_NAMES = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November',
+    'December',
+  ];
+  const chipLineFor = (facts: {
+    dayFloat: number;
+    rainIntensity: number;
+    isRaining: boolean;
+  }): string => {
+    const dayIndex = Math.floor(facts.dayFloat) + 1;
+    const dayOfMonth = Math.floor(facts.dayFloat % 30) + 1;
+    const monthIndex = 9 + Math.floor(facts.dayFloat / 30);
+    const monthName = MONTH_NAMES[(monthIndex - 1) % 12];
+    const word = facts.isRaining
+      ? facts.rainIntensity < 0.35
+        ? 'Rain, light'
+        : facts.rainIntensity < 0.75
+          ? 'Rain, steady'
+          : 'Downpour'
+      : 'Dry';
+    return `Day ${dayIndex} · ${dayOfMonth} ${monthName} · ${word}`;
+  };
+
+  // FEED LINES for state changes (DRAFT copy — W4):
+  // spoken on stage EDGES only, detected shell-side
+  // against the edge memory, so Systems' module stays
+  // presentation-free (the hunger pattern). Rising wet
+  // speaks each rung; drying speaks only when she is
+  // dry again (no damp/dry flicker chatter). Cold speaks
+  // each worse rung; warming speaks when she lands back
+  // at chilly or comfortable from a worse rung. Rain
+  // edges speak their own lines. During sleep the same
+  // function runs once on the net change (rain edges
+  // excluded — the waking tick owns those).
+  const speakColdWetEdges = (
+    prev: { cold: ColdStageKey; wet: WetStageKey; raining: boolean },
+    next: { cold: ColdStageKey; wet: WetStageKey; raining: boolean },
+    includeRain: boolean,
+  ): void => {
+    if (includeRain && next.raining !== prev.raining) {
+      showFeedback(
+        next.raining ? 'Rain begins.' : 'The rain eases off.',
+        'info',
+      );
+    }
+    if (next.wet !== prev.wet) {
+      if (next.wet === 'damp' && prev.wet === 'dry') {
+        showFeedback('Your clothes are damp.', 'info');
+      } else if (next.wet === 'wet') {
+        showFeedback('The wet is soaking through.', 'info');
+      } else if (next.wet === 'soaked') {
+        showFeedback('You are soaked to the skin.', 'blocked');
+      } else if (next.wet === 'dry') {
+        showFeedback('You are drying off.', 'gain');
+      }
+    }
+    if (next.cold !== prev.cold) {
+      const rank: Record<ColdStageKey, number> = {
+        comfortable: 0,
+        chilly: 1,
+        cold: 2,
+        freezing: 3,
+      };
+      if (rank[next.cold] > rank[prev.cold]) {
+        if (next.cold === 'chilly') {
+          showFeedback('A chill is getting into you.', 'info');
+        } else if (next.cold === 'cold') {
+          showFeedback('The cold is biting now.', 'blocked');
+        } else if (next.cold === 'freezing') {
+          showFeedback('You are dangerously cold.', 'blocked');
+        }
+      } else if (next.cold === 'comfortable' || next.cold === 'chilly') {
+        showFeedback('You are warming up.', 'gain');
+      }
+    }
+  };
+
+  // One cold/wet tick + witness refresh + edge speech,
+  // shared by the 1 s clock and the sleep rider. Returns
+  // false when no facts stand (the gauges hold).
+  const tickColdWet = (dtSeconds: number, x: number, z: number): boolean => {
+    const facts = composeColdWetFacts(x, z);
+    if (!facts) return false;
+    coldWet.tick(dtSeconds, facts);
+    setColdWetUi(coldWet.vitals());
+    const wf = currentWeatherFacts();
+    if (wf) setChipLine(chipLineFor(wf));
+    const next = {
+      cold: coldWet.coldStage(),
+      wet: coldWet.wetStage(),
+      raining: wf?.isRaining ?? false,
+    };
+    const prev = coldWetEdgesRef.current;
+    if (prev) speakColdWetEdges(prev, next, true);
+    coldWetEdgesRef.current = next;
+    return true;
+  };
   const [wardrobeNote, setWardrobeNote] = useState<string | null>(null);
 
   // Live shelter state, from the engine's shelter tracking
@@ -2747,6 +2942,71 @@ export default function App() {
     const timer = setTimeout(() => setWakeNote(null), 5000);
     return () => clearTimeout(timer);
   }, [wakeNote]);
+
+  // SLEEP RIDER (W3; Systems' law, DEV's settlement):
+  // the cold/wet gauges keep ticking while she sleeps —
+  // a free night would unmake shelter. The request
+  // stashes the night's composed facts + the sky
+  // position the night starts from; the completion
+  // ticks the skipped span (cycleT -> dawn on the
+  // 10-minute day) in minute chunks on those facts, so
+  // a night in the rain under a lean-to costs what the
+  // same minutes awake would cost. Edge speech runs
+  // once, on the net change, when she wakes.
+  const sleepTickRef = useRef<{
+    cycleT: number;
+    facts: ColdWetFacts;
+    x: number;
+    z: number;
+  } | null>(null);
+  useEffect(() => {
+    const offRequest = bus.on('sleep:requested', ({ x, z }) => {
+      const cycleT = rendererRef.current?.snapshotSky()?.cycleT;
+      const facts = composeColdWetFacts(x, z);
+      sleepTickRef.current =
+        cycleT !== undefined && cycleT !== null && facts
+          ? { cycleT, facts, x, z }
+          : null;
+    });
+    const offDone = bus.on('sleep:completed', () => {
+      const stash = sleepTickRef.current;
+      sleepTickRef.current = null;
+      if (!stash) return;
+      const spanSeconds =
+        (1 - stash.cycleT) * DAY_NIGHT_CYCLE_MINUTES * 60;
+      if (!(spanSeconds > 0)) return;
+      const before = {
+        cold: coldWet.coldStage(),
+        wet: coldWet.wetStage(),
+        raining: false,
+      };
+      let remaining = spanSeconds;
+      while (remaining > 0) {
+        const step = Math.min(60, remaining);
+        coldWet.tick(step, stash.facts);
+        remaining -= step;
+      }
+      setColdWetUi(coldWet.vitals());
+      const after = {
+        cold: coldWet.coldStage(),
+        wet: coldWet.wetStage(),
+        raining: false,
+      };
+      speakColdWetEdges(before, after, false);
+      if (coldWetEdgesRef.current) {
+        coldWetEdgesRef.current = {
+          ...coldWetEdgesRef.current,
+          cold: after.cold,
+          wet: after.wet,
+        };
+      }
+    });
+    return () => {
+      offRequest();
+      offDone();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Gap-closing state (see the header): one Systems FireState
   // per placed fire (the cooking vessel), the engine lighting
@@ -3882,6 +4142,13 @@ export default function App() {
           // null when the rig is gone).
           harvestState: harvestState.snapshot(),
           sky: rendererRef.current?.snapshotSky() ?? undefined,
+          // The weather spell record rides beside the sky
+          // (W1 save plumbing; the field is Systems',
+          // seated in save.ts — the record itself is the
+          // machine's hosted state, read via the renderer
+          // seam). Null until the machine seats one.
+          weather: rendererRef.current?.weatherRecord() ?? null,
+          coldWet: coldWetRef.current?.snapshot(),
           facing: player ? player.snapshotFacing() : undefined,
         });
       saveGame(data);
@@ -5264,6 +5531,11 @@ export default function App() {
         // is not called on this path, so after-construction
         // is after every sky reset that could wipe it.
         renderer.restoreSky(saved.sky);
+        // The spell record re-seats with the sky (W1):
+        // restoreWeather is a no-op on null (old saves),
+        // and the machine validates the record's shape
+        // itself at seating.
+        renderer.restoreWeather(saved.weather);
         for (const house of saved.houses) {
           try {
             const placed = shelterState.placeHouse(
@@ -5706,6 +5978,11 @@ export default function App() {
       hunger.tick(1);
       setHungerStage(hunger.stage());
       setHungerValue(hunger.value());
+      // Cold/wet on the same clock (W3): composed at the
+      // player's live position; a null composition (no
+      // world stepped yet) simply skips the tick.
+      const cwPlayer = playerRef.current;
+      if (cwPlayer) tickColdWet(1, cwPlayer.x, cwPlayer.z);
       // Hunger changed: latch update + drain multiplier
       // re-sync (the drain rate for the NEXT tick
       // follows the current carried/awakened state).
@@ -14386,6 +14663,7 @@ export default function App() {
               fps={fps}
               zoneX={zoneX}
               zoneZ={zoneZ}
+              timeDateMonth={chipLine}
             />
           ) : null
         }
@@ -14578,6 +14856,13 @@ export default function App() {
               value={hungerValue}
               warningActive={hungerWarningActive}
               warningFlash={hungerWarningFlash}
+            />
+          </div>
+          <div className="mt-2">
+            <WeatherWitness
+              theme={lookThemes.world}
+              cold={coldWetUi.cold}
+              wet={coldWetUi.wet}
             />
           </div>
           <div className="mt-2">
