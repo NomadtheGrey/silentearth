@@ -67,6 +67,8 @@ export interface PileInventoryModalProps {
   carryingText?: string;
   /** The pile's kinds + carried kinds, as unified item rows. */
   items: InventoryItem[];
+  /** ITEM INFO CARD (2026-11-01): the rows' info affordance, passed to the shared surface. Omitted = none. */
+  onInfoItem?: (item: InventoryItem) => void;
   /** Per-row verbs (ids are the standing pile action ids). */
   verbsFor: (item: InventoryItem) => ItemListVerb[];
   /** A verb press: the row's item id + the verb's action id. */
@@ -99,6 +101,7 @@ export function PileInventoryModal({
   totalText,
   carryingText,
   items,
+  onInfoItem,
   verbsFor,
   onVerb,
   onVisibleVerbs,
@@ -140,6 +143,7 @@ export function PileInventoryModal({
       </p>
       <ItemListSurface
         items={items}
+        onInfoItem={onInfoItem}
         verbsFor={verbsFor}
         onVerb={onVerb}
         sortMode={sortMode}
