@@ -659,7 +659,10 @@ function planProducerBatch(
  * Ensure the simulation holds `need` of `item`, planning the
  * producing chain deepest-first when it falls short. Producer
  * fallback rolls the attempt's simulation back whole — a
- * failed producer leaves no trace in the plan.
+ * failed producer leaves no trace in the plan. Batches of a
+ * producer plan one at a time under the same law per batch:
+ * the batches that planned stand (a partial make is a make);
+ * only a producer whose FIRST batch fails falls back whole.
  */
 function planEnsure(
   item: ItemId,
@@ -686,23 +689,44 @@ function planEnsure(
   }
   let firstError: Error | null = null;
   for (const producer of producers) {
+    // PARTIAL MAKES STAND (Adam's live-play ruling,
+    // 2026-11-02): batches plan ONE AT A TIME, each against
+    // a fresh trial clone of the attempt so far — a failed
+    // batch leaves no trace (the rollback law, per batch),
+    // and the batches that DID plan are kept and executed.
+    // She holds two vines and the trowel wants two cordage:
+    // the one cordage her vines cover is MADE; the chain
+    // refuses only when not even one batch can be planned,
+    // and at that point the simulation still mirrors her
+    // real pack, so the refusal's counts are the pack's own.
     let attempt: PlanState = { sim: state.sim.clone(), batches: [] };
-    try {
-      const batches = Math.ceil((need - have) / producer.output.quantity);
-      for (let b = 0; b < batches; b++) {
-        attempt = planProducerBatch(producer, attempt, ctx, [
+    const batches = Math.ceil((need - have) / producer.output.quantity);
+    let plannedBatches = 0;
+    for (let b = 0; b < batches; b++) {
+      const trial: PlanState = { sim: attempt.sim.clone(), batches: [] };
+      try {
+        const next = planProducerBatch(producer, trial, ctx, [
           ...path,
           item,
         ]);
+        attempt = {
+          sim: next.sim,
+          batches: [...attempt.batches, ...next.batches],
+        };
+        plannedBatches++;
+      } catch (err) {
+        if (firstError === null) {
+          firstError =
+            err instanceof Error ? err : new Error(String(err));
+        }
+        break;
       }
+    }
+    if (plannedBatches > 0) {
       return {
         sim: attempt.sim,
         batches: [...state.batches, ...attempt.batches],
       };
-    } catch (err) {
-      if (firstError === null) {
-        firstError = err instanceof Error ? err : new Error(String(err));
-      }
     }
   }
   throw firstError ?? new Error('Cannot craft prerequisites.');
@@ -712,11 +736,16 @@ function planEnsure(
  * Craft the missing prerequisites of ONE ingredient of the
  * open recipe (see the section header). `item` must be an
  * ingredient of `recipe`; the amount crafted covers the
- * recipe's stated need minus what the pack already holds.
+ * recipe's stated need minus what the pack already holds —
+ * or as much of it as her materials support: a partial make
+ * is a make (Adam, 2026-11-02), and the result's crafted
+ * quantity says how much was actually made.
  * Returns the steps run (deepest first) and the total made;
  * an already-satisfied ingredient returns empty steps.
- * Throws — consuming nothing — when the chain cannot
- * complete (the planning refusal names the blocker).
+ * Throws — consuming nothing — when the chain cannot make
+ * even one batch (the planning refusal names the blocker,
+ * in counts read from a simulation that still mirrors the
+ * pack, no batch having succeeded).
  */
 export function executeCraftChain(
   recipe: Recipe,
