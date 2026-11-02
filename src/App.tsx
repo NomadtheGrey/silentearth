@@ -1860,10 +1860,15 @@ import {
   getWords,
   isCloudEnabled,
   listCloudSaves,
+  mirrorNow,
   mirrorSave,
   parkLocal,
+  probeShelfFreshness,
   readParked,
+  resolveMirrorConflictKeep,
   syncState,
+  type MirrorConflict,
+  type ShelfFresherFacts,
   turnOff,
   turnOn,
 } from './systems/cloudSaves';
@@ -3874,7 +3879,12 @@ export default function App() {
       // forget: mirrorSave never throws and no-ops when
       // cloud is off, so a failed mirror never breaks
       // play (the sync note records it for the panel).
-      void mirrorSave(CLOUD_BASE_URL, data);
+      // THE CONFLICT PASS (2026-11-01): when the mirror
+      // settles, a conflict it raised is announced once
+      // per episode (the write-guard dialog).
+      void mirrorSave(CLOUD_BASE_URL, data).then(() => {
+        announceCloudConflict(syncState().mirrorConflict);
+      });
     } catch {
       // Saving must never break play.
     }
@@ -3935,6 +3945,37 @@ export default function App() {
     slot: string;
     row: CloudSaveRow;
   } | null>(null);
+  // THE WRITE-GUARD DIALOG (the conflict pass,
+  // 2026-11-01): the conflict episode currently being
+  // asked about, or null. The latch remembers the
+  // raise stamp of the last episode announced, so
+  // the dialog opens ONCE PER EPISODE — never twice
+  // for the same raise, however often state refreshes.
+  const [cloudConflictPrompt, setCloudConflictPrompt] =
+    useState<MirrorConflict | null>(null);
+  const cloudConflictAnnouncedRef = useRef<string | null>(null);
+  const announceCloudConflict = (conflict: MirrorConflict | null) => {
+    if (conflict === null) return;
+    // The latch keys on the episode AND its decision
+    // state: a Save Now press REOPENS a decided
+    // episode module-side (same raise stamp, decision
+    // undone), and that return to undecided must ask
+    // again — a latch on the stamp alone would leave
+    // the reopening silent, and no decision may be a
+    // trap (DEV, on the conflict claim).
+    const key = `${conflict.at}:${conflict.resolvedKeep ? 'kept' : 'open'}`;
+    if (cloudConflictAnnouncedRef.current === key) return;
+    cloudConflictAnnouncedRef.current = key;
+    if (!conflict.resolvedKeep) setCloudConflictPrompt(conflict);
+  };
+  // THE WAKE OFFER (the rework's third pass,
+  // 2026-11-01): the probe's fresher finding,
+  // offered once per shelf stamp per session. The
+  // latch holds the stamp already offered; the
+  // offer itself is a question, never an auto-load.
+  const [cloudWakeOffer, setCloudWakeOffer] =
+    useState<ShelfFresherFacts | null>(null);
+  const cloudWakeOfferLatchedRef = useRef<string | null>(null);
   const [cloudPendingRestore, setCloudPendingRestore] =
     useState<SaveData | null>(null);
   const [cloudPendingNewGame, setCloudPendingNewGame] = useState<{
@@ -3943,7 +3984,9 @@ export default function App() {
   } | null>(null);
 
   const refreshCloudState = () => {
-    setCloudSync(syncState());
+    const nextSync = syncState();
+    setCloudSync(nextSync);
+    announceCloudConflict(nextSync.mirrorConflict);
     setCloudWords(getWords());
     const parked = readParked();
     setCloudParked(
@@ -4260,6 +4303,124 @@ export default function App() {
     }
   };
 
+  // THE CONFLICT'S DOORS (the conflict pass,
+  // 2026-11-01): KEEP is the module's decision write —
+  // the episode is marked decided and mirroring stays
+  // suppressed until a bring or a forced overwrite.
+  // The dialog's dismiss (X / Escape / backdrop) IS
+  // this door: focus and no-action default to KEEP.
+  const handleCloudConflictKeep = () => {
+    setCloudConflictPrompt(null);
+    const res = resolveMirrorConflictKeep();
+    if (!res.ok) {
+      setCloudNote(res.reason ?? 'Could not record that choice.');
+    }
+    refreshCloudState();
+    void probeCloudWakeOfferAfterCurrency();
+  };
+
+  // OVERWRITE: this device's CURRENT record writes
+  // through, forced — saveNow first, so the shelf
+  // receives the freshest local state, then the disk
+  // record mirrors with force (a forced success
+  // clears the episode module-side).
+  const handleCloudConflictOverwrite = async () => {
+    setCloudConflictPrompt(null);
+    saveNow();
+    const data = loadSave();
+    if (data === null) {
+      setCloudNote('Nothing saved on this device yet to copy up.');
+      return;
+    }
+    setCloudBusy(true);
+    try {
+      const res = await mirrorSave(CLOUD_BASE_URL, data, { force: true });
+      setCloudNote(
+        res.ok
+          ? "Copied this device's save over the shelf copy."
+          : (res.reason ?? 'Could not copy over the shelf copy.'),
+      );
+    } finally {
+      setCloudBusy(false);
+    }
+    refreshCloudState();
+    void refreshCloudList();
+  };
+
+  // SAVE NOW (Adam's order — the diagnosis's State
+  // 13; the rework's third pass): the deliberate
+  // save. saveNow writes the local record through
+  // the one funnel; mirrorNow then flushes at once
+  // (the 60-second window bypassed, the freshness
+  // check intact). The note is honest in every
+  // state — a good local save under a failed cloud
+  // copy says exactly that.
+  const handleCloudSaveNow = async () => {
+    saveNow();
+    const data = loadSave();
+    if (data === null) {
+      setCloudNote('Nothing to save yet.');
+      return;
+    }
+    if (getWords() === null || !isCloudEnabled()) {
+      setCloudNote(
+        getWords() === null
+          ? 'Saved on this device. There are no cloud words here, so no copy went to a shelf.'
+          : 'Saved on this device. Cloud is off, so no copy went to your shelf.',
+      );
+      refreshCloudState();
+      return;
+    }
+    setCloudBusy(true);
+    try {
+      const res = await mirrorNow(CLOUD_BASE_URL, data);
+      if (syncState().mirrorConflict !== null) {
+        setCloudNote(
+          'Saved on this device. A newer copy stands on the shelf, so nothing was copied over it.',
+        );
+      } else if (!res.ok) {
+        setCloudNote(
+          `Saved on this device. The cloud copy could not be made: ${res.reason ?? 'unknown error'}`,
+        );
+      } else if (res.mirrored) {
+        setCloudNote('Saved — copied to your shelf just now.');
+      } else {
+        setCloudNote('Saved — this save is already on the shelf.');
+      }
+    } finally {
+      setCloudBusy(false);
+    }
+    refreshCloudState();
+    void refreshCloudList();
+  };
+
+  // THE WAKE OFFER probe: runs after boot and on
+  // Options open (and again when a conflict is
+  // resolved — keeping the newer copy makes loading
+  // it the natural next question). A fresher finding
+  // OFFERS the load; it never loads unasked. While
+  // the write-guard dialog stands, the offer holds
+  // (unlatched) for the next probe rather than
+  // stacking a second question over the first.
+  const probeCloudWakeOffer = async () => {
+    const local = loadSave();
+    const facts = await probeShelfFreshness(
+      CLOUD_BASE_URL,
+      local?.savedAt ?? null,
+    );
+    if (facts === null || !facts.fresher) return;
+    if (cloudWakeOfferLatchedRef.current === facts.shelfUpdatedAt) return;
+    if (
+      cloudConflictPrompt !== null ||
+      firstRunDialogOpen ||
+      introOpen
+    ) {
+      return;
+    }
+    cloudWakeOfferLatchedRef.current = facts.shelfUpdatedAt;
+    setCloudWakeOffer(facts);
+  };
+
   const confirmCloudRestore = () => {
     const parked = cloudPendingRestore;
     setCloudPendingRestore(null);
@@ -4391,6 +4552,13 @@ export default function App() {
     onRestoreParked: () => {
       const parked = readParked();
       if (parked !== null) setCloudPendingRestore(parked);
+    },
+    onResolveConflictKeep: handleCloudConflictKeep,
+    onResolveConflictOverwrite: () => {
+      void handleCloudConflictOverwrite();
+    },
+    onSaveNow: () => {
+      void handleCloudSaveNow();
     },
     onRename: handleCloudRename,
     onNewGame: handleNewGame,
@@ -10281,7 +10449,85 @@ export default function App() {
     if (!optionsOpen) return;
     refreshCloudState();
     void refreshCloudList();
+    void probeCloudWakeOfferAfterCurrency();
   }, [optionsOpen]);
+  // BUILD CURRENCY (the cloud rework's final pass, 2026-11-01):
+  // a device holding an old build plays it forever — the page is
+  // cached at open and nothing ever compared the running bundle
+  // against the served one, so fixed bugs read as still-broken on
+  // a stale tab. A build names itself by its hashed bundle (the
+  // module script in the served document); the running build
+  // reads its own name from its own document. The check runs at
+  // boot and on visibility wake — no timers, no polling — fetching
+  // the page's own document no-store and comparing names. A
+  // mismatch reloads ONCE per target (sessionStorage holds the
+  // hash reloaded for; a still-mismatched boot under the recorded
+  // target does not spin). Failure is silence: offline or
+  // unparseable, play continues on the running build. The wake
+  // offer's probes WAIT for the verdict (below) — per Adam's
+  // order the save question only ever stands on a current build.
+  const currencyCheckRef = useRef<Promise<void> | null>(null);
+  const runBuildCurrencyCheck = (): Promise<void> => {
+    const check = (async () => {
+      try {
+        const bundleOf = (text: string): string | null => {
+          const m = text.match(/assets\/(index-[A-Za-z0-9_-]+\.js)/);
+          return m === null ? null : m[1];
+        };
+        const ownScript = document.querySelector(
+          'script[type="module"][src]',
+        );
+        const running =
+          ownScript === null
+            ? null
+            : bundleOf(ownScript.getAttribute('src') ?? '');
+        if (running === null) return;
+        const res = await fetch(window.location.href, {
+          cache: 'no-store',
+        });
+        if (!res.ok) return;
+        const served = bundleOf(await res.text());
+        if (served === null || served === running) return;
+        const GUARD_KEY = 'silentearth.buildReloadedFor';
+        if (sessionStorage.getItem(GUARD_KEY) === served) return;
+        sessionStorage.setItem(GUARD_KEY, served);
+        window.location.reload();
+      } catch {
+        // Silence by design — see the note above.
+      }
+    })();
+    currencyCheckRef.current = check;
+    return check;
+  };
+  // The wake offer, gated on the currency verdict: probes await
+  // the latest check before asking their question.
+  const probeCloudWakeOfferAfterCurrency = async (): Promise<void> => {
+    if (currencyCheckRef.current !== null) {
+      await currencyCheckRef.current;
+    }
+    await probeCloudWakeOffer();
+  };
+
+  // THE WAKE OFFER at boot, behind the currency check:
+  // one probe once the game stands and the build is
+  // known current. The module answers null for
+  // cloud-off / wordless / unreadable — unknown never
+  // offers.
+  useEffect(() => {
+    void runBuildCurrencyCheck().then(() => probeCloudWakeOffer());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  // Wake: becoming visible again re-checks the build (a stale tab
+  // restarts on the current build; a current one hears nothing).
+  useEffect(() => {
+    const onVisibility = () => {
+      if (!document.hidden) void runBuildCurrencyCheck();
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    return () =>
+      document.removeEventListener('visibilitychange', onVisibility);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   // FIRST-RUN DIALOG (Adam, 2026-10-28): on a no-save
   // boot the dialog comes FIRST and the intro second.
   // firstRunDone starts true when a save exists (the
@@ -10807,7 +11053,9 @@ export default function App() {
       cloudPendingBring !== null ||
       cloudPendingRemove !== null ||
       cloudPendingRestore !== null ||
-      cloudPendingNewGame !== null;
+      cloudPendingNewGame !== null ||
+      cloudConflictPrompt !== null ||
+      cloudWakeOffer !== null;
     if (dialogUp) return;
     const off = bus.on('player:moved', ({ x, z }) => {
       const p = { x, z };
@@ -12128,6 +12376,8 @@ export default function App() {
       cloudPendingRemove !== null ||
       cloudPendingRestore !== null ||
       cloudPendingNewGame !== null ||
+      cloudConflictPrompt !== null ||
+      cloudWakeOffer !== null ||
       paused;
     if (anyScreenOpen && document.pointerLockElement !== null) {
       document.exitPointerLock();
@@ -12155,6 +12405,8 @@ export default function App() {
     cloudPendingRemove,
     cloudPendingRestore,
     cloudPendingNewGame,
+    cloudConflictPrompt,
+    cloudWakeOffer,
     paused,
   ]);
 
@@ -15266,6 +15518,134 @@ export default function App() {
                 onClick={() => setCloudPendingRemove(null)}
               >
                 Cancel
+              </button>
+            </div>
+          </div>
+        ) : null}
+      </Popup>
+
+      {/* THE WRITE-GUARD DIALOG (the conflict pass,
+        2026-11-01): opened once per episode by
+        announceCloudConflict. Both times are spoken;
+        the doors are the panel block's own handlers.
+        Enter confirms KEEP and dismissal IS Keep —
+        focus and no-action default to the safe door.
+        Copy DRAFT. */}
+      <Popup theme={lookThemes.dialog}
+        open={cloudConflictPrompt !== null}
+        title="A newer copy stands on the shelf"
+        onClose={handleCloudConflictKeep}
+        onConfirm={handleCloudConflictKeep}
+        comfortable={isTouch}
+      >
+        {cloudConflictPrompt !== null ? (
+          <div className="flex flex-col gap-3 p-3 text-sm">
+            <p>
+              The shelf holds a copy of this world saved{' '}
+              {new Date(
+                cloudConflictPrompt.shelfUpdatedAt,
+              ).toLocaleString()}
+              . This device's own save is from{' '}
+              {new Date(
+                cloudConflictPrompt.localSavedAt,
+              ).toLocaleString()}
+              .
+            </p>
+            <p className="text-xs opacity-80">
+              {cloudConflictPrompt.basisUpdatedAt !== null
+                ? `This device last knew the shelf at ${new Date(cloudConflictPrompt.basisUpdatedAt).toLocaleString()}, so the newer copy was made somewhere else — another device, or this one before its memory was cleared.`
+                : 'This device had never copied from this shelf before, so the newer copy was made somewhere else.'}{' '}
+              Copying this device's save up now would
+              replace it. Keeping it means this device
+              holds its saves back until you load the
+              shelf copy or overwrite on purpose.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                className={
+                  'rounded bg-moss-deep hover:bg-moss px-3 py-1 text-sm text-stone-100 ' +
+                  (isTouch ? 'min-h-[44px] px-3 py-2' : '')
+                }
+                onClick={handleCloudConflictKeep}
+              >
+                Keep the newer copy
+              </button>
+              <button
+                type="button"
+                className={
+                  'rounded bg-moss-deep hover:bg-moss px-3 py-1 text-sm text-stone-100 ' +
+                  (isTouch ? 'min-h-[44px] px-3 py-2' : '')
+                }
+                onClick={() => {
+                  void handleCloudConflictOverwrite();
+                }}
+              >
+                Overwrite it with this device's save
+              </button>
+            </div>
+          </div>
+        ) : null}
+      </Popup>
+
+      {/* THE WAKE OFFER (the rework's third pass,
+        2026-11-01): at open, a shelf holding a
+        fresher save OFFERS its load — an ask, never
+        an auto-load. Load rides the standing bring
+        door (the current world parks first, as
+        every bring does). Not now changes nothing.
+        Copy DRAFT. */}
+      <Popup theme={lookThemes.dialog}
+        open={cloudWakeOffer !== null}
+        title="A newer save stands on your shelf"
+        onClose={() => setCloudWakeOffer(null)}
+        comfortable={isTouch}
+      >
+        {cloudWakeOffer !== null ? (
+          <div className="flex flex-col gap-3 p-3 text-sm">
+            <p>
+              The shelf holds{' '}
+              {cloudWakeOffer.shelfName ?? 'a copy of this world'}{' '}
+              saved{' '}
+              {new Date(
+                cloudWakeOffer.shelfUpdatedAt,
+              ).toLocaleString()}
+              .
+            </p>
+            <p className="text-xs opacity-80">
+              {cloudWakeOffer.localSavedAt !== null
+                ? `This device's own save is from ${new Date(cloudWakeOffer.localSavedAt).toLocaleString()}. `
+                : 'This device has no save of its own yet. '}
+              Loading the shelf copy parks this device's
+              world first — nothing here is lost by
+              looking.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                className={
+                  'rounded bg-moss-deep hover:bg-moss px-3 py-1 text-sm text-stone-100 ' +
+                  (isTouch ? 'min-h-[44px] px-3 py-2' : '')
+                }
+                onClick={() => {
+                  const offer = cloudWakeOffer;
+                  setCloudWakeOffer(null);
+                  if (offer !== null) {
+                    void runCloudBring('main', getWords());
+                  }
+                }}
+              >
+                Load the shelf copy
+              </button>
+              <button
+                type="button"
+                className={
+                  'rounded bg-moss-deep hover:bg-moss px-3 py-1 text-sm text-stone-100 ' +
+                  (isTouch ? 'min-h-[44px] px-3 py-2' : '')
+                }
+                onClick={() => setCloudWakeOffer(null)}
+              >
+                Not now
               </button>
             </div>
           </div>

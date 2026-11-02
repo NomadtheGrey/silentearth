@@ -43,6 +43,14 @@ export interface BuildRecord {
 
 const ALL_RECORDS: BuildRecord[] = [
   {
+    merge: 'Merge #59',
+    pr: 95,
+    sha: '7f19b5b',
+    date: '2026-11-01',
+    what: 'The cloud rework, completed \u2014 its opening pass (the ungate) shipped in the previous merge; this one carries passes two through four. THE CONFLICT HAS A FACE: when a mirror write would displace a fresher cloud copy, the game no longer wears it as a failure or swallows it in silence \u2014 a dialog states the decision in plain words and defaults to Keep, the newer copy standing until Adam says otherwise. SAVE NOW + THE WAKE OFFER: his button lands, honest in every state \u2014 a press flushes the mirror at once, and at wake the freshness check runs first, so a device whose shelf holds a fresher save is OFFERED it (\u2018Hey, you have a fresher save for these words. Want me to load that?\u2019) \u2014 an ask, never an auto-load. BUILD CURRENCY, the final pass: the build checks its own freshness at boot and at wake, reloads once to the current build, and seats itself ahead of the wake offer, so the question is always asked by the newest code.',
+    why: 'The rework began with Adam loading his world and being answered in a different name. Its law, in his words, is that no fresher save is ever nuked quietly \u2014 and this merge is where the law gets its manners: conflicts speak as decisions, freshness arrives as an offer, and the tab doing the asking is current. What began as a diagnosis ends as a standing behavior.',
+  },
+  {
     merge: 'Merge #58',
     pr: 95,
     sha: '5d49473',

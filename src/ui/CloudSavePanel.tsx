@@ -49,6 +49,24 @@
  * Turning cloud back ON from here re-enables with
  * the device's own stored words (the caller's
  * turnOn — the module's only enable write).
+ * THE CONFLICT'S FACE (the rework's conflict pass,
+ * 2026-11-01): while a mirror conflict stands, the
+ * sync line names the safeguard's SUCCESS as itself
+ * — never 'Sync failed' — and a standing block
+ * beneath it carries the episode in words (both
+ * times, and the two doors) until it is resolved.
+ * The module's mirrorConflict rides the sync prop
+ * in display shape; resolutions are the caller's
+ * handlers, like every other cloud act here.
+ * SAVE NOW (the rework's third pass, 2026-11-01;
+ * Adam's own order): the panel's FIRST row is a
+ * deliberate save button — before it, saving was
+ * something that merely happened to her (autosaves
+ * and the pagehide net), and mirroring deferred
+ * silently inside the module's window. The press
+ * is the caller's: saveNow writes local, mirrorNow
+ * flushes at once, and the note left behind is
+ * honest in every state, cloud-off included.
  * Sync mapping: enabled + mirrored ok → 'Synced';
  * enabled + never mirrored → 'Will sync on next save';
  * enabled + last mirror failed unreachable → 'Will sync
@@ -78,6 +96,19 @@ export interface CloudSyncDisplay {
   enabled: boolean;
   wordsStored: boolean;
   lastMirror: { at: number; ok: boolean; reason?: string } | null;
+  /** A standing overwrite-safeguard conflict, in
+   * display shape (the module's MirrorConflict,
+   * minus its raise stamp): the shelf copy's time,
+   * the basis this device compared it against (null
+   * = it had never known the shelf), this device's
+   * save time at the raise, and whether the player
+   * already decided KEEP for this episode. */
+  mirrorConflict?: {
+    shelfUpdatedAt: string;
+    basisUpdatedAt: string | null;
+    localSavedAt: number;
+    resolvedKeep: boolean;
+  } | null;
   /** RETIRED with the adoption hold (2026-11-01):
     the module hardcodes this false; the panel no
     longer reads it. Kept in the type because the
@@ -111,6 +142,15 @@ export interface CloudSavePanelProps {
   onRemove: (slot: string) => void;
   onRestoreParked: () => void;
   onRename: (name: string) => void;
+  /** The conflict's two doors (the standing block's
+   * buttons; the shell's write-guard dialog carries
+   * the same handlers). */
+  onResolveConflictKeep: () => void;
+  onResolveConflictOverwrite: () => void;
+  /** SAVE NOW (the panel's first row): the
+   * deliberate save — the caller writes local and
+   * flushes the mirror at once. */
+  onSaveNow: () => void;
   onNewGame: () => void;
   theme?: UiThemeName;
   comfortable?: boolean;
@@ -141,6 +181,9 @@ export function CloudSavePanel({
   onRemove,
   onRestoreParked,
   onRename,
+  onResolveConflictKeep,
+  onResolveConflictOverwrite,
+  onSaveNow,
   onNewGame,
   theme = 'mire',
   comfortable = false,
@@ -187,6 +230,16 @@ export function CloudSavePanel({
         'Sync failed: ' + (sync.lastMirror.reason ?? 'unknown error');
     }
   }
+  // THE CONFLICT'S FACE: a standing conflict is the
+  // safeguard SUCCEEDING, and the line says so —
+  // never the failure face the refusal note used to
+  // wear here. (Copy DRAFT.)
+  const conflict = sync.mirrorConflict ?? null;
+  if (conflict !== null) {
+    syncLine = conflict.resolvedKeep
+      ? 'Keeping the newer cloud copy — this device is not copying its saves up.'
+      : 'A newer copy stands on the shelf — this device is holding its saves back.';
+  }
 
   const copyWords = () => {
     if (words === null) return;
@@ -211,6 +264,21 @@ export function CloudSavePanel({
 
   return (
     <div className="flex flex-col gap-3 text-sm text-stone-200">
+      {/* SAVE NOW (Adam's order, the rework's third
+        pass): the panel's FIRST row. Saving stops
+        being weather and becomes an act with a
+        button; the note under the panel reports
+        what the press did, in every state. */}
+      <div>
+        <button
+          type="button"
+          className={buttonClass}
+          disabled={busy}
+          onClick={onSaveNow}
+        >
+          Save now
+        </button>
+      </div>
       <label className="flex items-center gap-2">
         <input
           type="checkbox"
@@ -356,6 +424,58 @@ export function CloudSavePanel({
             renders directly, and while cloud is off it
             reads 'Cloud off', which is the plain truth. */}
           <p className="text-xs opacity-70">{syncLine}</p>
+
+          {/* THE STANDING CONFLICT, IN WORDS (the
+            conflict pass): while an episode stands,
+            the panel carries it — both times spoken
+            — with the two doors, until a bring, a
+            forced overwrite, or a KEEP decision
+            resolves it. Copy DRAFT. */}
+          {conflict !== null ? (
+            <div className="flex flex-col gap-2 border border-moss-deep rounded p-2">
+              <p className="text-sm">
+                A newer copy of this world stands on the
+                shelf, saved{' '}
+                {new Date(conflict.shelfUpdatedAt).toLocaleString()}.
+              </p>
+              <p className="text-xs opacity-80">
+                {conflict.basisUpdatedAt !== null
+                  ? `This device last knew the shelf at ${new Date(conflict.basisUpdatedAt).toLocaleString()}.`
+                  : 'This device had never copied from this shelf before.'}{' '}
+                This device's own save is from{' '}
+                {new Date(conflict.localSavedAt).toLocaleString()}.
+                Until you choose, this device will not copy
+                its saves over the newer one.
+              </p>
+              {conflict.resolvedKeep ? (
+                <p className="text-xs opacity-80">
+                  You chose to keep the newer copy. Loading
+                  it from the shelf clears this; overwriting
+                  is still yours to press.
+                </p>
+              ) : null}
+              <div className="flex flex-wrap gap-2">
+                {conflict.resolvedKeep ? null : (
+                  <button
+                    type="button"
+                    className={buttonClass}
+                    disabled={busy}
+                    onClick={onResolveConflictKeep}
+                  >
+                    Keep the newer copy
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className={buttonClass}
+                  disabled={busy}
+                  onClick={onResolveConflictOverwrite}
+                >
+                  Overwrite it with this device's save
+                </button>
+              </div>
+            </div>
+          ) : null}
 
 
           <div className="flex flex-col gap-2">
