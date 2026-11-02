@@ -43,6 +43,14 @@ export interface BuildRecord {
 
 const ALL_RECORDS: BuildRecord[] = [
   {
+    merge: 'Merge #68',
+    pr: 95,
+    sha: 'a57454d',
+    date: '2026-11-02',
+    what: 'THE OVERWRITE SAFEGUARD IS OUT \u2014 cloud saving no longer checks anything before it copies. The freshness check that stood in front of every mirror write is removed whole, along with the conflict state that could hold a device\u2019s mirroring silent. Saving the game now simply writes the copy to the cloud under your words; the last save wins. The 60-second coalescing window, the already-copied dedupe, and the honest failure notes all stay.',
+    why: 'Adam\u2019s word: the safeguard was not working \u2014 his game of twenty minutes before was not on the cloud when he went to load it. A guard that fails closed keeps saves home instead of keeping them safe, and a guard that cannot be trusted comes out. Whatever the deeper cause, it is addressed later or not at all; cloud saving is cloud saving again.',
+  },
+  {
     merge: 'Merge #67',
     pr: 95,
     sha: 'c0a2c3f',
