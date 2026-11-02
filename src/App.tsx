@@ -4316,7 +4316,7 @@ export default function App() {
       setCloudNote(res.reason ?? 'Could not record that choice.');
     }
     refreshCloudState();
-    void probeCloudWakeOffer();
+    void probeCloudWakeOfferAfterCurrency();
   };
 
   // OVERWRITE: this device's CURRENT record writes
@@ -10449,13 +10449,83 @@ export default function App() {
     if (!optionsOpen) return;
     refreshCloudState();
     void refreshCloudList();
-    void probeCloudWakeOffer();
+    void probeCloudWakeOfferAfterCurrency();
   }, [optionsOpen]);
-  // THE WAKE OFFER at boot: one probe once the game
-  // stands. The module answers null for cloud-off /
-  // wordless / unreadable — unknown never offers.
+  // BUILD CURRENCY (the cloud rework's final pass, 2026-11-01):
+  // a device holding an old build plays it forever — the page is
+  // cached at open and nothing ever compared the running bundle
+  // against the served one, so fixed bugs read as still-broken on
+  // a stale tab. A build names itself by its hashed bundle (the
+  // module script in the served document); the running build
+  // reads its own name from its own document. The check runs at
+  // boot and on visibility wake — no timers, no polling — fetching
+  // the page's own document no-store and comparing names. A
+  // mismatch reloads ONCE per target (sessionStorage holds the
+  // hash reloaded for; a still-mismatched boot under the recorded
+  // target does not spin). Failure is silence: offline or
+  // unparseable, play continues on the running build. The wake
+  // offer's probes WAIT for the verdict (below) — per Adam's
+  // order the save question only ever stands on a current build.
+  const currencyCheckRef = useRef<Promise<void> | null>(null);
+  const runBuildCurrencyCheck = (): Promise<void> => {
+    const check = (async () => {
+      try {
+        const bundleOf = (text: string): string | null => {
+          const m = text.match(/assets\/(index-[A-Za-z0-9_-]+\.js)/);
+          return m === null ? null : m[1];
+        };
+        const ownScript = document.querySelector(
+          'script[type="module"][src]',
+        );
+        const running =
+          ownScript === null
+            ? null
+            : bundleOf(ownScript.getAttribute('src') ?? '');
+        if (running === null) return;
+        const res = await fetch(window.location.href, {
+          cache: 'no-store',
+        });
+        if (!res.ok) return;
+        const served = bundleOf(await res.text());
+        if (served === null || served === running) return;
+        const GUARD_KEY = 'silentearth.buildReloadedFor';
+        if (sessionStorage.getItem(GUARD_KEY) === served) return;
+        sessionStorage.setItem(GUARD_KEY, served);
+        window.location.reload();
+      } catch {
+        // Silence by design — see the note above.
+      }
+    })();
+    currencyCheckRef.current = check;
+    return check;
+  };
+  // The wake offer, gated on the currency verdict: probes await
+  // the latest check before asking their question.
+  const probeCloudWakeOfferAfterCurrency = async (): Promise<void> => {
+    if (currencyCheckRef.current !== null) {
+      await currencyCheckRef.current;
+    }
+    await probeCloudWakeOffer();
+  };
+
+  // THE WAKE OFFER at boot, behind the currency check:
+  // one probe once the game stands and the build is
+  // known current. The module answers null for
+  // cloud-off / wordless / unreadable — unknown never
+  // offers.
   useEffect(() => {
-    void probeCloudWakeOffer();
+    void runBuildCurrencyCheck().then(() => probeCloudWakeOffer());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  // Wake: becoming visible again re-checks the build (a stale tab
+  // restarts on the current build; a current one hears nothing).
+  useEffect(() => {
+    const onVisibility = () => {
+      if (!document.hidden) void runBuildCurrencyCheck();
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    return () =>
+      document.removeEventListener('visibilitychange', onVisibility);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   // FIRST-RUN DIALOG (Adam, 2026-10-28): on a no-save
