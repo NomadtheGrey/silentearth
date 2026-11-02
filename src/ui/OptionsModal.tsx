@@ -50,6 +50,7 @@ import {
   CloudSavePanel,
   type CloudSavePanelProps,
 } from './CloudSavePanel';
+import type { HudElementId } from './hudLayout';
 import { UI_THEMES, type UiLookId, type UiThemeName } from './themes';
 import { BUILD_HISTORY } from './buildHistory';
 import { CameraToggle } from './CameraToggle';
@@ -178,9 +179,24 @@ const OPTION_TABS = [
   { id: 'history', label: 'Build history' },
   { id: 'quests', label: 'Quest Log' },
   { id: 'cloud', label: 'Cloud Saves' },
+  { id: 'hud', label: 'HUD' },
 ] as const;
 
 type OptionsTabId = (typeof OPTION_TABS)[number]['id'];
+
+/** One HUD element's row in the HUD tab. */
+export interface OptionsHudItem {
+  id: HudElementId;
+  label: string;
+  hidden: boolean;
+}
+
+/** HUD tab props: the element list plus the caller's layout verbs. */
+export interface OptionsHudProps {
+  items: OptionsHudItem[];
+  onToggle: (id: HudElementId, hidden: boolean) => void;
+  onReset: () => void;
+}
 
 export interface OptionsModalProps {
   /** Current font choice, owned by the caller. */
@@ -217,6 +233,12 @@ export interface OptionsModalProps {
    * optional Perspective/quests pattern).
    */
   cloud?: CloudSavePanelProps;
+  /**
+   * HUD layout controls, owned by the caller (App wiring,
+   * ui/hudLayout). Omitted = no HUD tab (mirrors the cloud
+   * pattern).
+   */
+  hud?: OptionsHudProps;
   /** Called when the modal is closed. */
   onClose?: () => void;
   /** Bottom-sheet layout + thumb-sized controls on touch. Default false. */
@@ -235,6 +257,7 @@ export function OptionsModal({
   onShowIntro,
   quests,
   cloud,
+  hud,
   onClose,
   comfortable = false,
   theme = 'mire',
@@ -288,7 +311,9 @@ export function OptionsModal({
 
         <div role="tablist" aria-label="Options sections" className="flex gap-1 px-3">
           {OPTION_TABS.filter(
-            (tab) => tab.id !== 'cloud' || cloud !== undefined,
+            (tab) =>
+              (tab.id !== 'cloud' || cloud !== undefined) &&
+              (tab.id !== 'hud' || hud !== undefined),
           ).map((tab) => {
             const active = tab.id === activeTab;
             return (
@@ -448,6 +473,50 @@ export function OptionsModal({
               theme={theme}
               comfortable={comfortable}
             />
+          ) : null}
+          {activeTab === 'hud' && hud !== undefined ? (
+            <div>
+              <p className={'text-sm ' + t.muted}>
+                Every HUD element can be dragged by its ⠿ grip and
+                hidden by its ✕. What is hidden comes back here. The
+                layout is kept on this device — mouse and touch apart
+                — and never in the save.
+              </p>
+              <ul className="mt-3 flex flex-col gap-2">
+                {hud.items.map((item) => (
+                  <li
+                    key={item.id}
+                    className="flex items-center justify-between gap-3"
+                  >
+                    <span className={'text-sm ' + t.heading}>
+                      {item.label}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => hud.onToggle(item.id, !item.hidden)}
+                      className={
+                        'rounded bg-stone-700 px-3 hover:bg-stone-600 ' +
+                        (comfortable ? 'py-2 min-h-[44px] ' : 'py-1 ') +
+                        'text-xs'
+                      }
+                    >
+                      {item.hidden ? 'Show' : 'Hide'}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+              <button
+                type="button"
+                onClick={hud.onReset}
+                className={
+                  'mt-4 rounded bg-stone-700 px-3 hover:bg-stone-600 ' +
+                  (comfortable ? 'py-2 min-h-[44px] ' : 'py-1 ') +
+                  'text-xs'
+                }
+              >
+                Reset layout
+              </button>
+            </div>
           ) : null}
         </div>
       </section>

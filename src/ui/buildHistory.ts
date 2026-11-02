@@ -43,6 +43,14 @@ export interface BuildRecord {
 
 const ALL_RECORDS: BuildRecord[] = [
   {
+    merge: 'Merge #69',
+    pr: 95,
+    sha: 'edf8d82',
+    date: '2026-11-02',
+    what: 'THE HUD, RESEATED \u2014 Adam\u2019s hand-drawn diagram made real. On desktop the location chip, the status bars (hunger, cold, wet, and the storm warning), and the quest card now stand in a right-hand column; health, the SILENT EARTH readout, the controls, and the wardrobe stand up the left, compacted into the space the bars vacated. The center of the screen stands clear. Every element is moveable (a \u29bf grip drags it anywhere, clamped to the screen) and closable (its \u2715 hides it), and Options gains a HUD tab listing them all with show/hide switches and a layout reset. Positions are kept on the device, mouse and touch apart, never in the save. On touch the seats stand as they were measured.',
+    why: 'Adam\u2019s notes and his color-coded drawing: the bars belonged out of the view, and the elements should move to where each player wants them \u2014 these seats are only the starting locations. The vitals had ridden to the top of the left stack in Merge #65 and still stood in the picture; the diagram settled where they actually belong.',
+  },
+  {
     merge: 'Merge #68',
     pr: 95,
     sha: 'a57454d',
