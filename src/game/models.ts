@@ -264,8 +264,9 @@ export function buildKindGeometry(spec: MeshSpec, kind: ScatterKind): THREE.Buff
     ]);
   }
   // Kind override (the Grove's old trees share the 'tree' shape
-  // slot, but they must read VISIBLY OLDER than a standing oak —
-  // Adam, 2026-10-30, the age is the game's side of the pill
+  // slot, but they must read VISIBLY OLDER than an ordinary
+  // standing tree — Adam, 2026-10-30, the age is the game's
+  // side of the pill
   // rule; amended the same day: the difference must read BEFORE
   // SHE'S CLOSE, at maze-approach distance). Distance carries
   // on silhouette + palette, so: a much thicker, greyer trunk
