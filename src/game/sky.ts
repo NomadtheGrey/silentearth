@@ -317,6 +317,9 @@ export function cloudCoverFromRain(rain: number): number {
   return Math.min(1, Math.max(0, (rain - CLOUD_RAIN_MIN) / (CLOUD_RAIN_MAX - CLOUD_RAIN_MIN)));
 }
 
+/** How much standing rain dims the world's light at intensity 1 (DRAFT — W4 pin pass). */
+export const RAIN_LIGHT_DIM = 0.35;
+
 /** Moon phase for a world seed, 0..1 (the cycle's base; 0 = new, 0.5 = full). */
 export function moonPhase(seed: string): number {
   return ((deriveSeed(String(seed), 'moon') % 1000) / 1000 + 1) % 1;
@@ -399,6 +402,14 @@ export interface SkyUpdateInput {
   month?: number;
   /** Seasonal weather at the player (rain + wind drive the sky). */
   weather: { rain: number; wind: number };
+  /**
+   * The SPELL layer's live rain intensity (W1, weather-
+   * Spells) — composes OVER the field's rain: cover and
+   * clarity read max(field, spell), and the lights dim
+   * under standing rain. Absent = the field alone (the
+   * pre-W1 behavior).
+   */
+  rain?: number;
   playerX: number;
   playerZ: number;
 }
@@ -731,8 +742,16 @@ export class SkyRig {
     const dayFactor = clamp01((sunElev + 0.05) / 0.3);
     const nightFactor = 1 - dayFactor;
     this.lastNightFactor = nightFactor;
-    const clarity = clarityFromRain(input.weather.rain);
-    const cover = cloudCoverFromRain(input.weather.rain);
+    // W1: the sky answers to the SPELL's rain where it
+    // stands — the effective rain is the field's or the
+    // spell's, whichever is greater, and the lights dim
+    // under it. (Pre-W1 the field alone drove this, and
+    // its permanent partial blend meant a grey sky that
+    // never rained.)
+    const rainEff = Math.max(input.weather.rain, input.rain ?? 0);
+    const rainDim = 1 - RAIN_LIGHT_DIM * rainEff;
+    const clarity = clarityFromRain(rainEff);
+    const cover = cloudCoverFromRain(rainEff);
 
     // Sky group follows the player: the dome reads as infinitely far.
     this.group.position.set(input.playerX, 0, input.playerZ);
@@ -761,7 +780,7 @@ export class SkyRig {
       this.domeUniforms.moonGlow.value = 0;
       this.sunLight.position.copy(dir).multiplyScalar(100);
       this.sunLight.color.set(0xd8d0b0);
-      this.sunLight.intensity = SUN_DAYLIGHT_BASE + SUN_DAYLIGHT_PEAK * Math.sin(Math.PI * split.dayProgress);
+      this.sunLight.intensity = (SUN_DAYLIGHT_BASE + SUN_DAYLIGHT_PEAK * Math.sin(Math.PI * split.dayProgress)) * rainDim;
     } else {
       const dir = moonDirection(split.nightProgress);
       this.moonMesh.position.copy(dir).multiplyScalar(SKY_BODY_RADIUS);
@@ -789,9 +808,9 @@ export class SkyRig {
       // New moon = 0: essentially no moonlight, dark as now.
       const altFactor = clamp01(dir.y / Math.sin((MOON_MAX_ALT_DEG * Math.PI) / 180));
       this.sunLight.intensity =
-        MOONLIGHT_FULL * terms.illumination * altFactor * (0.35 + 0.65 * clarity);
+        MOONLIGHT_FULL * terms.illumination * altFactor * (0.35 + 0.65 * clarity) * rainDim;
     }
-    this.hemiLight.intensity = 0.45 + HEMI_DAYLIGHT_GAIN * dayFactor;
+    this.hemiLight.intensity = (0.45 + HEMI_DAYLIGHT_GAIN * dayFactor) * rainDim;
     // Owl talon — night sight (tier-1 charm, DRAFT floor):
     // the night ambient floor rises while carried + awakened.
     // Scaled by nightFactor (full at night, zero by day) —
