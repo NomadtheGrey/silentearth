@@ -82,9 +82,9 @@ export const BIOMES: BiomeDef[] = [
     groundColor: 0x5a5a38,
     density: 1.0,
     mix: {
-      bush: 0.14, log: 0.08, bogPatch: 0.08, standingWater: 0.08,
+      bush: 0.14, log: 0.09, bogPatch: 0.08, standingWater: 0.08,
       tree: 0.05, snapWood: 0.10, tenderVines: 0.28, peatMoss: 0.10,
-      riverSilt: 0.04, riverStone: 0.03, bone: 0.01, downedOak: 0.01,
+      riverSilt: 0.04, riverStone: 0.03, bone: 0.01,
       stump: 0.01, bogGrowth: 0.03, edibleMushroom: 0.04, poisonMushroom: 0.04,
       flint: 0.05, pond: 0.02,
     },
@@ -123,8 +123,8 @@ export const BIOMES: BiomeDef[] = [
     groundColor: 0x7a7a4a,
     density: 0.70,
     mix: {
-      bush: 0.20, tree: 0.18, snapWood: 0.15, tenderVines: 0.10, log: 0.05,
-      riverStone: 0.10, bone: 0.05, peatMoss: 0.05, downedOak: 0.05,
+      bush: 0.20, tree: 0.18, snapWood: 0.15, tenderVines: 0.10, log: 0.10,
+      riverStone: 0.10, bone: 0.05, peatMoss: 0.05,
       riverSilt: 0.02, saltCrystal: 0.02, bogPatch: 0.01, standingWater: 0.01,
       stump: 0.02, appleTree: 0.06, flint: 0.08, flower: 0.08, beehive: 0.02,
       // Flowers landing (2026-10-28): new kinds, pink untouched.
@@ -163,8 +163,8 @@ export const BIOMES: BiomeDef[] = [
     groundColor: 0x3d4a2a,
     density: 1.25,
     mix: {
-      tenderVines: 0.45, bush: 0.20, log: 0.08, snapWood: 0.08,
-      downedOak: 0.05, peatMoss: 0.05, tree: 0.05, riverStone: 0.02, bone: 0.02,
+      tenderVines: 0.45, bush: 0.20, log: 0.13, snapWood: 0.08,
+      peatMoss: 0.05, tree: 0.05, riverStone: 0.02, bone: 0.02,
       stump: 0.01, bogGrowth: 0.02, edibleMushroom: 0.08, poisonMushroom: 0.08,
       flint: 0.03,
     },
@@ -181,8 +181,8 @@ export const BIOMES: BiomeDef[] = [
     density: 0.50,
     mix: {
       saltCrystal: 0.30, riverStone: 0.20, bone: 0.15, riverSilt: 0.10,
-      bush: 0.05, snapWood: 0.05, log: 0.05, peatMoss: 0.03,
-      standingWater: 0.02, tenderVines: 0.04, downedOak: 0.01,
+      bush: 0.05, snapWood: 0.05, log: 0.06, peatMoss: 0.03,
+      standingWater: 0.02, tenderVines: 0.04,
       flint: 0.03,
     },
     // The odd dry one: mineral crust, salt crystals, bone.
@@ -225,7 +225,7 @@ export const BIOMES: BiomeDef[] = [
     density: 1.30,
     mix: {
       tallTree: 0.28, tree: 0.14, bush: 0.12, tenderVines: 0.18,
-      log: 0.06, snapWood: 0.05, downedOak: 0.04, peatMoss: 0.04,
+      log: 0.10, snapWood: 0.05, peatMoss: 0.04,
       flower: 0.03, riverStone: 0.02, bone: 0.01, stump: 0.01, bogGrowth: 0.01, edibleMushroom: 0.08, poisonMushroom: 0.08,
       // Flowers landing (2026-10-28): new kinds, pink untouched.
       aster: 0.007, trillium: 0.008, violet: 0.008, ladySlipper: 0.007,

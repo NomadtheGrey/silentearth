@@ -61,7 +61,6 @@ import {
   wrapGenWithState,
 } from './harvestState';
 import { standingInWater, terrainSpeedAt, WADING_FACTOR, type WaterDisc } from './movement';
-import { treeKindAt } from './treeKind';
 import { riverParamsFor, riverRibbonForChunk } from './river';
 import { barnSite, caveMouthSite, chapelSite, drownedMillSite, farmhouseSite, generalStoreSite, groveSite, pushOutOfWalls, railSidingSite, schoolhouseSite, siloSite, sunkenRoadSite, villageSite, wallsNearSites, type SiteFootprint } from './sites';
 import { caveFootprintFor, caveInstancesInRect, caveLayoutForKey, caveMouthsNear } from './caves';
@@ -1332,7 +1331,7 @@ export class WorldRenderer {
    *  mesh's baseY — the renderer's own placement sum,
    *  so the crown a perch reads is the crown that draws). */
   private crownTopCache = new Map<string, number>();
-  private crownTopFor(kind: 'tree' | 'oakTree'): number {
+  private crownTopFor(kind: 'tree'): number {
     let top = this.crownTopCache.get(kind);
     if (top === undefined) {
       const mesh = SOURCE_FOR_KIND[kind].mesh;
@@ -1361,7 +1360,7 @@ export class WorldRenderer {
         if (!pts) {
           pts = [];
           for (const obj of this.gen.generateChunk(cx, cz).objects) {
-            if (obj.kind === 'tree' || obj.kind === 'oakTree') {
+            if (obj.kind === 'tree') {
               pts.push({
                 x: obj.x,
                 z: obj.z,
@@ -1402,7 +1401,7 @@ export class WorldRenderer {
         if (!pts) {
           pts = [];
           for (const obj of this.gen.generateChunk(cx, cz).objects) {
-            if (obj.kind === 'tree' || obj.kind === 'oakTree' || obj.kind === 'bush') {
+            if (obj.kind === 'tree' || obj.kind === 'bush') {
               pts.push({ x: obj.x, z: obj.z });
             }
           }
@@ -3127,15 +3126,12 @@ export class WorldRenderer {
       .spawnedTreesSnapshot()
       .filter((sapling) => this.chunks.has(this.chunkKey(sapling.cx, sapling.cz)));
     if (saplings.length > 0) {
-      // Saplings draw in their spot's kind (Adam, 2026-10-30 —
-      // kind belongs to the ground): oak-spot saplings grow up
-      // in the oak's broader shape, the rest in the common
-      // tree's, one instanced mesh per kind.
-      const byKind: { tree: typeof saplings; oakTree: typeof saplings } = { tree: [], oakTree: [] };
-      for (const sapling of saplings) {
-        byKind[treeKindAt(this.gen.seed, sapling.x, sapling.z) === 'oak' ? 'oakTree' : 'tree'].push(sapling);
-      }
-      for (const kind of ['tree', 'oakTree'] as const) {
+      // Saplings draw as the one tree kind there is (trees
+      // went generic, Adam, 2026-11-02 — the flattening
+      // retired the oak-spot shape saplings used to grow
+      // into), one instanced mesh.
+      const byKind: { tree: typeof saplings } = { tree: saplings };
+      for (const kind of ['tree'] as const) {
         const list = byKind[kind];
         if (list.length === 0) continue;
         const kindRender = KIND_RENDER[kind];

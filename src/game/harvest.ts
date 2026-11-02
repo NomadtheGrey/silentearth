@@ -202,7 +202,6 @@ import {
 } from './harvestState';
 import type { WorldGen } from './worldgen';
 import { boneItemId, boneKindAt } from './boneKind';
-import { treeKindAt } from './treeKind';
 import { groveContains, groveSite, GROVE_REFUSAL_LINE } from './sites';
 import { TOO_HUNGRY_STAGE, type HungerStageQuery } from './hunger';
 import { loomState } from './loomState';
@@ -716,13 +715,10 @@ export function createHarvestOutcomeListener(
         fail(req, 'out-of-range');
         return;
       }
-      // A matured sapling's kind is its own spot's kind (Adam,
-      // 2026-10-30 — kind belongs to the ground, read off the
-      // seed): an oak-spot regrowth fells as an oak, Downed Oak
-      // and all, exactly like a worldgen oak.
-      const treeSource = SOURCE_BY_ID[
-        treeKindAt(gen.seed, sapling.x, sapling.z) === 'oak' ? 'standingOak' : 'standingTree'
-      ];
+      // Trees are generic (Adam, 2026-11-02 — the flattening
+      // retired the oak kind): a matured sapling fells as the
+      // one standing tree there is.
+      const treeSource = SOURCE_BY_ID['standingTree'];
       if (!treeSource) {
         fail(req, 'target-mismatch');
         return;

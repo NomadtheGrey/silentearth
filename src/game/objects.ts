@@ -72,12 +72,13 @@
  *   three by the game itself: the first trowel costs snap-wood +
  *   cordage (from vines) + river stone, so gating any of those behind
  *   the trowel would make the first tool uncraftable.
- *   SPADE-AXE (the one gated source): downed oak. Heavy structural
- *   wood for true shelters (wattle hut onward, all mid-game), and a
- *   route-symmetric gate: an axe-trowel-only gate would lock out
- *   spade-route players until convergence, and vice versa. Below
- *   spade-axe oak yields 0; at spade-axe 1 + 25% →2; trundle 2 + 25% →3
- *   (hauling heavy logs is exactly what the wheeled tool is for).
+ *   SPADE-AXE (the family gate's history): the downed oak
+ *   was the one family-gated source — heavy structural wood
+ *   behind the axe family, route-symmetric so neither tool
+ *   route locked out. THE LOG MERGER (Adam, 2026-11-02)
+ *   retired that kind into the fallen log, which stands at
+ *   HAND + its STOMP; the axe family gate lives on now in
+ *   the standing trees (felling is axe work, as ever).
  *   STUMP: claiming needs no tool (permit 'hand'), but it is an
  *   ANCHOR, not a counted harvest — the amount pattern does not apply
  *   to it (see anchor flag); moving it still needs the trundle-tool
@@ -543,21 +544,6 @@ const SPORES_25: SecondaryYield = {
  * actually recover.
  */
 
-/**
- * The oak's fell companion (Adam, 2026-10-30): a felled
- * standing oak yields its snap-wood PLUS one Downed Oak
- * — the structural piece the hut recipes already
- * consume. Chance 1 = every fell (quantity DRAFT for
- * the pin pass). The REMOVE action grants secondaries
- * outright, so a removed oak yields it too, exactly as
- * the common tree's def shape would.
- */
-const DOWNED_OAK_ALWAYS: SecondaryYield = {
-  item: 'DOWNED_OAK',
-  chance: 1,
-  message: 'A sound oak length comes down with it — a Downed Oak piece.',
-};
-
 const BOG_BERRIES_50: SecondaryYield = {
   item: 'BOG_BERRIES',
   chance: 0.5,
@@ -588,16 +574,43 @@ export const SOURCES: HarvestSourceDef[] = [
     biomes: ['mirewood', 'oldfieldRise', 'tanglewood', 'deepBog', 'creekBottom', 'saltFlat'],
     mesh: { shape: 'bush', color: 0x3f5a2c, baseY: 0.45 },
   },
+  // THE LOG MERGER (Adam, 2026-11-02): the downed oak
+  // retired into this def — one log kind, stompable,
+  // yielding the Log piece (the DOWNED_OAK item key,
+  // whose id stays 'downed-oak' as plumbing under the
+  // display name 'Log') plus snap wood. The oak's
+  // chance secondaries (spores/kindling) retired with
+  // it, and its densities folded into 'log' in the
+  // biome tables. Permit stays this def's own HAND —
+  // the stomp is the processing now (flagged in the
+  // landing report; the oak's axe pin governed the
+  // retired kind).
   {
     id: 'fallenLog',
     kind: 'log',
     name: 'Fallen Log',
-    description: 'A plain fallen log, lighter than downed oak — framing wood, not structure.',
+    description:
+      'A plain fallen log — the only kind there is. Stomp it apart: ' +
+      'a sound Log piece for building — framing and structure both, ' +
+      'since it is the one log — and snap wood comes away in the ' +
+      'working.',
     harvestable: true,
     permitTier: 'hand',
     renewal: 'spawn-near-trees',
-    primaryYield: 'SNAP_WOOD',
-    secondaryYields: [],
+    primaryYield: 'DOWNED_OAK',
+    secondaryYields: [
+      {
+        item: 'SNAP_WOOD',
+        chance: 1,
+        message: 'Snap wood comes away with it — the brittle limbs and offcuts.',
+      },
+    ],
+    multiStep: {
+      action: 'STOMP',
+      step: 0.34,
+      struggleMessage: 'Stomping down on the heavy log. Your legs ache as the wood splinters slowly.',
+      successMessage: 'The log yields a sound piece.',
+    },
     provenance: 'draft',
     biomes: ['mirewood', 'oldfieldRise', 'tanglewood', 'deepBog', 'creekBottom', 'saltFlat'],
     mesh: { shape: 'log', color: 0x5a4028, baseY: 0.24 },
@@ -674,31 +687,6 @@ export const SOURCES: HarvestSourceDef[] = [
     mesh: { shape: 'tree', color: 0x4a2e18, extraColor: 0x2f4a26, baseY: 0.8, extraY: 2.4 },
   },
   {
-    id: 'standingOak',
-    kind: 'oakTree',
-    name: 'Standing Oak',
-    description:
-      'An oak among the standing trees (Adam, 2026-10-30 — tree ' +
-      'kinds: which trees are oaks is a fact of the spot they grow ' +
-      'on, read off the world seed). Broader in the canopy than ' +
-      'the common run, and heavier coming down: felled, it yields ' +
-      'its snap-wood plus a Downed Oak piece. Same lifecycle as ' +
-      'any standing tree otherwise — fell leaves a stump and a ' +
-      'sapling rises nearby; remove clears the ground for good. ' +
-      'No new log item comes from it; the Downed Oak is the ' +
-      'existing structural piece.',
-    harvestable: true,
-    permitTier: 'axeTrowel',
-    permitFamily: 'axe',
-    removable: true,
-    fellOnHarvest: true,
-    primaryYield: 'SNAP_WOOD',
-    secondaryYields: [DOWNED_OAK_ALWAYS],
-    provenance: 'draft',
-    biomes: ['mirewood', 'oldfieldRise', 'tanglewood'],
-    mesh: { shape: 'tree', color: 0x4a2e18, extraColor: 0x476b2a, baseY: 0.8, extraY: 2.4 },
-  },
-  {
     id: 'groveOak',
     kind: 'groveOak',
     name: 'Grove Tree',
@@ -716,7 +704,7 @@ export const SOURCES: HarvestSourceDef[] = [
     removable: true,
     fellOnHarvest: true,
     primaryYield: 'SNAP_WOOD',
-    secondaryYields: [DOWNED_OAK_ALWAYS],
+    secondaryYields: [],
     provenance: 'draft',
     biomes: ['forest', 'tanglewood', 'oldfieldRise'],
     mesh: { shape: 'tree', color: 0x453324, extraColor: 0x55663c, baseY: 0.8, extraY: 2.4 },
@@ -2587,44 +2575,6 @@ export const SOURCES: HarvestSourceDef[] = [
     provenance: 'prototype',
     biomes: ['saltFlat', 'oldfieldRise'],
     mesh: { shape: 'crystal', color: 0xd8e8e8, baseY: 0.2 },
-  },
-  {
-    id: 'downedOakLog',
-    kind: 'downedOak',
-    name: 'Downed Oak',
-    description:
-      'Heavy structural logs that form the skeleton of true shelters. Hard to process. ' +
-      'Axe work (Adam, 2026-10-26, PINNED permit: axe-family — axe-trowel and its ' +
-      'descendants; a spade is not an axe). Acorns scatter around it on the ground — ' +
-      'hand-picked, not from the log (gather-exempt food, Adam 2026-10-26 — ' +
-      'but acorns NEED COOKED: eating them requires the campfire ' +
-      'cooking step, Adam 2026-10-26).',
-    harvestable: true,
-    permitTier: 'axeTrowel',
-    permitFamily: 'axe',
-    renewal: 'spawn-near-trees',
-    primaryYield: 'DOWNED_OAK',
-    secondaryYields: [
-      {
-        item: 'SPORES',
-        chance: 0.25,
-        message: 'A cloud of luminescent spores clings to your sleeves.',
-      },
-      {
-        item: 'DRY_KINDLING',
-        chance: 0.2,
-        message: 'You recover some dry splinters from the core.',
-      },
-    ],
-    multiStep: {
-      action: 'STOMP',
-      step: 0.34,
-      struggleMessage: 'Stomping down on the heavy oak. Your legs ache as the wood splinters slowly.',
-      successMessage: 'The heavy log yields a structural piece.',
-    },
-    provenance: 'prototype',
-    biomes: ['tanglewood', 'mirewood', 'oldfieldRise', 'saltFlat'],
-    mesh: { shape: 'oakLog', color: 0x3a2818, baseY: 0.38 },
   },
   {
     id: 'oldStump',

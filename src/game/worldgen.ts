@@ -18,7 +18,6 @@
 import { BIOMES, createFields, weightsAt, groundColorAt, marshWeight } from './biomes';
 import type { Fields } from './biomes';
 import { mulberry32, deriveSeed, hashSeed } from './seed';
-import { treeKindAt } from './treeKind';
 import { barnSite, caveMouthSite, chapelSite, distToSegment, drownedMillSite, farmhouseSite, generalStoreSite, groveSite, railSidingSite, schoolhouseSite, siloSite, sunkenRoadSite, villageSite, waterTowerSite, type SiteFootprint } from './sites';
 import { CHUNK_SIZE, BASE_SCATTER_PER_CHUNK, GROUND_SEGMENTS } from '../constants';
 import { caveInstancesInRect } from './caves';
@@ -44,7 +43,7 @@ export interface WorldGen {
 const SCATTER_KINDS: ScatterKind[] = [
   'bush', 'log', 'bogPatch', 'standingWater', 'tree',
   'snapWood', 'tenderVines', 'peatMoss', 'riverSilt', 'riverStone',
-  'bone', 'saltCrystal', 'downedOak',
+  'bone', 'saltCrystal',
   // Fill-in landing (2026-10-25): stump, reed, marshGrass, bogGrowth.
   'stump', 'reed', 'marshGrass', 'bogGrowth',
   // Meadow/forest landing (2026-10-26): flower, tallTree (scenery only).
@@ -399,8 +398,20 @@ export function createWorldGen(seed: string): WorldGen {
     // landing leaves every pre-existing scatter object untouched;
     // offsets clamp inside the chunk so chunk-gen objects never
     // cross chunk borders (proximity regenerates per chunk).
+    // THE LOG MERGER (Adam, 2026-11-02): the downed oak is a
+    // fallen log now, and fallen logs are everywhere the oaks
+    // were and more — a cluster beside EVERY log would more
+    // than double the acorn supply. The pass gates on the
+    // log's own spot instead (a position hash, the treeKind
+    // pattern): roughly one log in four carries a cluster
+    // (ACORN_LOG_SHARE, DRAFT), holding the acorn census
+    // near what the oaks alone provided.
     const acornRand = mulberry32(deriveSeed(seed, `acorns:${cx},${cz}`));
-    const oaks = objects.filter((obj) => obj.kind === 'downedOak');
+    const oaks = objects.filter(
+      (obj) =>
+        obj.kind === 'log' &&
+        ((deriveSeed(seed, `acornlog:${obj.x.toFixed(2)},${obj.z.toFixed(2)}`) % 4) + 4) % 4 === 0,
+    );
     for (const oak of oaks) {
       const angle = acornRand() * Math.PI * 2;
       const dist = 0.8 + acornRand() * 1.2;
@@ -490,20 +501,12 @@ export function createWorldGen(seed: string): WorldGen {
       objects.splice(0, objects.length, ...hung);
     }
 
-    // Tree kinds (Adam, 2026-10-30): a deterministic share of
-    // standing-tree slots are OAKS. Runs LAST among the passes,
-    // so every earlier derivation (the acorn scatter, the hive
-    // hosting above — hives host on 'tree') reads the original
-    // kinds. Pure relabel: treeKindAt is a position hash (no
-    // RNG consumed), and position/scale/rotY are untouched, so
-    // slot identity and counts are exactly today's — only the
-    // kind string changes, on oak spots only. 'oakTree' never
-    // enters the biome mixes; it exists only by this conversion.
-    for (const obj of objects) {
-      if (obj.kind === 'tree' && treeKindAt(seed, obj.x, obj.z) === 'oak') {
-        obj.kind = 'oakTree';
-      }
-    }
+    // Tree kinds RETIRED (Adam, 2026-11-02 — the flattening:
+    // "just make them generic trees... Unless we want to get
+    // into all the varieties of trees, which i don't"). The
+    // oak relabel pass that stood here is gone; every standing
+    // tree is 'tree'. Apple trees stand as the one accepted
+    // variation — the fruit is visible, not a hidden type.
 
     // The sites (Grove landing 2026-10-30; Schoolhouse landing
     // #2 and the Burnt Village #3, same day): the site pass runs LAST, after every other
