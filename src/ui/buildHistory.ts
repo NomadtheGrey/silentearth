@@ -43,6 +43,14 @@ export interface BuildRecord {
 
 const ALL_RECORDS: BuildRecord[] = [
   {
+    merge: 'Merge #65',
+    pr: 95,
+    sha: '1a60d63',
+    date: '2026-11-02',
+    what: 'THE NOTES PAIR \u2014 two items from Adam\u2019s own SE Notes file, the easiest on his ranked list. THE STATUS BARS MOVE UP: the vitals row \u2014 health, hunger, cold, wet, and the storm warning, with the quest card that shares its row \u2014 now stands at the TOP of the HUD stack, directly under the transient placement and pour cards; the row moved whole, so its touch-landscape rail stands exactly as measured. FPS IN BOTH PLACES: the SILENT EARTH meta block \u2014 the readout Adam calls the Debug HUD \u2014 gains an FPS line from the same sample the location chip reads, same wording, worst frame and all; the chip keeps its own. Shown in both places for now, on his word.',
+    why: 'Adam\u2019s notes, from play: the bars belong at the top of the screen, out of the way of the view \u2014 seated mid-stack they sat in the picture and could slip below the fold of a short screen. And the frame rate belongs with the rest of the readouts, not only in the chip. Small items, taken first because they were the easiest on his list; the rest of the notes \u2014 the quest log, the closable HUD, sound, the raven \u2014 stand grouped and ranked for their own rounds.',
+  },
+  {
     merge: 'Merge #64',
     pr: 95,
     sha: '6e94bbd',
