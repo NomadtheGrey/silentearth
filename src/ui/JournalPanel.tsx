@@ -55,9 +55,42 @@ export interface JournalMarkRow {
   seekingSinceDay: number | null;
 }
 
+/**
+ * One true name she has been taught by a rite (the
+ * familiar road, 2026-11-02): the kind, its name as
+ * written in the book, and its gift. The standing
+ * familiar's row carries the Recite door when its gift
+ * is a working one; borrowState is the caller's read of
+ * the borrowing (span/rest live in FamiliarState).
+ */
+export interface JournalNameRow {
+  kind: string;
+  /** The kind's plain label (caller's). */
+  label: string;
+  /** The true name, as written. */
+  name: string;
+  /** The gift's phrase. */
+  gift: string;
+  /** This kind stands as her familiar now. */
+  isFamiliar: boolean;
+  /** The gift works today (a Recite can be offered). */
+  giftWorking: boolean;
+  /** For the familiar's row: the borrowing's posture. */
+  borrowState?: 'ready' | 'borrowed' | 'resting';
+}
+
 export interface JournalPanelProps {
   /** One row per begun mark, caller's order. */
   marks: JournalMarkRow[];
+  /**
+   * The true names the rites have taught her (the
+   * familiar road): rendered as the book's Names page,
+   * below the marks. Omitted/empty = no names yet (the
+   * section does not render).
+   */
+  names?: JournalNameRow[];
+  /** Recite a name — borrow the familiar's gift. */
+  onRecite?: (kind: string) => void;
   /**
    * The quest log the book carries (dialog audit #4):
    * the caller's mapped rows, rendered below the marks
@@ -83,6 +116,8 @@ export interface JournalPanelProps {
 
 export function JournalPanel({
   marks,
+  names,
+  onRecite,
   quests,
   onMarkQuest,
   onClose,
@@ -203,6 +238,51 @@ export function JournalPanel({
           ))}
         </ul>
       )}
+      {names && names.length > 0 ? (
+        <div className="mt-3">
+          <h3 className={'mb-2 text-sm font-semibold ' + t.heading}>
+            Names
+          </h3>
+          <ul className="flex flex-col gap-2">
+            {names.map((row) => (
+              <li
+                key={row.kind}
+                className="flex flex-col gap-y-0.5 rounded-xl bg-black/20 px-3 py-2"
+              >
+                <span className="flex flex-wrap items-baseline gap-x-2">
+                  <span className="font-medium">{row.name}</span>
+                  <span className="text-xs text-stone-400">
+                    the {row.label}
+                    {row.isFamiliar ? ' — your familiar' : ''}
+                  </span>
+                </span>
+                <span className="text-xs text-stone-400">
+                  Gift: {row.gift}
+                  {row.isFamiliar && !row.giftWorking
+                    ? ' — not yet hers to borrow'
+                    : ''}
+                </span>
+                {row.isFamiliar && row.giftWorking && onRecite ? (
+                  <span className="mt-1">
+                    <button
+                      type="button"
+                      disabled={row.borrowState !== 'ready'}
+                      onClick={() => onRecite(row.kind)}
+                      className={btn + t.button}
+                    >
+                      {row.borrowState === 'borrowed'
+                        ? 'Borrowed now'
+                        : row.borrowState === 'resting'
+                          ? 'The gift rests'
+                          : `Recite — borrow: ${row.gift}`}
+                    </button>
+                  </span>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
       {quests ? (
         <div className="mt-3">
           <h3 className={'mb-2 text-sm font-semibold ' + t.heading}>

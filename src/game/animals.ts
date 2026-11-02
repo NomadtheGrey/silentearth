@@ -165,6 +165,21 @@ export const ANIMAL_DEFS: Record<AnimalKind, AnimalDef> = {
 export const HOME_RANGE_M = 8;
 export const FLEE_RADIUS_M = 4;
 export const WARY_FLEE_RADIUS_M = 8;
+
+/**
+ * UNDETECTED (the mole's gift, borrowed — the familiar
+ * road, 2026-11-02): while the shell holds this on, wild
+ * animals do not startle at her at all — she passes
+ * unseen, as the mole does. The shell owns the span
+ * (FamiliarState's borrowing); this module only reads.
+ */
+let undetectedNow = false;
+export function setUndetected(on: boolean): void {
+  undetectedNow = on;
+}
+export function isUndetected(): boolean {
+  return undetectedNow;
+}
 export const WANDER_SPEED_MPS = 1;
 export const FLEE_SPEED_MPS = 1.5;
 /** Zigzag half-angle off the away line, radians (DRAFT, ~34°). */
@@ -511,7 +526,7 @@ function stepSquirrelClimb(
   distP: number,
 ): boolean {
   if (a.climbState === 'none') {
-    if (distP >= FLEE_RADIUS_M) return false;
+    if (undetectedNow || distP >= FLEE_RADIUS_M) return false;
     // Nearest tree in refuge reach of the squirrel.
     let best: AnimalPoint | null = null;
     let bestDist = Infinity;
@@ -626,7 +641,7 @@ export function updateAnimal(a: AnimalInstance, dt: number, input: AnimalUpdateI
     a.snapT = Math.max(0, a.snapT - dt);
     if (a.snapT <= 0) spookFish(a, input.playerX, input.playerZ);
   }
-  if (distP < fleeRadius && !(a.spookT > 0) && !(a.snapT > 0)) {
+  if (!undetectedNow && distP < fleeRadius && !(a.spookT > 0) && !(a.snapT > 0)) {
     // Per-kind flee style (DRAFT values — see ANIMAL_DEFS).
     // Temperament still sets WHEN (the radius above); style sets HOW.
     if (def.flee === 'freeze') {
