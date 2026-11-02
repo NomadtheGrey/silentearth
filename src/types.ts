@@ -92,6 +92,7 @@ export type ScatterKind =
   // non-harvestable scenery (the ring, the fragment stone, the
   // maze walls, the crow's hoard).
   | 'groveOak'
+  | 'pineTree'
   | 'standingStone'
   | 'carvedStone'
   | 'hedgeWall'

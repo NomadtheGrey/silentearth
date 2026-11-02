@@ -278,6 +278,22 @@ export function buildKindGeometry(spec: MeshSpec, kind: ScatterKind): THREE.Buff
   // wild canopy, so the grove's trees lift out of the forest's
   // deep greens); moss-dark masses hanging at the crown's edge
   // with thin moss strands below them.
+  // Kind override (the PINE, 2026-11-02 — Background's
+  // Scrub biome dresses in this silhouette via the 'tree'
+  // shape slot; Adam opened pines early). A pine reads
+  // CONICAL against the generic tree's blobs: a straighter,
+  // taller trunk and three stacked cones narrowing up,
+  // shade-stepped so the tiers read. Local ground is
+  // y = -baseY (the def carries baseY 0.8); the top cone's
+  // apex lands at local 2.4 = world ~3.2 at scale 1.
+  if (kind === 'pineTree') {
+    return merge([
+      part(cyl(0.07, 0.11, 1.9, 6), c, { p: [0, 0.15, 0] }),
+      part(cyl(0.02, 1.05, 1.3, 8), e, { p: [0, 0.75, 0] }),
+      part(cyl(0.02, 0.8, 1.15, 8), shade(e, 1.08), { p: [0, 1.35, 0] }),
+      part(cyl(0.02, 0.52, 1.0, 8), shade(e, 0.94), { p: [0, 1.9, 0] }),
+    ]);
+  }
   if (kind === 'groveOak') {
     const branches: THREE.BufferGeometry[] = [];
     for (let i = 0; i < 5; i++) {
