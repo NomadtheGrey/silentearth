@@ -112,9 +112,31 @@ export const PLACEMENT_YAW_KINDS: ReadonlySet<string> = new Set([
   'writing-desk',
 ]);
 
-/** Does this placeable's ghost rotate with her facing? */
+/** Does this placeable's ghost rotate with her facing?
+ *  Houses take yaw too (Adam, 2026-11-02: 'Let's have
+ *  the house door face the player') — their keys are
+ *  house item ids or type names, resolved the same way
+ *  placementFootprintFor resolves them. A square outline
+ *  alone would hide the rotation, so the renderer marks
+ *  the door side on house ghosts (placementIsHouse). */
 export function placementTakesYaw(key: string): boolean {
-  return PLACEMENT_YAW_KINDS.has(key);
+  if (PLACEMENT_YAW_KINDS.has(key)) return true;
+  return key in HOUSE_ITEM_KEYS || key in HOUSE_DEFS;
+}
+
+/** Is this placeable a house (any ladder type)? The
+ *  ghost draws its DOOR TICK for these: a notch on the
+ *  local +z edge — the side every house builder puts
+ *  its door/opening on, and the side that faces her at
+ *  placement (rotY = her yaw points local +z at her). */
+export function placementIsHouse(key: string): boolean {
+  return key in HOUSE_ITEM_KEYS || key in HOUSE_DEFS;
+}
+
+/** The local +z extent of a footprint (the door edge's
+ *  distance from center): rect depth half, circle r. */
+export function footprintDoorExtent(fp: PlacementFootprint): number {
+  return fp.shape === 'circle' ? fp.r : fp.d / 2;
 }
 
 /** House item ids (Systems' spellings) -> their defs. */

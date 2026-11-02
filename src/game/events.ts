@@ -267,7 +267,7 @@ export interface EventMap {
    * — no zone/plot gate. Renderer rebuilds the placed group; the
    * shelter query reads live state, so no re-wiring is needed.
    */
-  'shelter:placed': { id: string; type: HouseType; x: number; z: number };
+  'shelter:placed': { id: string; type: HouseType; x: number; z: number; rotY: number };
   /**
    * A placed house UPGRADED in place (shelterState.upgradeHouse):
    * same id, same position, new type. Deliberately NOT

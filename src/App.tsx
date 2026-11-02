@@ -3988,6 +3988,7 @@ export default function App() {
               type: house.type,
               x: house.x,
               z: house.z,
+              rotY: house.rotY ?? 0,
               contents: [...ids]
                 .filter((id) => (store?.count(id) ?? 0) > 0)
                 .map((id) => ({
@@ -5549,6 +5550,7 @@ export default function App() {
               house.type as HouseType,
               house.x,
               house.z,
+              house.rotY ?? 0,
             );
             const store = new HomeStorage(
               HOUSE_TYPE_TO_ITEM[placed.type],
@@ -8972,7 +8974,7 @@ export default function App() {
       if (mode.fireType) {
         fireState.placeFire(mode.fireType, target.x, target.z, playerRef.current?.yaw ?? 0);
       } else if (mode.houseType) {
-        shelterState.placeHouse(mode.houseType, target.x, target.z);
+        shelterState.placeHouse(mode.houseType, target.x, target.z, playerRef.current?.yaw ?? 0);
       } else if (mode.loom) {
         loomState.placeLoom(target.x, target.z, playerRef.current?.yaw ?? 0);
       }
@@ -13026,26 +13028,6 @@ export default function App() {
         handleWorldPlaceTorch();
         return;
       }
-      // PLACEMENT / DUMP PARITY (Adam's live-play bug,
-      // 2026-11-02: the placement prompt promises click
-      // or Enter; Enter confirmed and the click did
-      // nothing): the action-KEY listener branches the
-      // armed states first — Enter confirms an armed
-      // placement, Enter pours an armed dump, every
-      // other key waits — but this click path never got
-      // the twin branches, so a locked click fell
-      // through to USE at the aim (visibly nothing when
-      // no winner stands there). The branches now stand
-      // here in the key listener's order, calling the
-      // same confirm functions Enter calls.
-      if (placement !== null) {
-        handlePlaceConfirm();
-        return;
-      }
-      if (dumpArmed) {
-        confirmDump();
-        return;
-      }
       // Inventory is NOT a gate here (Adam, 2026-10-31):
       // the pack left the modal set for world interaction
       // (see the keydown's panel-family branch), and this
@@ -13073,9 +13055,6 @@ export default function App() {
     companionsOpen,
     journalOpen,
     placement,
-    dumpArmed,
-    handlePlaceConfirm,
-    confirmDump,
     handleUseInteract,
     handleWorldPlaceTorch,
   ]);

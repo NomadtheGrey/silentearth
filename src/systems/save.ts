@@ -247,6 +247,9 @@ export interface SavedHouse {
   type: string;
   x: number;
   z: number;
+  /** Placement facing (2026-11-02, houses take yaw —
+   *  the door faces the placer). Absent reads as 0. */
+  rotY?: number;
   contents: Record<string, number>;
 }
 
@@ -674,6 +677,7 @@ export interface SaveDraft {
     type: string;
     x: number;
     z: number;
+    rotY?: number;
     contents: ReadonlyArray<{ item: string; quantity: number }>;
   }>;
   looms: ReadonlyArray<{ x: number; z: number; rotY?: number }>;
@@ -1074,6 +1078,7 @@ export function serializeSave(draft: SaveDraft): SaveData {
       type: house.type,
       x: house.x,
       z: house.z,
+      ...(typeof house.rotY === 'number' && Number.isFinite(house.rotY) ? { rotY: house.rotY } : {}),
       contents: normalizeStacks(house.contents),
     })),
     looms: draft.looms.map((loom) => ({
@@ -1441,6 +1446,9 @@ export function deserializeSave(value: unknown): SaveData | null {
         type: entry.type,
         x: entry.x,
         z: entry.z,
+        ...(typeof (entry as { rotY?: unknown }).rotY === 'number' && Number.isFinite((entry as { rotY: number }).rotY)
+          ? { rotY: (entry as { rotY: number }).rotY }
+          : {}),
         contents,
       });
     }
