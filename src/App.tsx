@@ -4142,6 +4142,12 @@ export default function App() {
           // null when the rig is gone).
           harvestState: harvestState.snapshot(),
           sky: rendererRef.current?.snapshotSky() ?? undefined,
+          // The weather spell record rides beside the sky
+          // (W1 save plumbing; the field is Systems',
+          // seated in save.ts — the record itself is the
+          // machine's hosted state, read via the renderer
+          // seam). Null until the machine seats one.
+          weather: rendererRef.current?.weatherRecord() ?? null,
           coldWet: coldWetRef.current?.snapshot(),
           facing: player ? player.snapshotFacing() : undefined,
         });
@@ -5525,6 +5531,11 @@ export default function App() {
         // is not called on this path, so after-construction
         // is after every sky reset that could wipe it.
         renderer.restoreSky(saved.sky);
+        // The spell record re-seats with the sky (W1):
+        // restoreWeather is a no-op on null (old saves),
+        // and the machine validates the record's shape
+        // itself at seating.
+        renderer.restoreWeather(saved.weather);
         for (const house of saved.houses) {
           try {
             const placed = shelterState.placeHouse(
