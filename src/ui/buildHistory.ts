@@ -43,6 +43,14 @@ export interface BuildRecord {
 
 const ALL_RECORDS: BuildRecord[] = [
   {
+    merge: 'Merge #67',
+    pr: 95,
+    sha: 'c0a2c3f',
+    date: '2026-11-02',
+    what: 'BUILD NOTES, READABLE \u2014 in the Build history tab, each entry now opens with its own header line (Merge number, date, PR, and build stamp) instead of ending with it, and a hairline rule separates one entry from the next.',
+    why: 'Adam\u2019s notes, twice over: he could not tell which Build number went with which description \u2014 the identifying line sat at the foot of each entry, where it read as belonging to the one below it. The header belongs on top of its own entry, with a clear break between entries.',
+  },
+  {
     merge: 'Merge #66',
     pr: 95,
     sha: '0780072',
