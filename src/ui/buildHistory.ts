@@ -43,6 +43,14 @@ export interface BuildRecord {
 
 const ALL_RECORDS: BuildRecord[] = [
   {
+    merge: 'Merge #64',
+    pr: 95,
+    sha: '6e94bbd',
+    date: '2026-11-02',
+    what: 'BIOME BLENDING \u2014 the ground stops stepping where one biome meets the next. THE SEAM: each chunk wore ONE ground texture, painted in its dominant biome\u2019s full flat color and multiplied over the smooth vertex-color blend \u2014 so where the dominant flipped at a chunk edge, the rendered color stepped along a straight line even mid-blend, and every biome\u2019s color was applied twice over. THE FIX (Adam\u2019s pick of three options, A): the ground textures are brightness-only detail now \u2014 seeded speckle and grain over a neutral white base \u2014 and all ground color comes from the vertex blend alone, the way the terrain file\u2019s own header always said it should. Each biome keeps its character as its own seeded speckle pattern; the marsh tint and the wetness darkening ride the blend as before.',
+    why: 'Adam, from live play: the borders seamed, and the whole country looked kinda dreary regardless of biome \u2014 \u201csome places should look muddy, but others should not.\u201d Mud belongs to wet ground; it was never supposed to be the price of every step. With the double-applied color gone, the country comes up to its designed brightness and one biome melts into the next.',
+  },
+  {
     merge: 'Merge #63',
     pr: 95,
     sha: '15d4fcd',
