@@ -410,16 +410,25 @@ export function OptionsModal({
                 <p className={'italic ' + t.muted}>No build records yet.</p>
               ) : (
                 <ul className="flex flex-col gap-3">
-                  {BUILD_HISTORY.map((record) => (
-                    <li key={record.sha}>
+                  {BUILD_HISTORY.map((record, index) => (
+                    <li
+                      key={record.sha}
+                      className={
+                        index === 0
+                          ? undefined
+                          : 'border-t border-white/15 pt-3'
+                      }
+                    >
                       <p
-                        className={'text-sm font-medium ' + t.heading}
+                        className={
+                          'text-xs font-semibold tracking-wide ' + t.heading
+                        }
                       >
-                        {record.what}
-                      </p>
-                      <p className={'mt-0.5 text-xs ' + t.muted}>
-                        {record.date} · {record.merge} · PR #{record.pr} ·{' '}
+                        {record.merge} · {record.date} · PR #{record.pr} ·{' '}
                         {record.sha}
+                      </p>
+                      <p className={'mt-1 text-sm font-medium ' + t.heading}>
+                        {record.what}
                       </p>
                       <p className={'mt-1 text-sm ' + t.muted}>
                         {record.why}
