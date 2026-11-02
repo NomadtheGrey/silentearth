@@ -137,6 +137,13 @@ export interface CraftingMenuProps {
   onCraftPrerequisite?: (recipeId: string, itemId: string) => void;
   /** Called when the menu is closed. Optional. */
   onClose?: () => void;
+  /**
+   * ITEM INFO CARD (2026-11-01): a row's info affordance
+   * opens the card for the recipe's OUTPUT item
+   * (recipe.outputItemId). The menu renders no facts.
+   * Omitted = no affordance.
+   */
+  onInfoItem?: (itemId: string) => void;
   /** Thumb-sized action buttons (44 px targets) on touch. Default false. */
   comfortable?: boolean;
   /** Look for the menu. Default "hearth" (firelit making). */
@@ -151,6 +158,7 @@ export function CraftingMenu({
   onSelectRecipe,
   onCraft,
   onCraftPrerequisite,
+  onInfoItem,
   onClose,
   comfortable = false,
   theme = 'hearth',
@@ -202,11 +210,12 @@ export function CraftingMenu({
           (selected ? t.selected : 'bg-stone-800/60')
         }
       >
+        <div className="flex items-start gap-1">
         <button
           type="button"
           onClick={() => onSelectRecipe?.(recipe.id)}
           aria-pressed={selected}
-          className="w-full text-left"
+          className="min-w-0 flex-1 text-left"
         >
           <span className="flex items-center gap-1.5 font-medium">
             {recipe.icon ? (
@@ -225,6 +234,17 @@ export function CraftingMenu({
             </span>
           ) : null}
         </button>
+        {onInfoItem && recipe.outputItemId ? (
+          <button
+            type="button"
+            onClick={() => onInfoItem(recipe.outputItemId as string)}
+            aria-label={`About ${recipe.outputItemName ?? recipe.name}`}
+            className="min-h-[44px] min-w-[44px] shrink-0 rounded text-base hover:bg-stone-800"
+          >
+            <span aria-hidden="true">ⓘ</span>
+          </button>
+        ) : null}
+        </div>
         {recipe.disabledLabel ? (
           <p className={'mt-1 block text-sm ' + t.muted}>
             {recipe.disabledLabel}

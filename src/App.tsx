@@ -1873,6 +1873,11 @@ import {
   turnOn,
 } from './systems/cloudSaves';
 import {
+  itemFactsFor,
+  knowledgeSnapshot,
+  restoreKnowledge,
+} from './systems/knowledge';
+import {
   type CloudParkedSave,
   type CloudSaveRow,
 } from './ui/CloudSavePanel';
@@ -3117,7 +3122,7 @@ export default function App() {
   const [craftContextSiteId, setCraftContextSiteId] =
     useState<string | null>(null);
   const [craftDoor, setCraftDoor] = useState<
-    'craft' | 'upgrade' | 'ritual'
+    'craft' | 'upgrade' | 'ritual' | 'fire'
   >('craft');
   useEffect(() => {
     if (!craftingOpen) {
@@ -3864,6 +3869,12 @@ export default function App() {
           // serialize writes them verbatim, restore
           // validates on load). Knowledge survives refresh.
           nameSight: nameSightRef.current.snapshot(),
+          // KNOWN-FACTS SAVE WIRING (the info card's
+          // amendment, 2026-11-01): the register rides
+          // every save on the nameSight pattern, or the
+          // card would read true in-session and empty
+          // after a reload.
+          knowledge: knowledgeSnapshot(),
           // WORLD-STATE SAVE WIRING: harvest state, sky
           // cycle, and facing ride every save (all three
           // draft fields optional — serialize defaults
@@ -3975,6 +3986,14 @@ export default function App() {
   // offer itself is a question, never an auto-load.
   const [cloudWakeOffer, setCloudWakeOffer] =
     useState<ShelfFresherFacts | null>(null);
+  // ITEM INFO CARD (Adam's pin; claim 4ac343ed +
+  // amendment 089f148d): the item whose detail card
+  // stands, opened from any row of the unified surface
+  // (pack / hut storage / piles / crafting). The shell
+  // composes the card's facts at render from Systems'
+  // register — the surface components render none.
+  const [itemInfoId, setItemInfoId] = useState<string | null>(null);
+  const openItemInfo = (id: string) => setItemInfoId(id);
   const cloudWakeOfferLatchedRef = useRef<string | null>(null);
   const [cloudPendingRestore, setCloudPendingRestore] =
     useState<SaveData | null>(null);
@@ -5208,6 +5227,21 @@ export default function App() {
         // boot-effect run cannot re-restore over gameplay
         // looks (guarded by the same check as traps).
         nameSightRef.current.restore(bootSaved.nameSight ?? []);
+        // KNOWN-FACTS BOOT WIRING: the register restores
+        // beside nameSight (boot-only; clears + rebuilds).
+        // The save's shape is readonly; the register's
+        // snapshot wants plain arrays — spread, as
+        // serializeSave itself does.
+        restoreKnowledge(
+          bootSaved.knowledge
+            ? {
+                metItems: [...(bootSaved.knowledge.metItems ?? [])],
+                knownUseRecipes: [
+                  ...(bootSaved.knowledge.knownUseRecipes ?? []),
+                ],
+              }
+            : undefined,
+        );
       }
     }
     const renderer = new WorldRenderer(container, gen, player);
@@ -7481,6 +7515,33 @@ export default function App() {
     setCompanionsOpen(false);
     setJournalOpen(false);
   };
+  // THE FIRE DIALOG (Adam's two-tab ruling, 2026-11-01):
+  // the LIT KILN alone trades its anchored menu for the
+  // dialog — Fire and Craft doors in one seat, context
+  // fixed at open, leash-closed like every context. E
+  // opens on the Fire door, K on the Craft door; every
+  // other fire (and the unlit kiln) keeps today's menu.
+  const isLitKiln = (fire: PlacedFire): boolean =>
+    fire.type === 'kiln' && fire.lit;
+  const openFireContext = (
+    fire: PlacedFire,
+    door: 'fire' | 'craft',
+  ) => {
+    setCraftContextSiteId(`fire:${fire.id}`);
+    setCraftDoor(door);
+    setCraftingOpen(true);
+    setInventoryOpen(false);
+    setCharmsOpen(false);
+    setCompanionsOpen(false);
+    setJournalOpen(false);
+  };
+  // E / the fire chip at any fire: the lit kiln goes to
+  // its dialog; everything else selects the anchored
+  // menu, exactly as before.
+  const openFireDoor = (fire: PlacedFire) => {
+    if (isLitKiln(fire)) openFireContext(fire, 'fire');
+    else setSelectedFireId(fire.id);
+  };
   const openCraftingPanel = () => {
     // THE FOLD: opening the dialog while a stump (plain
     // or made altar) is her faced winner attaches that
@@ -7494,6 +7555,15 @@ export default function App() {
     ) {
       setCraftContextSiteId(useWinner.siteId);
       setCraftDoor('craft');
+    }
+    // K at the lit kiln: the same dialog, Craft door
+    // first (the fire ruling's second tab).
+    if (useWinner?.kind === 'fire') {
+      const fire = placedFires.find((f) => f.id === useWinner.id);
+      if (fire !== undefined && isLitKiln(fire)) {
+        setCraftContextSiteId(`fire:${fire.id}`);
+        setCraftDoor('craft');
+      }
     }
     setCraftingOpen(true);
     setInventoryOpen(false);
@@ -7988,7 +8058,13 @@ export default function App() {
   // for anything else (boulders do not exist yet).
   const sitePositionFor = (
     siteId: string,
-  ): { kind: 'altar' | 'stump'; x: number; z: number } | null => {
+  ): { kind: 'altar' | 'stump' | 'fire'; x: number; z: number } | null => {
+    if (siteId.startsWith('fire:')) {
+      const fire = placedFires.find(
+        (f) => f.id === siteId.slice('fire:'.length),
+      );
+      return fire ? { kind: 'fire', x: fire.x, z: fire.z } : null;
+    }
     if (siteId.startsWith('altar:')) {
       const altar = altarState.get(siteId);
       return altar ? { kind: 'altar', x: altar.x, z: altar.z } : null;
@@ -8074,7 +8150,10 @@ export default function App() {
   // surface. Boulders do not exist yet.
   const handleStageBone = (siteId: string, kind: string) => {
     const site = sitePositionFor(siteId);
-    if (!site) {
+    if (!site || site.kind === 'fire') {
+      // A fire context is never a ritual site (the
+      // widened position type admits it; this door's
+      // sites are stump/altar by construction).
       setRitualNote('No site there.');
       return;
     }
@@ -10312,9 +10391,21 @@ export default function App() {
   const contextSiteLabel =
     craftContextSiteId === null
       ? null
-      : isStumpyAltar(contextSiteAdditions)
-        ? 'Stumpy Altar'
-        : 'Stump';
+      : craftContextSiteId.startsWith('fire:')
+        ? 'Kiln'
+        : isStumpyAltar(contextSiteAdditions)
+          ? 'Stumpy Altar'
+          : 'Stump';
+  // The fire a fire-context names (the lit kiln the
+  // dialog stands on), resolved live — the Fire door
+  // renders its actions from the fire's current state.
+  const craftContextFire =
+    craftContextSiteId !== null &&
+    craftContextSiteId.startsWith('fire:')
+      ? placedFires.find(
+          (f) => f.id === craftContextSiteId.slice('fire:'.length),
+        )
+      : undefined;
   const contextSiteActs: { id: string; label: string }[] = (() => {
     if (craftContextSiteId === null || contextSitePosition === null) {
       return [];
@@ -11055,7 +11146,9 @@ export default function App() {
       cloudPendingRestore !== null ||
       cloudPendingNewGame !== null ||
       cloudConflictPrompt !== null ||
-      cloudWakeOffer !== null;
+      cloudWakeOffer !== null ||
+      itemInfoId !== null ||
+      itemInfoId !== null;
     if (dialogUp) return;
     const off = bus.on('player:moved', ({ x, z }) => {
       const p = { x, z };
@@ -12054,9 +12147,11 @@ export default function App() {
           setSelectedSiteId(winner.siteId);
         }
         break;
-      case 'fire':
-        setSelectedFireId(winner.id);
+      case 'fire': {
+        const fire = placedFires.find((f) => f.id === winner.id);
+        if (fire !== undefined) openFireDoor(fire);
         break;
+      }
       case 'tent':
         setSelectedTentId(winner.id);
         break;
@@ -12407,6 +12502,7 @@ export default function App() {
     cloudPendingNewGame,
     cloudConflictPrompt,
     cloudWakeOffer,
+    itemInfoId,
     paused,
   ]);
 
@@ -13168,6 +13264,10 @@ export default function App() {
         : check.ownership === 'available'
           ? undefined
           : CRAFT_OWNERSHIP_LABELS[check.ownership],
+      // ITEM INFO CARD: the row's affordance opens the
+      // card for the item this recipe MAKES.
+      outputItemId: recipe.output.item,
+      outputItemName: displayNameFor(recipe.output.item),
       availabilityNote,
       icon:
         recipe.output.item === UMBRELLA_ITEM_ID ? (
@@ -13866,7 +13966,7 @@ export default function App() {
                   kind={fire.type}
                   status={status}
                   lightingDetail={detail}
-                  onSelect={() => setSelectedFireId(fire.id)}
+                  onSelect={() => openFireDoor(fire)}
                 />
               </WorldAnchor>
             </Fragment>
@@ -14744,6 +14844,7 @@ export default function App() {
             const pileModel = pileModalModel(selectedPile);
             return (
               <PileInventoryModal theme={lookThemes.world}
+                onInfoItem={(item) => openItemInfo(item.id)}
                 title={
                   selectedPile.stacks.length === 1
                     ? `${displayNameFor(selectedPile.stacks[0].item)} × ${selectedPile.stacks[0].quantity}`
@@ -14783,6 +14884,7 @@ export default function App() {
         ) : null}
         {inventoryOpen ? (
           <InventoryPanel theme={lookThemes.world}
+            onInfoItem={(item) => openItemInfo(item.id)}
             items={inventoryItems.filter(
               (item) => !wornGear.ids.has(normalizeItemId(item.id as ItemId)),
             )}
@@ -14843,34 +14945,94 @@ export default function App() {
                 role="group"
                 aria-label={`${contextSiteLabel ?? 'Stump'} doors`}
               >
-                {(['craft', 'upgrade', 'ritual'] as const).map(
-                  (door) => (
-                    <button
-                      key={door}
-                      type="button"
-                      aria-pressed={craftDoor === door}
-                      onClick={() => setCraftDoor(door)}
-                      onTouchStart={(e) => {
-                        e.stopPropagation();
-                      }}
-                      className={
-                        'min-h-[44px] flex-1 rounded-xl px-2 py-1.5 text-sm ' +
-                        (craftDoor === door
-                          ? UI_THEMES[lookThemes.dialog].button
-                          : 'text-stone-300 hover:bg-white/10')
-                      }
-                    >
-                      {door === 'craft'
+                {(craftContextSiteId.startsWith('fire:')
+                  ? (['fire', 'craft'] as const)
+                  : (['craft', 'upgrade', 'ritual'] as const)
+                ).map((door) => (
+                  <button
+                    key={door}
+                    type="button"
+                    aria-pressed={craftDoor === door}
+                    onClick={() => setCraftDoor(door)}
+                    onTouchStart={(e) => {
+                      e.stopPropagation();
+                    }}
+                    className={
+                      'min-h-[44px] flex-1 rounded-xl px-2 py-1.5 text-sm ' +
+                      (craftDoor === door
+                        ? UI_THEMES[lookThemes.dialog].button
+                        : 'text-stone-300 hover:bg-white/10')
+                    }
+                  >
+                    {door === 'fire'
+                      ? 'Fire'
+                      : door === 'craft'
                         ? 'Craft'
                         : door === 'upgrade'
                           ? 'Upgrade'
                           : 'Ritual'}
-                    </button>
-                  ),
-                )}
+                  </button>
+                ))}
               </div>
-              {craftDoor === 'craft' ? (
+              {craftDoor === 'fire' &&
+              craftContextFire !== undefined ? (
+                <section
+                  aria-label="Kiln fire"
+                  className={
+                    (isTouch ? 'max-h-[92dvh] ' : 'max-h-[70vh] ') +
+                    'overflow-y-auto rounded-2xl p-2 ' +
+                    UI_THEMES[lookThemes.dialog].panel
+                  }
+                >
+                  <h3 className="text-sm font-medium">
+                    {FIRE_NAME[craftContextFire.type]}
+                  </h3>
+                  <div className="mt-2 flex flex-col gap-1">
+                    {fireMenuActions(craftContextFire).map(
+                      (action) => (
+                        <div key={action.id}>
+                          <button
+                            type="button"
+                            disabled={action.disabled}
+                            onClick={() => {
+                              if (action.id === 'close') {
+                                setCraftingOpen(false);
+                              } else {
+                                handleFireAction(
+                                  craftContextFire.id,
+                                  action.id,
+                                );
+                              }
+                            }}
+                            onTouchStart={(e) => {
+                              e.stopPropagation();
+                            }}
+                            className={
+                              'min-h-[44px] w-full rounded-xl px-2 py-1.5 text-left text-sm ' +
+                              UI_THEMES[lookThemes.dialog].button +
+                              ' disabled:cursor-not-allowed disabled:opacity-40'
+                            }
+                          >
+                            {action.label}
+                            {action.hint ? (
+                              <span className="ml-2 opacity-80">
+                                {action.hint}
+                              </span>
+                            ) : null}
+                          </button>
+                          {action.disabled && action.disabledNote ? (
+                            <p className="px-2 pt-0.5 text-xs opacity-80">
+                              {action.disabledNote}
+                            </p>
+                          ) : null}
+                        </div>
+                      ),
+                    )}
+                  </div>
+                </section>
+              ) : craftDoor === 'craft' ? (
                 <CraftingMenu theme={lookThemes.dialog}
+                  onInfoItem={openItemInfo}
                   recipes={orderedCraftingRecipes}
                   sections={craftingSections}
                   stationNote={stationNote}
@@ -15013,6 +15175,7 @@ export default function App() {
             </div>
           ) : (
             <CraftingMenu theme={lookThemes.dialog}
+              onInfoItem={openItemInfo}
               recipes={orderedCraftingRecipes}
               sections={craftingSections}
               stationNote={stationNote}
@@ -15648,6 +15811,73 @@ export default function App() {
                 Not now
               </button>
             </div>
+          </div>
+        ) : null}
+      </Popup>
+
+      {/* ITEM INFO CARD: opened from any row of the
+        unified surface. Every fact is composed here,
+        shell-side — name and catalogue id never gate;
+        the description is the row note's own rule
+        (itemNoteFor); the known-facts sections read
+        Systems' register and show the hole plainly
+        where nothing is known yet. Copy DRAFT. */}
+      <Popup theme={lookThemes.dialog}
+        open={itemInfoId !== null}
+        title={
+          itemInfoId !== null
+            ? displayNameFor(normalizeItemId(itemInfoId))
+            : ''
+        }
+        onClose={() => setItemInfoId(null)}
+        comfortable={isTouch}
+      >
+        {itemInfoId !== null ? (
+          <div className="flex flex-col gap-3 p-3 text-sm">
+            <p className="text-xs opacity-80">
+              Catalogue: {normalizeItemId(itemInfoId)}
+            </p>
+            {itemNoteFor(itemInfoId, charmStateRef.current) ? (
+              <p>{itemNoteFor(itemInfoId, charmStateRef.current)}</p>
+            ) : null}
+            <p>
+              Weight: {formatLb(weightOf(normalizeItemId(itemInfoId)))}{' '}
+              lb each
+              {inventory.count(itemInfoId as ItemId) > 0
+                ? ` — you carry ${inventory.count(itemInfoId as ItemId)}, ${formatLb(weightOf(normalizeItemId(itemInfoId)) * inventory.count(itemInfoId as ItemId))} lb in all.`
+                : '.'}
+            </p>
+            {(() => {
+              const facts = itemFactsFor(normalizeItemId(itemInfoId));
+              return (
+                <>
+                  <div>
+                    <p className="font-medium">Where it comes from</p>
+                    {facts.sources.length > 0 ? (
+                      <ul className="list-disc pl-5">
+                        {facts.sources.map((line) => (
+                          <li key={line}>{line}</li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="opacity-80">Not yet known.</p>
+                    )}
+                  </div>
+                  <div>
+                    <p className="font-medium">What it's for</p>
+                    {facts.uses.length > 0 ? (
+                      <ul className="list-disc pl-5">
+                        {facts.uses.map((line) => (
+                          <li key={line}>{line}</li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="opacity-80">Not yet known.</p>
+                    )}
+                  </div>
+                </>
+              );
+            })()}
           </div>
         ) : null}
       </Popup>

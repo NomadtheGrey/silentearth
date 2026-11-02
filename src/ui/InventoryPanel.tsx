@@ -134,8 +134,15 @@ export interface InventoryPanelProps {
    * Wake verb (the found shrew skull), and its press.
    * The caller owns the grant; this layer only reports.
    */
+  /** The shrew door: rows whose item carries a Wake verb, and its press. */
   wakeableIds?: ReadonlySet<string>;
   onWakeItem?: (id: string) => void;
+  /**
+   * ITEM INFO CARD (2026-11-01): the rows' info
+   * affordance — passed straight to the shared surface;
+   * the panel renders no facts. Omitted = no affordance.
+   */
+  onInfoItem?: (item: InventoryItem) => void;
   /**
    * Home-storage section, shown when the caller opens one
    * (sheltered at a placed house). Omitted = personal list
@@ -235,6 +242,7 @@ export function InventoryPanel({
   onDumpItem,
   wakeableIds,
   onWakeItem,
+  onInfoItem,
   storage,
   onDepositItem,
   onDropItem,
@@ -472,6 +480,7 @@ export function InventoryPanel({
 
       <ItemListSurface
         items={items}
+        onInfoItem={onInfoItem}
         verbsFor={personalVerbsFor}
         onVerb={handlePersonalVerb}
         selectedItemId={selectedItemId}
@@ -495,6 +504,7 @@ export function InventoryPanel({
           </h3>
           <ItemListSurface
             items={nearbyPileItems}
+            onInfoItem={onInfoItem}
             verbsFor={nearbyVerbsFor}
             onVerb={(itemId, verbId) =>
               onTakeItem?.(itemId, verbId === 'take-all' ? 'all' : 1)
@@ -524,6 +534,7 @@ export function InventoryPanel({
           ) : null}
           <ItemListSurface
             items={storage.items}
+            onInfoItem={onInfoItem}
             verbsFor={storageVerbsFor}
             onVerb={(itemId) => storage.onWithdrawItem?.(itemId)}
             sortMode={sortMode}

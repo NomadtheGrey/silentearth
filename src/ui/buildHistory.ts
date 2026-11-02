@@ -43,6 +43,14 @@ export interface BuildRecord {
 
 const ALL_RECORDS: BuildRecord[] = [
   {
+    merge: 'Merge #60',
+    pr: 95,
+    sha: '670bef0',
+    date: '2026-11-01',
+    what: 'Two doors Adam asked for by name. THE ITEM INFO CARD: every row on the unified surface carries a \u24d8 now, and it opens the card \u2014 the item\u2019s name, its Catalogue id, its description, its weights, and what she KNOWS about it from the register, gated by discovery: a fact not yet earned reads \u2018Not yet known.\u2019 and stands in the hole honestly. The register\u2019s save wiring rides with it, so earned facts survive a reload. THE FIRE DIALOG: a lit kiln opens with its two doors as Adam ruled them \u2014 Fire | Craft \u2014 while an unlit kiln keeps its anchored menu, unchanged.',
+    why: 'Identification is the tag\u2019s job for the world; the card is the same law turned inward, onto the pack \u2014 a thing she carries should say what it is and what is known of it. And a kiln with a fire in it is a different room from a cold one; the dialog finally admits it.',
+  },
+  {
     merge: 'Merge #59',
     pr: 95,
     sha: '7f19b5b',

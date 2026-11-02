@@ -171,4 +171,14 @@ export interface CraftingRecipe {
   disabledLabel?: string;
   /** Caller-supplied glyph, rendered before the name. Optional. */
   icon?: ReactNode;
+  /**
+   * The item this recipe makes (ITEM INFO CARD,
+   * 2026-11-01): the card a row's info affordance opens
+   * is about the OUTPUT item — its catalogue id, its
+   * description, its known facts. Caller-supplied from
+   * the systems recipe; omitted = no affordance.
+   */
+  outputItemId?: string;
+  /** The output item's display name (the affordance's spoken name). */
+  outputItemName?: string;
 }
