@@ -65,6 +65,10 @@ export interface PlacedFire {
   type: FireType;
   x: number;
   z: number;
+  /** Placement facing (2026-11-02, the yaw path): the
+   *  hearth's firebox and the kiln's door have fronts,
+   *  so fires land as the ghost stood. Absent reads 0. */
+  rotY?: number;
   lit: boolean;
   lighting: LightingProcess | null;
 }
@@ -87,11 +91,11 @@ class FireState {
     bus.on('game:pause-changed', (p) => this.onPauseChanged(p.paused));
   }
 
-  placeFire(type: FireType, x: number, z: number): PlacedFire {
+  placeFire(type: FireType, x: number, z: number, rotY = 0): PlacedFire {
     const id = `fire:${type}:${++this.counter}`;
-    const fire: PlacedFire = { id, type, x, z, lit: false, lighting: null };
+    const fire: PlacedFire = { id, type, x, z, rotY, lit: false, lighting: null };
     this.fires.set(id, fire);
-    bus.emit('fire:placed', { id, type, x, z });
+    bus.emit('fire:placed', { id, type, x, z, rotY });
     return fire;
   }
 
@@ -151,6 +155,7 @@ class FireState {
         type: fire.type,
         x: fire.x,
         z: fire.z,
+        rotY: Number.isFinite(fire.rotY) ? fire.rotY : 0,
         lit: fire.lit,
         lighting: validLighting(fire.lighting),
       });

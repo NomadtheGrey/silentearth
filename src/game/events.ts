@@ -246,7 +246,7 @@ export interface EventMap {
    * placement — no cost or gate at this layer (Systems + UI own
    * recipes/gating). Renderer rebuilds the placed group from this.
    */
-  'fire:placed': { id: string; type: FireType; x: number; z: number };
+  'fire:placed': { id: string; type: FireType; x: number; z: number; rotY: number };
   /**
    * Lighting progressed on an unlit fire: flint clicks so far
    * (phase null), or friction phase ('waiting' until the wait
@@ -267,7 +267,7 @@ export interface EventMap {
    * — no zone/plot gate. Renderer rebuilds the placed group; the
    * shelter query reads live state, so no re-wiring is needed.
    */
-  'shelter:placed': { id: string; type: HouseType; x: number; z: number };
+  'shelter:placed': { id: string; type: HouseType; x: number; z: number; rotY: number };
   /**
    * A placed house UPGRADED in place (shelterState.upgradeHouse):
    * same id, same position, new type. Deliberately NOT
@@ -284,7 +284,7 @@ export interface EventMap {
    * rebuilds the placed group; stationPresence reads live
    * state, so no re-wiring is needed.
    */
-  'loom:placed': { id: string; x: number; z: number };
+  'loom:placed': { id: string; x: number; z: number; rotY: number };
   /**
    * A torch was placed (torchState.placeTorch, Adam 2026-10-27
    * — a carried lit torch planted to light an area or path).
@@ -327,7 +327,7 @@ export interface EventMap {
    * consume lives with Systems + UI. Renderer rebuilds
    * the placed group from this.
    */
-  'desk:placed': { id: string; x: number; z: number };
+  'desk:placed': { id: string; x: number; z: number; rotY: number };
   /**
    * A placed desk was removed (deskState.removeDesk). No
    * pickup/removal mechanic exists in this order — the

@@ -659,7 +659,10 @@ function planProducerBatch(
  * Ensure the simulation holds `need` of `item`, planning the
  * producing chain deepest-first when it falls short. Producer
  * fallback rolls the attempt's simulation back whole — a
- * failed producer leaves no trace in the plan.
+ * failed producer leaves no trace in the plan. Batches of a
+ * producer plan one at a time under the same law per batch:
+ * the batches that planned stand (a partial make is a make);
+ * only a producer whose FIRST batch fails falls back whole.
  */
 function planEnsure(
   item: ItemId,
@@ -686,37 +689,138 @@ function planEnsure(
   }
   let firstError: Error | null = null;
   for (const producer of producers) {
+    // PARTIAL MAKES STAND (Adam's live-play ruling,
+    // 2026-11-02): batches plan ONE AT A TIME, each against
+    // a fresh trial clone of the attempt so far — a failed
+    // batch leaves no trace (the rollback law, per batch),
+    // and the batches that DID plan are kept and executed.
+    // She holds two vines and the trowel wants two cordage:
+    // the one cordage her vines cover is MADE; the chain
+    // refuses only when not even one batch can be planned,
+    // and at that point the simulation still mirrors her
+    // real pack, so the refusal's counts are the pack's own.
     let attempt: PlanState = { sim: state.sim.clone(), batches: [] };
-    try {
-      const batches = Math.ceil((need - have) / producer.output.quantity);
-      for (let b = 0; b < batches; b++) {
-        attempt = planProducerBatch(producer, attempt, ctx, [
+    const batches = Math.ceil((need - have) / producer.output.quantity);
+    let plannedBatches = 0;
+    for (let b = 0; b < batches; b++) {
+      const trial: PlanState = { sim: attempt.sim.clone(), batches: [] };
+      try {
+        const next = planProducerBatch(producer, trial, ctx, [
           ...path,
           item,
         ]);
+        attempt = {
+          sim: next.sim,
+          batches: [...attempt.batches, ...next.batches],
+        };
+        plannedBatches++;
+      } catch (err) {
+        if (firstError === null) {
+          firstError =
+            err instanceof Error ? err : new Error(String(err));
+        }
+        break;
       }
+    }
+    if (plannedBatches > 0) {
       return {
         sim: attempt.sim,
         batches: [...state.batches, ...attempt.batches],
       };
-    } catch (err) {
-      if (firstError === null) {
-        firstError = err instanceof Error ? err : new Error(String(err));
-      }
     }
   }
   throw firstError ?? new Error('Cannot craft prerequisites.');
+}
+
+
+/**
+ * The FULL shortfall census of a chain, against the REAL
+ * pack (Adam's extension, 2026-11-02: a refusal names every
+ * missing line, not just the first blocker the planner hit).
+ * Walks the pressed ingredient's producer subtree with a
+ * virtual copy of her counts — held intermediates offset
+ * their level exactly as the planner would spend them — and
+ * records, per raw item (no producer) or held gate, how many
+ * MORE units the whole chain still needs beyond what she
+ * holds. First-producer choice mirrors the planner's.
+ * Returns [] when nothing is short (the blocker was a gate,
+ * not a count), in which case the refusal stands alone.
+ */
+function chainShortfalls(
+  item: ItemId,
+  need: number,
+  inventory: PersonalInventory,
+): { item: ItemId; have: number; stillNeeds: number }[] {
+  const virtual = new Map<string, number>();
+  const held = (i: ItemId): number =>
+    virtual.get(i) ?? inventory.count(i);
+  const short = new Map<string, number>();
+  const census = (it: ItemId, nd: number, path: ItemId[]): void => {
+    const have = held(it);
+    if (have >= nd) {
+      virtual.set(it, have - nd);
+      return;
+    }
+    const producers = chainProducersFor(it);
+    if (producers.length === 0 || path.includes(it)) {
+      short.set(it, (short.get(it) ?? 0) + (nd - have));
+      virtual.set(it, 0);
+      return;
+    }
+    const producer = producers[0];
+    const deficit = nd - have;
+    virtual.set(it, 0);
+    const batches = Math.ceil(deficit / producer.output.quantity);
+    for (const req of producer.requires ?? []) {
+      const reqHeld = held(req.item);
+      if (reqHeld < req.quantity) {
+        short.set(
+          req.item,
+          Math.max(short.get(req.item) ?? 0, req.quantity - reqHeld),
+        );
+      }
+    }
+    for (const ing of producer.ingredients) {
+      census(ing.item, ing.quantity * batches, [...path, it]);
+    }
+    if (producer.upgradeFrom !== undefined) {
+      const options: ItemId[] = Array.isArray(producer.upgradeFrom)
+        ? producer.upgradeFrom
+        : [producer.upgradeFrom];
+      const heldOption = options.find((o) => held(o) >= 1);
+      if (heldOption !== undefined) {
+        virtual.set(heldOption, held(heldOption) - 1);
+      } else if (options.length > 0) {
+        census(options[0], 1, [...path, it]);
+      }
+    }
+    virtual.set(it, batches * producer.output.quantity - deficit);
+  };
+  census(item, need, []);
+  return [...short.entries()].map(([i, stillNeeds]) => ({
+    item: i,
+    have: inventory.count(i),
+    stillNeeds,
+  }));
 }
 
 /**
  * Craft the missing prerequisites of ONE ingredient of the
  * open recipe (see the section header). `item` must be an
  * ingredient of `recipe`; the amount crafted covers the
- * recipe's stated need minus what the pack already holds.
+ * recipe's stated need minus what the pack already holds —
+ * or as much of it as her materials support: a partial make
+ * is a make (Adam, 2026-11-02), and the result's crafted
+ * quantity says how much was actually made.
  * Returns the steps run (deepest first) and the total made;
  * an already-satisfied ingredient returns empty steps.
- * Throws — consuming nothing — when the chain cannot
- * complete (the planning refusal names the blocker).
+ * Throws — consuming nothing — when the chain cannot make
+ * even one batch. The refusal names the first blocker in
+ * counts read from a simulation that still mirrors the pack
+ * (no batch having succeeded), and appends the full census:
+ * every raw shortfall in the chain, each in the pack's true
+ * counts (holds / needs-more), so no missing line hides
+ * behind the first.
  */
 export function executeCraftChain(
   recipe: Recipe,
@@ -741,13 +845,46 @@ export function executeCraftChain(
     return { steps: [], crafted: { item: wanted, quantity: 0 } };
   }
   const ctx: ChainContext = { station, hunger, nearCreek, site, outOfPack };
-  const planned = planEnsure(
-    wanted,
-    ingredient.quantity,
-    { sim: inventory.clone(), batches: [] },
-    ctx,
-    [],
-  );
+  let planned: PlanState;
+  try {
+    planned = planEnsure(
+      wanted,
+      ingredient.quantity,
+      { sim: inventory.clone(), batches: [] },
+      ctx,
+      [],
+    );
+  } catch (err) {
+    // The refusal names the first blocker; the census names
+    // EVERY shortfall in the chain, in the pack's true counts
+    // (Adam's extension, 2026-11-02). A gate blocker (station,
+    // hunger, site) leaves the census empty or beside the
+    // point — the appendix rides count refusals only, which
+    // are the 'Cannot craft prerequisites' family.
+    if (
+      err instanceof Error &&
+      err.message.startsWith('Cannot craft prerequisites')
+    ) {
+      const shortfalls = chainShortfalls(
+        wanted,
+        ingredient.quantity,
+        inventory,
+      );
+      if (shortfalls.length > 0) {
+        const lines = shortfalls
+          .map(
+            (s) =>
+              `${chainItemName(s.item)} (holds ${s.have}, ` +
+              `needs ${s.stillNeeds} more)`,
+          )
+          .join('; ');
+        throw new Error(
+          `${err.message} Everything the chain is short of: ${lines}.`,
+        );
+      }
+    }
+    throw err;
+  }
   const steps: CraftChainStep[] = [];
   for (const batchRecipe of planned.batches) {
     executeCraft(batchRecipe, inventory, station, hunger, nearCreek, site, null, outOfPack);
