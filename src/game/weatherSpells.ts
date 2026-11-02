@@ -25,19 +25,27 @@
  *   rides: a wet spell rains harder in the bog); inclement
  *   → max(field, INCLEMENT_FLOOR). Spell edges cross-fade
  *   over EDGE_DAYS so nothing pops.
- * - THE SEEDED WOBBLE (Adam, 2026-11-02): inside a wet
- *   or inclement spell the intensity BREATHES — a slow
- *   seeded sine (period WOBBLE_PERIOD_DAYS, depth
- *   WOBBLE_DEPTH of the standing intensity) phased by
- *   the spell's own index, so the same spell wobbles
- *   identically on every device and a mid-spell reload
- *   is seamless. Dry spells never wobble (their target
- *   is 0, and 0 modulated is 0). THE FLOOR IS PRE-
- *   WOBBLE (lane's call, named for the pin pass): the
- *   floor guarantees a spell's standing character; the
- *   wobble is texture over it, so an inclement spell
- *   may LULL below the floor (to floor × (1 − depth))
- *   but its standing strength always reaches it.
+ * - THE SEEDED WOBBLE (Adam, 2026-11-02; calibrated
+ *   the same day by his reality check: "All day rains
+ *   are not common"): inside a wet or inclement spell
+ *   the intensity BREATHES — a slow seeded sine (period
+ *   WOBBLE_PERIOD_DAYS) phased by the spell's own
+ *   index, so the same spell wobbles identically on
+ *   every device and a mid-spell reload is seamless.
+ *   THE DEPTH IS PER-SPELL: a steadiness roll at the
+ *   spell's birth decides its character — MOST wet
+ *   spells wobble DEEP (lulls fall toward nothing: a
+ *   wet day reads as showers passing, not a sheet),
+ *   and a minority hold STEADY (the all-day rain, kept
+ *   uncommon). Inclement rolls steadier and shallower
+ *   — a storm day is the all-day rain's natural home.
+ *   Dry spells never wobble (their target is 0, and 0
+ *   modulated is 0). THE FLOOR IS PRE-WOBBLE (lane's
+ *   call, named for the pin pass): the floor guarantees
+ *   a spell's standing character; the wobble is
+ *   texture over it, so an inclement spell may LULL
+ *   below the floor but its standing strength always
+ *   reaches it.
  * - FIRST WEEK PLEASANT (Adam, 2026-10-28): while the
  *   WORLD's day count is under FIRST_WEEK_DAYS, inclement
  *   cannot roll (a spell is judged by the day it BEGINS);
@@ -119,8 +127,30 @@ export const INCLEMENT_HARSHNESS_LIFT = 0.15;
 export const RAIN_VISIBLE_INTENSITY = 0.05;
 /** The wobble's period in days — 0.25 = six game-hours (DRAFT). */
 export const WOBBLE_PERIOD_DAYS = 0.25;
-/** The wobble's depth: a lull falls to (1 − depth) of standing (DRAFT). */
-export const WOBBLE_DEPTH = 0.45;
+/**
+ * Per-spell wobble character (Adam's calibration: "All
+ * day rains are not common" — ALL DRAFT). A spell rolls
+ * STEADY with the kind's steady weight (its depth lands
+ * in the shallow band: it rains more or less all day)
+ * or DEEP otherwise (lulls fall toward nothing: showers
+ * passing). Wet spells are mostly deep; inclement
+ * spells roll steadier and breathe shallower.
+ */
+export const WOBBLE_SHAPES: Record<
+  'wet' | 'inclement',
+  { steadyWeight: number; steadyDepth: [number, number]; deepDepth: [number, number] }
+> = {
+  wet: { steadyWeight: 0.2, steadyDepth: [0.15, 0.3], deepDepth: [0.85, 1.0] },
+  inclement: { steadyWeight: 0.55, steadyDepth: [0.2, 0.35], deepDepth: [0.55, 0.75] },
+};
+
+/** A spell's rolled wobble depth (deterministic per spell index). */
+export function wobbleDepthFor(kind: 'wet' | 'inclement', worldSeed: string, index: number): number {
+  const shape = WOBBLE_SHAPES[kind];
+  const steady = roll01(worldSeed, index, 'steadiness') < shape.steadyWeight;
+  const band = steady ? shape.steadyDepth : shape.deepDepth;
+  return band[0] + roll01(worldSeed, index, 'depth') * (band[1] - band[0]);
+}
 
 /** Spell length ranges in days, by kind (ALL DRAFT). */
 export const SPELL_LENGTH_DAYS: Record<WeatherSpellKind, [number, number]> = {
@@ -247,12 +277,14 @@ export function stepWeather(ctx: { gen: WorldGen; playerX: number; playerZ: numb
   else if (cur.kind === 'inclement') target = Math.max(field.rain, INCLEMENT_FLOOR);
   if (cur.kind !== 'dry' && target > 0) {
     // The seeded wobble: showers and lulls within the
-    // spell, phased by the spell's own index (determin-
-    // istic on every device; seamless across a reload —
-    // the record and the sky clock are both persisted).
+    // spell, at the spell's own rolled depth, phased by
+    // its index (deterministic on every device; seam-
+    // less across a reload — the record and the sky
+    // clock are both persisted).
+    const depth = wobbleDepthFor(cur.kind, worldSeed, cur.index);
     const phase = roll01(worldSeed, cur.index, 'wobble') * Math.PI * 2;
     const w = 0.5 + 0.5 * Math.sin((ctx.dayFloat / WOBBLE_PERIOD_DAYS) * Math.PI * 2 + phase);
-    target *= 1 - WOBBLE_DEPTH * (1 - w);
+    target *= 1 - depth * (1 - w);
   }
   let intensity = target;
   const sinceEdge = ctx.dayFloat - blendDay;
