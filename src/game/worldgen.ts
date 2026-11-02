@@ -15,7 +15,7 @@
  * weights only. Terrain height is a later decision, not a placeholder.
  */
 
-import { BIOMES, createFields, weightsAt, groundColorAt, marshWeight } from './biomes';
+import { BIOMES, createFields, weightsAt, legacyWeightsAt, groundColorAt, marshWeight } from './biomes';
 import type { Fields } from './biomes';
 import { mulberry32, deriveSeed, hashSeed } from './seed';
 import { barnSite, caveMouthSite, chapelSite, distToSegment, drownedMillSite, farmhouseSite, generalStoreSite, groveSite, railSidingSite, schoolhouseSite, siloSite, sunkenRoadSite, villageSite, waterTowerSite, type SiteFootprint } from './sites';
@@ -572,11 +572,15 @@ export function createWorldGen(seed: string): WorldGen {
   function findSpawn(): { x: number; z: number } {
     // Deterministic scan: the most Mirewood-dominant point within 200 m of
     // origin, so the player always starts in the sloppy-wet hybrid start.
+    // PINNED (Adam, 2026-11-02): the scan reads the legacy
+    // siting grammar (biomes.ts LEGACY_ANCHORS), not the
+    // living weights — the spawn seat stands where it
+    // stood before the biome landing, on every seed.
     let best = { x: 0, z: 0 };
     let bestWeight = -1;
     for (let z = -200; z <= 200; z += 8) {
       for (let x = -200; x <= 200; x += 8) {
-        const w = weightsAtPos(x, z).weights.mirewood;
+        const w = legacyWeightsAt(fieldsAt(x, z)).weights.mirewood;
         if (w > bestWeight) {
           bestWeight = w;
           best = { x, z };

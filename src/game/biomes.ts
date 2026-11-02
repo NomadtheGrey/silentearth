@@ -349,6 +349,73 @@ export function createFields(seed: string): (x: number, z: number) => Fields {
  *  how much wider creekBottom reads beside its creeks. */
 export const FLOODPLAIN_BOOST = 1.8;
 
+/**
+ * THE PINNED SITING GRAMMAR (Adam, 2026-11-02 — 'Ya i
+ * guess it's fine', on the biome landing's total
+ * re-deal): the biome landing re-formed the country, and
+ * with it every seat that walks the weights — including
+ * two seats Adam knows by heart: the SPAWN and the DEBUT
+ * CAVE'S MOUTH. Those two derivations now read THIS
+ * frozen copy of the pre-landing grammar (the eight
+ * original anchors, the plain gaussian blend, the
+ * mirewood floor, no floodplain), so their seats stand
+ * exactly where they stood before the landing, on every
+ * seed, by construction. The living world blends by the
+ * current table above; only the two pinned derivations
+ * read the old country. FROZEN: do not tune these
+ * numbers — a change here moves the spawn and the mouth
+ * in every existing world. (Anchor values copied
+ * verbatim from the pre-landing table, verified against
+ * the code at the pre-landing tip.)
+ */
+export const LEGACY_ANCHORS: ReadonlyArray<{
+  id: string;
+  anchor: Partial<Record<FieldAxis, { at: number; sigma: number }>>;
+}> = [
+  { id: 'mirewood', anchor: { wetness: { at: 0.62, sigma: 0.30 }, elevation: { at: 0.45, sigma: 0.30 }, density: { at: 0.60, sigma: 0.30 }, creek: { at: 0.15, sigma: 0.35 } } },
+  { id: 'deepBog', anchor: { wetness: { at: 0.95, sigma: 0.22 }, elevation: { at: 0.25, sigma: 0.28 }, density: { at: 0.30, sigma: 0.30 } } },
+  { id: 'oldfieldRise', anchor: { wetness: { at: 0.30, sigma: 0.25 }, elevation: { at: 0.78, sigma: 0.25 }, density: { at: 0.35, sigma: 0.30 } } },
+  { id: 'creekBottom', anchor: { creek: { at: 0.90, sigma: 0.25 }, wetness: { at: 0.80, sigma: 0.25 }, elevation: { at: 0.30, sigma: 0.30 } } },
+  { id: 'tanglewood', anchor: { density: { at: 0.95, sigma: 0.22 }, wetness: { at: 0.60, sigma: 0.30 } } },
+  { id: 'saltFlat', anchor: { mineral: { at: 0.92, sigma: 0.22 }, wetness: { at: 0.15, sigma: 0.25 }, elevation: { at: 0.50, sigma: 0.30 } } },
+  { id: 'meadow', anchor: { wetness: { at: 0.35, sigma: 0.25 }, elevation: { at: 0.55, sigma: 0.30 }, density: { at: 0.30, sigma: 0.25 }, distance: { at: 1.0, sigma: 0.25 } } },
+  { id: 'forest', anchor: { density: { at: 0.90, sigma: 0.22 }, wetness: { at: 0.55, sigma: 0.30 }, elevation: { at: 0.50, sigma: 0.30 }, distance: { at: 1.0, sigma: 0.22 } } },
+];
+
+/** Weights under the pinned siting grammar (see above).
+ *  Keyed by plain strings — the legacy ids include the
+ *  retired 'saltFlat', which the living BiomeId union no
+ *  longer carries. */
+export function legacyWeightsAt(fields: Fields): { weights: Record<string, number>; dominant: string } {
+  const raw = new Map<string, number>();
+  let total = 0;
+  for (const def of LEGACY_ANCHORS) {
+    let affinity = 1;
+    for (const [axis, pref] of Object.entries(def.anchor) as [
+      FieldAxis,
+      { at: number; sigma: number },
+    ][]) {
+      const d = (fields[axis] - pref.at) / pref.sigma;
+      affinity *= Math.exp(-0.5 * d * d);
+    }
+    if (def.id === 'mirewood') affinity = Math.max(affinity, 0.08);
+    raw.set(def.id, affinity);
+    total += affinity;
+  }
+  const weights: Record<string, number> = {};
+  let dominant = 'mirewood';
+  let best = -1;
+  for (const [id, value] of raw) {
+    const w = value / total;
+    weights[id] = w;
+    if (w > best) {
+      best = w;
+      dominant = id;
+    }
+  }
+  return { weights, dominant };
+}
+
 /** Normalized per-biome weights at a world position. Sums to 1. */
 export function weightsAt(fields: Fields): BiomeWeights {
   const raw = new Map<BiomeId, number>();
