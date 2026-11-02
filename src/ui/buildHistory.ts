@@ -43,6 +43,14 @@ export interface BuildRecord {
 
 const ALL_RECORDS: BuildRecord[] = [
   {
+    merge: 'Merge #63',
+    pr: 95,
+    sha: '15d4fcd',
+    date: '2026-11-02',
+    what: 'THE BUGFIX ROUND \u2014 five fixes from one morning of Adam\u2019s live play. CRAFTING TELLS THE TRUTH TWICE OVER (Systems): a prerequisite chain that cannot finish now crafts the part that CAN and says so, instead of refusing the whole chain; and a refusal names EVERY shortfall in the chain \u2014 holds X, needs Y more, per missing material \u2014 instead of only the first blocker it hit. PLACEMENT LEARNS HER FACING (Background): the placement outline now turns with her view for the loom and the writing desk, and the station lands at exactly the facing the outline showed, saved and restored with it; hearths and kilns take the facing too (their firebox and door have fronts). CLICK PARITY (UI): the placement prompt promised click or Enter \u2014 Enter confirmed, the click did nothing; the click path now carries the same confirm branches as the key path, for placement and the jar pour alike. HOUSES FACE THEIR PLACER (Adam\u2019s ruling: \u201cLet\u2019s have the house door face the player\u201d): a placed house records her facing and its door \u2014 already built on one side \u2014 turns to her; the house outline grows a small notch on the door side so the square ghost says which way it will face before she commits.',
+    why: 'Every item here was found by playing, not by auditing: a chain refused whole, a refusal that hid its reasons, an outline that would not turn, a promised click that did nothing, a house door facing away. The round\u2019s theme is the interface keeping its word \u2014 what the prompt promises works, what the outline shows lands, and what a refusal says is the whole of it.',
+  },
+  {
     merge: 'Merge #62',
     pr: 95,
     sha: '1d0b576',
