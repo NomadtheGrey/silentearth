@@ -1736,6 +1736,12 @@ import {
   applyUmbrellaToPrecipitationRemaining,
 } from './systems/umbrella';
 import { HudShell } from './ui/HudShell';
+import {
+  HudElement,
+  useHudLayout,
+  HUD_ELEMENT_LABELS,
+} from './ui/hudLayout';
+import type { HudElementId } from './ui/hudLayout';
 import { WitchHealth } from './ui/WitchHealth';
 import { HungerIndicator } from './ui/HungerIndicator';
 import { ForageHint } from './ui/ForageHint';
@@ -11114,6 +11120,11 @@ export default function App() {
   // the stacked panel burying the world, so the game leads and
   // the panels are one tap away. Desktop never collapses.
   const [hudCollapsed, setHudCollapsed] = useState(isTouch);
+  // HUD LAYOUT (Adam, 2026-11-02): per-element offsets
+  // and hidden flags, stored per pointer class on the
+  // device (ui/hudLayout) — the diagram's seats are the
+  // defaults; the player drags from there.
+  const hudLayout = useHudLayout(isTouch ? 'coarse' : 'fine');
   // QUEST CARD DISMISSAL (Adam, 2026-11-01 — the task
   // chip gains its Close [X]): dismissal is keyed to
   // the quest the card is SHOWING. The press records
@@ -14093,6 +14104,83 @@ export default function App() {
     </>
   );
 
+  // HUD ELEMENT BLOCKS (Adam, 2026-11-02, his
+  // hand-drawn diagram): the vitals and the chip as JSX
+  // values with several seats, the stackMeta idiom. On
+  // touch the vitals stand together in the DEFECT 3 row
+  // (health and bars in the rail, the quest card beside
+  // them) and the chip keeps the topReadout seat. On
+  // desktop the seats split per the diagram: health up
+  // the left column; the chip, the bars, and the quest
+  // card in a new right-hand column — the center of the
+  // screen stands clear. Every seat wraps its block in
+  // a HudElement (drag grip + [X]) at the render.
+  const healthBlock = (
+    <div className="mt-3">
+      <WitchHealth />
+    </div>
+  );
+  const barsBlock = (
+    <>
+      <div className="mt-2">
+        <HungerIndicator
+          stage={hungerStage}
+          value={hungerValue}
+          warningActive={hungerWarningActive}
+          warningFlash={hungerWarningFlash}
+        />
+      </div>
+      <div className="mt-2">
+        <WeatherWitness
+          theme={lookThemes.world}
+          cold={coldWetUi.cold}
+          wet={coldWetUi.wet}
+        />
+      </div>
+      <div className="mt-2">
+        <StormWarning
+          active={deerWarningActive}
+          flash={deerWarningFlash}
+        />
+      </div>
+    </>
+  );
+  const questBlock =
+    cardQuestRow && cardQuestRow.id !== dismissedCardQuestId ? (
+      <div className="mt-2">
+        <QuestCard
+          title={cardQuestRow.title}
+          hint={cardQuestRow.hint}
+          components={cardQuestComponents}
+          marked={cardQuestRow.id === activeQuestId}
+          theme={lookThemes.world}
+          onClose={() => setDismissedCardQuestId(cardQuestRow.id)}
+        />
+      </div>
+    ) : null;
+  // The chip hides while a panel or the modal is open
+  // (the topReadout seat's standing rule, both seats).
+  const chipGateOpen =
+    !inventoryOpen &&
+    !craftingOpen &&
+    !charmsOpen &&
+    !companionsOpen &&
+    !optionsOpen &&
+    !introOpen;
+  const locationChip = (
+    <LocationChip
+      theme={lookThemes.world}
+      x={position.x}
+      z={position.z}
+      biomeName={dominantBiome.name}
+      biomePercent={dominantBiome.percent}
+      fps={fps}
+      zoneX={zoneX}
+      zoneZ={zoneZ}
+      timeDateMonth={chipLine}
+    />
+  );
+
   // THE PLACEMENT CARD, HOISTED (the kiln defect,
   // Adam + DEV, 2026-11-01): the card renders only while
   // a placement is armed, and while armed it is the one
@@ -14691,27 +14779,15 @@ export default function App() {
       <HudShell theme={lookThemes.world}
         hideNeeds={isTouch && hudCollapsed}
         topReadout={
-          !inventoryOpen &&
-          !craftingOpen &&
-          !charmsOpen &&
-      !companionsOpen &&
-          !companionsOpen &&
-          !optionsOpen &&
-          !introOpen ? (
-            <LocationChip theme={lookThemes.world}
-              x={position.x}
-              z={position.z}
-              biomeName={dominantBiome.name}
-              biomePercent={dominantBiome.percent}
-              fps={fps}
-              zoneX={zoneX}
-              zoneZ={zoneZ}
-              timeDateMonth={chipLine}
-            />
+          isTouch && chipGateOpen ? (
+            <HudElement hud={hudLayout} id="chip">
+              {locationChip}
+            </HudElement>
           ) : null
         }
       >
         {(!isTouch || !hudCollapsed) ? (
+        <div className={isTouch ? '' : 'flex items-start gap-2'}>
         <div
           className={
             isTouch
@@ -14758,65 +14834,41 @@ export default function App() {
               cards, out of the way of the view. The row below is
               the DEFECT 3 unit, moved whole: its internal
               landscape rail arrangement is untouched. */}
-          {/* VITALS + CARD ROW (DEFECT 3): on touch
-              landscape these stand side by side — vitals
-              in a fixed rail, the quest card flexing
-              beside them — because a short screen cannot
-              stack both inside the visible slice. The
-              wrappers are plain blocks everywhere else,
-              so portrait and desktop stacking are
-              unchanged. */}
-          <div
-            className={
-              isTouch
-                ? 'landscape:flex landscape:items-start landscape:gap-3 landscape:-mt-1'
-                : ''
-            }
-          >
-            <div
-              className={
-                isTouch ? 'landscape:w-[11rem] landscape:shrink-0' : ''
-              }
-            >
-          <div className="mt-3">
-            <WitchHealth />
-          </div>
-          <div className="mt-2">
-            <HungerIndicator
-              stage={hungerStage}
-              value={hungerValue}
-              warningActive={hungerWarningActive}
-              warningFlash={hungerWarningFlash}
-            />
-          </div>
-          <div className="mt-2">
-            <WeatherWitness
-              theme={lookThemes.world}
-              cold={coldWetUi.cold}
-              wet={coldWetUi.wet}
-            />
-          </div>
-          <div className="mt-2">
-            <StormWarning
-              active={deerWarningActive}
-              flash={deerWarningFlash}
-            />
-          </div>
+          {/* VITALS + CARD (DEFECT 3 seats, re-seated by
+              Adam's diagram, 2026-11-02): on touch the row
+              stands as measured — landscape rail, health
+              and bars in the column, the quest card beside
+              them. On desktop only health stands here, up
+              the left column; the bars and the quest card
+              sit in the right-hand column rendered after
+              this stack. */}
+          {isTouch ? (
+            <div className="landscape:flex landscape:items-start landscape:gap-3 landscape:-mt-1">
+              <div className="landscape:w-[11rem] landscape:shrink-0">
+                <HudElement hud={hudLayout} id="health">
+                  {healthBlock}
+                </HudElement>
+                <HudElement hud={hudLayout} id="bars">
+                  {barsBlock}
+                </HudElement>
+              </div>
+              {questBlock !== null ? (
+                <HudElement hud={hudLayout} id="quest">
+                  {questBlock}
+                </HudElement>
+              ) : null}
             </div>
-          {cardQuestRow && cardQuestRow.id !== dismissedCardQuestId ? (
-            <div className="mt-2">
-              <QuestCard
-                title={cardQuestRow.title}
-                hint={cardQuestRow.hint}
-                components={cardQuestComponents}
-                marked={cardQuestRow.id === activeQuestId}
-                theme={lookThemes.world}
-                onClose={() => setDismissedCardQuestId(cardQuestRow.id)}
-              />
-            </div>
+          ) : (
+            <HudElement hud={hudLayout} id="health">
+              {healthBlock}
+            </HudElement>
+          )}
+          {!isTouch ? (
+            <HudElement hud={hudLayout} id="meta">
+              {stackMeta}
+            </HudElement>
           ) : null}
-          </div>
-          {!isTouch ? stackMeta : null}
+          <HudElement hud={hudLayout} id="controls">
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <button
               type="button"
@@ -14934,7 +14986,9 @@ export default function App() {
               ) : null}
             </button>
           </div>
+          </HudElement>
           <ForageHint stage={hungerStage} />
+          <HudElement hud={hudLayout} id="wardrobe">
           <div className="mt-2">
             <WornList
               worn={wornGarments}
@@ -14948,6 +15002,7 @@ export default function App() {
               note={wardrobeNote}
             />
           </div>
+          </HudElement>
           <div className="mt-2">
             <ShelteredIndicator
               sheltered={sheltered}
@@ -14967,7 +15022,11 @@ export default function App() {
               (see placementCard's hoisting note above). */}
           {/* Touch seat for the meta block: LAST in the
               stack (DEFECT 3 — the working parts lead). */}
-          {isTouch ? stackMeta : null}
+          {isTouch ? (
+            <HudElement hud={hudLayout} id="meta">
+              {stackMeta}
+            </HudElement>
+          ) : null}
           {/* Seed controls. THE STRIP FOLLOWS THE
               CONTENT (Adam's overlap defect + DEV's idiom,
               2026-11-01): this row used to sit in an
@@ -15026,6 +15085,32 @@ export default function App() {
             </span>
           </div>
           ) : null}
+        </div>
+        {!isTouch ? (
+          <div className="pointer-events-none m-2 ml-auto flex w-full max-w-sm flex-col">
+            {chipGateOpen ? (
+              <HudElement
+                hud={hudLayout}
+                id="chip"
+                className="pointer-events-auto self-end"
+              >
+                {locationChip}
+              </HudElement>
+            ) : null}
+            <HudElement hud={hudLayout} id="bars">
+              {barsBlock}
+            </HudElement>
+            {questBlock !== null ? (
+              <HudElement
+                hud={hudLayout}
+                id="quest"
+                className="pointer-events-auto"
+              >
+                {questBlock}
+              </HudElement>
+            ) : null}
+          </div>
+        ) : null}
         </div>
         ) : null}
       </HudShell>
@@ -15654,6 +15739,17 @@ export default function App() {
           }}
           quests={questDisplay}
           cloud={cloudPanelProps}
+          hud={{
+            items: (Object.keys(HUD_ELEMENT_LABELS) as HudElementId[]).map(
+              (id) => ({
+                id,
+                label: HUD_ELEMENT_LABELS[id],
+                hidden: hudLayout.slot(id).hidden,
+              }),
+            ),
+            onToggle: (id, hidden) => hudLayout.setHidden(id, hidden),
+            onReset: () => hudLayout.reset(),
+          }}
           onClose={() => setOptionsOpen(false)}
           comfortable={isTouch}
         />
