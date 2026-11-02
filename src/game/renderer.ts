@@ -48,6 +48,7 @@ import {
 } from './companionRuntime';
 import { catActor, catGlowOn, clearCat, ensureCat, installCatPreyAccess, stepCat } from './catRuntime';
 import { clearGuide, guideActor, guideVisible, seatYFor, stageGuide, stepGuide } from './guideRuntime';
+import { currentWeatherFacts, seatWeatherState, stepWeather, weatherStateSnapshot, type WeatherSpellRecord } from './weatherSpells';
 import { exodusBats, stepExodus } from './exodusRuntime';
 import { crowGlowIntensity, CROW_GLOW_EMISSIVE } from './crow';
 import type { CrowTier } from './crow';
@@ -1271,17 +1272,25 @@ export class WorldRenderer {
    * 10-31): the first and last ~2 game-hours of the day
    * arc, read off the sky rig's own clock. The cycle
    * starts at dawn; dusk ends where the day fraction
-   * ends (September's fraction — the calendar's month
-   * drift is not built, and September is the world's
-   * standing start). Width DRAFT.
+   * ends — read at the LIVE month since W1 (the season
+   * drifts now; September is only the start). Width
+   * DRAFT.
    */
+  /** The live month (W1): the spell machine's derived
+   *  month once it has stepped, else the season start.
+   *  Every season-shaped reading (day split, sun path)
+   *  reads this, so the whole world ages together. */
+  private liveMonth(): number {
+    return currentWeatherFacts()?.month ?? SEASON_START_MONTH;
+  }
+
   private guideWindowOpen(): boolean {
     const sky = this.sky;
     if (!sky) return false;
     const t = sky.cycleT;
     const w = 2 / 24;
     if (t <= w) return true;
-    const f = dayFraction(SEASON_START_MONTH);
+    const f = dayFraction(this.liveMonth());
     return t >= f - w && t <= f;
   }
 
@@ -1291,7 +1300,7 @@ export class WorldRenderer {
     if (!sky) return false;
     const t = sky.cycleT;
     const w = 2 / 24;
-    const f = dayFraction(SEASON_START_MONTH);
+    const f = dayFraction(this.liveMonth());
     return t >= f - w && t <= f;
   }
 
@@ -1542,6 +1551,24 @@ export class WorldRenderer {
     this.sky?.restore(snap);
   }
 
+  /**
+   * Weather save seam (W1) — the sky seam's twin: the
+   * spell record is HOSTED state (Systems seats the save
+   * field in their W2 pass). weatherRecord() returns the
+   * record to persist; restoreWeather(rec) re-seats it
+   * after setWorldGen has seated a fresh opening spell
+   * (a null/undefined record leaves the fresh seat — old
+   * saves carry no weather field).
+   */
+  weatherRecord(): WeatherSpellRecord | null {
+    return weatherStateSnapshot();
+  }
+
+  restoreWeather(rec: WeatherSpellRecord | null | undefined): void {
+    if (!rec) return;
+    seatWeatherState(rec, String(this.gen.seed));
+  }
+
   /** Ground detail texture for a chunk: the dominant biome's procedural
    *  texture, or the marsh texture when marsh ground character dominates
    *  the chunk center. The vertex-color blend underneath still carries
@@ -1630,6 +1657,12 @@ export class WorldRenderer {
     // (disposed is already true there) — dispose() removes the
     // rig itself below instead of rebuilding it.
     if (!this.disposed) this.sky?.setSeed(String(gen.seed));
+    // Weather spells (W1): a new world seats the machine
+    // fresh — its opening spell is a rolled dry spell
+    // (the pleasant week starts fair). A save restore
+    // re-seats the persisted record via restoreWeather
+    // after install, as with the sky.
+    seatWeatherState(null, String(gen.seed));
     this.proximity.setGen(this.gen);
     this.disposeGroundTextures();
     for (const [key, loaded] of this.chunks) {
@@ -2028,7 +2061,7 @@ export class WorldRenderer {
       if (loaded.sunflowerHeads) { any = true; break; }
     }
     if (!any) return;
-    const orientation = sunflowerHeadOrientation(this.sky?.cycleT ?? 0, SEASON_START_MONTH);
+    const orientation = sunflowerHeadOrientation(this.sky?.cycleT ?? 0, this.liveMonth());
     const now = Date.now();
     const m = new THREE.Matrix4();
     for (const loaded of this.chunks.values()) {
@@ -3502,12 +3535,19 @@ export class WorldRenderer {
       this.camera.lookAt(this.player.x, this.player.yOffset, this.player.z);
     }
 
-    // Sky: day/night driver + sun/moon/stars/clouds + lights.
-    // Month stays the season-start input (no calendar yet — see
-    // sky.ts); weather is the seasonal query at her position.
+    // Weather spells (W1): the machine steps on the sky
+    // rig's OWN clock (daysElapsed + cycleT — no second
+    // clock), and the sky + the weather query read the
+    // LIVE month the machine derives, so the season
+    // finally advances and fronts move. (Before W1 the
+    // month was the season-start constant everywhere.)
+    const dayFloat = this.sky ? this.sky.daysElapsed + this.sky.cycleT : 0;
+    const wf = stepWeather({ gen: this.gen, playerX: this.player.x, playerZ: this.player.z, dayFloat });
+    // Sky: day/night driver + sun/moon/stars/clouds + lights;
+    // weather is the seasonal query at her position.
     this.sky?.update(dt, {
-      month: SEASON_START_MONTH,
-      weather: seasonalWeatherAt(this.gen, this.player.x, this.player.z, SEASON_START_MONTH),
+      month: wf.month,
+      weather: seasonalWeatherAt(this.gen, this.player.x, this.player.z, wf.month),
       playerX: this.player.x,
       playerZ: this.player.z,
     });
