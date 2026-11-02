@@ -3122,7 +3122,7 @@ export default function App() {
   const [craftContextSiteId, setCraftContextSiteId] =
     useState<string | null>(null);
   const [craftDoor, setCraftDoor] = useState<
-    'craft' | 'upgrade' | 'ritual'
+    'craft' | 'upgrade' | 'ritual' | 'fire'
   >('craft');
   useEffect(() => {
     if (!craftingOpen) {
@@ -7515,6 +7515,33 @@ export default function App() {
     setCompanionsOpen(false);
     setJournalOpen(false);
   };
+  // THE FIRE DIALOG (Adam's two-tab ruling, 2026-11-01):
+  // the LIT KILN alone trades its anchored menu for the
+  // dialog — Fire and Craft doors in one seat, context
+  // fixed at open, leash-closed like every context. E
+  // opens on the Fire door, K on the Craft door; every
+  // other fire (and the unlit kiln) keeps today's menu.
+  const isLitKiln = (fire: PlacedFire): boolean =>
+    fire.type === 'kiln' && fire.lit;
+  const openFireContext = (
+    fire: PlacedFire,
+    door: 'fire' | 'craft',
+  ) => {
+    setCraftContextSiteId(`fire:${fire.id}`);
+    setCraftDoor(door);
+    setCraftingOpen(true);
+    setInventoryOpen(false);
+    setCharmsOpen(false);
+    setCompanionsOpen(false);
+    setJournalOpen(false);
+  };
+  // E / the fire chip at any fire: the lit kiln goes to
+  // its dialog; everything else selects the anchored
+  // menu, exactly as before.
+  const openFireDoor = (fire: PlacedFire) => {
+    if (isLitKiln(fire)) openFireContext(fire, 'fire');
+    else setSelectedFireId(fire.id);
+  };
   const openCraftingPanel = () => {
     // THE FOLD: opening the dialog while a stump (plain
     // or made altar) is her faced winner attaches that
@@ -7528,6 +7555,15 @@ export default function App() {
     ) {
       setCraftContextSiteId(useWinner.siteId);
       setCraftDoor('craft');
+    }
+    // K at the lit kiln: the same dialog, Craft door
+    // first (the fire ruling's second tab).
+    if (useWinner?.kind === 'fire') {
+      const fire = placedFires.find((f) => f.id === useWinner.id);
+      if (fire !== undefined && isLitKiln(fire)) {
+        setCraftContextSiteId(`fire:${fire.id}`);
+        setCraftDoor('craft');
+      }
     }
     setCraftingOpen(true);
     setInventoryOpen(false);
@@ -8022,7 +8058,13 @@ export default function App() {
   // for anything else (boulders do not exist yet).
   const sitePositionFor = (
     siteId: string,
-  ): { kind: 'altar' | 'stump'; x: number; z: number } | null => {
+  ): { kind: 'altar' | 'stump' | 'fire'; x: number; z: number } | null => {
+    if (siteId.startsWith('fire:')) {
+      const fire = placedFires.find(
+        (f) => f.id === siteId.slice('fire:'.length),
+      );
+      return fire ? { kind: 'fire', x: fire.x, z: fire.z } : null;
+    }
     if (siteId.startsWith('altar:')) {
       const altar = altarState.get(siteId);
       return altar ? { kind: 'altar', x: altar.x, z: altar.z } : null;
@@ -8108,7 +8150,10 @@ export default function App() {
   // surface. Boulders do not exist yet.
   const handleStageBone = (siteId: string, kind: string) => {
     const site = sitePositionFor(siteId);
-    if (!site) {
+    if (!site || site.kind === 'fire') {
+      // A fire context is never a ritual site (the
+      // widened position type admits it; this door's
+      // sites are stump/altar by construction).
       setRitualNote('No site there.');
       return;
     }
@@ -10346,9 +10391,21 @@ export default function App() {
   const contextSiteLabel =
     craftContextSiteId === null
       ? null
-      : isStumpyAltar(contextSiteAdditions)
-        ? 'Stumpy Altar'
-        : 'Stump';
+      : craftContextSiteId.startsWith('fire:')
+        ? 'Kiln'
+        : isStumpyAltar(contextSiteAdditions)
+          ? 'Stumpy Altar'
+          : 'Stump';
+  // The fire a fire-context names (the lit kiln the
+  // dialog stands on), resolved live — the Fire door
+  // renders its actions from the fire's current state.
+  const craftContextFire =
+    craftContextSiteId !== null &&
+    craftContextSiteId.startsWith('fire:')
+      ? placedFires.find(
+          (f) => f.id === craftContextSiteId.slice('fire:'.length),
+        )
+      : undefined;
   const contextSiteActs: { id: string; label: string }[] = (() => {
     if (craftContextSiteId === null || contextSitePosition === null) {
       return [];
@@ -12090,9 +12147,11 @@ export default function App() {
           setSelectedSiteId(winner.siteId);
         }
         break;
-      case 'fire':
-        setSelectedFireId(winner.id);
+      case 'fire': {
+        const fire = placedFires.find((f) => f.id === winner.id);
+        if (fire !== undefined) openFireDoor(fire);
         break;
+      }
       case 'tent':
         setSelectedTentId(winner.id);
         break;
@@ -13907,7 +13966,7 @@ export default function App() {
                   kind={fire.type}
                   status={status}
                   lightingDetail={detail}
-                  onSelect={() => setSelectedFireId(fire.id)}
+                  onSelect={() => openFireDoor(fire)}
                 />
               </WorldAnchor>
             </Fragment>
@@ -14886,33 +14945,92 @@ export default function App() {
                 role="group"
                 aria-label={`${contextSiteLabel ?? 'Stump'} doors`}
               >
-                {(['craft', 'upgrade', 'ritual'] as const).map(
-                  (door) => (
-                    <button
-                      key={door}
-                      type="button"
-                      aria-pressed={craftDoor === door}
-                      onClick={() => setCraftDoor(door)}
-                      onTouchStart={(e) => {
-                        e.stopPropagation();
-                      }}
-                      className={
-                        'min-h-[44px] flex-1 rounded-xl px-2 py-1.5 text-sm ' +
-                        (craftDoor === door
-                          ? UI_THEMES[lookThemes.dialog].button
-                          : 'text-stone-300 hover:bg-white/10')
-                      }
-                    >
-                      {door === 'craft'
+                {(craftContextSiteId.startsWith('fire:')
+                  ? (['fire', 'craft'] as const)
+                  : (['craft', 'upgrade', 'ritual'] as const)
+                ).map((door) => (
+                  <button
+                    key={door}
+                    type="button"
+                    aria-pressed={craftDoor === door}
+                    onClick={() => setCraftDoor(door)}
+                    onTouchStart={(e) => {
+                      e.stopPropagation();
+                    }}
+                    className={
+                      'min-h-[44px] flex-1 rounded-xl px-2 py-1.5 text-sm ' +
+                      (craftDoor === door
+                        ? UI_THEMES[lookThemes.dialog].button
+                        : 'text-stone-300 hover:bg-white/10')
+                    }
+                  >
+                    {door === 'fire'
+                      ? 'Fire'
+                      : door === 'craft'
                         ? 'Craft'
                         : door === 'upgrade'
                           ? 'Upgrade'
                           : 'Ritual'}
-                    </button>
-                  ),
-                )}
+                  </button>
+                ))}
               </div>
-              {craftDoor === 'craft' ? (
+              {craftDoor === 'fire' &&
+              craftContextFire !== undefined ? (
+                <section
+                  aria-label="Kiln fire"
+                  className={
+                    (isTouch ? 'max-h-[92dvh] ' : 'max-h-[70vh] ') +
+                    'overflow-y-auto rounded-2xl p-2 ' +
+                    UI_THEMES[lookThemes.dialog].panel
+                  }
+                >
+                  <h3 className="text-sm font-medium">
+                    {FIRE_NAME[craftContextFire.type]}
+                  </h3>
+                  <div className="mt-2 flex flex-col gap-1">
+                    {fireMenuActions(craftContextFire).map(
+                      (action) => (
+                        <div key={action.id}>
+                          <button
+                            type="button"
+                            disabled={action.disabled}
+                            onClick={() => {
+                              if (action.id === 'close') {
+                                setCraftingOpen(false);
+                              } else {
+                                handleFireAction(
+                                  craftContextFire.id,
+                                  action.id,
+                                );
+                              }
+                            }}
+                            onTouchStart={(e) => {
+                              e.stopPropagation();
+                            }}
+                            className={
+                              'min-h-[44px] w-full rounded-xl px-2 py-1.5 text-left text-sm ' +
+                              UI_THEMES[lookThemes.dialog].button +
+                              ' disabled:cursor-not-allowed disabled:opacity-40'
+                            }
+                          >
+                            {action.label}
+                            {action.hint ? (
+                              <span className="ml-2 opacity-80">
+                                {action.hint}
+                              </span>
+                            ) : null}
+                          </button>
+                          {action.disabled && action.disabledNote ? (
+                            <p className="px-2 pt-0.5 text-xs opacity-80">
+                              {action.disabledNote}
+                            </p>
+                          ) : null}
+                        </div>
+                      ),
+                    )}
+                  </div>
+                </section>
+              ) : craftDoor === 'craft' ? (
                 <CraftingMenu theme={lookThemes.dialog}
                   onInfoItem={openItemInfo}
                   recipes={orderedCraftingRecipes}
