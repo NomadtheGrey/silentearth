@@ -465,7 +465,7 @@ export function createAtticGen(
   const weights: BiomeWeights = {
     weights: {
       mirewood: 0, deepBog: 0, oldfieldRise: 0, creekBottom: 0,
-      tanglewood: 0, saltFlat: 0, meadow: 0, forest: 0,
+      tanglewood: 0, fen: 0, scrub: 0, meadow: 0, forest: 0,
     } as Record<BiomeId, number>,
     dominant: facts.biome,
   };

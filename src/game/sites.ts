@@ -56,6 +56,7 @@
  * instances is their own future claim.
  */
 
+import { createFields, legacyWeightsAt } from './biomes';
 import { deriveSeed, mulberry32 } from './seed';
 import { riverCenterAt, riverParamsFor, RIVER_WIDTH } from './river';
 import type { BiomeId, BiomeWeights, ScatterKind, ScatterObject } from '../types';
@@ -2143,8 +2144,21 @@ const mouthSpot = toWorld(0, 2.6);
 }
 
 /**
- * Derive the world's Cave Mouth. `weightsAtPos` returns the
- * full weights + dominant at a position. Memoized by seed.
+ * Derive the world's Cave Mouth. Memoized by seed.
+ *
+ * PINNED SITING (Adam, 2026-11-02): this derivation — the
+ * spacing reads against the five earlier sites AND the
+ * wooded-ground walk — reads the LEGACY siting grammar
+ * (biomes.ts LEGACY_ANCHORS) derived from the seed
+ * itself, NOT the caller's living weights, so the debut
+ * cave's mouth stands where it stood before the biome
+ * landing on every seed. The `weightsAtPos` parameter is
+ * retained for signature stability with its many
+ * composition callers and is deliberately unread. The
+ * five spacing sites are likewise derived under the
+ * legacy grammar here (their seats as the mouth's
+ * derivation has always seen them); the sites themselves
+ * stand in the world at their living-grammar seats.
  */
 export function caveMouthSite(
   seed: string,
@@ -2154,12 +2168,17 @@ export function caveMouthSite(
   const cached = caveMouthCache.get(`${seed}::cavemouth`);
   if (cached) return cached;
 
+  const pinFields = createFields(seed);
+  const pinW = (x: number, z: number): BiomeWeights =>
+    legacyWeightsAt(pinFields(x, z)) as unknown as BiomeWeights;
+  void weightsAtPos;
+
   // Spacing against all five earlier sites (radii + 60).
-  const grove = groveSite(seed, spawn, (x, z) => weightsAtPos(x, z).dominant);
-  const school = schoolhouseSite(seed, spawn, weightsAtPos);
-  const village = villageSite(seed, spawn, weightsAtPos);
-  const farm = farmhouseSite(seed, spawn, weightsAtPos);
-  const chapel = chapelSite(seed, spawn, weightsAtPos);
+  const grove = groveSite(seed, spawn, (x, z) => pinW(x, z).dominant);
+  const school = schoolhouseSite(seed, spawn, pinW);
+  const village = villageSite(seed, spawn, pinW);
+  const farm = farmhouseSite(seed, spawn, pinW);
+  const chapel = chapelSite(seed, spawn, pinW);
   const spacingLegal = (x: number, z: number): boolean =>
     [grove, school, village, farm, chapel].every(
       (s) =>
@@ -2176,7 +2195,7 @@ export function caveMouthSite(
     x: spawn.x + dirX * CAVE_MOUTH_MAX_DIST_M,
     z: spawn.z + dirZ * CAVE_MOUTH_MAX_DIST_M,
   };
-  let biome = weightsAtPos(center.x, center.z).dominant;
+  let biome = pinW(center.x, center.z).dominant;
   let distance = CAVE_MOUTH_MAX_DIST_M;
   let accepted = false;
   let fallback: { x: number; z: number; biome: BiomeId; distance: number } | null = null;
@@ -2184,7 +2203,7 @@ export function caveMouthSite(
     const x = spawn.x + dirX * d;
     const z = spawn.z + dirZ * d;
     if (!spacingLegal(x, z)) continue;
-    const w = weightsAtPos(x, z);
+    const w = pinW(x, z);
     if (!fallback) fallback = { x, z, biome: w.dominant, distance: d };
     if (w.dominant === 'tanglewood' || w.dominant === 'forest') {
       center = { x, z };
@@ -2212,7 +2231,7 @@ export function caveMouthSite(
       const z = spawn.z + dirZ * d;
       if (!(spacingLegal(x, z))) continue;
       center = { x, z };
-      biome = weightsAtPos(x, z).dominant;
+      biome = pinW(x, z).dominant;
       distance = d;
       break;
     }

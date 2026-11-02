@@ -15,10 +15,9 @@
  * weights only. Terrain height is a later decision, not a placeholder.
  */
 
-import { BIOMES, createFields, weightsAt, groundColorAt, marshWeight } from './biomes';
+import { BIOMES, createFields, weightsAt, legacyWeightsAt, groundColorAt, marshWeight } from './biomes';
 import type { Fields } from './biomes';
 import { mulberry32, deriveSeed, hashSeed } from './seed';
-import { treeKindAt } from './treeKind';
 import { barnSite, caveMouthSite, chapelSite, distToSegment, drownedMillSite, farmhouseSite, generalStoreSite, groveSite, railSidingSite, schoolhouseSite, siloSite, sunkenRoadSite, villageSite, waterTowerSite, type SiteFootprint } from './sites';
 import { CHUNK_SIZE, BASE_SCATTER_PER_CHUNK, GROUND_SEGMENTS } from '../constants';
 import { caveInstancesInRect } from './caves';
@@ -44,7 +43,7 @@ export interface WorldGen {
 const SCATTER_KINDS: ScatterKind[] = [
   'bush', 'log', 'bogPatch', 'standingWater', 'tree',
   'snapWood', 'tenderVines', 'peatMoss', 'riverSilt', 'riverStone',
-  'bone', 'saltCrystal', 'downedOak',
+  'bone', 'pineTree',
   // Fill-in landing (2026-10-25): stump, reed, marshGrass, bogGrowth.
   'stump', 'reed', 'marshGrass', 'bogGrowth',
   // Meadow/forest landing (2026-10-26): flower, tallTree (scenery only).
@@ -134,7 +133,9 @@ export interface ClusterGrove {
  * The grove (if any) deriving from grid cell (gx, gz) — a pure
  * function of the seed, the biome weights, and the registered
  * sites. The biome mask (Adam's tentative shape): no groves
- * where saltFlat or deepBog dominates; the full spectrum where
+ * where deepBog or fen dominates (the salt flat stood in
+ * this line until it retired, 2026-11-02 — open wet and
+ * treeless ground grows no stands); the full spectrum where
  * woodland carries; small groves only in meadow / oldfieldRise
  * country (hedgerow character). DEV's condition: a centre
  * whose radius would overlap a site's clear footprint is
@@ -153,7 +154,7 @@ export function groveForCell(
   const x = (gx + 0.5) * CLUSTER_CELL_M + (rand() * 2 - 1) * jitter;
   const z = (gz + 0.5) * CLUSTER_CELL_M + (rand() * 2 - 1) * jitter;
   const w = weightsAtPos(x, z);
-  if (w.dominant === 'saltFlat' || w.dominant === 'deepBog') return null;
+  if (w.dominant === 'deepBog' || w.dominant === 'fen') return null;
   const woodland =
     (w.weights.forest ?? 0) + (w.weights.tanglewood ?? 0) + (w.weights.mirewood ?? 0);
   let tier: 'full' | 'small' | null = null;
@@ -399,8 +400,20 @@ export function createWorldGen(seed: string): WorldGen {
     // landing leaves every pre-existing scatter object untouched;
     // offsets clamp inside the chunk so chunk-gen objects never
     // cross chunk borders (proximity regenerates per chunk).
+    // THE LOG MERGER (Adam, 2026-11-02): the downed oak is a
+    // fallen log now, and fallen logs are everywhere the oaks
+    // were and more — a cluster beside EVERY log would more
+    // than double the acorn supply. The pass gates on the
+    // log's own spot instead (a position hash, the treeKind
+    // pattern): roughly one log in four carries a cluster
+    // (ACORN_LOG_SHARE, DRAFT), holding the acorn census
+    // near what the oaks alone provided.
     const acornRand = mulberry32(deriveSeed(seed, `acorns:${cx},${cz}`));
-    const oaks = objects.filter((obj) => obj.kind === 'downedOak');
+    const oaks = objects.filter(
+      (obj) =>
+        obj.kind === 'log' &&
+        ((deriveSeed(seed, `acornlog:${obj.x.toFixed(2)},${obj.z.toFixed(2)}`) % 4) + 4) % 4 === 0,
+    );
     for (const oak of oaks) {
       const angle = acornRand() * Math.PI * 2;
       const dist = 0.8 + acornRand() * 1.2;
@@ -490,20 +503,12 @@ export function createWorldGen(seed: string): WorldGen {
       objects.splice(0, objects.length, ...hung);
     }
 
-    // Tree kinds (Adam, 2026-10-30): a deterministic share of
-    // standing-tree slots are OAKS. Runs LAST among the passes,
-    // so every earlier derivation (the acorn scatter, the hive
-    // hosting above — hives host on 'tree') reads the original
-    // kinds. Pure relabel: treeKindAt is a position hash (no
-    // RNG consumed), and position/scale/rotY are untouched, so
-    // slot identity and counts are exactly today's — only the
-    // kind string changes, on oak spots only. 'oakTree' never
-    // enters the biome mixes; it exists only by this conversion.
-    for (const obj of objects) {
-      if (obj.kind === 'tree' && treeKindAt(seed, obj.x, obj.z) === 'oak') {
-        obj.kind = 'oakTree';
-      }
-    }
+    // Tree kinds RETIRED (Adam, 2026-11-02 — the flattening:
+    // "just make them generic trees... Unless we want to get
+    // into all the varieties of trees, which i don't"). The
+    // oak relabel pass that stood here is gone; every standing
+    // tree is 'tree'. Apple trees stand as the one accepted
+    // variation — the fruit is visible, not a hidden type.
 
     // The sites (Grove landing 2026-10-30; Schoolhouse landing
     // #2 and the Burnt Village #3, same day): the site pass runs LAST, after every other
@@ -567,11 +572,15 @@ export function createWorldGen(seed: string): WorldGen {
   function findSpawn(): { x: number; z: number } {
     // Deterministic scan: the most Mirewood-dominant point within 200 m of
     // origin, so the player always starts in the sloppy-wet hybrid start.
+    // PINNED (Adam, 2026-11-02): the scan reads the legacy
+    // siting grammar (biomes.ts LEGACY_ANCHORS), not the
+    // living weights — the spawn seat stands where it
+    // stood before the biome landing, on every seed.
     let best = { x: 0, z: 0 };
     let bestWeight = -1;
     for (let z = -200; z <= 200; z += 8) {
       for (let x = -200; x <= 200; x += 8) {
-        const w = weightsAtPos(x, z).weights.mirewood;
+        const w = legacyWeightsAt(fieldsAt(x, z)).weights.mirewood;
         if (w > bestWeight) {
           bestWeight = w;
           best = { x, z };

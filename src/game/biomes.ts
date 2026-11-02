@@ -82,9 +82,9 @@ export const BIOMES: BiomeDef[] = [
     groundColor: 0x5a5a38,
     density: 1.0,
     mix: {
-      bush: 0.14, log: 0.08, bogPatch: 0.08, standingWater: 0.08,
+      bush: 0.14, log: 0.09, bogPatch: 0.08, standingWater: 0.08,
       tree: 0.05, snapWood: 0.10, tenderVines: 0.28, peatMoss: 0.10,
-      riverSilt: 0.04, riverStone: 0.03, bone: 0.01, downedOak: 0.01,
+      riverSilt: 0.04, riverStone: 0.03, bone: 0.01,
       stump: 0.01, bogGrowth: 0.03, edibleMushroom: 0.04, poisonMushroom: 0.04,
       flint: 0.05, pond: 0.02,
     },
@@ -123,9 +123,9 @@ export const BIOMES: BiomeDef[] = [
     groundColor: 0x7a7a4a,
     density: 0.70,
     mix: {
-      bush: 0.20, tree: 0.18, snapWood: 0.15, tenderVines: 0.10, log: 0.05,
-      riverStone: 0.10, bone: 0.05, peatMoss: 0.05, downedOak: 0.05,
-      riverSilt: 0.02, saltCrystal: 0.02, bogPatch: 0.01, standingWater: 0.01,
+      bush: 0.20, tree: 0.18, snapWood: 0.15, tenderVines: 0.10, log: 0.10,
+      riverStone: 0.10, bone: 0.05, peatMoss: 0.05,
+      riverSilt: 0.02, bogPatch: 0.01, standingWater: 0.01,
       stump: 0.02, appleTree: 0.06, flint: 0.08, flower: 0.08, beehive: 0.02,
       // Flowers landing (2026-10-28): new kinds, pink untouched.
       yarrow: 0.01, dandelion: 0.01, milkweed: 0.005, poppy: 0.02, sunflower: 0.02, aster: 0.015,
@@ -163,8 +163,8 @@ export const BIOMES: BiomeDef[] = [
     groundColor: 0x3d4a2a,
     density: 1.25,
     mix: {
-      tenderVines: 0.45, bush: 0.20, log: 0.08, snapWood: 0.08,
-      downedOak: 0.05, peatMoss: 0.05, tree: 0.05, riverStone: 0.02, bone: 0.02,
+      tenderVines: 0.45, bush: 0.20, log: 0.13, snapWood: 0.08,
+      peatMoss: 0.05, tree: 0.05, riverStone: 0.02, bone: 0.02,
       stump: 0.01, bogGrowth: 0.02, edibleMushroom: 0.08, poisonMushroom: 0.08,
       flint: 0.03,
     },
@@ -175,21 +175,47 @@ export const BIOMES: BiomeDef[] = [
     },
   },
   {
-    id: 'saltFlat',
-    name: 'Salt Flat',
-    groundColor: 0xb8b0a0,
-    density: 0.50,
+    id: 'fen',
+    name: 'Fen',
+    groundColor: 0x5c6636,
+    density: 0.7,
     mix: {
-      saltCrystal: 0.30, riverStone: 0.20, bone: 0.15, riverSilt: 0.10,
-      bush: 0.05, snapWood: 0.05, log: 0.05, peatMoss: 0.03,
-      standingWater: 0.02, tenderVines: 0.04, downedOak: 0.01,
-      flint: 0.03,
+      reed: 0.22, marshGrass: 0.18, standingWater: 0.14, peatMoss: 0.08,
+      bogPatch: 0.06, riverSilt: 0.05, bogGrowth: 0.04, snapWood: 0.04,
+      bush: 0.04, log: 0.03, edibleMushroom: 0.03, poisonMushroom: 0.03,
+      pond: 0.02, riverStone: 0.02, bone: 0.01,
     },
-    // The odd dry one: mineral crust, salt crystals, bone.
+    // The wet middle (Adam, 2026-11-02, the biome landing):
+    // open reedy wetland between Mirewood and the outright
+    // bog — the ground the marsh overlay used to gesture at,
+    // standing as a biome of its own. Scatter is the
+    // existing vocabulary only; no new items ride it.
     anchor: {
-      mineral: { at: 0.92, sigma: 0.22 },
-      wetness: { at: 0.15, sigma: 0.25 },
-      elevation: { at: 0.50, sigma: 0.30 },
+      wetness: { at: 0.75, sigma: 0.21 },
+      elevation: { at: 0.40, sigma: 0.28 },
+      density: { at: 0.38, sigma: 0.26 },
+    },
+  },
+  {
+    id: 'scrub',
+    name: 'Scrub',
+    groundColor: 0x8a8558,
+    density: 0.6,
+    mix: {
+      bush: 0.22, riverStone: 0.14, pineTree: 0.10, snapWood: 0.08,
+      flint: 0.05, bone: 0.04, log: 0.04, tree: 0.03, flower: 0.03,
+      tenderVines: 0.03, stump: 0.01,
+    },
+    // The dry middle (Adam, 2026-11-02, the biome landing):
+    // low bush, stone, sparse trees — and pines, the one
+    // dressed silhouette, where the mineral soil runs
+    // mid. The mineral axis earns its keep here (its
+    // second honest user after the salt flat it was
+    // seeded for retired the same day).
+    anchor: {
+      wetness: { at: 0.25, sigma: 0.20 },
+      mineral: { at: 0.50, sigma: 0.27 },
+      density: { at: 0.42, sigma: 0.25 },
     },
   },
   {
@@ -225,7 +251,7 @@ export const BIOMES: BiomeDef[] = [
     density: 1.30,
     mix: {
       tallTree: 0.28, tree: 0.14, bush: 0.12, tenderVines: 0.18,
-      log: 0.06, snapWood: 0.05, downedOak: 0.04, peatMoss: 0.04,
+      log: 0.10, snapWood: 0.05, peatMoss: 0.04,
       flower: 0.03, riverStone: 0.02, bone: 0.01, stump: 0.01, bogGrowth: 0.01, edibleMushroom: 0.08, poisonMushroom: 0.08,
       // Flowers landing (2026-10-28): new kinds, pink untouched.
       aster: 0.007, trillium: 0.008, violet: 0.008, ladySlipper: 0.007,
@@ -319,6 +345,77 @@ export function createFields(seed: string): (x: number, z: number) => Fields {
   };
 }
 
+/** The floodplain margin boost (DRAFT — Adam's pin pass):
+ *  how much wider creekBottom reads beside its creeks. */
+export const FLOODPLAIN_BOOST = 1.8;
+
+/**
+ * THE PINNED SITING GRAMMAR (Adam, 2026-11-02 — 'Ya i
+ * guess it's fine', on the biome landing's total
+ * re-deal): the biome landing re-formed the country, and
+ * with it every seat that walks the weights — including
+ * two seats Adam knows by heart: the SPAWN and the DEBUT
+ * CAVE'S MOUTH. Those two derivations now read THIS
+ * frozen copy of the pre-landing grammar (the eight
+ * original anchors, the plain gaussian blend, the
+ * mirewood floor, no floodplain), so their seats stand
+ * exactly where they stood before the landing, on every
+ * seed, by construction. The living world blends by the
+ * current table above; only the two pinned derivations
+ * read the old country. FROZEN: do not tune these
+ * numbers — a change here moves the spawn and the mouth
+ * in every existing world. (Anchor values copied
+ * verbatim from the pre-landing table, verified against
+ * the code at the pre-landing tip.)
+ */
+export const LEGACY_ANCHORS: ReadonlyArray<{
+  id: string;
+  anchor: Partial<Record<FieldAxis, { at: number; sigma: number }>>;
+}> = [
+  { id: 'mirewood', anchor: { wetness: { at: 0.62, sigma: 0.30 }, elevation: { at: 0.45, sigma: 0.30 }, density: { at: 0.60, sigma: 0.30 }, creek: { at: 0.15, sigma: 0.35 } } },
+  { id: 'deepBog', anchor: { wetness: { at: 0.95, sigma: 0.22 }, elevation: { at: 0.25, sigma: 0.28 }, density: { at: 0.30, sigma: 0.30 } } },
+  { id: 'oldfieldRise', anchor: { wetness: { at: 0.30, sigma: 0.25 }, elevation: { at: 0.78, sigma: 0.25 }, density: { at: 0.35, sigma: 0.30 } } },
+  { id: 'creekBottom', anchor: { creek: { at: 0.90, sigma: 0.25 }, wetness: { at: 0.80, sigma: 0.25 }, elevation: { at: 0.30, sigma: 0.30 } } },
+  { id: 'tanglewood', anchor: { density: { at: 0.95, sigma: 0.22 }, wetness: { at: 0.60, sigma: 0.30 } } },
+  { id: 'saltFlat', anchor: { mineral: { at: 0.92, sigma: 0.22 }, wetness: { at: 0.15, sigma: 0.25 }, elevation: { at: 0.50, sigma: 0.30 } } },
+  { id: 'meadow', anchor: { wetness: { at: 0.35, sigma: 0.25 }, elevation: { at: 0.55, sigma: 0.30 }, density: { at: 0.30, sigma: 0.25 }, distance: { at: 1.0, sigma: 0.25 } } },
+  { id: 'forest', anchor: { density: { at: 0.90, sigma: 0.22 }, wetness: { at: 0.55, sigma: 0.30 }, elevation: { at: 0.50, sigma: 0.30 }, distance: { at: 1.0, sigma: 0.22 } } },
+];
+
+/** Weights under the pinned siting grammar (see above).
+ *  Keyed by plain strings — the legacy ids include the
+ *  retired 'saltFlat', which the living BiomeId union no
+ *  longer carries. */
+export function legacyWeightsAt(fields: Fields): { weights: Record<string, number>; dominant: string } {
+  const raw = new Map<string, number>();
+  let total = 0;
+  for (const def of LEGACY_ANCHORS) {
+    let affinity = 1;
+    for (const [axis, pref] of Object.entries(def.anchor) as [
+      FieldAxis,
+      { at: number; sigma: number },
+    ][]) {
+      const d = (fields[axis] - pref.at) / pref.sigma;
+      affinity *= Math.exp(-0.5 * d * d);
+    }
+    if (def.id === 'mirewood') affinity = Math.max(affinity, 0.08);
+    raw.set(def.id, affinity);
+    total += affinity;
+  }
+  const weights: Record<string, number> = {};
+  let dominant = 'mirewood';
+  let best = -1;
+  for (const [id, value] of raw) {
+    const w = value / total;
+    weights[id] = w;
+    if (w > best) {
+      best = w;
+      dominant = id;
+    }
+  }
+  return { weights, dominant };
+}
+
 /** Normalized per-biome weights at a world position. Sums to 1. */
 export function weightsAt(fields: Fields): BiomeWeights {
   const raw = new Map<BiomeId, number>();
@@ -334,6 +431,20 @@ export function weightsAt(fields: Fields): BiomeWeights {
     }
     // Mirewood floor: the mire is the background matrix, never fully absent.
     if (biome.id === 'mirewood') affinity = Math.max(affinity, 0.08);
+    // FLOODPLAIN (Adam, 2026-11-02, the biome landing): the
+    // creek's wide hand — not a biome, a treatment. Beside
+    // the creek lines (the field running MID, its margin
+    // band) on wet ground, creekBottom's reach widens: the
+    // floodplain is the flat the water claims when it
+    // rises, so the bottom's affinity gains a margin
+    // factor peaked off-line (gauss at creek 0.65) and
+    // scaled by the wetness fit. On the line itself the
+    // band reads zero — the core anchor already owns it.
+    if (biome.id === 'creekBottom') {
+      const marginBand = Math.exp(-0.5 * (((fields.creek - 0.65) / 0.18) ** 2));
+      const wetFit = Math.exp(-0.5 * (((fields.wetness - 0.7) / 0.3) ** 2));
+      affinity *= 1 + FLOODPLAIN_BOOST * marginBand * wetFit;
+    }
     raw.set(biome.id, affinity);
     total += affinity;
   }

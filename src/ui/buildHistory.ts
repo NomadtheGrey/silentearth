@@ -43,6 +43,14 @@ export interface BuildRecord {
 
 const ALL_RECORDS: BuildRecord[] = [
   {
+    merge: 'Merge #62',
+    pr: 95,
+    sha: '1d0b576',
+    date: '2026-11-02',
+    what: 'THE COUNTRY RE-FORMS \u2014 the whole stack since the weather. THE LOG MERGER: one log kind \u2014 the downed oak retired into the fallen log, stompable barehanded (Adam: fallen logs are weaker, dead, don\u2019t usually require an axe), yielding the one Log piece plus snap wood every time; on his word the oak\u2019s bonuses ride too (spores one-in-four, dry kindling one-in-five). THE TREE FLATTENING: no tree types \u2014 every standing tree is a generic tree, felling gives snap wood alone and logs ride on fallen logs only; apple trees stand as the one visible variation, and a pine dressing is seeded for later. THE BIOME PACKAGE: FEN in (the wet middle \u2014 open, reedy wetland between Mirewood and the bog, built from the existing vocabulary), SCRUB in (the dry middle \u2014 low bush, stone, sparse trees, and PINES standing in it: a conical silhouette on the ordinary tree\u2019s own mechanics), the FLOODPLAIN (a treatment, not a biome: creek bottoms widen beside their creek lines), and SALT FLAT OUT \u2014 Adam: salt plains \u201care nowhere near here\u201d; the biome, its crystal crust, and the Salt Crystal item retire together (the item never had a use; a saved stack of it drops on load). THE LANDMARK PINS: the spawn and the debut cave\u2019s mouth hold their old seats exactly, by a frozen copy of the old grammar; the farmhouse cellar \u2014 the same cave\u2019s second mouth \u2014 rides its house, which stands on its old seat again too.',
+    why: 'THE RE-DEAL IS TOTAL, AND IT IS NAMED PLAINLY: the biome set is the world\u2019s grammar, so in every saved world the country itself re-forms \u2014 placed things, houses, and saves persist; the land is new. Measured before and after: salt borders vanish entirely; the wettest-against-driest borders collapse; the Deep Bog becomes rare (about 1.7% of the country, in deep pockets where it wins purely) as Fen takes the wet band\u2019s middle \u2014 widening the bog\u2019s reach back is a named option for Adam\u2019s pin pass, deliberately not tuned in secret. Standing trees roughly halve in the settled region, while logs (about 19,600 in the census country) and acorns stay ample against every recipe that eats them. Every new number rides DRAFT for his pin pass.',
+  },
+  {
     merge: 'Merge #61',
     pr: 95,
     sha: 'ff184df',
