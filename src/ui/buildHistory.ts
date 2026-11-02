@@ -43,6 +43,14 @@ export interface BuildRecord {
 
 const ALL_RECORDS: BuildRecord[] = [
   {
+    merge: 'Merge #61',
+    pr: 95,
+    sha: 'ff184df',
+    date: '2026-11-02',
+    what: 'THE WEATHER BUILD, WHOLE \u2014 Adam: \u201clet\u2019s get the weather going.\u201d Before this, the game had a climate and no weather: a static field, a frozen September, a grey sky that never rained. THE SPELL MACHINE: weather now runs in spells \u2014 dry, wet, inclement \u2014 with persistence, rolled from the country she stands in (the Deep Bog turns inclement far oftener than Oldfield Rise); inclement cannot roll in a new world\u2019s first week. THE LIVE CLOCK: the season advances on the sky\u2019s own dawn count \u2014 September 1 is day one, months drift, fronts move, and the guide\u2019s windows, the sunflowers, and sleep all read the same living month. RAIN RENDERS: streaks fall and splash where they strike, the sky closes and the light dims honestly under standing rain, and the fog thickens. THE SEEDED WOBBLE, CALIBRATED BY ADAM\u2019S REALITY CHECK (\u201cAll day rains are not common\u201d): inside a spell the rain breathes in showers and lulls \u2014 most wet spells wobble deep toward nothing, a steady all-day rain is the uncommon minority, and a storm day is its natural home. HER STATE + THE WITNESS (Systems + UI): cold and wet are her own gauges now, driven by the weather at her skin, wading, shelter, and fire warmth \u2014 and they SHOW, in two plain pills beside her hunger, with the date and the weather\u2019s word on the location chip. The spell itself persists in her save, so a reloaded world breathes on mid-spell.',
+    why: 'Adam asked why he had never seen rain, and the honest answer was that there was none to see \u2014 the field was a climate waiting for weather. ENTRY HONESTY, AS HE RULED IT: every number in this build rides DRAFT \u2014 spell lengths and chances, the wobble\u2019s depths, the cold/wet rates \u2014 because he deferred the pin pass until after he has stood in it himself: \u201cWe won\u2019t know until I look at the screen. We\u2019ll adjust knobs later.\u201d The measured year stands behind the shape: Mirewood rains on about 55% of days, the Bog 67%, the Rise 42%, and only about a quarter of wet days rain all day.',
+  },
+  {
     merge: 'Merge #60',
     pr: 95,
     sha: '670bef0',
