@@ -48,7 +48,7 @@ export const LOOK_PORTIONS: Readonly<Record<string, readonly string[]>> = {
   riverStone: ['River stone', 'whetstone', 'smooth and hard'],
   riverSilt: ['Silt bed', 'fine silt', 'clay beneath'],
   saltCrystal: ['Salt crystal', 'flat salt', 'sharp and clean'],
-  tree: ['Standing oak', 'tall oak', 'acorns above'],
+  tree: ['Standing tree', 'tall tree', 'acorns above'],
   groundAcorns: ['Ground acorns', 'fallen acorns', 'cook first'],
   edibleMushroom: ['Mushroom', 'tan plain cap', 'safe to eat'],
   poisonMushroom: ['Mushroom', 'rust cap, pale spots', 'do not eat'],
