@@ -579,8 +579,9 @@ export const SOURCES: HarvestSourceDef[] = [
   // yielding the Log piece (the DOWNED_OAK item key,
   // whose id stays 'downed-oak' as plumbing under the
   // display name 'Log') plus snap wood. The oak's
-  // chance secondaries (spores/kindling) retired with
-  // it, and its densities folded into 'log' in the
+  // chance secondaries (spores/kindling) rode with it
+  // after all — restored on Adam's word the same day —
+  // and its densities folded into 'log' in the
   // biome tables. Permit stays this def's own HAND —
   // the stomp is the processing now (flagged in the
   // landing report; the oak's axe pin governed the
@@ -603,6 +604,16 @@ export const SOURCES: HarvestSourceDef[] = [
         item: 'SNAP_WOOD',
         chance: 1,
         message: 'Snap wood comes away with it — the brittle limbs and offcuts.',
+      },
+      // The oak's bonuses, restored on Adam's word
+      // (2026-11-02, after the merger retired them in
+      // its first form): the fallen log keeps what the
+      // downed oak sometimes gave.
+      SPORES_25,
+      {
+        item: 'DRY_KINDLING',
+        chance: 0.2,
+        message: 'Dry kindling comes away with it — thin, resinous splits.',
       },
     ],
     multiStep: {
