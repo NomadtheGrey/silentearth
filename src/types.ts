@@ -25,7 +25,8 @@ export type BiomeId =
   | 'oldfieldRise'
   | 'creekBottom'
   | 'tanglewood'
-  | 'saltFlat'
+  | 'fen'
+  | 'scrub'
   | 'meadow'
   | 'forest';
 
@@ -52,15 +53,12 @@ export type ScatterKind =
   | 'bogPatch'
   | 'standingWater'
   | 'tree'
-  | 'oakTree'
   | 'snapWood'
   | 'tenderVines'
   | 'peatMoss'
   | 'riverSilt'
   | 'riverStone'
   | 'bone'
-  | 'saltCrystal'
-  | 'downedOak'
   | 'stump'
   | 'reed'
   | 'marshGrass'
@@ -94,6 +92,7 @@ export type ScatterKind =
   // non-harvestable scenery (the ring, the fragment stone, the
   // maze walls, the crow's hoard).
   | 'groveOak'
+  | 'pineTree'
   | 'standingStone'
   | 'carvedStone'
   | 'hedgeWall'

@@ -943,6 +943,14 @@ const RETIRED_FIRE_TYPES: ReadonlySet<string> = new Set([
  *   stands (it carries Adam's water rulings), took the
  *   pot-trap job, and the pot item retires. Its registry
  *   rows stay; only a saved stack drops here.
+ * - 'salt-crystal' — retired 2026-11-02 on Adam's word
+ *   ('let's do away with salt plains those are nowhere
+ *   near here'): the item retires with its biome (the
+ *   salt flats leave the country in Background's biome
+ *   landing). It never had a use ('No known use yet'
+ *   stood in its description to the end), so the loss
+ *   is nil. Its registry rows stay, per the pattern;
+ *   only a saved stack drops here.
  */
 const RETIRED_ITEM_IDS: ReadonlySet<string> = new Set([
   'bloomery',
@@ -950,6 +958,9 @@ const RETIRED_ITEM_IDS: ReadonlySet<string> = new Set([
   // The clay pot (Adam, 2026-11-01): one vessel stands —
   // the jar took its trap job and its water cycle.
   'clay-pot',
+  // Salt (Adam, 2026-11-02): the flats are nowhere near
+  // here — the item retires with its biome.
+  'salt-crystal',
 ]);
 
 const SAVE_HOUSE_TYPES: ReadonlySet<string> = new Set([

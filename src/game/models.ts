@@ -263,35 +263,10 @@ export function buildKindGeometry(spec: MeshSpec, kind: ScatterKind): THREE.Buff
       part(sphere(0.02, 6, 5), shade(c, 0.8), { p: [-0.13, 0.014, -0.33] }),
     ]);
   }
-  // Kind override (oak tree shares the 'tree' shape slot with
-  // the common tree, but an oak must READ differently in the
-  // canopy — Adam, 2026-10-30): a stouter trunk and a broader,
-  // rounder crown — four blobs spread wide where the common
-  // tree's three sit close. Silhouette first, tint second (the
-  // oak source's fuller green rides the same parts).
-  if (kind === 'oakTree') {
-    const branches: THREE.BufferGeometry[] = [];
-    for (let i = 0; i < 4; i++) {
-      const a = (i / 4) * Math.PI * 2 + 0.4;
-      branches.push(
-        part(cyl(0.05, 0.08, 1.1, 4), c, {
-          p: [Math.cos(a) * 0.42, 0.6 + i * 0.1, Math.sin(a) * 0.42],
-          r: [Math.sin(a) * 0.75, 0, -Math.cos(a) * 0.75],
-        }),
-      );
-    }
-    return merge([
-      part(cyl(0.24, 0.36, 1.7, 7), c),
-      ...branches,
-      part(blob(1.3), e, { p: [0, extraDy + 0.1, 0] }),
-      part(blob(0.95), shade(e, 0.9), { p: [0.7, extraDy + 0.5, 0.25] }),
-      part(blob(0.8), shade(e, 1.05), { p: [-0.65, extraDy + 0.35, -0.3] }),
-      part(blob(0.6), shade(e, 1.1), { p: [0.1, extraDy + 0.85, -0.5] }),
-    ]);
-  }
   // Kind override (the Grove's old trees share the 'tree' shape
-  // slot, but they must read VISIBLY OLDER than a standing oak —
-  // Adam, 2026-10-30, the age is the game's side of the pill
+  // slot, but they must read VISIBLY OLDER than an ordinary
+  // standing tree — Adam, 2026-10-30, the age is the game's
+  // side of the pill
   // rule; amended the same day: the difference must read BEFORE
   // SHE'S CLOSE, at maze-approach distance). Distance carries
   // on silhouette + palette, so: a much thicker, greyer trunk
@@ -303,6 +278,22 @@ export function buildKindGeometry(spec: MeshSpec, kind: ScatterKind): THREE.Buff
   // wild canopy, so the grove's trees lift out of the forest's
   // deep greens); moss-dark masses hanging at the crown's edge
   // with thin moss strands below them.
+  // Kind override (the PINE, 2026-11-02 — Background's
+  // Scrub biome dresses in this silhouette via the 'tree'
+  // shape slot; Adam opened pines early). A pine reads
+  // CONICAL against the generic tree's blobs: a straighter,
+  // taller trunk and three stacked cones narrowing up,
+  // shade-stepped so the tiers read. Local ground is
+  // y = -baseY (the def carries baseY 0.8); the top cone's
+  // apex lands at local 2.4 = world ~3.2 at scale 1.
+  if (kind === 'pineTree') {
+    return merge([
+      part(cyl(0.07, 0.11, 1.9, 6), c, { p: [0, 0.15, 0] }),
+      part(cyl(0.02, 1.05, 1.3, 8), e, { p: [0, 0.75, 0] }),
+      part(cyl(0.02, 0.8, 1.15, 8), shade(e, 1.08), { p: [0, 1.35, 0] }),
+      part(cyl(0.02, 0.52, 1.0, 8), shade(e, 0.94), { p: [0, 1.9, 0] }),
+    ]);
+  }
   if (kind === 'groveOak') {
     const branches: THREE.BufferGeometry[] = [];
     for (let i = 0; i < 5; i++) {

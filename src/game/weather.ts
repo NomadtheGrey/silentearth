@@ -117,8 +117,11 @@ export interface WeatherProfile {
  *   this is the weather-harshness Adam pointed at.
  * - oldfieldRise is mildest (0.25): higher, drier, the pleasant
  *   neighbor — shelter comes from the land itself.
- * - saltFlat is harsh through exposure, not wet (wind 14, rain
- *   0.05): open ground, no cover, drying wind.
+ * - fen is creek/bog-lite (rain 0.65): the wet middle,
+ *   rainy but not the outright swamp. scrub is dry and
+ *   breezy (rain 0.18, wind 11): exposure without the wet.
+ *   (Both 2026-11-02, the biome landing; saltFlat's exposure
+ *   profile retired with the biome.)
  * - mirewood (spawn) sits mid-pack (0.45): sloppy-wet, but not
  *   the outright swamp — survivable, not comfortable.
  * - forest/tanglewood winds stay low (canopy breaks the wind)
@@ -130,7 +133,8 @@ export const BIOME_WEATHER: Record<BiomeId, WeatherProfile> = {
   oldfieldRise: { wind: 5, rain: 0.25, harshness: 0.25 },
   creekBottom: { wind: 4, rain: 0.55, harshness: 0.5 },
   tanglewood: { wind: 3, rain: 0.5, harshness: 0.5 },
-  saltFlat: { wind: 14, rain: 0.05, harshness: 0.65 },
+  fen: { wind: 9, rain: 0.65, harshness: 0.35 },
+  scrub: { wind: 11, rain: 0.18, harshness: 0.4 },
   meadow: { wind: 7, rain: 0.3, harshness: 0.3 },
   forest: { wind: 3, rain: 0.4, harshness: 0.4 },
 };
