@@ -190,6 +190,7 @@ import {
   type InjurySnapshot,
   type InjuryStage,
 } from './injury';
+import type { ScentSnapshot } from './scent';
 // Single source for the ritual records (rituals.ts /
 // charms.ts own them; save.ts imports them — no second
 // mirror to drift, the placed-torch id lesson).
@@ -719,6 +720,9 @@ export interface SaveData {
   weather: SavedWeather | null;
   /** Her injury stage (injury.ts); sound for old saves. */
   injury: InjurySnapshot;
+  /** Her applied scent (scent.ts); unscented for old
+   * saves. */
+  scent: ScentSnapshot;
   /** The last place she COMPLETED a sleep (the
    * crawl-back's encampment seat); null for old saves
    * and until she first sleeps. */
@@ -1013,6 +1017,15 @@ export interface SaveDraft {
    */
   injury?: {
     stage?: string;
+  };
+  /**
+   * Her scent snapshot from ScentState.snapshot().
+   * OPTIONAL, same wiring-later pattern.
+   */
+  scent?: {
+    kind?: string | null;
+    category?: string | null;
+    secondsLeft?: number;
   };
   /**
    * The last completed sleep's seat (the shell writes
@@ -1469,6 +1482,26 @@ export function serializeSave(draft: SaveDraft): SaveData {
           ? (draft.injury.stage as InjuryStage)
           : 'sound',
     },
+    // Scent: a record naming a real kind with a
+    // finite clock rides (category kept for the
+    // attractor, dropped otherwise); anything else
+    // writes the unscented record.
+    scent:
+      (draft.scent?.kind === 'repellent' ||
+        draft.scent?.kind === 'attractor') &&
+      typeof draft.scent?.secondsLeft === 'number' &&
+      Number.isFinite(draft.scent.secondsLeft) &&
+      draft.scent.secondsLeft > 0
+        ? {
+            kind: draft.scent.kind,
+            category:
+              draft.scent.kind === 'attractor' &&
+              typeof draft.scent.category === 'string'
+                ? draft.scent.category
+                : null,
+            secondsLeft: draft.scent.secondsLeft,
+          }
+        : { kind: null, category: null, secondsLeft: 0 },
     // Last sleep site: finite coords ride as-is;
     // anything else writes null (no completed sleep
     // on record — the encampment chain falls back).
@@ -2369,6 +2402,31 @@ export function deserializeSave(value: unknown): SaveData | null {
     ) {
       injury = { stage: value.injury.stage as InjuryStage };
     }
+    // Scent is optional on read, same additive rule:
+    // an old v1 save without it loads unscented. A
+    // record naming a real kind with a finite
+    // positive clock rides (category kept for the
+    // attractor); anything else loads unscented —
+    // ScentState.restore applies the same leniency
+    // at its own seat.
+    let scent: ScentSnapshot = { kind: null, category: null, secondsLeft: 0 };
+    if (
+      isRecord(value.scent) &&
+      (value.scent.kind === 'repellent' || value.scent.kind === 'attractor') &&
+      typeof value.scent.secondsLeft === 'number' &&
+      Number.isFinite(value.scent.secondsLeft) &&
+      value.scent.secondsLeft > 0
+    ) {
+      scent = {
+        kind: value.scent.kind,
+        category:
+          value.scent.kind === 'attractor' &&
+          typeof value.scent.category === 'string'
+            ? value.scent.category
+            : null,
+        secondsLeft: value.scent.secondsLeft,
+      };
+    }
     // The last sleep site is optional on read: a
     // record with finite coords rides; anything else
     // loads null (no completed sleep on record).
@@ -2562,6 +2620,7 @@ export function deserializeSave(value: unknown): SaveData | null {
       coldWet,
       weather,
       injury,
+      scent,
       lastSleepSite,
       feralWarned,
       stagings,
