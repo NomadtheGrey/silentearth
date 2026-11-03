@@ -408,6 +408,17 @@ export interface Recipe {
    */
   capacityBonus?: number;
   /** Doc provenance, open questions, and anything not yet pinned. */
+  /**
+   * The output item's OWN use, in the card's words
+   * (DRAFT until Adam's pin pass): printed by
+   * itemFactsFor as a use OF THE ITEM once she has
+   * exercised that use (recordItemUse — the sleeping
+   * bag's first sleep is the first door). For items
+   * whose purpose is the using, not the making:
+   * placeables and tools of a single verb. Absent =
+   * the item's uses are its consuming recipes only.
+   */
+  useLine?: string;
   notes?: string;
 }
 
@@ -1326,16 +1337,19 @@ const DRAFT_RECIPES: Recipe[] = [
       i(ITEMS.grass, 6),
       i(ITEMS.tenderVines, 2),
     ],
+    useLine: 'Slept in — thatch-hut warmth while she sleeps',
     notes:
-      'DRAFT. Carried bedding, passive while carried (umbrella ' +
-      'precedent: no equip, no use-action, does NOT gate sleep — ' +
-      'sleep-anywhere already works). V1 effect is the marker + ' +
-      'the fiction (carriesSleepingBag, checked at sleep time); ' +
-      'no number today — no cold/exposure-during-sleep model to ' +
-      'attach one to, and a waking-refresh number would collide ' +
-      'with groundhog +10 (Adam\'s word needed, not baked). ' +
-      'Multiples by default (one-person-one-bag single is a ' +
-      'follow-up only if Adam wants it); not a no-recraft single.',
+      'DRAFT recipe; the BAG is pinned (Adam, 2026-11-02): a ' +
+      'PLACED sleep site (Background\'s setBags body; SavedBag ' +
+      'seat in save.ts) — while she SLEEPS IN it, her shelter ' +
+      'factor is the thatch hut\'s 0.5, read from the engine\'s ' +
+      'live table, scoped to the sleeping occupant only (not a ' +
+      'radius shelter; no storage; the factor is the whole ' +
+      'contribution — no garment row). The learn event is the ' +
+      'FIRST COMPLETED SLEEP (recordItemUse at the sleep door; ' +
+      'placement teaches nothing). Multiples by default; not a ' +
+      'no-recraft single. (Supersedes the carried-bedding draft ' +
+      'this note carried before the placement build.)',
   },
   {
     id: 'tent',
@@ -1354,10 +1368,11 @@ const DRAFT_RECIPES: Recipe[] = [
       'placed; multiples allowed). NOT a HouseType — no ' +
       'HomeStorage/Store/Take, no upgrade pill, no FIND CAMP ' +
       'camp, no home chip (all house-anchored). Shelter effect ' +
-      'PROPOSED draft 0.85 (lean-to 0.7, unsheltered 1.0) with ' +
-      'NO live benefit until Background\'s tent-aware ' +
-      'shelterQuery branch lands (their claim, DEV-routed). ' +
-      'Not a no-recraft single (multiples by design).',
+      'LIVE: the tent stands in the THATCH TIER — factor 0.5 at ' +
+      '2.5 m from the engine\'s live table (Adam\'s reading, ' +
+      '2026-11-02: an enclosure a campfire could stand in; ' +
+      'Background cb42878 moved 0.85 → 0.5). Not a no-recraft ' +
+      'single (multiples by design).',
   },
 ];
 

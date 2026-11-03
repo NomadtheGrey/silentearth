@@ -105,6 +105,16 @@
  *   (torch precedent). Order preserved; duplicate
  *   positions allowed (two tents at one spot are two
  *   entries); multiples allowed by design.
+ * - placed sleeping bags (position, id optional — no
+ *   game import): same additive-field rule (old saves
+ *   load bags: []) and the tents leniency on read
+ *   (entries pass through; the placed-bag restore
+ *   validates + drops bad records). Placed bags carry
+ *   no shelter state — the bag's thatch-tier shelter
+ *   contribution is composed at sleep by the shell
+ *   (Adam's pin, 2026-11-02), never stored. Order
+ *   preserved; duplicate positions allowed; multiples
+ *   allowed by design (the tent pattern whole).
  * - ritual stagings + awakenings (tier-1 Waking state):
  *   same additive-field rule (old saves load stagings:
  *   [] + awakenings: []) and the name-sight leniency on
@@ -456,6 +466,20 @@ export interface SavedTent {
 }
 
 /**
+ * A placed sleeping bag, as saved. Structural twin of
+ * SavedTent (the bag body is Background's setBags seam,
+ * BagPosition in game/shelter.ts): the save carries
+ * position always and the id when the entity provides
+ * one. Order preserved; duplicate positions allowed;
+ * multiples allowed by design.
+ */
+export interface SavedBag {
+  x: number;
+  z: number;
+  id?: string;
+}
+
+/**
  * World harvest state, as saved. Structural mirror of the game
  * layer's HarvestStateSnapshot (harvestState.ts) by literal —
  * systems does not import game modules. The engine's restore()
@@ -621,6 +645,9 @@ export interface SaveData {
   discovery: SavedDiscovery;
   /** Placed tents (portable shelters); [] for old saves. */
   tents: SavedTent[];
+  /** Placed sleeping bags (portable sleep sites);
+   * [] for old saves. */
+  bags: SavedBag[];
   /** Partial-true-name look counts; [] for old saves. */
   nameSight: SavedNameLook[];
   /** Known-facts register (met items + known recipe
@@ -844,6 +871,16 @@ export interface SaveDraft {
     id?: string;
   }>;
   /**
+   * Placed sleeping bags from the shell's placed-bag
+   * state (Background's setBags seam). OPTIONAL, same
+   * pattern as tents: format now, wiring later.
+   */
+  bags?: ReadonlyArray<{
+    x: number;
+    z: number;
+    id?: string;
+  }>;
+  /**
    * Partial-true-name looks from NameSight.snapshot().
    * OPTIONAL so existing saveNow call sites keep
    * compiling unchanged until the App wiring lands
@@ -862,6 +899,7 @@ export interface SaveDraft {
   knowledge?: {
     metItems?: ReadonlyArray<string>;
     knownUseRecipes?: ReadonlyArray<string>;
+    usedItems?: ReadonlyArray<string>;
   };
   /**
    * Her cold / wet gauges from ColdWetState.snapshot().
@@ -1223,6 +1261,15 @@ export function serializeSave(draft: SaveDraft): SaveData {
       z: tent.z,
       ...(tent.id !== undefined ? { id: tent.id } : {}),
     })),
+    // Sleeping bags: the tents pattern whole — written
+    // AS-IS (position + the id when present); no shelter
+    // state is written, the bag's contribution is
+    // composed at sleep, never stored.
+    bags: (draft.bags ?? []).map((bag) => ({
+      x: bag.x,
+      z: bag.z,
+      ...(bag.id !== undefined ? { id: bag.id } : {}),
+    })),
     // Name-sight: written AS-IS (key + looks verbatim, no
     // filtering, no normalization — keys are caller-defined
     // thing keys, not inventory ids). Invalid entries are
@@ -1239,6 +1286,7 @@ export function serializeSave(draft: SaveDraft): SaveData {
     knowledge: {
       metItems: [...(draft.knowledge?.metItems ?? [])],
       knownUseRecipes: [...(draft.knowledge?.knownUseRecipes ?? [])],
+      usedItems: [...(draft.knowledge?.usedItems ?? [])],
     },
     // Cold / wet gauges: finite-guarded here (a NaN
     // would poison the JSON document); range is the
@@ -1984,6 +2032,26 @@ export function deserializeSave(value: unknown): SaveData | null {
         });
       }
     }
+    // Sleeping bags are optional on read, the tents
+    // leniency whole: an old v1 save without them loads
+    // with bags: []. Entries pass through UNVALIDATED —
+    // the placed-bag restore validates (finite coords)
+    // and drops bad records. A non-array bags field
+    // loads as [] — the section drops, the document
+    // survives. `id` passes through only as a string.
+    const bags: SavedBag[] = [];
+    if (value.bags !== undefined && Array.isArray(value.bags)) {
+      for (const entry of value.bags) {
+        if (!isRecord(entry)) continue;
+        bags.push({
+          x: entry.x as number,
+          z: entry.z as number,
+          ...(typeof entry.id === 'string'
+            ? { id: entry.id as string }
+            : {}),
+        });
+      }
+    }
     // Name-sight is optional on read, same additive-field
     // rule: an old v1 save without it loads with
     // nameSight: []. A non-array field loads as [] — the
@@ -2010,6 +2078,7 @@ export function deserializeSave(value: unknown): SaveData | null {
     const knowledge: KnowledgeSnapshot = {
       metItems: [],
       knownUseRecipes: [],
+      usedItems: [],
     };
     if (isRecord(value.knowledge)) {
       if (Array.isArray(value.knowledge.metItems)) {
@@ -2023,6 +2092,15 @@ export function deserializeSave(value: unknown): SaveData | null {
             knowledge.knownUseRecipes.push(entry);
           }
         }
+      }
+      // Used items (the register's third set) are additive:
+      // an older save without the field restores as [].
+      if (Array.isArray(value.knowledge.usedItems)) {
+        const used: string[] = [];
+        for (const entry of value.knowledge.usedItems) {
+          if (typeof entry === 'string') used.push(entry);
+        }
+        knowledge.usedItems = used;
       }
     }
     // Her cold / wet gauges are optional on read, same
@@ -2212,6 +2290,7 @@ export function deserializeSave(value: unknown): SaveData | null {
       fragments,
       discovery,
       tents,
+      bags,
       nameSight,
       knowledge,
       coldWet,

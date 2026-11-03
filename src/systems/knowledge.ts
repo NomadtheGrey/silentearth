@@ -17,6 +17,14 @@
 // derivation returns empty lists and the SHELL renders
 // the hole ('Not yet known' is presentation, UI's lane).
 //
+// USES this derivation composes: consuming recipes
+// (known use), food (met), and the item's OWN use — a
+// producing recipe's useLine, printed only once that
+// use has been EXERCISED (recordItemUse; the sleeping
+// bag's first sleep is the first door). Crafting an
+// item never exercises its own use: the loom is not
+// the lesson.
+//
 // SOURCES this derivation composes today: crafted-by
 // (recipe outputs) and trapped kinds (trap-catch). The
 // harvest/scatter sources — the largest class for raw
@@ -30,7 +38,11 @@ import { RECIPES } from './recipes';
 import type { ItemId } from './recipes';
 import { isFood } from './hunger';
 import { TRAP_CATCH_SETS, catchItemFor } from './trap-catch';
-import { isItemMet, isRecipeUseKnown } from './knowledge-register';
+import {
+  isItemMet,
+  isRecipeUseKnown,
+  isItemUseKnown,
+} from './knowledge-register';
 
 export {
   markItemMet,
@@ -38,6 +50,8 @@ export {
   recordCraftedUse,
   teachRecipeUse,
   isRecipeUseKnown,
+  recordItemUse,
+  isItemUseKnown,
   knowledgeSnapshot,
   restoreKnowledge,
   resetKnowledge,
@@ -66,6 +80,18 @@ export function itemFactsFor(item: ItemId): ItemFacts {
           : recipe.upgradeFrom === item));
     if (consumes && isRecipeUseKnown(recipe.id)) {
       uses.push(recipe.name);
+    }
+  }
+  // The item's OWN use: its producing recipe's useLine,
+  // printed only once she has exercised that use
+  // (recordItemUse — never at craft or placement).
+  for (const recipe of RECIPES) {
+    if (
+      recipe.output.item === item &&
+      recipe.useLine !== undefined &&
+      isItemUseKnown(item)
+    ) {
+      uses.push(recipe.useLine);
     }
   }
   if (met && isFood(item)) {

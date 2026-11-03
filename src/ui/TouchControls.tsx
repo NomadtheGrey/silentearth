@@ -11,12 +11,15 @@
  * - Left thumbstick: a solid MOVE ring + knob that pulses until
  *   the first stick use, then goes static and drops the label.
  *   The ring and knob stay — they are the control, not a cue.
- * - Right-side drag-look field with a DRAG TO LOOK cue ring at
- *   right-thumb height, shown until the first real look drag,
- *   then retired. The caller may hide the whole field
- *   (lookEnabled); the shell leaves it enabled in both modes
- *   because the engine applies look deltas gateless and keeps
- *   pitch consistent across mode switches.
+ * - Right-side drag-look field. It carries NO cue: the
+ *   first-run LOOK ring that stood here was removed whole
+ *   (Adam, 2026-11-02 — it read as the parked LOOK button;
+ *   identification rides tags and the pack, and the drag
+ *   field simply works). The caller may hide the whole
+ *   field (lookEnabled); the shell leaves it enabled in
+ *   both modes because the engine applies look deltas
+ *   gateless and keeps pitch consistent across mode
+ *   switches.
  * - Right thumbstick: a solid TURN ring + knob even with MOVE
  *   on the bottom row (the USE/JUMP row above it), same size and
  *   pulse-until-first-use pattern as MOVE.
@@ -33,8 +36,9 @@
  *   and stacked on the centre axis, where Adam's playtest
  *   found them obscuring the view; the centre of the
  *   screen is the reticle's field and stays clear). The
- *   row is thumb-sized (64 px), spans 232-296 px off the
- *   bottom (8 px clear of the ring's top), USE inboard
+ *   row is thumb-sized (64 px), spans 156-220 px off the
+ *   bottom (8 px clear of the ring's top since the sticks
+ *   dropped to the corners, 2026-11-02), USE inboard
  *   (right-[5.5rem]) so a long interact label spills left
  *   into open field, JUMP outboard (right-4) over the
  *   ring's right half. When the shell passes
@@ -118,7 +122,6 @@ export function TouchControls({
 }: TouchControlsProps) {
   const [stickUsed, setStickUsed] = useState(false);
   const [turnUsed, setTurnUsed] = useState(false);
-  const [lookUsed, setLookUsed] = useState(false);
   const [knob, setKnob] = useState({ x: 0, y: 0 });
   const [turnKnob, setTurnKnob] = useState({ x: 0, y: 0 });
 
@@ -270,7 +273,6 @@ export function TouchControls({
       // Past the tap threshold this is a look drag, not a tap:
       // the cue retires, and nothing will fire on release.
       if (lookStart.current.maxMove > TAP_MAX_MOVE) {
-        setLookUsed(true);
       }
       onLook?.(dx, dy);
     }
@@ -312,35 +314,11 @@ export function TouchControls({
           onTouchEnd={handleLookEnd}
           onTouchCancel={handleLookCancel}
         >
-          {/* LOOK CUE SEAT (Adam's phone defect, 2026-11-01):
-              the cue used to hang at top-1/3 while every other
-              member of the right cluster anchors to the
-              bottom — on a short landscape screen the
-              top-anchored cue drifted down into the turn
-              stick's airspace and the knob, dragged up,
-              painted over it (the stick renders after the
-              field). The cue now sits on the cluster's own
-              bottom-anchored grid: left of the turn disc with
-              clearance for the knob's full 40 px travel plus
-              its overhang, below the USE/JUMP/PLACE row —
-              geometry that holds at any aspect, because
-              everything it must clear is bottom/right
-              anchored too. */}
-          {!lookUsed ? (
-            <div className="pointer-events-none absolute bottom-[8.75rem] right-44 flex flex-col items-center gap-1 opacity-80">
-              <div className="flex h-16 w-16 items-center justify-center rounded-full border-2 border-[#f0ead6]/70 bg-black/55 text-xs text-[#f0ead6]">
-                LOOK
-              </div>
-              <span className="text-xs tracking-widest text-[#f0ead6]">
-                DRAG TO LOOK
-              </span>
-            </div>
-          ) : null}
         </div>
       ) : null}
 
       <div
-        className="pointer-events-auto absolute bottom-24 left-4 touch-none"
+        className="pointer-events-auto absolute bottom-[max(1.25rem,env(safe-area-inset-bottom))] left-4 touch-none"
         onTouchStart={handleStickStart}
         onTouchMove={handleStickMove}
         onTouchEnd={handleStickEnd}
@@ -375,7 +353,7 @@ export function TouchControls({
         look was weird) — the USE/JUMP row sits above this
         ring (2026-10-30), out of the view's centre. */}
       <div
-        className="pointer-events-auto absolute bottom-24 right-4 touch-none"
+        className="pointer-events-auto absolute bottom-[max(1.25rem,env(safe-area-inset-bottom))] right-4 touch-none"
         onTouchStart={handleTurnStart}
         onTouchMove={handleTurnMove}
         onTouchEnd={handleTurnEnd}
@@ -405,9 +383,10 @@ export function TouchControls({
 
       {/* USE: the action row above the TURN ring
         (2026-10-30, Adam's playtest: the centred pair
-        obscured the view). bottom-[14.5rem] spans the
-        64 px row 232-296 px off the bottom — 8 px clear
-        of the ring's top (224) and wholly out of the
+        obscured the view). bottom-[9.75rem] spans the
+        64 px row 156-220 px off the bottom — 8 px clear
+        of the ring's top (148, since the sticks dropped
+        to the corners 2026-11-02) and wholly out of the
         screen centre. USE sits inboard (right-[5.5rem]:
         [W-152, W-88]) so its label — which overflows the
         circle by design — spills left into open field,
@@ -425,7 +404,7 @@ export function TouchControls({
         <button
           type="button"
           aria-label="Place a lit torch"
-          className="pointer-events-auto absolute bottom-[14.5rem] right-[10.5rem] flex h-16 w-16 touch-none items-center justify-center whitespace-nowrap rounded-full border-2 border-[#f0ead6]/80 bg-moss-deep/90 text-sm font-bold text-[#f0ead6]"
+          className="pointer-events-auto absolute bottom-[9.75rem] right-[10.5rem] flex h-16 w-16 touch-none items-center justify-center whitespace-nowrap rounded-full border-2 border-[#f0ead6]/80 bg-moss-deep/90 text-sm font-bold text-[#f0ead6]"
           onTouchStart={(e) => {
             e.preventDefault();
             onPlaceTorch();
@@ -441,7 +420,7 @@ export function TouchControls({
           interactLabel ??
           'Use: interact with the nearest in-range target'
         }
-        className="pointer-events-auto absolute bottom-[14.5rem] right-[5.5rem] flex h-16 w-16 touch-none items-center justify-center whitespace-nowrap rounded-full border-2 border-[#f0ead6]/80 bg-moss-deep/90 text-sm font-bold text-[#f0ead6]"
+        className="pointer-events-auto absolute bottom-[9.75rem] right-[5.5rem] flex h-16 w-16 touch-none items-center justify-center whitespace-nowrap rounded-full border-2 border-[#f0ead6]/80 bg-moss-deep/90 text-sm font-bold text-[#f0ead6]"
         onTouchStart={(e) => {
           e.preventDefault();
           onInteract?.();
@@ -460,7 +439,7 @@ export function TouchControls({
       <button
         type="button"
         aria-label="Jump"
-        className="pointer-events-auto absolute bottom-[14.5rem] right-4 flex h-16 w-16 touch-none items-center justify-center whitespace-nowrap rounded-full border-2 border-[#f0ead6]/80 bg-moss-deep/90 text-sm font-bold text-[#f0ead6]"
+        className="pointer-events-auto absolute bottom-[9.75rem] right-4 flex h-16 w-16 touch-none items-center justify-center whitespace-nowrap rounded-full border-2 border-[#f0ead6]/80 bg-moss-deep/90 text-sm font-bold text-[#f0ead6]"
         onTouchStart={(e) => {
           e.preventDefault();
           onJump?.();
