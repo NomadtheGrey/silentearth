@@ -1691,7 +1691,12 @@ import {
   placeCarriedTrap,
 } from './systems/trap-place';
 import { fillJar, dumpJar } from './systems/clay-jar';
-import { placeTent, pickupTent } from './systems/camping';
+import {
+  placeBag,
+  pickupBag,
+  placeTent,
+  pickupTent,
+} from './systems/camping';
 import { harvestHoney } from './systems/honey';
 import { harvestState } from './game/harvestState';
 import {
@@ -1757,6 +1762,7 @@ import { PileInventoryModal } from './ui/PileInventoryModal';
 import { PileChip } from './ui/PileChip';
 import { TorchChip } from './ui/TorchChip';
 import { TentChip } from './ui/TentChip';
+import { BagChip } from './ui/BagChip';
 import { FirstRunDialog } from './ui/FirstRunDialog';
 import { AnimalTag } from './ui/AnimalTag';
 import { AltarChip } from './ui/AltarChip';
@@ -1882,6 +1888,7 @@ import {
 import {
   itemFactsFor,
   knowledgeSnapshot,
+  recordItemUse,
   restoreKnowledge,
 } from './systems/knowledge';
 import {
@@ -2184,6 +2191,7 @@ const PLACEABLE_IDS: ReadonlySet<string> = new Set([
   ITEMS.writingDesk,
   ITEMS.cauldron,
   ITEMS.tent,
+  ITEMS.sleepingBag,
   // THE CARRYABLE TRAPS (the trap chunk, 2026-11-01):
   // their pack rows carry the Place verb like every
   // other placeable — the press arms the trap flow in
@@ -2987,20 +2995,67 @@ export default function App() {
     facts: ColdWetFacts;
     x: number;
     z: number;
+    site: 'bag' | 'tent' | null;
   } | null>(null);
   useEffect(() => {
     const offRequest = bus.on('sleep:requested', ({ x, z }) => {
       const cycleT = rendererRef.current?.snapshotSky()?.cycleT;
-      const facts = composeColdWetFacts(x, z);
+      const composed = composeColdWetFacts(x, z);
+      // THE SITE OVERRIDE (the bag build): the facts
+      // compose at HER position; a sleep taken through
+      // a placed bag's or a tent's own door replaces
+      // the shelter factor with the SITE's — Adam's
+      // pin for the bag (2026-11-02: 'as warm as the
+      // thatch hut, no storage') reads the thatch
+      // factor from the live table at composition time,
+      // never a copied number; the tent reads shelterAt
+      // at its own seat, correct from any press
+      // distance. Occupant-scoped by construction: the
+      // awake composition never sees the mark, and a
+      // bag she merely stands beside shelters nothing.
+      const site = sleepSiteRef.current;
+      sleepSiteRef.current = null;
+      let facts = composed;
+      if (facts && site?.kind === 'bag') {
+        facts = {
+          ...facts,
+          shelterMultiplier: HOUSE_DEFS.thatchHut.shelterMultiplier,
+        };
+      } else if (facts && site?.kind === 'tent') {
+        facts = {
+          ...facts,
+          shelterMultiplier: shelterAt(
+            site.x,
+            site.z,
+            shelterState.snapshot(),
+            placedTentsRef.current,
+          ).multiplier,
+        };
+      }
       sleepTickRef.current =
         cycleT !== undefined && cycleT !== null && facts
-          ? { cycleT, facts, x, z }
+          ? { cycleT, facts, x, z, site: site?.kind ?? null }
           : null;
     });
     const offDone = bus.on('sleep:completed', () => {
       const stash = sleepTickRef.current;
       sleepTickRef.current = null;
       if (!stash) return;
+      // THE LEARN (landed composed, 2026-11-03): the
+      // first COMPLETED sleep in the placed bag — and
+      // only there — records the bag's use, through
+      // Systems' direct-use register door (recordItemUse,
+      // the register's third set; derivation half
+      // 9f94642). It must NOT ride recordCraftedUse:
+      // executeCraft already writes that set at craft
+      // time, so a derivation keyed to it would teach
+      // the use at the loom and kill the first-sleep
+      // learn (a crafted-but-unslept bag keeps its
+      // hole). Placement writes nothing either. The
+      // set makes the first sleep the one that records.
+      if (stash.site === 'bag') {
+        recordItemUse(ITEMS.sleepingBag);
+      }
       const spanSeconds =
         (1 - stash.cycleT) * DAY_NIGHT_CYCLE_MINUTES * 60;
       if (!(spanSeconds > 0)) return;
@@ -3052,6 +3107,7 @@ export default function App() {
   const [eatNote, setEatNote] = useState<string | null>(null);
   const [torchNote, setTorchNote] = useState<string | null>(null);
   const [tentNote, setTentNote] = useState<string | null>(null);
+  const [bagNote, setBagNote] = useState<string | null>(null);
   const [altarNote, setAltarNote] = useState<string | null>(null);
   const [deskNote, setDeskNote] = useState<string | null>(null);
   const [cauldronNote, setCauldronNote] = useState<string | null>(null);
@@ -3316,6 +3372,57 @@ export default function App() {
     { tent: { id: string; x: number; z: number }; x: number; y: number }[]
   >([]);
   const [selectedTentId, setSelectedTentId] = useState<string | null>(null);
+  // PLACED SLEEPING BAGS (the portable hut, 2026-11-02;
+  // Adam's ruling: the bag's card promise is true —
+  // 'a bed wherever you stop'). The tent template end
+  // to end: a shell store beside placedTents (bag:<n>
+  // ids cannot collide with tent:<n>), lazy init from
+  // bootSave, the ref mirror, and updatePlacedBags as
+  // the only mutation door — which also pushes the
+  // renderer's setBags (Background's seam: the bedroll
+  // body, unrotated in v1, yaw 0 like the tents).
+  // NOT a house: no store, no binding, no shelter
+  // radius — the bag shelters only its sleeper, and
+  // only through the sleep itself (the sleep-site
+  // mark below), never by standing near it.
+  const [placedBags, setPlacedBags] = useState<
+    { id: string; x: number; z: number }[]
+  >(() =>
+    (bootSave?.bags ?? [])
+      .filter((bag) => Number.isFinite(bag.x) && Number.isFinite(bag.z))
+      .map((bag, index) => ({
+        id: bag.id ?? `bag:boot-${index}`,
+        x: bag.x,
+        z: bag.z,
+      })),
+  );
+  const placedBagsRef = useRef(placedBags);
+  const updatePlacedBags = (next: { id: string; x: number; z: number }[]) => {
+    placedBagsRef.current = next;
+    setPlacedBags(next);
+    // RENDERER SYNC (setBags, Background 9b79485): the
+    // shell is the source of truth and pushes its list
+    // on every mutation (place / pickup / regenerate-
+    // clear / boot re-supply), the tent pattern.
+    rendererRef.current?.setBags(next.map((bag) => ({ x: bag.x, z: bag.z })));
+  };
+  const [bagAnchors, setBagAnchors] = useState<
+    { bag: { id: string; x: number; z: number }; x: number; y: number }[]
+  >([]);
+  const [selectedBagId, setSelectedBagId] = useState<string | null>(null);
+  // THE SLEEP-SITE MARK (the bag build): set by a
+  // placed bag's or a faced tent's own Sleep door in
+  // the instant before it emits the sleep request, and
+  // read + cleared by the sleep stash below. It is how
+  // the stash knows WHERE she sleeps — exactly, not by
+  // deriving from her position (a menu opens from
+  // beyond a tent's radius, and a bag she stands
+  // beside shelters nothing). The home menu's Rest
+  // sets no mark: a house sleep composes at her
+  // position as it always has.
+  const sleepSiteRef = useRef<
+    { kind: 'bag' } | { kind: 'tent'; x: number; z: number } | null
+  >(null);
   // Placed altars (Background singleton, read fresh on every
   // event) and their projected anchors — the torch pattern
   // minus the menu: the altar chip is label-only (no ritual
@@ -4076,6 +4183,15 @@ export default function App() {
             x: tent.x,
             z: tent.z,
             id: tent.id,
+          })),
+          // BAG SAVE WIRING (the portable hut): the
+          // shell's placed-bag set rides every save the
+          // tents way (x + z + shell id verbatim).
+          // Without this, placed bags vanish on reload.
+          bags: placedBagsRef.current.map((bag) => ({
+            x: bag.x,
+            z: bag.z,
+            id: bag.id,
           })),
           // STUMP SAVE WIRING (stumpy shell, 2026-10-28):
           // the live stump-addition set rides every save
@@ -5047,6 +5163,19 @@ export default function App() {
       tents.push({ tent, x: anchor.x, y: anchor.y });
     }
     setTentAnchors(tents);
+    // Placed bags (the portable hut): the shell store,
+    // read from the ref mirror, same skip-null rule.
+    const bags: {
+      bag: { id: string; x: number; z: number };
+      x: number;
+      y: number;
+    }[] = [];
+    for (const bag of placedBagsRef.current) {
+      const anchor = projectAnchor(bag.x, bag.z, 'scatter');
+      if (!anchor) continue;
+      bags.push({ bag, x: anchor.x, y: anchor.y });
+    }
+    setBagAnchors(bags);
     const altars: { altar: PlacedAltarEntity; x: number; y: number }[] = [];
     for (const altar of altarState.snapshot()) {
       const anchor = projectAnchor(altar.x, altar.z, 'scatter');
@@ -5875,6 +6004,12 @@ export default function App() {
     rendererRef.current?.setTents(
       placedTentsRef.current.map((tent) => ({ x: tent.x, z: tent.z })),
     );
+    // BAG BOOT RE-SUPPLY (setBags): the same contract —
+    // the renderer was constructed with an empty bag
+    // list, so the shell pushes its restored bags now.
+    rendererRef.current?.setBags(
+      placedBagsRef.current.map((bag) => ({ x: bag.x, z: bag.z })),
+    );
 
     const offCamera = bus.on('camera:switched', ({ mode }) => {
       setCameraMode(mode);
@@ -6621,6 +6756,9 @@ export default function App() {
     // updatePlacedTents (setTents([])); the next
     // saveNow persists the empty list.
     updatePlacedTents([]);
+    // A new world clears placed bags with the tents
+    // (the clear syncs via updatePlacedBags).
+    updatePlacedBags([]);
     // A new world clears the scry reveal (new camps, new water).
     divinationRef.current.dismiss();
     renderer.setCampArrowsVisible(false);
@@ -7638,6 +7776,47 @@ export default function App() {
     saveNow();
     recomputeAnchors();
     setTentNote('Placed a tent.');
+  };
+
+  // PLACED SLEEPING BAG (the portable hut, 2026-11-02):
+  // the tent's twin, clause for clause — one press
+  // places one bag at the crosshair, grant first
+  // (Systems placeBag consumes one carried bag;
+  // failure touches nothing), then the shell record.
+  // Panel action: the panel stays open, the count
+  // drops, the note carries the result. No hunger
+  // gate (a move, like drop/pickup).
+  const handlePlaceBag = () => {
+    const player = playerRef.current;
+    if (!player) return;
+    const target = aimedPlacementPoint();
+    if (target === null && inventory.count(ITEMS.sleepingBag) > 0) {
+      setBagNote('Nowhere to set it down.');
+      return;
+    }
+    const outcome = placeBag(
+      inventory,
+      target?.x ?? player.x,
+      target?.z ?? player.z,
+    );
+    // Equality check, not truthiness (non-strict tsc
+    // does not narrow this union on truthiness).
+    if (outcome.placed === false) {
+      setBagNote(outcome.reason);
+      return;
+    }
+    const maxSuffix = placedBagsRef.current.reduce((max, bag) => {
+      const match = /^bag:(\d+)$/.exec(bag.id);
+      return match ? Math.max(max, Number(match[1])) : max;
+    }, 0);
+    updatePlacedBags([
+      ...placedBagsRef.current,
+      { id: `bag:${maxSuffix + 1}`, x: outcome.bag.x, z: outcome.bag.z },
+    ]);
+    refreshInventory();
+    saveNow();
+    recomputeAnchors();
+    setBagNote('Placed a sleeping bag.');
   };
 
   // PLACED ALTAR (settled lean — instant at her feet, the
@@ -9053,6 +9232,13 @@ export default function App() {
       handlePlaceTent();
       return;
     }
+    // Placed sleeping bags ride the tent's instant
+    // pattern whole (the bag build): one press places
+    // one bag at the crosshair, no preview flow.
+    if (itemId === ITEMS.sleepingBag) {
+      handlePlaceBag();
+      return;
+    }
     // Single-tap campfire (Adam, 2026-10-28): Place places
     // immediately — no placement mode, no ghost, no
     // "Place here" panel. AT THE CROSSHAIR since Adam's
@@ -9815,6 +10001,18 @@ export default function App() {
   // TENT MENU ACTIONS (tent shell): Take down + Close —
   // the torch menu's shape, over the shell store.
   const tentMenuActions = (): ContextAction[] => [
+    // TENT CLIMB-IN (the bag build): the faced tent's
+    // menu gains Sleep — the home row's exact idiom
+    // (night-gated, 'Night only'). Sleeping through
+    // this door marks the tent as the sleep site, so
+    // the night composes with the shelter AT THE
+    // TENT, wherever she stood to press it.
+    {
+      id: 'sleep',
+      label: 'Sleep until Sunrise',
+      disabled: !isNight,
+      disabledNote: isNight ? undefined : 'Night only',
+    },
     { id: 'take-down', label: 'Take down' },
     { id: 'close', label: 'Close [X]' },
   ];
@@ -9827,6 +10025,13 @@ export default function App() {
     };
     if (actionId === 'close') {
       setSelectedTentId(null);
+      return;
+    }
+    if (actionId === 'sleep') {
+      sleepSiteRef.current = { kind: 'tent', x: tent.x, z: tent.z };
+      setSelectedTentId(null);
+      handleSleep();
+      recomputeAnchors();
       return;
     }
     if (actionId === 'take-down') {
@@ -9844,6 +10049,57 @@ export default function App() {
       updatePlacedTents(placedTentsRef.current.filter((t) => t.id !== tentId));
       setSelectedTentId(null);
       say('Took down the tent.', 'gain');
+      refreshInventory();
+      saveNow();
+    }
+    recomputeAnchors();
+  };
+
+  // BAG MENU ACTIONS (the portable hut): Sleep until
+  // Sunrise + Pick up + Close. Sleep is the bag's
+  // whole point — the home row's night-gate idiom;
+  // Pick up is grant-first on the tent pattern (a
+  // full pack leaves the bag placed, the menu open).
+  const bagMenuActions = (): ContextAction[] => [
+    {
+      id: 'sleep',
+      label: 'Sleep until Sunrise',
+      disabled: !isNight,
+      disabledNote: isNight ? undefined : 'Night only',
+    },
+    { id: 'pick-up', label: 'Pick up' },
+    { id: 'close', label: 'Close [X]' },
+  ];
+
+  const handleBagAction = (bagId: string, actionId: string) => {
+    const bag = placedBagsRef.current.find((b) => b.id === bagId);
+    if (!bag) return;
+    const say = (text: string, tone: FeedbackTone) => {
+      showFeedback(text, tone);
+    };
+    if (actionId === 'close') {
+      setSelectedBagId(null);
+      return;
+    }
+    if (actionId === 'sleep') {
+      // The mark is the signal: the sleep stash reads
+      // it and composes the night with the thatch
+      // factor (Adam's pin), wherever she stood.
+      sleepSiteRef.current = { kind: 'bag' };
+      setSelectedBagId(null);
+      handleSleep();
+      recomputeAnchors();
+      return;
+    }
+    if (actionId === 'pick-up') {
+      const grant = pickupBag(inventory);
+      if (grant.granted === 0) {
+        say('Pack full — no room.', 'blocked');
+        return;
+      }
+      updatePlacedBags(placedBagsRef.current.filter((b) => b.id !== bagId));
+      setSelectedBagId(null);
+      say('Picked up the sleeping bag.', 'gain');
       refreshInventory();
       saveNow();
     }
@@ -10736,6 +10992,19 @@ export default function App() {
           tentAnchors.find((a) => a.tent.id === selectedTent.id) ?? null,
         );
 
+  // The selected bag + its anchor — the tent pattern.
+  const selectedBag =
+    selectedBagId === null
+      ? undefined
+      : placedBags.find((b) => b.id === selectedBagId);
+  const selectedBagAnchor =
+    selectedBag === undefined
+      ? null
+      : retainAnchor(
+          `bag:${selectedBag.id}`,
+          bagAnchors.find((a) => a.bag.id === selectedBag.id) ?? null,
+        );
+
   // The ritual site whose panel is open, with its anchor —
   // the torch pattern, live: the panel renders from the
   // live site (placedAltars or stumpAnchors), so a
@@ -11434,6 +11703,10 @@ export default function App() {
         setSelectedTentId(null);
         return;
       }
+      if (selectedBagId !== null) {
+        setSelectedBagId(null);
+        return;
+      }
       if (selectedCauldronHearthId !== null) {
         setSelectedCauldronHearthId(null);
         return;
@@ -11485,6 +11758,7 @@ export default function App() {
     homeMenuOpen,
     selectedPileId,
     selectedTentId,
+    selectedBagId,
     selectedFireId,
     selectedCauldronHearthId,
     selectedSiteId,
@@ -11565,6 +11839,10 @@ export default function App() {
       setSelectedTentId(null);
       return true;
     }
+    if (selectedBagId !== null) {
+      setSelectedBagId(null);
+      return true;
+    }
     if (selectedFireId !== null) {
       setSelectedFireId(null);
       return true;
@@ -11638,6 +11916,7 @@ export default function App() {
       selectedFireId !== null ||
       selectedSiteId !== null ||
       selectedTentId !== null ||
+      selectedBagId !== null ||
       homeMenuOpen ||
       (craftingOpen && craftContextSiteId !== null);
     if (!anyOpen) return;
@@ -11686,6 +11965,13 @@ export default function App() {
           setSelectedTentId(null);
         }
       }
+      if (selectedBagId !== null) {
+        const bag =
+          placedBags.find((b) => b.id === selectedBagId) ?? null;
+        if (walkAwayShouldClose(bag, p, WALK_AWAY_LEASH)) {
+          setSelectedBagId(null);
+        }
+      }
       if (homeMenuOpen) {
         const leash =
           homeHouse === undefined
@@ -11708,6 +11994,7 @@ export default function App() {
     selectedFireId,
     selectedSiteId,
     selectedTentId,
+    selectedBagId,
     homeMenuOpen,
     craftingOpen,
     craftContextSiteId,
@@ -11774,6 +12061,7 @@ export default function App() {
     homeMenuOpen,
     selectedPileId,
     selectedTentId,
+    selectedBagId,
     selectedFireId,
     selectedSiteId,
     charmsOpen,
@@ -11955,7 +12243,7 @@ export default function App() {
     | { kind: 'trap'; id: string; distance: number }
     | { kind: 'hive'; x: number; z: number; distance: number }
     | { kind: 'site'; siteId: string; distance: number }
-    | { kind: 'fire' | 'tent' | 'torch' | 'loom'; id: string; distance: number }
+    | { kind: 'fire' | 'tent' | 'bag' | 'torch' | 'loom'; id: string; distance: number }
     | { kind: 'cauldron'; id: string; distance: number }
     | { kind: 'desk'; id: string; distance: number }
     | {
@@ -12188,7 +12476,7 @@ export default function App() {
     }
     if (siteBest !== null) challengers.push(siteBest);
     const considerPlaced = (
-      kind: 'fire' | 'tent' | 'torch' | 'loom' | 'cauldron',
+      kind: 'fire' | 'tent' | 'bag' | 'torch' | 'loom' | 'cauldron',
       id: string,
       x: number,
       z: number,
@@ -12204,6 +12492,9 @@ export default function App() {
     }
     for (const tent of placedTents) {
       considerPlaced('tent', tent.id, tent.x, tent.z);
+    }
+    for (const bag of placedBags) {
+      considerPlaced('bag', bag.id, bag.x, bag.z);
     }
     for (const torch of placedTorches) {
       considerPlaced('torch', torch.id, torch.x, torch.z);
@@ -12662,6 +12953,9 @@ export default function App() {
       case 'tent':
         setSelectedTentId(winner.id);
         break;
+      case 'bag':
+        setSelectedBagId(winner.id);
+        break;
       case 'creature':
         // The faced creature's live verb (Piece B) —
         // the same act the creature pill runs.
@@ -12771,6 +13065,9 @@ export default function App() {
       case 'tent':
         handleTentAction(winner.id, 'take-down');
         break;
+      case 'bag':
+        handleBagAction(winner.id, 'pick-up');
+        break;
       case 'trap':
         // The trap's second act (the trap chunk): pick
         // up a set carryable, dismantle a set deadfall —
@@ -12841,6 +13138,13 @@ export default function App() {
       const target = flattenMenuTargets(tentMenuActions())[digit - 1];
       if (target && !target.disabled) {
         handleTentAction(selectedTent.id, target.id);
+      }
+      return;
+    }
+    if (selectedBag !== undefined) {
+      const target = flattenMenuTargets(bagMenuActions())[digit - 1];
+      if (target && !target.disabled) {
+        handleBagAction(selectedBag.id, target.id);
       }
       return;
     }
@@ -12967,6 +13271,7 @@ export default function App() {
       homeMenuOpen ||
       selectedPileId !== null ||
       selectedTentId !== null ||
+      selectedBagId !== null ||
       selectedFireId !== null ||
       selectedSiteId !== null ||
       pendingRemoveTarget !== null ||
@@ -12996,6 +13301,7 @@ export default function App() {
     homeMenuOpen,
     selectedPileId,
     selectedTentId,
+    selectedBagId,
     selectedFireId,
     selectedSiteId,
     pendingRemoveTarget,
@@ -13081,6 +13387,7 @@ export default function App() {
         homeMenuOpen ||
         selectedPileId !== null ||
           selectedTentId !== null ||
+          selectedBagId !== null ||
         selectedFireId !== null ||
         selectedSiteId !== null
       ) {
@@ -13195,6 +13502,7 @@ export default function App() {
     homeMenuOpen,
     selectedPileId,
     selectedTentId,
+    selectedBagId,
     selectedFireId,
     selectedSiteId,
     dispatchWorldMenuDigit,
@@ -14282,6 +14590,7 @@ export default function App() {
                 ? 'PICK UP'
                 : useWinner.kind === 'site' ||
                     useWinner.kind === 'tent' ||
+                    useWinner.kind === 'bag' ||
                   useWinner.kind === 'home'
                 ? 'OPEN'
               : useWinner.kind === 'cave-enter'
@@ -14634,6 +14943,13 @@ export default function App() {
             </WorldAnchor>
           </Fragment>
         ))}
+        {bagAnchors.map(({ bag, x, y }) => (
+          <Fragment key={bag.id}>
+            <WorldAnchor x={x} y={y} interactive>
+              <BagChip onSelect={() => setSelectedBagId(bag.id)} />
+            </WorldAnchor>
+          </Fragment>
+        ))}
         {altarAnchors.map(({ altar, x, y }) => (
           <Fragment key={altar.id}>
             <WorldAnchor x={x} y={y} interactive>
@@ -14746,6 +15062,21 @@ export default function App() {
               showKeyHints={!isTouch}
               onSelect={(id) => handleTentAction(selectedTent.id, id)}
               onClose={() => setSelectedTentId(null)}
+            />
+          </WorldAnchor>
+        ) : null}
+        {selectedBag && selectedBagAnchor ? (
+          <WorldAnchor
+            x={selectedBagAnchor.x}
+            y={selectedBagAnchor.y}
+            interactive
+          >
+            <ContextMenu theme={lookThemes.world}
+              objectName="Sleeping Bag"
+              actions={bagMenuActions()}
+              showKeyHints={!isTouch}
+              onSelect={(id) => handleBagAction(selectedBag.id, id)}
+              onClose={() => setSelectedBagId(null)}
             />
           </WorldAnchor>
         ) : null}
@@ -15957,6 +16288,11 @@ export default function App() {
         {tentNote ? (
           <p className="rounded bg-black/45 px-2 py-1 text-xs text-stone-200">
             {tentNote}
+          </p>
+        ) : null}
+        {bagNote ? (
+          <p className="rounded bg-black/45 px-2 py-1 text-xs text-stone-200">
+            {bagNote}
           </p>
         ) : null}
         {altarNote ? (
