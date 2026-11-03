@@ -1062,12 +1062,19 @@ const DRAFT_RECIPES: Recipe[] = [
     name: 'Crafted Workstation',
     status: 'draft',
     output: { item: ITEMS.craftedWorkstation, quantity: 1 },
+    station: 'hand',
     ingredients: [i(ITEMS.downedOak, 6), i(ITEMS.twinedCordage, 4)],
     notes:
       'DRAFT. A proper bench: oak top, cordage lashing. She can make ' +
       'her own workstation; the stump is the starter workstation. ' +
       'Wheel and loom fork off a crafted workstation (found-stump ' +
-      'forks still open).',
+      'forks still open). HAND-CRAFTABLE (Adam, 2026-11-03): the ' +
+      'station is EXPLICITLY \'hand\' (the cordage precedent) — the ' +
+      'placeable bench exists precisely for stump-less country, so ' +
+      'requiring the workstation station to make it was a bootstrap ' +
+      'paradox; with 6 logs she can raise one wherever she stands. ' +
+      'The Stumpy Workstation (the stump upgrade, above) is a ' +
+      'different thing and keeps its station.',
   },
   {
     id: 'potters-wheel',
