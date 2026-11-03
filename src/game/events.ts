@@ -33,6 +33,19 @@ export interface EventMap {
   'world:chunkLoaded': { cx: number; cz: number; objectCount: number };
   /** A chunk's meshes were removed from the scene. */
   'world:chunkUnloaded': { cx: number; cz: number };
+  /**
+   * The WebGL context died (GPU/driver reset or the browser
+   * reclaiming it under pressure; renderer.ts, 2026-11-03). The
+   * world keeps simulating and the save is untouched — only the
+   * canvas is blank. The shell shows the plain lost-graphics state.
+   */
+  'renderer:context-lost': Record<string, never>;
+  /**
+   * The context came back and the renderer re-primed the scene's
+   * resources; the canvas renders again. The shell clears the
+   * lost-graphics state.
+   */
+  'renderer:context-restored': Record<string, never>;
   /** Player position changed (throttled to ~10 Hz by the controller). */
   'player:moved': { x: number; z: number; chunkX: number; chunkZ: number };
   /**

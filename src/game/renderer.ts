@@ -667,7 +667,13 @@ export class WorldRenderer {
   private renderer: THREE.WebGLRenderer;
   private scene = new THREE.Scene();
   private camera: THREE.PerspectiveCamera;
-  private clock = new THREE.Clock();
+  /** Frame timer (THREE.Timer since r186 deprecated THREE.Clock —
+   *  Adam's word, 2026-11-03). Timer differs from Clock in one way
+   *  that matters here: getDelta() only READS the delta update()
+   *  computed, so the loop calls update(frameTimestamp) first, every
+   *  frame, pause gate included — the same consumption discipline
+   *  the Clock read had. */
+  private timer = new THREE.Timer();
   private raf = 0;
   private chunks = new Map<string, LoadedChunk>();
   /** River course for the current world (seed + spawn); null until set. */
@@ -879,6 +885,15 @@ export class WorldRenderer {
   private flameTime = 0;
   private worldTickAcc = 0;
   private disposed = false;
+  /** True between webglcontextlost and webglcontextrestored on the
+   *  canvas (GPU/driver reset, or the browser reclaiming the context
+   *  under pressure). THREE r186 rides the raw events itself —
+   *  preventDefault on loss (so a restore stays possible), render()
+   *  no-ops while lost, GL state re-initialised on restore — so this
+   *  flag is the GAME's half: the fact for the shell (isContextLost
+   *  + the bus pair) and the trigger for the resource re-prime on
+   *  restore. */
+  private contextLost = false;
   /** One shared procedural ground texture per biome (+ marsh), built from
    *  the current world seed. Cached, never per-chunk, so texture cost
    *  stays flat no matter how many chunks stream in. */
@@ -1081,6 +1096,17 @@ export class WorldRenderer {
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.setSize(container.clientWidth, container.clientHeight);
     container.appendChild(this.renderer.domElement);
+    // WEBGL CONTEXT RECOVERY (2026-11-03, Adam's live report: the
+    // canvas went white mid-session while the HUD stayed alive — a
+    // lost context with no game-side handling at all). THREE
+    // registered its own lost/restored handlers inside the
+    // WebGLRenderer constructor just above, so ours OBSERVE: the
+    // loss is recorded and broadcast, and the restore re-primes the
+    // scene's resources (onContextRestored below) before the next
+    // frame renders.
+    const canvas = this.renderer.domElement;
+    canvas.addEventListener('webglcontextlost', this.onContextLost);
+    canvas.addEventListener('webglcontextrestored', this.onContextRestored);
 
     this.camera = new THREE.PerspectiveCamera(
       60,
@@ -2430,8 +2456,58 @@ export class WorldRenderer {
     this.sky?.dispose();
     this.sky = null;
     this.disposeGroundTextures();
+    const canvas = this.renderer.domElement;
+    canvas.removeEventListener('webglcontextlost', this.onContextLost);
+    canvas.removeEventListener('webglcontextrestored', this.onContextRestored);
     this.renderer.dispose();
     this.renderer.domElement.remove();
+  }
+
+  private onContextLost = (): void => {
+    if (this.contextLost) return;
+    this.contextLost = true;
+    bus.emit('renderer:context-lost', {});
+  };
+
+  private onContextRestored = (): void => {
+    this.contextLost = false;
+    this.reprimeAfterContextRestore();
+    bus.emit('renderer:context-restored', {});
+  };
+
+  /** The shell's fact for the lost-canvas state (any wording is the
+   *  shell's; the renderer only reports). */
+  isContextLost(): boolean {
+    return this.contextLost;
+  }
+
+  /** After a restore, the GL objects behind cached materials and
+   *  textures belong to the dead context; flagging needsUpdate makes
+   *  THREE re-compile and re-upload on next use instead of binding
+   *  stale handles. One-time cost, on the restore path only. The
+   *  size re-asserts the viewport/pixel-ratio state. */
+  private reprimeAfterContextRestore(): void {
+    const seen = new Set<THREE.Material>();
+    this.scene.traverse((obj) => {
+      const holder = obj as {
+        material?: THREE.Material | THREE.Material[];
+      };
+      if (!holder.material) return;
+      const list = Array.isArray(holder.material)
+        ? holder.material
+        : [holder.material];
+      for (const mat of list) {
+        if (seen.has(mat)) continue;
+        seen.add(mat);
+        mat.needsUpdate = true;
+        for (const value of Object.values(mat)) {
+          const tex = value as THREE.Texture | null;
+          if (tex && tex.isTexture) tex.needsUpdate = true;
+        }
+      }
+    });
+    for (const tex of this.groundTextures.values()) tex.needsUpdate = true;
+    this.onResize();
   }
 
   private onResize = (): void => {
@@ -3816,15 +3892,16 @@ export class WorldRenderer {
     }
   }
 
-  private loop = (): void => {
+  private loop = (frameTimestamp?: number): void => {
     if (this.disposed) return;
     this.raf = requestAnimationFrame(this.loop);
-    const dt = Math.min(this.clock.getDelta(), 0.1);
+    this.timer.update(frameTimestamp);
+    const dt = Math.min(this.timer.getDelta(), 0.1);
     // PAUSE GATE (Adam 2026-10-26 — see pause.ts): while paused
     // the loop schedules its next frame but simulates nothing —
     // no player update, no sky advance, no world tick, no render.
     // The canvas keeps its last frame, so the view reads frozen.
-    // getDelta is still consumed above so resume sees no spike
+    // the timer is still updated above so resume sees no spike
     // (the 0.1 clamp would cap it anyway). NOTHING here sets or
     // clears the flag — the trigger (visibilitychange and/or
     // blur) is Adam's open choice and plugs into
