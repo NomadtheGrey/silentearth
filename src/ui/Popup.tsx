@@ -17,12 +17,15 @@
  * the dialog closes via its Close button (kept), a visible
  * [X] button beside it (thumb-sized when comfortable), and
  * Escape while open. The Escape listener mounts only while
- * the dialog is open, so Esc never fires with no modal up;
- * it acts on Escape alone and swallows nothing, so V/C
- * camera cycling and WASD movement are untouched. Stacking:
- * each modal's backdrop covers the screen, so a second
- * modal cannot be user-opened beneath an open one — one
- * Esc closes the one open modal (topmost by construction).
+ * the dialog is open, so Esc never fires with no modal up.
+ * Stacking: a modal can also open ITSELF over another —
+ * the cloud wake offer stands over Options without any
+ * user opening — so topmost is not a construction the
+ * stacking gives for free: the dialog's key listener
+ * hears dismissal keys in the capture phase and claims
+ * the ones it acts on (the KEY LADDER note at the
+ * listener), which is what makes one Esc close the one
+ * open dialog on top.
  */
 
 import { useEffect } from 'react';
@@ -67,14 +70,33 @@ export function Popup({
   // Escape closes the dialog and Enter confirms it, but
   // only while it is open: the listener is added only
   // when open is true, so neither key fires with no
-  // modal up. The keys act alone (no preventDefault, no
-  // stopPropagation), so V/C camera cycling and WASD
-  // movement are untouched; Enter typed into a text
-  // field is the field's, never the dialog's.
+  // modal up. Enter typed into a text field is the
+  // field's, never the dialog's.
+  //
+  // THE KEY LADDER (2026-11-03): the listener hears
+  // the key in the CAPTURE phase and, when it acts,
+  // claims it (stopPropagation) — the topmost layer
+  // hears the key first, by construction. The old
+  // bubble-phase listener lost the ladder whenever a
+  // modal stood open BENEATH the dialog: the wake
+  // offer opens itself over Options (no user opening
+  // involved, so the stacking note below did not
+  // hold), Options' own Esc listener took the key,
+  // and the dialog's dismissal never landed — Esc
+  // closed Options and further Escapes oscillated it
+  // while the dialog stood (the C5 finding, staged
+  // live in the key-ladder drive). Claiming only
+  // happens on an act: Esc/X always act while open;
+  // Enter acts only with a confirm to run. A key the
+  // dialog does not act on falls through untouched,
+  // so V/C camera cycling and WASD movement are as
+  // untouched as ever, and no preventDefault is
+  // taken anywhere.
   useEffect(() => {
     if (!open) return;
     const onKeyDown = (e: KeyboardEvent): void => {
       if (e.key === 'Escape' || e.key === 'x' || e.key === 'X') {
+        e.stopPropagation();
         onClose?.();
         return;
       }
@@ -84,11 +106,12 @@ export function Popup({
         if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') {
           return;
         }
+        e.stopPropagation();
         onConfirm();
       }
     };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
+    window.addEventListener('keydown', onKeyDown, true);
+    return () => window.removeEventListener('keydown', onKeyDown, true);
   }, [open, onClose, onConfirm]);
 
   if (!open) {
