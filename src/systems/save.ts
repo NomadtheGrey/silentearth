@@ -899,6 +899,7 @@ export interface SaveDraft {
   knowledge?: {
     metItems?: ReadonlyArray<string>;
     knownUseRecipes?: ReadonlyArray<string>;
+    usedItems?: ReadonlyArray<string>;
   };
   /**
    * Her cold / wet gauges from ColdWetState.snapshot().
@@ -1285,6 +1286,7 @@ export function serializeSave(draft: SaveDraft): SaveData {
     knowledge: {
       metItems: [...(draft.knowledge?.metItems ?? [])],
       knownUseRecipes: [...(draft.knowledge?.knownUseRecipes ?? [])],
+      usedItems: [...(draft.knowledge?.usedItems ?? [])],
     },
     // Cold / wet gauges: finite-guarded here (a NaN
     // would poison the JSON document); range is the
@@ -2076,6 +2078,7 @@ export function deserializeSave(value: unknown): SaveData | null {
     const knowledge: KnowledgeSnapshot = {
       metItems: [],
       knownUseRecipes: [],
+      usedItems: [],
     };
     if (isRecord(value.knowledge)) {
       if (Array.isArray(value.knowledge.metItems)) {
@@ -2089,6 +2092,15 @@ export function deserializeSave(value: unknown): SaveData | null {
             knowledge.knownUseRecipes.push(entry);
           }
         }
+      }
+      // Used items (the register's third set) are additive:
+      // an older save without the field restores as [].
+      if (Array.isArray(value.knowledge.usedItems)) {
+        const used: string[] = [];
+        for (const entry of value.knowledge.usedItems) {
+          if (typeof entry === 'string') used.push(entry);
+        }
+        knowledge.usedItems = used;
       }
     }
     // Her cold / wet gauges are optional on read, same
