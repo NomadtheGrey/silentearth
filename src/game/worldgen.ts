@@ -18,7 +18,7 @@
 import { BIOMES, createFields, weightsAt, legacyWeightsAt, groundColorAt, marshWeight } from './biomes';
 import type { Fields } from './biomes';
 import { mulberry32, deriveSeed, hashSeed } from './seed';
-import { barnSite, caveMouthSite, chapelSite, distToSegment, drownedMillSite, farmhouseSite, generalStoreSite, groveSite, railSidingSite, schoolhouseSite, siloSite, sunkenRoadSite, villageSite, waterTowerSite, type SiteFootprint } from './sites';
+import { barnSite, caveMouthSite, chapelSite, distToSegment, drownedMillSite, farmhouseSite, generalStoreSite, groveSite, railSidingSite, schoolhouseSite, siloSite, sunkenRoadSite, villageSite, waterTowerSite, type GroveSite, type SiteFootprint } from './sites';
 import { CHUNK_SIZE, BASE_SCATTER_PER_CHUNK, GROUND_SEGMENTS } from '../constants';
 import { caveInstancesInRect } from './caves';
 import { homesteadInstancesInRect } from './homesteads';
@@ -74,7 +74,9 @@ const SCATTER_KINDS: ScatterKind[] = [
   // four flowered biomes only, mix-driven. Appended last, like
   // beehive — existing kinds keep their relative order (the
   // added mix weights still re-roll kind picks per slot, as the
-  // apple landing noted).
+  // apple landing noted). EXCEPTION (places build, 2026-11-03):
+  // 'ladySlipper' keeps its slot here (kind order is load-
+  // bearing) but left the mixes — grove patches plant it.
   'yarrow', 'coneflower', 'clover', 'dandelion', 'milkweed',
   'poppy', 'sunflower', 'aster', 'trillium', 'violet',
   'ladySlipper', 'iris', 'waterLily',
@@ -104,6 +106,17 @@ export const CLUSTER_WOODLAND_MIN = 0.35;
 // reliably grow their grove).
 export const CLUSTER_PRESENCE_FULL = 0.8;
 export const CLUSTER_PRESENCE_SMALL = 0.3;
+// Pine stands (Adam, 2026-11-03: 'For scrub, scattered is
+// fine. I see no reason we can't have pine forests though
+// sometimes'): a scrub-dominant cell rolls this presence
+// for a stand that plants PINES. Purely additive — lone
+// pines stay unculled, the scrub's scatter stands as it
+// was; the tier's draws run only on cells that returned
+// null before it existed, so every standing derivation
+// is byte-identical. Stands plant UNNAMED (Adam deferred
+// naming the same day — 'maybe a Mark of Naming', a
+// parked seed, not a build). DRAFT.
+export const CLUSTER_PRESENCE_PINE = 0.25;
 // Fraction of lone trees (outside every grove) culled
 // (DRAFT; raised hard in the 2026-10-30 tuning pass, on
 // Adam's verdict that the clustered woods read as
@@ -116,6 +129,40 @@ export const CLUSTER_THIN_CULL = 0.85;
 // contrast the tuning exists for never arrives.
 export const CLUSTER_TALL_THIN_CULL = 0.6;
 
+// === Lady slipper places (Adam, 2026-11-03: 'That flower
+// isn't an ingredient yet, we might find one later. Let's
+// find good places to grow those in game.') =================
+// The pink lady slipper is PLACE-BOUND, not mix-scattered:
+// the real flower keeps to acidic woods (pine/oak company)
+// on moist but well-drained ground, in small colonies. In
+// the game's own terms the company is the clustering
+// pass's woodland stands, and the drainage is a field read
+// at the grove's centre — wetness in the band below, marsh
+// under the mud line. The forest mix entry retired in the
+// same landing: the orchid stops sprinkling the open
+// forest and becomes somewhere she can be brought to.
+// All numbers DRAFT for Adam's pin pass.
+/** A qualifying grove rolls this chance of carrying a patch. */
+export const LADY_SLIPPER_PRESENCE = 0.6;
+/** The drained band: wetness at the grove's centre, inclusive. */
+export const LADY_SLIPPER_WET_MIN = 0.3;
+export const LADY_SLIPPER_WET_MAX = 0.62;
+/** Standing-water country is out: marsh weight stays under this. */
+export const LADY_SLIPPER_MARSH_MAX = 0.5;
+/** Stems per patch in a clustering grove: MIN + roll of SPAN (3–9). */
+export const LADY_SLIPPER_STEMS_MIN = 3;
+export const LADY_SLIPPER_STEMS_SPAN = 7;
+/** A patch's clump radius (m): stems scatter within it. */
+export const LADY_SLIPPER_PATCH_RADIUS_M = 2.5;
+/** The singular Grove's patch: stems MIN + roll of SPAN (7–12),
+ *  planted in the annulus from its clearing's edge outward by
+ *  BAND (m) — in the oak shade around the maze, off its heart.
+ *  The Grove always carries its patch (no presence roll): the
+ *  raven's destination rewards the arrival. */
+export const LADY_SLIPPER_GROVE_STEMS_MIN = 7;
+export const LADY_SLIPPER_GROVE_STEMS_SPAN = 6;
+export const LADY_SLIPPER_GROVE_BAND_M = 14;
+
 export interface ClusterGrove {
   /** World position of the grove centre. */
   x: number;
@@ -124,6 +171,11 @@ export interface ClusterGrove {
   /** Standing trees the grove plants (before chunk containment). */
   count: number;
   sizeClass: 'small' | 'large' | 'huge';
+  /** What the stand plants: hardwoods, or pines for a
+   *  pine stand (the scrub tier). Consumers that read
+   *  groves — the thinning consult, the lady slipper's
+   *  company gate — key on this flavour. */
+  plantKind: 'tree' | 'pineTree';
   /** The grid cell this grove derives from (its stream key). */
   cellX: number;
   cellZ: number;
@@ -137,7 +189,8 @@ export interface ClusterGrove {
  * this line until it retired, 2026-11-02 — open wet and
  * treeless ground grows no stands); the full spectrum where
  * woodland carries; small groves only in meadow / oldfieldRise
- * country (hedgerow character). DEV's condition: a centre
+ * country (hedgerow character); pine stands sometimes in
+ * scrub country (Adam, 2026-11-03). DEV's condition: a centre
  * whose radius would overlap a site's clear footprint is
  * skipped outright — a stand beheaded by a clearing would read
  * as a bug, not a grove.
@@ -157,32 +210,56 @@ export function groveForCell(
   if (w.dominant === 'deepBog' || w.dominant === 'fen') return null;
   const woodland =
     (w.weights.forest ?? 0) + (w.weights.tanglewood ?? 0) + (w.weights.mirewood ?? 0);
-  let tier: 'full' | 'small' | null = null;
+  let tier: 'full' | 'small' | 'pine' | null = null;
   if (woodland >= CLUSTER_WOODLAND_MIN) tier = 'full';
   else if (w.dominant === 'meadow' || w.dominant === 'oldfieldRise') tier = 'small';
+  else if (w.dominant === 'scrub') tier = 'pine';
   if (tier === null) return null;
-  if (rand() >= (tier === 'full' ? CLUSTER_PRESENCE_FULL : CLUSTER_PRESENCE_SMALL)) {
+  const presence =
+    tier === 'full'
+      ? CLUSTER_PRESENCE_FULL
+      : tier === 'small'
+        ? CLUSTER_PRESENCE_SMALL
+        : CLUSTER_PRESENCE_PINE;
+  if (rand() >= presence) {
     return null;
   }
   let sizeClass: ClusterGrove['sizeClass'];
   let radius: number;
   let count: number;
-  const roll = tier === 'small' ? 0 : rand();
-  if (tier === 'small' || roll < 0.55) {
-    sizeClass = 'small';
-    radius = 8 + rand() * 4;
-    count = 10 + Math.floor(rand() * 7);
-  } else if (roll < 0.9) {
-    sizeClass = 'large';
-    radius = 18 + rand() * 10;
-    count = 34 + Math.floor(rand() * 27);
-  } else {
-    // Huge forests: Adam's "maybe" — present in v1, rare.
-    // Sizes shifted up a class in the 2026-10-30 tuning
-    // pass (bigger stands, counts to match).
-    sizeClass = 'huge';
-    radius = 40 + rand() * 20;
-    count = 90 + Math.floor(rand() * 51);
+  if (tier === 'pine') {
+    // Pine stands: the small/large classes only, counts
+    // in the claim's band (12–40) — no huge class; a
+    // pine forest is a sometimes thing, not a sea. The
+    // site-overlap rejection below is shared, unchanged.
+    if (rand() < 0.7) {
+      sizeClass = 'small';
+      radius = 8 + rand() * 4;
+      count = 12 + Math.floor(rand() * 9);
+    } else {
+      sizeClass = 'large';
+      radius = 18 + rand() * 10;
+      count = 24 + Math.floor(rand() * 17);
+    }
+  }
+  if (tier !== 'pine') {
+    const roll = tier === 'small' ? 0 : rand();
+    if (tier === 'small' || roll < 0.55) {
+      sizeClass = 'small';
+      radius = 8 + rand() * 4;
+      count = 10 + Math.floor(rand() * 7);
+    } else if (roll < 0.9) {
+      sizeClass = 'large';
+      radius = 18 + rand() * 10;
+      count = 34 + Math.floor(rand() * 27);
+    } else {
+      // Huge forests: Adam's "maybe" — present in v1, rare.
+      // Sizes shifted up a class in the 2026-10-30 tuning
+      // pass (bigger stands, counts to match).
+      sizeClass = 'huge';
+      radius = 40 + rand() * 20;
+      count = 90 + Math.floor(rand() * 51);
+    }
   }
   for (const site of sites) {
     if (site.ribbon) {
@@ -193,7 +270,16 @@ export function groveForCell(
       return null;
     }
   }
-  return { x, z, radius, count, sizeClass, cellX: gx, cellZ: gz };
+  return {
+    x,
+    z,
+    radius,
+    count,
+    sizeClass,
+    plantKind: tier === 'pine' ? 'pineTree' : 'tree',
+    cellX: gx,
+    cellZ: gz,
+  };
 }
 
 /**
@@ -211,6 +297,7 @@ function applyClustering(
   cx: number,
   cz: number,
   weightsAtPos: (x: number, z: number) => BiomeWeights,
+  fieldsAt: (x: number, z: number) => Fields,
   sites: readonly SiteFootprint[],
 ): void {
   const originX = cx * CHUNK_SIZE;
@@ -258,8 +345,90 @@ function applyClustering(
       if (x < originX || x >= originX + CHUNK_SIZE || z < originZ || z >= originZ + CHUNK_SIZE) {
         continue;
       }
-      objects.push({ kind: 'tree', x, z, y: 0, scale, rotY });
+      objects.push({ kind: g.plantKind, x, z, y: 0, scale, rotY });
     }
+  }
+  // Lady slipper patches (the places build, 2026-11-03):
+  // a grove that reads as the flower's ground — woodland
+  // company at the full-tier measure, moist but drained
+  // at its centre — rolls for a patch on its own stream.
+  // The gates are pure reads of the grove's centre, the
+  // same in every chunk that consults the grove, and the
+  // stream's draws run in a fixed order per grove, so
+  // patches agree at chunk borders like the trees do.
+  // (Pine company joins via the pine stands, 2026-11-03:
+  // a stand's flavour is its company — the same drained
+  // band below gates both companies, one law.)
+  for (const g of groves) {
+    const w = weightsAtPos(g.x, g.z);
+    const woodland =
+      (w.weights.forest ?? 0) + (w.weights.tanglewood ?? 0) + (w.weights.mirewood ?? 0);
+    if (woodland < CLUSTER_WOODLAND_MIN && g.plantKind !== 'pineTree') continue;
+    const f = fieldsAt(g.x, g.z);
+    if (f.wetness < LADY_SLIPPER_WET_MIN || f.wetness > LADY_SLIPPER_WET_MAX) continue;
+    if (marshWeight(f) >= LADY_SLIPPER_MARSH_MAX) continue;
+    const rand = mulberry32(deriveSeed(seed, `lady-slipper:${g.cellX},${g.cellZ}`));
+    if (rand() >= LADY_SLIPPER_PRESENCE) continue;
+    const angle = rand() * Math.PI * 2;
+    const dist = g.radius * 0.8 * Math.pow(rand(), 0.85);
+    const px = g.x + Math.cos(angle) * dist;
+    const pz = g.z + Math.sin(angle) * dist;
+    const stems = LADY_SLIPPER_STEMS_MIN + Math.floor(rand() * LADY_SLIPPER_STEMS_SPAN);
+    for (let i = 0; i < stems; i++) {
+      const sa = rand() * Math.PI * 2;
+      const sd = LADY_SLIPPER_PATCH_RADIUS_M * Math.sqrt(rand());
+      const scale = 0.7 + rand() * 0.7;
+      const rotY = rand() * Math.PI * 2;
+      const x = px + Math.cos(sa) * sd;
+      const z = pz + Math.sin(sa) * sd;
+      if (x < originX || x >= originX + CHUNK_SIZE || z < originZ || z >= originZ + CHUNK_SIZE) {
+        continue;
+      }
+      objects.push({ kind: 'ladySlipper', x, z, y: 0, scale, rotY });
+    }
+  }
+}
+
+/**
+ * The singular Grove's lady slipper patch (the places
+ * build, 2026-11-03): always planted (no presence roll),
+ * in the annulus around its clearing — from the clearing's
+ * edge outward by LADY_SLIPPER_GROVE_BAND_M — in the oak
+ * shade around the maze, off its heart. Its own stream,
+ * drawn in a fixed order, takes only this chunk's stems.
+ * Runs BEFORE the site pass, so the stems stand under the
+ * same suppression law as any scatter (the annulus keeps
+ * them clear of the Grove's own clearing by construction).
+ */
+function applyGroveLadySlipper(
+  objects: ScatterObject[],
+  seed: string,
+  cx: number,
+  cz: number,
+  grove: GroveSite,
+): void {
+  const originX = cx * CHUNK_SIZE;
+  const originZ = cz * CHUNK_SIZE;
+  const inner = grove.clearRadius + 2;
+  const outer = grove.clearRadius + LADY_SLIPPER_GROVE_BAND_M;
+  // Cheap rejection: the chunk's nearest point to the
+  // centre beyond the annulus, or its farthest inside it.
+  const nearX = Math.max(originX, Math.min(grove.center.x, originX + CHUNK_SIZE));
+  const nearZ = Math.max(originZ, Math.min(grove.center.z, originZ + CHUNK_SIZE));
+  if (Math.hypot(grove.center.x - nearX, grove.center.z - nearZ) > outer) return;
+  const rand = mulberry32(deriveSeed(seed, 'lady-slipper:grove'));
+  const stems = LADY_SLIPPER_GROVE_STEMS_MIN + Math.floor(rand() * LADY_SLIPPER_GROVE_STEMS_SPAN);
+  for (let i = 0; i < stems; i++) {
+    const angle = rand() * Math.PI * 2;
+    const dist = inner + rand() * (outer - inner);
+    const scale = 0.7 + rand() * 0.7;
+    const rotY = rand() * Math.PI * 2;
+    const x = grove.center.x + Math.cos(angle) * dist;
+    const z = grove.center.z + Math.sin(angle) * dist;
+    if (x < originX || x >= originX + CHUNK_SIZE || z < originZ || z >= originZ + CHUNK_SIZE) {
+      continue;
+    }
+    objects.push({ kind: 'ladySlipper', x, z, y: 0, scale, rotY });
   }
 }
 
@@ -281,6 +450,12 @@ export function createWorldGen(seed: string): WorldGen {
   // feature emission in the site pass.
   let spawnMemo: { x: number; z: number } | null = null;
   const spawnOnce = (): { x: number; z: number } => (spawnMemo ??= findSpawn());
+  // The singular Grove, derived once (groveSite memoizes
+  // by seed as well) — the lady slipper patch pass reads
+  // its centre and clearing.
+  let groveMemo: GroveSite | null = null;
+  const groveOnce = (): GroveSite =>
+    (groveMemo ??= groveSite(seed, spawnOnce(), (x, z) => weightsAtPos(x, z).dominant));
   const getInstancesNear = (rect: { minX: number; maxX: number; minZ: number; maxZ: number }): SiteFootprint[] => [
     ...caveInstancesInRect(seed, spawnOnce(), weightsAtPos, rect),
     ...homesteadInstancesInRect(seed, spawnOnce(), weightsAtPos, rect),
@@ -391,7 +566,12 @@ export function createWorldGen(seed: string): WorldGen {
     // pass's byte-identical-outside-footprints promise.
     // A grove overlapping a mouth clearing simply loses
     // its in-clearing trees to the site pass below.
-    applyClustering(objects, seed, cx, cz, weightsAtPos, getSites());
+    applyClustering(objects, seed, cx, cz, weightsAtPos, fieldsAt, getSites());
+
+    // The singular Grove's lady slipper patch (the places
+    // build, 2026-11-03): the Grove always carries one,
+    // in the annulus around its clearing.
+    applyGroveLadySlipper(objects, seed, cx, cz, groveOnce());
 
     // Ground acorns (Adam, 2026-10-26): one cluster beside each
     // downed oak in this chunk — acorns are hand-picked from the

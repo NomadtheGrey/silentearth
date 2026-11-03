@@ -5063,6 +5063,10 @@ export default function App() {
     x: number,
     z: number,
     kind: 'scatter' | 'ground',
+    // A caller that knows the object's real height hands
+    // it in (the guide's perch, from Background's seat);
+    // scatter's ~1 m float stands otherwise.
+    worldYOverride?: number,
   ): { x: number; y: number } | null => {
     const player = playerRef.current;
     const container = containerRef.current;
@@ -5072,7 +5076,7 @@ export default function App() {
     if (width === 0 || height === 0) return null;
     const point = projectWorldToScreen({
       worldX: x,
-      worldY: kind === 'ground' ? 0 : 1,
+      worldY: kind === 'ground' ? 0 : worldYOverride ?? 1,
       worldZ: z,
       playerX: player.x,
       playerZ: player.z,
@@ -17442,15 +17446,18 @@ export default function App() {
                     name: `Feral ${animal.kind.charAt(0).toUpperCase()}${animal.kind.slice(1)}`,
                   },
             );
-            // THE GUIDE RAVEN (tag claim): Background's
-            // seat snapshot joins the feed as a NAMED
+            // THE GUIDE RAVEN (tag claim; the raven's
+            // name, 2026-11-03): Background's seat
+            // snapshot joins the feed as a SINGULAR
             // entry — the tag reads 'Raven' (Adam's
-            // word; the engine kind stays 'crow'), under
-            // the same nearest-within-range rule as
-            // every creature. Visibility (perched /
-            // flying / departing; surface only) is
-            // composed in their layer; the shell only
-            // names it.
+            // word; the engine kind stays 'crow') on
+            // its own pill, never competing for the
+            // ambient nearest slot, projected at the
+            // seat's live height (the bird's instance.y,
+            // carried on the seat since Background's
+            // rework). Visibility (perched / flying /
+            // departing; surface only) is composed in
+            // their layer; the shell only names it.
             const seat = guideTagSeat();
             return seat
               ? [
@@ -17460,6 +17467,8 @@ export default function App() {
                     name: 'Raven',
                     x: seat.x,
                     z: seat.z,
+                    y: seat.y,
+                    singular: true as const,
                   },
                 ]
               : animals;
@@ -17468,7 +17477,9 @@ export default function App() {
             const player = playerRef.current;
             return player ? { x: player.x, z: player.z } : { x: 0, z: 0 };
           }}
-          project={(x, z) => projectAnchor(x, z, 'scatter')}
+          project={(x, z, worldY) =>
+            projectAnchor(x, z, 'scatter', worldY)
+          }
         />
       ) : null}
 

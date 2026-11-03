@@ -35,7 +35,9 @@
  * PROTECTION — SETTLED ELSEWHERE (F1, 2026-11-02): one
  * table only, the engine's (game/shelter.ts HOUSE_DEFS —
  * lean-to 0.7 / thatch 0.5 / woven 0.35 / hut 0.2, radius
- * 6 m, tents 0.85 at 2.5 m). This module's staged copy
+ * 6 m, tents 0.5 at 2.5 m — the thatch tier, Adam's
+ * reading 2026-11-02, Background cb42878). This
+ * module's staged copy
  * (thatch 0.55 / woven 0.4 / hut 0.25 / radius 5, plus its
  * position query) is RETIRED — deleted, not dormant; the
  * pointer stands below HOME_STORAGE_CAPACITY. Systems
@@ -85,7 +87,8 @@ export const HOME_STORAGE_CAPACITY: Readonly<Record<string, number>> = {
  * all along). The canonical factors are game/shelter.ts's
  * HOUSE_DEFS (lean-to 0.7 / thatch 0.5 / woven cottage
  * 0.35 / small wooden hut 0.2) with its SHELTER_RADIUS of
- * 6 m and tents at 0.85 inside 2.5 m. This module's staged
+ * 6 m and tents at 0.5 inside 2.5 m (the thatch tier,
+ * cb42878). This module's staged
  * copy — SHELTER_PROTECTION (thatch 0.55 / a ghost
  * wattle-and-daub row at 0.4 / woven 0.4 / hut 0.25),
  * SHELTER_RADIUS 5, shelterMultiplierFor, and the

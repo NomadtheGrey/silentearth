@@ -5,7 +5,7 @@
  * Silent Earth redesign — creature identifier tag (UI lane,
  * presentation only).
  *
- * The one tag on the nearest world animal (Adam, 2026-10-28):
+ * The tag on the nearest world animal (Adam, 2026-10-28):
  * display name only, v1. Animals move independently of the
  * player (wander/flee), so a per-render derivation — the
  * scatter tag's shape — would sit stale on a moving animal.
@@ -34,25 +34,56 @@
  * a singular special, deliberately not in the engine's
  * visible-animals list, and 'Raven' is Adam's word for
  * it while the engine kind stays 'crow').
+ *
+ * SINGULARS (the raven's name, 2026-11-03): an entry
+ * flagged `singular` does NOT compete for the ambient
+ * nearest slot — it stands its own tag, at its own
+ * carried height (`y`, the seat's live world height),
+ * within the same 32 m range. The flag, not the name,
+ * is the discriminator: feral-dress entries also carry
+ * a name (stamped by the shell) and keep competing for
+ * the ambient slot exactly as before. Before this, the
+ * guide lost the single slot to almost any ambient
+ * animal staged nearer, and even when it won, its pill
+ * projected at the scatter height (1 m — the tree's
+ * trunk, metres below the perched bird).
  */
 
-import { useEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import { WorldAnchor } from './WorldAnchor';
 import { UI_THEMES, type UiThemeName } from './themes';
 
+/** One feed entry, as the shell composes it. */
+export interface AnimalTagEntry {
+  kind: string;
+  /** Own display name, when the entry carries one (named entries win). */
+  name?: string;
+  x: number;
+  z: number;
+  /** Real world height to project at, when the entry carries one. */
+  y?: number;
+  /**
+   * A named singular (the guide): stands its own tag and
+   * never competes for the ambient nearest slot.
+   */
+  singular?: boolean;
+}
+
 export interface AnimalTagProps {
   /** Live feed of loaded-chunk animals (Background's getter). */
-  getAnimals: () => {
-    kind: string;
-    /** Own display name, when the entry carries one (named entries win). */
-    name?: string;
-    x: number;
-    z: number;
-  }[];
+  getAnimals: () => AnimalTagEntry[];
   /** Live player position (for distance). */
   getPlayerPos: () => { x: number; z: number };
-  /** Screen projection (App's projectAnchor, 'scatter' kind). */
-  project: (x: number, z: number) => { x: number; y: number } | null;
+  /**
+   * Screen projection (App's projectAnchor, 'scatter'
+   * kind); an entry's carried height rides along when
+   * it has one, else the scatter default stands.
+   */
+  project: (
+    x: number,
+    z: number,
+    worldY?: number,
+  ) => { x: number; y: number } | null;
   /** Look for the tag's overlay. Default "mire". */
   theme?: UiThemeName;
 }
@@ -62,10 +93,16 @@ const TAG_POLL_MS = 250;
 /** Range cap in meters (approved, draft for pin pass). */
 const TAG_RANGE_M = 32;
 
+/** One standing pill, projected. */
+interface TagPill {
+  key: string;
+  name: string;
+  x: number;
+  y: number;
+}
+
 export function AnimalTag({ getAnimals, getPlayerPos, project, theme = 'mire' }: AnimalTagProps) {
-  const [tag, setTag] = useState<{ name: string; x: number; y: number } | null>(
-    null,
-  );
+  const [tags, setTags] = useState<readonly TagPill[]>([]);
   // Latest-callback refs: the interval runs once (stable),
   // but reads fresh props every poll — App re-renders hand
   // new function identities, which must never reset the
@@ -80,13 +117,9 @@ export function AnimalTag({ getAnimals, getPlayerPos, project, theme = 'mire' }:
   useEffect(() => {
     const tick = () => {
       const player = getPlayerPosRef.current();
-      let nearest: {
-        kind: string;
-        name?: string;
-        x: number;
-        z: number;
-      } | null = null;
-      let nearestDistance = Infinity;
+      let ambient: AnimalTagEntry | null = null;
+      let ambientDistance = Infinity;
+      const singulars: AnimalTagEntry[] = [];
       for (const animal of getAnimalsRef.current()) {
         if (!Number.isFinite(animal.x) || !Number.isFinite(animal.z)) continue;
         if (!animal.kind) continue;
@@ -94,30 +127,45 @@ export function AnimalTag({ getAnimals, getPlayerPos, project, theme = 'mire' }:
           animal.x - player.x,
           animal.z - player.z,
         );
-        if (distance <= TAG_RANGE_M && distance < nearestDistance) {
-          nearest = animal;
-          nearestDistance = distance;
+        if (distance > TAG_RANGE_M) continue;
+        if (animal.singular) {
+          singulars.push(animal);
+        } else if (distance < ambientDistance) {
+          ambient = animal;
+          ambientDistance = distance;
         }
       }
-      if (!nearest) {
-        setTag(null);
-        return;
+      const standing: (AnimalTagEntry & { key: string })[] = [
+        ...(ambient ? [{ ...ambient, key: 'ambient' }] : []),
+        ...singulars.map((entry, index) => ({
+          ...entry,
+          key: `singular:${entry.name ?? entry.kind}:${index}`,
+        })),
+      ];
+      const pills: TagPill[] = [];
+      for (const entry of standing) {
+        const anchor = projectRef.current(entry.x, entry.z, entry.y);
+        if (!anchor) continue;
+        pills.push({
+          key: entry.key,
+          name:
+            entry.name ??
+            (entry.kind.charAt(0).toUpperCase() + entry.kind.slice(1)),
+          x: anchor.x,
+          y: anchor.y,
+        });
       }
-      const anchor = projectRef.current(nearest.x, nearest.z);
-      if (!anchor) {
-        setTag(null);
-        return;
-      }
-      const name =
-        nearest.name ??
-        (nearest.kind.charAt(0).toUpperCase() + nearest.kind.slice(1));
-      setTag((prev) =>
-        prev !== null &&
-        prev.name === name &&
-        prev.x === anchor.x &&
-        prev.y === anchor.y
+      setTags((prev) =>
+        prev.length === pills.length &&
+        prev.every(
+          (pill, index) =>
+            pill.key === pills[index].key &&
+            pill.name === pills[index].name &&
+            pill.x === pills[index].x &&
+            pill.y === pills[index].y,
+        )
           ? prev
-          : { name, x: anchor.x, y: anchor.y },
+          : pills,
       );
     };
     tick();
@@ -125,17 +173,23 @@ export function AnimalTag({ getAnimals, getPlayerPos, project, theme = 'mire' }:
     return () => window.clearInterval(id);
   }, []);
 
-  if (!tag) return null;
+  if (tags.length === 0) return null;
   return (
-    <WorldAnchor x={tag.x} y={tag.y}>
-      <p
-        className={
-          'whitespace-nowrap rounded px-2 py-1 text-xs text-stone-100 ' +
-          UI_THEMES[theme].overlay
-        }
-      >
-        {tag.name}
-      </p>
-    </WorldAnchor>
+    <>
+      {tags.map((tag) => (
+        <Fragment key={tag.key}>
+          <WorldAnchor x={tag.x} y={tag.y}>
+            <p
+              className={
+                'whitespace-nowrap rounded px-2 py-1 text-xs text-stone-100 ' +
+                UI_THEMES[theme].overlay
+              }
+            >
+              {tag.name}
+            </p>
+          </WorldAnchor>
+        </Fragment>
+      ))}
+    </>
   );
 }
