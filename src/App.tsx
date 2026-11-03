@@ -3511,7 +3511,7 @@ export default function App() {
   // shell tracks the id universe; counts stay Systems').
   const systemsFiresRef = useRef(new Map<string, SystemsFireState>());
   const engineFirePathRef = useRef(
-    new Map<string, 'flint' | 'friction'>(),
+    new Map<string, 'flint' | 'friction' | 'candle'>(),
   );
   const homeStoresRef = useRef(new Map<string, HomeStorage>());
   const homeStoreItemsRef = useRef(new Map<string, Set<string>>());
@@ -10514,7 +10514,7 @@ export default function App() {
    */
   const mirrorLightingStart = (
     fireId: string,
-    method: 'flint' | 'friction',
+    method: 'flint' | 'friction' | 'candle',
   ) => {
     engineFirePathRef.current.set(fireId, method);
   };
@@ -10661,9 +10661,33 @@ export default function App() {
         { id: 'close', label: 'Close [X]' },
       ];
     }
+    if (fire.lighting?.method === 'candle') {
+      // The candle's process needs no second press —
+      // the wait IS the lighting (the header bar
+      // carries its progress). Rows: Close only.
+      return [...cauldronActions, { id: 'close', label: 'Close [X]' }];
+    }
     const hasFlint = inventory.count(ITEMS.flint) > 0;
     return [
       ...cauldronActions,
+      {
+        // THE CANDLE DOOR (UI, 2026-11-03; Adam's pin
+        // via DEV — she walks around with a candle, so
+        // she lights fires with that): offered
+        // UNCONDITIONALLY. The carried light satisfies
+        // the method; no candle item is required or
+        // consumed (the crafted item keeps its altar
+        // uses). The row was ABSENT from this list
+        // until now — every layer beneath the door
+        // (engine process, save mirror, the bar) was
+        // wired in the salves + moss batch, and Adam's
+        // campfire would not light by candle because
+        // no door ever called startLighting with it.
+        // Label + hint DRAFT for Adam's pin pass.
+        id: 'light-candle',
+        label: 'Light with candle',
+        hint: 'From her carried candle',
+      },
       {
         id: 'light-flint',
         label: 'Light with flint',
@@ -10696,7 +10720,22 @@ export default function App() {
       handlePlaceCauldron();
       return;
     }
-    if (actionId === 'light-flint') {
+    if (actionId === 'light-candle') {
+      // The candle door's act (see the row in
+      // fireMenuActions): the engine seats the 2 s
+      // waiting process and its tick lights the fire
+      // — no item is consulted or consumed, here or
+      // in the engine. The menu stays open on the
+      // waiting rows (bar in the header) until the
+      // fire lights.
+      const result = fireState.startLighting(fireId, 'candle', Date.now());
+      if (isFireFailure(result)) {
+        say(`Cannot light: ${result.reason}.`, 'blocked');
+        return;
+      }
+      mirrorLightingStart(fireId, 'candle');
+      say('She lights it from her candle.', 'info');
+    } else if (actionId === 'light-flint') {
       const result = fireState.startLighting(fireId, 'flint', Date.now());
       if (isFireFailure(result)) {
         say(`Cannot light: ${result.reason}.`, 'blocked');
@@ -15851,7 +15890,9 @@ export default function App() {
                 ? fire.lighting.phase === 'ready'
                   ? 'Ready — rub!'
                   : 'Waiting…'
-                : undefined;
+                : fire.lighting?.method === 'candle'
+                  ? 'Waiting…'
+                  : undefined;
           return (
             <Fragment key={fire.id}>
               <WorldAnchor x={x} y={y} interactive>

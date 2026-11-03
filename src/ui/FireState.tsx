@@ -46,9 +46,13 @@
  * would cook against the wrong fire.
  *
  * CANDLE NOTE — READ THIS: the witch's avatar/portrait candle
- * stays as it is, and NOTHING here assumes the candle lights
- * fires. Lighting methods are flint and friction only; the
- * candle relation stays flagged open for Adam's call.
+ * stays as it is — and since Adam's 2026-11-03 ruling it IS a
+ * fire-starter: the carried light satisfies the candle method
+ * (no candle item required or consumed; the crafted item
+ * keeps its altar uses). Lighting methods are candle, flint,
+ * and friction. (This note previously flagged the relation
+ * open; the ruling closed it — a stale header contradicting
+ * a ruling is the defect class that misbuilds doors.)
  */
 
 /** Fire-ladder kinds, as placed. */
