@@ -128,6 +128,14 @@ export interface InventoryPanelProps {
   onReadItem?: (id: string) => void;
   /** The jar build: rows whose item carries a Dump verb (the water-jar), and its press. */
   dumpableIds?: ReadonlySet<string>;
+  /**
+   * Item ids that can tend a hurt (the salve). Items in
+   * this set gain a Tend button. Omitted = no Tend
+   * buttons; tending itself is the caller's job.
+   */
+  tendableIds?: ReadonlySet<string>;
+  /** Called when the player presses Tend on an item. Optional. */
+  onTendItem?: (id: string) => void;
   onDumpItem?: (id: string) => void;
   /**
    * The shrew's wake door: rows whose item carries a
@@ -240,6 +248,8 @@ export function InventoryPanel({
   onReadItem,
   dumpableIds,
   onDumpItem,
+  tendableIds,
+  onTendItem,
   wakeableIds,
   onWakeItem,
   onInfoItem,
@@ -285,6 +295,9 @@ export function InventoryPanel({
     if ((dumpableIds?.has(item.id) ?? false) && onDumpItem) {
       verbs.push({ id: 'dump', label: 'Dump', ariaLabel: `Dump ${item.name}` });
     }
+    if ((tendableIds?.has(item.id) ?? false) && onTendItem) {
+      verbs.push({ id: 'tend', label: 'Tend', ariaLabel: `Tend with ${item.name}` });
+    }
     if ((wakeableIds?.has(item.id) ?? false) && onWakeItem) {
       verbs.push({ id: 'wake', label: 'Wake', ariaLabel: `Wake ${item.name}` });
     }
@@ -317,6 +330,7 @@ export function InventoryPanel({
     else if (verbId === 'light') onLightItem?.(itemId);
     else if (verbId === 'read') onReadItem?.(itemId);
     else if (verbId === 'dump') onDumpItem?.(itemId);
+    else if (verbId === 'tend') onTendItem?.(itemId);
     else if (verbId === 'wake') onWakeItem?.(itemId);
     else if (verbId === 'deposit') onDepositItem?.(itemId);
     else if (verbId === 'drop-one') onDropItem?.(itemId);
