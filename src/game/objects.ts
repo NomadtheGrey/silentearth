@@ -3090,3 +3090,60 @@ export const GROUND_MATERIALS: GroundMaterialDef[] = [
 
 export const GROUND_MATERIAL_BY_ID: Record<string, GroundMaterialDef> =
   Object.fromEntries(GROUND_MATERIALS.map((g) => [g.id, g]));
+
+/**
+ * SOURCE → YIELD INDEX — the harvest-source seam (assigned
+ * 2026-11-01, claim ratified by DEV 2026-11-03). The item
+ * card's facts derivation (Systems' itemFactsFor) composes
+ * crafted-by and trapped sources, but the layers' law —
+ * the game layer never imports systems, systems never
+ * imports game (harvest.ts's header states it) — keeps
+ * the harvest sources out of its reach. This index is
+ * the game side's half of the seam: item id → the card's
+ * source lines for everything the harvest defs yield,
+ * derived here from the defs themselves so the two can
+ * never drift. The shell joins the lines into
+ * facts.sources at its existing itemFactsFor call site,
+ * under the same isItemMet gate the derivation applies
+ * internally — the gate is the seam's one correctness
+ * obligation, and it lives with the join, not here.
+ *
+ * Record shape: READY LINES in the card's existing
+ * grammar ('Harvested: Fallen Log' beside 'Crafted: X'
+ * and 'Trapped: Y'), ordered primary yield first, then
+ * secondary and tool-gated yields in def order, deduped
+ * per item. Anchor defs are EXCLUDED (the stump is
+ * claimed as a workstation, not harvested — STUMP keeps
+ * no harvest line), as are yield-less and non-harvestable
+ * defs (the lady slipper among them). Ground materials
+ * fold in with the scatter sources. The 'Harvested:'
+ * copy is DRAFT until Adam's pin pass, like every fact
+ * line. Census at derivation: 33 items, 47 lines.
+ */
+export const SOURCE_YIELD_INDEX: ReadonlyMap<string, readonly string[]> =
+  (() => {
+    const index = new Map<string, string[]>();
+    const add = (item: ItemId | undefined, line: string): void => {
+      if (item === undefined) return;
+      const list = index.get(item) ?? [];
+      if (!list.includes(line)) list.push(line);
+      index.set(item, list);
+    };
+    for (const def of Object.values(SOURCE_FOR_KIND)) {
+      if (def.anchor) continue;
+      const line = `Harvested: ${def.name}`;
+      add(def.primaryYield, line);
+      for (const secondary of def.secondaryYields) add(secondary.item, line);
+      for (const gated of def.toolGatedYields ?? []) add(gated.item, line);
+    }
+    for (const ground of GROUND_MATERIALS) {
+      add(ground.primaryYield, `Harvested: ${ground.name}`);
+    }
+    return index;
+  })();
+
+/** The card's harvest-source lines for one item (empty
+ *  when the harvest defs yield it nowhere). Never throws. */
+export function harvestSourceLinesFor(item: string): readonly string[] {
+  return SOURCE_YIELD_INDEX.get(item) ?? [];
+}
