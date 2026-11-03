@@ -221,7 +221,8 @@ export type SaveCameraMode = 'first' | 'third' | 'behind';
  */
 export type SavedLightingProcess =
   | { method: 'flint'; clicks: number }
-  | { method: 'friction'; phase: 'waiting' | 'ready'; waitUntil: number };
+  | { method: 'friction'; phase: 'waiting' | 'ready'; waitUntil: number }
+  | { method: 'candle'; phase: 'waiting'; waitUntil: number };
 
 export interface SavedFire {
   /**
