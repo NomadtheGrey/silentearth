@@ -43,6 +43,14 @@ export interface BuildRecord {
 
 const ALL_RECORDS: BuildRecord[] = [
   {
+    merge: 'Merge #73',
+    pr: 95,
+    sha: '73522d9',
+    date: '2026-11-03',
+    what: 'ONE OF EVERY BONE \u2014 a quest of acquaintance. The journal gains a Waking that asks for one bone of every kind in the country (twenty-two kinds; the generic bone and the human bone are not among them). A kind she has MET \u2014 seen and known, and picking a bone up counts as meeting it \u2014 earns a row in the quest\u2019s card; kinds not yet met print nothing, and nowhere does the game print how many kinds there are. The card counts only what she has met: \u2018Kinds met: N\u2019. Completion is stricter than the card: the quest is done when every kind has been ACQUIRED, and a kind she spent stays acquired \u2014 awakened at an altar or latched in her save, it counts forever. The visible rows can look finished before the quest is; the rows never get to declare it done.',
+    why: 'The familiar road runs on bones, kind by kind \u2014 this quest teaches her the whole menagerie before she is asked to wake any of it. Its two honesties are the design: nothing advertises the size of the set, so the country stays larger than her list; and a bone used is not a bone forgotten, so the rite never punishes her for having already spent what she found.',
+  },
+  {
     merge: 'Merge #72',
     pr: 95,
     sha: '822a271',

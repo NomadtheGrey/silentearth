@@ -125,6 +125,7 @@
  */
 
 import type { PersonalInventory } from './inventory';
+import { displayNameFor } from './inventory';
 import { FOOD_ITEMS, type HungerStage } from './hunger';
 import { FIRST_CHARM_KIND, boneItemFor } from './charms';
 import { RITUAL_RECIPES } from './rituals';
@@ -260,6 +261,25 @@ export interface QuestFacts {
    * before the flag existed still stands in the record.
    */
   awakenings?: number;
+  /**
+   * The bone KINDS she has MET (looked at — a pickup
+   * counts as a look; the shell derives this from the
+   * NameSight kinds). OPTIONAL: absent reads as none
+   * met. Read by one-of-every-bone's ROWS alone (LAW 1,
+   * discovery-gated rows): an unmet kind prints no row,
+   * and nothing anywhere prints the set's size.
+   */
+  bonesMet?: readonly string[];
+  /**
+   * The bone KINDS she has ACQUIRED — the latched set
+   * the shell composes through boneAcquisitionsFor
+   * (carried now ∪ awakened ∪ saved in
+   * SaveData.boneAcquisitions; spent, dropped, and
+   * woken bones count forever). OPTIONAL: absent reads
+   * as none acquired. Read by one-of-every-bone's
+   * completion alone (LAW 2, latched acquisition).
+   */
+  bonesAcquired?: readonly string[];
 }
 
 /**
@@ -348,6 +368,24 @@ export interface QuestDefinition {
    */
   componentsMode?: 'all' | 'any';
   /**
+   * DYNAMIC COMPONENTS (one-of-every-bone, 2026-11-03):
+   * when present, the quest's components are DERIVED
+   * from the facts by this hook and `components` stands
+   * empty — the one quest whose rows cannot be a static
+   * list, because its rows are discovery-gated (LAW 1:
+   * one row per MET kind; an unmet kind prints no row).
+   * THE CARVE-OUT, stated here so no probe 'catches'
+   * it: the decomposition law above does NOT hold for
+   * such a quest — the rows decompose over the MET
+   * subset, so the components roll-up can read complete
+   * while the quest is not done; isDone stays the SOLE
+   * authority and judges the full set. (A roll-up over
+   * visible rows claiming completion would leak the
+   * set's size and finish the quest early — DEV's
+   * ratification, 2026-11-03.)
+   */
+  componentsFor?: (facts: QuestFacts) => readonly QuestComponent[];
+  /**
    * LIVENESS (DEV's word, 2026-11-02, on Adam's QuestCard
    * objection): whether this quest's moment is live RIGHT
    * NOW, as distinct from whether it is done. OPTIONAL —
@@ -364,14 +402,39 @@ export interface QuestDefinition {
   isLive?: (facts: QuestFacts) => boolean;
 }
 
-/** Every bone item id: generic + all 18 primal-bone kinds. */
+/** Every bone item id: generic + all 22 primal-bone kinds. */
 const BONE_ITEM_IDS: readonly string[] = [
   'bone',
   ...RITUAL_RECIPES.map((recipe) => boneItemFor(recipe.boneKind)),
   boneItemFor(FIRST_CHARM_KIND),
 ];
 
-/** The 15 v1 quests, in priority order. */
+/**
+ * THE BONE SET for one-of-every-bone (Adam's seed,
+ * 2026-11-01): every primal-bone KIND — the ritual
+ * recipes' kinds + the shrew (FIRST_CHARM_KIND, woken
+ * directly, no ritual recipe) — derived from the same
+ * sources as BONE_ITEM_IDS minus the generic 'bone'
+ * (no kind; it does not count). HUMAN bone is out by
+ * construction (it is no ritual kind; the graves
+ * thread is its own). KINDS throughout; boneItemFor
+ * maps at the inventory edge only.
+ */
+export const BONE_QUEST_KINDS: readonly string[] = [
+  ...new Set([
+    ...RITUAL_RECIPES.map((recipe) => recipe.boneKind),
+    FIRST_CHARM_KIND,
+  ]),
+];
+
+const BONE_QUEST_KIND_SET: ReadonlySet<string> = new Set(BONE_QUEST_KINDS);
+
+/** True when a kind belongs to the bone set. */
+export function isBoneQuestKind(kind: string): boolean {
+  return BONE_QUEST_KIND_SET.has(kind);
+}
+
+/** The quests, in priority order (18 with one-of-every-bone). */
 /**
  * wake-charm's completion, one expression read by its
  * predicate and every road step: the shell's flag OR
@@ -762,6 +825,43 @@ export const QUEST_DEFINITIONS: readonly QuestDefinition[] = [
     ],
   },
   {
+    id: 'one-of-every-bone',
+    // ONE OF EVERY BONE (Adam's seed, 2026-11-01:
+    // 'Might could have a task in there — Acquire one
+    // of every bone or something — that way the player
+    // knows he has them all.' The set's wholeness,
+    // ANNOUNCED). Title DRAFT for Adam's pin pass.
+    title: 'One of Every Bone',
+    thread: 'wakings',
+    act: 'witchery',
+    // LAW 2 (latched acquisition): done when every
+    // kind of the set stands in the acquired union the
+    // shell composes (carried ∪ awakened ∪ saved) —
+    // spent, dropped, and woken bones count forever.
+    isDone: (facts) =>
+      BONE_QUEST_KINDS.every((kind) =>
+        (facts.bonesAcquired ?? []).includes(kind),
+      ),
+    // LAW 1 (discovery-gated rows): no static list —
+    // componentsFor derives one row per MET kind, in
+    // set order; an unmet kind prints no row, and the
+    // rows never show the set's size. The static list
+    // stands empty; the decomposition carve-out is
+    // stated at componentsFor on QuestDefinition.
+    components: [],
+    componentsFor: (facts) => {
+      const acquired = new Set(facts.bonesAcquired ?? []);
+      const met = new Set(facts.bonesMet ?? []);
+      return BONE_QUEST_KINDS.filter((kind) => met.has(kind)).map(
+        (kind) => ({
+          id: `bone:${kind}`,
+          label: displayNameFor(boneItemFor(kind) as never),
+          isDone: () => acquired.has(kind),
+        }),
+      );
+    },
+  },
+  {
     id: 'gain-a-familiar',
     title: 'Gain a Familiar',
     // THE FAMILIAR ROAD (Adam, 2026-11-02): the familiar
@@ -862,6 +962,36 @@ export function newlyCompleted(
   ).map((quest) => quest.id);
 }
 
+/**
+ * THE BONE-ACQUISITION LATCH (one-of-every-bone, LAW
+ * 2): the union of the bone set's kinds she has
+ * acquired — carried NOW (a bone in the pack counts),
+ * AWAKENED (an awakening proves possession; waking
+ * never un-acquires), and SAVED (SaveData.
+ * boneAcquisitions, the latch's own record). ONE
+ * helper, two call sites by design: the shell reads
+ * it to compose facts.bonesAcquired, and folds its
+ * result into the save at save time — so a kind once
+ * acquired counts forever, spent, dropped, or woken.
+ * Returns kinds in set order, each at most once;
+ * inputs outside the set never ride (kind-validated
+ * by construction).
+ */
+export function boneAcquisitionsFor(
+  inventory: PersonalInventory,
+  awakenedKinds: readonly string[],
+  savedKinds: readonly string[],
+): string[] {
+  const awakened = new Set(awakenedKinds);
+  const saved = new Set(savedKinds);
+  return BONE_QUEST_KINDS.filter(
+    (kind) =>
+      inventory.count(boneItemFor(kind) as never) > 0 ||
+      awakened.has(kind) ||
+      saved.has(kind),
+  );
+}
+
 /** The definition for an id (unknown id → undefined). */
 export function questById(id: string): QuestDefinition | undefined {
   return QUEST_DEFINITIONS.find((quest) => quest.id === id);
@@ -871,13 +1001,25 @@ export function questById(id: string): QuestDefinition | undefined {
  * A quest's components with their done states, for the
  * HUD's active-task card (unknown id → no components).
  */
+/**
+ * A quest's components as they stand under these
+ * facts: the dynamic derivation when the quest
+ * declares componentsFor, else its static list.
+ */
+function resolveComponents(
+  quest: QuestDefinition,
+  facts: QuestFacts,
+): readonly QuestComponent[] {
+  return quest.componentsFor ? quest.componentsFor(facts) : quest.components;
+}
+
 export function questComponentsFor(
   id: string,
   facts: QuestFacts,
 ): { id: string; label: string; done: boolean }[] {
   const quest = questById(id);
   if (!quest) return [];
-  return quest.components.map((component) => ({
+  return resolveComponents(quest, facts).map((component) => ({
     id: component.id,
     label: component.label,
     done: component.isDone(facts),
@@ -888,14 +1030,18 @@ export function questComponentsFor(
  * The components' combined state under the quest's
  * mode. By the decomposition law this EQUALS the
  * quest's own isDone for every facts value (probed) —
- * it exists so a surface can read the card's roll-up
- * without re-deriving the mode; completion itself is
+ * EXCEPT a componentsFor quest (one-of-every-bone),
+ * whose rows decompose over the met subset by design:
+ * there the roll-up can read complete while isDone
+ * still judges the full set. Completion itself is
  * always judged by isDone.
  */
 export function questComponentsDone(id: string, facts: QuestFacts): boolean {
   const quest = questById(id);
   if (!quest) return false;
-  const states = quest.components.map((component) => component.isDone(facts));
+  const states = resolveComponents(quest, facts).map((component) =>
+    component.isDone(facts),
+  );
   return quest.componentsMode === 'any'
     ? states.some(Boolean)
     : states.every(Boolean);

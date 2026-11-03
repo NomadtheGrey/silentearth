@@ -194,7 +194,7 @@ import type { SavedMarkProgress } from './fragments';
 import type { SavedDiscovery } from './discovery';
 import type { SavedAwakening } from './charms';
 import type { SavedQuestFlags } from './quests';
-import { questById } from './quests';
+import { questById, isBoneQuestKind } from './quests';
 
 /** Storage key. The version rides inside the document too. */
 export const SAVE_KEY = 'silentearth-save-v1';
@@ -666,6 +666,10 @@ export interface SaveData {
   stagings: SavedRitualStaging[];
   /** Charm awakenings (kind + tier); [] for old saves. */
   awakenings: SavedAwakening[];
+  /** Bone kinds acquired for one-of-every-bone (the
+   * latch's own record — kinds, validated + deduped);
+   * [] for old saves. */
+  boneAcquisitions: string[];
   /** Quest event flags; absent for old saves (all false). */
   quests?: SavedQuestFlags;
   /** World harvest state; empty snapshot for old saves. */
@@ -940,6 +944,12 @@ export interface SaveDraft {
     kind: string;
     tier: number;
   }>;
+  /**
+   * Bone-acquisition latch from boneAcquisitionsFor()
+   * (quests.ts) — the shell folds the union in at save
+   * time. OPTIONAL, same wiring-later pattern.
+   */
+  boneAcquisitions?: ReadonlyArray<string>;
   /**
    * Quest event flags from the shell's QuestFlags.
    * OPTIONAL so existing saveNow call sites keep
@@ -1343,6 +1353,11 @@ export function serializeSave(draft: SaveDraft): SaveData {
       kind: entry.kind,
       tier: entry.tier,
     })),
+    // Bone acquisitions: written AS-IS (the helper's
+    // union is already kinds-only + deduped); kind
+    // validation + dedupe repeat on read, so a stale
+    // or hand-edited record self-cleans at load.
+    boneAcquisitions: [...(draft.boneAcquisitions ?? [])],
     // Quest flags: written as-is (fresh copy) when the
     // shell supplies them; omitted when absent (old
     // saves / pre-wiring — absent reads as all false).
@@ -2199,6 +2214,26 @@ export function deserializeSave(value: unknown): SaveData | null {
         awakenings.push({ kind: entry.kind, tier: entry.tier as number });
       }
     }
+    // Bone acquisitions are optional on read, same
+    // additive-field rule: an old v1 save without the
+    // field loads with boneAcquisitions: []. Entries
+    // are KIND-VALIDATED against the bone set (a kind
+    // outside it — or a non-string — drops) and
+    // DEDUPED, first occurrence keeping its place; a
+    // non-array field loads as [] — the section drops,
+    // the document survives.
+    const boneAcquisitions: string[] = [];
+    if (
+      value.boneAcquisitions !== undefined &&
+      Array.isArray(value.boneAcquisitions)
+    ) {
+      for (const entry of value.boneAcquisitions) {
+        if (typeof entry !== 'string') continue;
+        if (!isBoneQuestKind(entry)) continue;
+        if (boneAcquisitions.includes(entry)) continue;
+        boneAcquisitions.push(entry);
+      }
+    }
     // Quest flags are optional on read, same
     // additive-field rule: old v1 saves without them
     // load with quests absent (all false).
@@ -2297,6 +2332,7 @@ export function deserializeSave(value: unknown): SaveData | null {
       weather,
       stagings,
       awakenings,
+      boneAcquisitions,
       ...(quests !== undefined ? { quests } : {}),
       harvestState,
       sky,
