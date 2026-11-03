@@ -106,6 +106,17 @@ export const CLUSTER_WOODLAND_MIN = 0.35;
 // reliably grow their grove).
 export const CLUSTER_PRESENCE_FULL = 0.8;
 export const CLUSTER_PRESENCE_SMALL = 0.3;
+// Pine stands (Adam, 2026-11-03: 'For scrub, scattered is
+// fine. I see no reason we can't have pine forests though
+// sometimes'): a scrub-dominant cell rolls this presence
+// for a stand that plants PINES. Purely additive — lone
+// pines stay unculled, the scrub's scatter stands as it
+// was; the tier's draws run only on cells that returned
+// null before it existed, so every standing derivation
+// is byte-identical. Stands plant UNNAMED (Adam deferred
+// naming the same day — 'maybe a Mark of Naming', a
+// parked seed, not a build). DRAFT.
+export const CLUSTER_PRESENCE_PINE = 0.25;
 // Fraction of lone trees (outside every grove) culled
 // (DRAFT; raised hard in the 2026-10-30 tuning pass, on
 // Adam's verdict that the clustered woods read as
@@ -160,6 +171,11 @@ export interface ClusterGrove {
   /** Standing trees the grove plants (before chunk containment). */
   count: number;
   sizeClass: 'small' | 'large' | 'huge';
+  /** What the stand plants: hardwoods, or pines for a
+   *  pine stand (the scrub tier). Consumers that read
+   *  groves — the thinning consult, the lady slipper's
+   *  company gate — key on this flavour. */
+  plantKind: 'tree' | 'pineTree';
   /** The grid cell this grove derives from (its stream key). */
   cellX: number;
   cellZ: number;
@@ -173,7 +189,8 @@ export interface ClusterGrove {
  * this line until it retired, 2026-11-02 — open wet and
  * treeless ground grows no stands); the full spectrum where
  * woodland carries; small groves only in meadow / oldfieldRise
- * country (hedgerow character). DEV's condition: a centre
+ * country (hedgerow character); pine stands sometimes in
+ * scrub country (Adam, 2026-11-03). DEV's condition: a centre
  * whose radius would overlap a site's clear footprint is
  * skipped outright — a stand beheaded by a clearing would read
  * as a bug, not a grove.
@@ -193,32 +210,56 @@ export function groveForCell(
   if (w.dominant === 'deepBog' || w.dominant === 'fen') return null;
   const woodland =
     (w.weights.forest ?? 0) + (w.weights.tanglewood ?? 0) + (w.weights.mirewood ?? 0);
-  let tier: 'full' | 'small' | null = null;
+  let tier: 'full' | 'small' | 'pine' | null = null;
   if (woodland >= CLUSTER_WOODLAND_MIN) tier = 'full';
   else if (w.dominant === 'meadow' || w.dominant === 'oldfieldRise') tier = 'small';
+  else if (w.dominant === 'scrub') tier = 'pine';
   if (tier === null) return null;
-  if (rand() >= (tier === 'full' ? CLUSTER_PRESENCE_FULL : CLUSTER_PRESENCE_SMALL)) {
+  const presence =
+    tier === 'full'
+      ? CLUSTER_PRESENCE_FULL
+      : tier === 'small'
+        ? CLUSTER_PRESENCE_SMALL
+        : CLUSTER_PRESENCE_PINE;
+  if (rand() >= presence) {
     return null;
   }
   let sizeClass: ClusterGrove['sizeClass'];
   let radius: number;
   let count: number;
-  const roll = tier === 'small' ? 0 : rand();
-  if (tier === 'small' || roll < 0.55) {
-    sizeClass = 'small';
-    radius = 8 + rand() * 4;
-    count = 10 + Math.floor(rand() * 7);
-  } else if (roll < 0.9) {
-    sizeClass = 'large';
-    radius = 18 + rand() * 10;
-    count = 34 + Math.floor(rand() * 27);
-  } else {
-    // Huge forests: Adam's "maybe" — present in v1, rare.
-    // Sizes shifted up a class in the 2026-10-30 tuning
-    // pass (bigger stands, counts to match).
-    sizeClass = 'huge';
-    radius = 40 + rand() * 20;
-    count = 90 + Math.floor(rand() * 51);
+  if (tier === 'pine') {
+    // Pine stands: the small/large classes only, counts
+    // in the claim's band (12–40) — no huge class; a
+    // pine forest is a sometimes thing, not a sea. The
+    // site-overlap rejection below is shared, unchanged.
+    if (rand() < 0.7) {
+      sizeClass = 'small';
+      radius = 8 + rand() * 4;
+      count = 12 + Math.floor(rand() * 9);
+    } else {
+      sizeClass = 'large';
+      radius = 18 + rand() * 10;
+      count = 24 + Math.floor(rand() * 17);
+    }
+  }
+  if (tier !== 'pine') {
+    const roll = tier === 'small' ? 0 : rand();
+    if (tier === 'small' || roll < 0.55) {
+      sizeClass = 'small';
+      radius = 8 + rand() * 4;
+      count = 10 + Math.floor(rand() * 7);
+    } else if (roll < 0.9) {
+      sizeClass = 'large';
+      radius = 18 + rand() * 10;
+      count = 34 + Math.floor(rand() * 27);
+    } else {
+      // Huge forests: Adam's "maybe" — present in v1, rare.
+      // Sizes shifted up a class in the 2026-10-30 tuning
+      // pass (bigger stands, counts to match).
+      sizeClass = 'huge';
+      radius = 40 + rand() * 20;
+      count = 90 + Math.floor(rand() * 51);
+    }
   }
   for (const site of sites) {
     if (site.ribbon) {
@@ -229,7 +270,16 @@ export function groveForCell(
       return null;
     }
   }
-  return { x, z, radius, count, sizeClass, cellX: gx, cellZ: gz };
+  return {
+    x,
+    z,
+    radius,
+    count,
+    sizeClass,
+    plantKind: tier === 'pine' ? 'pineTree' : 'tree',
+    cellX: gx,
+    cellZ: gz,
+  };
 }
 
 /**
@@ -295,7 +345,7 @@ function applyClustering(
       if (x < originX || x >= originX + CHUNK_SIZE || z < originZ || z >= originZ + CHUNK_SIZE) {
         continue;
       }
-      objects.push({ kind: 'tree', x, z, y: 0, scale, rotY });
+      objects.push({ kind: g.plantKind, x, z, y: 0, scale, rotY });
     }
   }
   // Lady slipper patches (the places build, 2026-11-03):
@@ -306,14 +356,14 @@ function applyClustering(
   // same in every chunk that consults the grove, and the
   // stream's draws run in a fixed order per grove, so
   // patches agree at chunk borders like the trees do.
-  // (Pine company has no planting here: scrub's pines
-  // grow unclustered — there is no pine stand to plant
-  // in; that half is its own piece of work if called.)
+  // (Pine company joins via the pine stands, 2026-11-03:
+  // a stand's flavour is its company — the same drained
+  // band below gates both companies, one law.)
   for (const g of groves) {
     const w = weightsAtPos(g.x, g.z);
     const woodland =
       (w.weights.forest ?? 0) + (w.weights.tanglewood ?? 0) + (w.weights.mirewood ?? 0);
-    if (woodland < CLUSTER_WOODLAND_MIN) continue;
+    if (woodland < CLUSTER_WOODLAND_MIN && g.plantKind !== 'pineTree') continue;
     const f = fieldsAt(g.x, g.z);
     if (f.wetness < LADY_SLIPPER_WET_MIN || f.wetness > LADY_SLIPPER_WET_MAX) continue;
     if (marshWeight(f) >= LADY_SLIPPER_MARSH_MAX) continue;
