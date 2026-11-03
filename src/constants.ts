@@ -24,6 +24,15 @@ export const THEME = {
 
 /** World chunk edge length in meters. */
 export const CHUNK_SIZE = 32;
+/**
+ * One GAME DAY in wall-clock milliseconds (2026-11-03):
+ * the day/night cycle's length (DAY_NIGHT_CYCLE_MINUTES
+ * = 10 real minutes, weather.ts) expressed once, here,
+ * so every clock Adam prices in game days reads from a
+ * single source. If the cycle length ever changes, this
+ * constant is the one place the day's price follows.
+ */
+export const GAME_DAY_MS = 600_000;
 /** Ground plane subdivisions per chunk edge (vertex-color resolution). */
 export const GROUND_SEGMENTS = 16;
 /**
