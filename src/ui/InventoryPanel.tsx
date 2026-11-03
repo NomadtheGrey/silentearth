@@ -478,23 +478,74 @@ export function InventoryPanel({
         </p>
       ) : null}
 
-      <ItemListSurface
-        items={items}
-        onInfoItem={onInfoItem}
-        verbsFor={personalVerbsFor}
-        onVerb={handlePersonalVerb}
-        selectedItemId={selectedItemId}
-        onSelectItem={onSelectItem}
-        sortMode={sortMode}
-        sortReversed={sortReversed}
-        onSortChange={onSortChange}
-        recencyOrder={recencyOrder}
-        categoryOrder={categoryOrder}
-        emptyText="Nothing carried yet."
-        searchLabel="Search items"
-        comfortable={comfortable}
-        theme={theme}
-      />
+      {storage !== undefined ? (
+        <ItemListSurface
+          sections={[
+            {
+              id: 'storage',
+              title: `${storage.label} storage`,
+              meta: storage.capacityText,
+              emptyText: 'Nothing stored here yet.',
+            },
+            {
+              id: 'pack',
+              title: 'Your pack',
+              // No meta: the panel's own Carrying row
+              // above the list already speaks it (the
+              // storage section's meta is the one with
+              // no other home).
+              emptyText: 'Nothing carried yet.',
+            },
+          ]}
+          items={[
+            ...storage.items.map((item) => ({
+              ...item,
+              section: 'storage',
+            })),
+            ...items.map((item) => ({ ...item, section: 'pack' })),
+          ]}
+          onInfoItem={onInfoItem}
+          verbsFor={(item) =>
+            item.section === 'storage'
+              ? storageVerbsFor(item)
+              : personalVerbsFor(item)
+          }
+          onVerb={(itemId, verbId) => {
+            if (verbId === 'withdraw') storage.onWithdrawItem?.(itemId);
+            else handlePersonalVerb(itemId, verbId);
+          }}
+          selectedItemId={selectedItemId}
+          onSelectItem={onSelectItem}
+          selectable={(item) => item.section !== 'storage'}
+          sortMode={sortMode}
+          sortReversed={sortReversed}
+          onSortChange={onSortChange}
+          recencyOrder={recencyOrder}
+          categoryOrder={categoryOrder}
+          emptyText="Nothing carried or stored yet."
+          searchLabel="Search items"
+          comfortable={comfortable}
+          theme={theme}
+        />
+      ) : (
+        <ItemListSurface
+          items={items}
+          onInfoItem={onInfoItem}
+          verbsFor={personalVerbsFor}
+          onVerb={handlePersonalVerb}
+          selectedItemId={selectedItemId}
+          onSelectItem={onSelectItem}
+          sortMode={sortMode}
+          sortReversed={sortReversed}
+          onSortChange={onSortChange}
+          recencyOrder={recencyOrder}
+          categoryOrder={categoryOrder}
+          emptyText="Nothing carried yet."
+          searchLabel="Search items"
+          comfortable={comfortable}
+          theme={theme}
+        />
+      )}
 
       {nearbyPileItems !== undefined && nearbyPileItems.length > 0 ? (
         <>
@@ -520,36 +571,8 @@ export function InventoryPanel({
           />
         </>
       ) : null}
-      {storage !== undefined ? (
-        <>
-          <VineDivider className="mb-2 mt-3" />
-          {/* No sub-header: in the storage-headed mode
-              the panel's own title names the house
-              ('<House name> inventory' — hut storage,
-              2026-11-01); the capacity line speaks next. */}
-          {storage.capacityText ? (
-            <p className={'mb-2 text-sm ' + t.muted}>
-              {storage.capacityText}
-            </p>
-          ) : null}
-          <ItemListSurface
-            items={storage.items}
-            onInfoItem={onInfoItem}
-            verbsFor={storageVerbsFor}
-            onVerb={(itemId) => storage.onWithdrawItem?.(itemId)}
-            sortMode={sortMode}
-            sortReversed={sortReversed}
-            onSortChange={onSortChange}
-            categoryOrder={categoryOrder}
-            emptyText="Nothing stored here yet."
-            searchLabel="Search stored items"
-            comfortable={comfortable}
-            theme={theme}
-          />
-          {storage.note ? (
-            <p className="mt-1 text-xs text-red-300">{storage.note}</p>
-          ) : null}
-        </>
+      {storage !== undefined && storage.note ? (
+        <p className="mt-1 text-xs text-red-300">{storage.note}</p>
       ) : null}
     </section>
   );

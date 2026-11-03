@@ -1,6 +1,7 @@
 /**
- * Silent Earth — shelter storage + shelter protection
- * (player-systems lane, MVP round).
+ * Silent Earth — shelter storage (player-systems lane,
+ * MVP round). Shelter PROTECTION factors are not here —
+ * see the F1 pointer below HOME_STORAGE_CAPACITY.
  *
  * SEPARATION (standing rule): home storage is NOT personal
  * inventory. PersonalInventory (inventory.ts) is what she
@@ -13,7 +14,7 @@
  * HOUSE TYPES: keyed by the house recipe's item id (the same
  * vocabulary as RECIPES). Wattle-and-daub hut and woven cottage
  * are ONE ladder stage (merged 2026-10-25, in-game name 'Woven
- * Cottage'), so they share storage and protection values.
+ * Cottage'), so they share a storage value.
  *
  * STORAGE — in POUNDS since 2026-10-28 (Adam's standing ruling:
  * "pounds here and going forward"). The numerals below are
@@ -31,19 +32,16 @@
  * everything — future adds refuse, nothing is ever dropped
  * (same rule as the upgrade capacity rule).
  *
- * PROTECTION — lane-decided values for Background's hook:
- * Background's weather.ts takes shelter as a ShelterQuery
- * (x, z) => multiplier, 1 = unsheltered, lower = more
- * protected, and evaluates it where she STANDS against the
- * placed house's position (free placement — no zones, no
- * plots, pinned). This module supplies the values and the
- * query: shelterMultiplierFor(house) gives the multiplier at
- * the house, and createShelterQuery(placed) closes over a
- * placed house's coordinates. Radius is lane-decided
- * (SHELTER_RADIUS = 5 m, hard edge in v1 — no falloff curve
- * invented; falloff is a later refinement if Adam wants it).
- * Multiple placed houses: shelterMultiplierAt() takes the best
- * (lowest) multiplier of any house in range.
+ * PROTECTION — SETTLED ELSEWHERE (F1, 2026-11-02): one
+ * table only, the engine's (game/shelter.ts HOUSE_DEFS —
+ * lean-to 0.7 / thatch 0.5 / woven 0.35 / hut 0.2, radius
+ * 6 m, tents 0.85 at 2.5 m). This module's staged copy
+ * (thatch 0.55 / woven 0.4 / hut 0.25 / radius 5, plus its
+ * position query) is RETIRED — deleted, not dormant; the
+ * pointer stands below HOME_STORAGE_CAPACITY. Systems
+ * code that needs a shelter factor takes it as a composed
+ * fact (cold-wet's ColdWetFacts) or reads it at the shell
+ * seam; systems modules do not import game/.
  */
 
 import { ITEMS, RECIPES, type ItemId, type Recipe } from './recipes';
@@ -55,7 +53,7 @@ import {
 import type { CraftingInventory } from './crafting';
 
 // ---------------------------------------------------------------------------
-// House types, storage, protection
+// House types and storage
 // ---------------------------------------------------------------------------
 
 export type HouseItem =
@@ -80,35 +78,25 @@ export const HOME_STORAGE_CAPACITY: Readonly<Record<string, number>> = {
 };
 
 /**
- * Shelter exposure multiplier at the house (1 = unsheltered;
- * lower = more protected). LANE-DECIDED starting tunables for
- * Adam's pin pass, in Background's ShelterQuery shape.
- *
- * WIP — STAGED, NOT DEAD (Adam, 2026-10-31, answering the
- * code audit: "things not implemented yet get marked
- * WIP"): this protection half — SHELTER_PROTECTION,
- * SHELTER_RADIUS, shelterMultiplierFor, createShelterQuery,
- * shelterMultiplierAt — is NOT YET CALLED because cold and
- * wet are not implemented yet; it is the staged shelter
- * side of the cold/wet build, not an orphan. The live
- * shelter evaluation today is the engine's (game/shelter.ts,
- * HOUSE_DEFS), whose numbers DIFFER from these (multipliers
- * and radius). That divergence is a known, open pin-pass
- * item: when the cold/wet build wires this half, the two
- * sets are settled as ONE decision — one set of numbers
- * per fact — not before, and neither table is edited to
- * match the other in the meantime.
+ * F1 — SHELTER FACTORS LIVE IN ONE TABLE ONLY (settled
+ * 2026-11-02: Adam delegated the pick — 'We only need one
+ * table right?' — and DEV chose the engine's live table,
+ * the numbers her shelter has actually been computed with
+ * all along). The canonical factors are game/shelter.ts's
+ * HOUSE_DEFS (lean-to 0.7 / thatch 0.5 / woven cottage
+ * 0.35 / small wooden hut 0.2) with its SHELTER_RADIUS of
+ * 6 m and tents at 0.85 inside 2.5 m. This module's staged
+ * copy — SHELTER_PROTECTION (thatch 0.55 / a ghost
+ * wattle-and-daub row at 0.4 / woven 0.4 / hut 0.25),
+ * SHELTER_RADIUS 5, shelterMultiplierFor, and the
+ * position query built on them (PlacedHouse,
+ * createShelterQuery, shelterMultiplierAt) — is RETIRED:
+ * deleted, not dormant. It was never called (verified at
+ * retirement: no consumer in any lane); cold/wet takes
+ * its shelterMultiplier as a composed fact, and the
+ * sleeping bag's thatch anchor reads the same live table.
+ * Storage below is untouched — pounds are this module's.
  */
-export const SHELTER_PROTECTION: Readonly<Record<string, number>> = {
-  [ITEMS.primitiveLeanTo]: 0.7,
-  [ITEMS.thatchHut]: 0.55,
-  [ITEMS.wattleAndDaubHut]: 0.4,
-  [ITEMS.wovenCottage]: 0.4,
-  [ITEMS.smallWoodenHut]: 0.25,
-};
-
-/** Radius (metres) within which a placed house shelters. LANE-DECIDED. */
-export const SHELTER_RADIUS = 5;
 
 export function isHouseItem(item: ItemId): boolean {
   return item in HOME_STORAGE_CAPACITY;
@@ -234,66 +222,6 @@ export function consumeHomeUpgradePrice(
     consumed.push({ item, quantity: ingredient.quantity });
   }
   return { ok: true, from, to: next.rung, consumed };
-}
-
-export function shelterMultiplierFor(house: ItemId): number {
-  const multiplier = SHELTER_PROTECTION[house];
-  if (multiplier === undefined) {
-    throw new Error(`No shelter protection for ${house}: not a house.`);
-  }
-  return multiplier;
-}
-
-// ---------------------------------------------------------------------------
-// Position-keyed shelter query (Background's ShelterQuery shape)
-// ---------------------------------------------------------------------------
-
-export interface PlacedHouse {
-  x: number;
-  z: number;
-  house: ItemId;
-  /** Override for SHELTER_RADIUS, when a house warrants it. */
-  radius?: number;
-}
-
-/**
- * Build a ShelterQuery closing over one placed house: the
- * house's multiplier inside its radius, 1 (unsheltered) outside
- * it. Wiring passes this to weather's exposureAtPosition as
- * shelterQuery. Placement itself (where houses go) is
- * Background's entity side; this function only answers "how
- * sheltered is (x, z) given this placed house".
- */
-export function createShelterQuery(
-  placed: PlacedHouse,
-): (x: number, z: number) => number {
-  const multiplier = shelterMultiplierFor(placed.house);
-  const radius = placed.radius ?? SHELTER_RADIUS;
-  return (x: number, z: number): number => {
-    const dx = x - placed.x;
-    const dz = z - placed.z;
-    return dx * dx + dz * dz <= radius * radius ? multiplier : 1;
-  };
-}
-
-/**
- * Best (lowest) shelter multiplier across placed houses at
- * (x, z); 1 when no placed house is in range. For shells that
- * hold several houses without building a combined query.
- */
-export function shelterMultiplierAt(
-  placed: readonly PlacedHouse[],
-  x: number,
-  z: number,
-): number {
-  let best = 1;
-  for (const house of placed) {
-    const multiplier = createShelterQuery(house)(x, z);
-    if (multiplier < best) {
-      best = multiplier;
-    }
-  }
-  return best;
 }
 
 // ---------------------------------------------------------------------------

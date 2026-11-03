@@ -189,6 +189,38 @@ export interface ItemListSurfaceProps {
    * the card is the caller's. Omitted = no affordance.
    */
   onInfoItem?: (item: InventoryItem) => void;
+  /**
+   * SECTIONS (2026-11-02, Adam's ruling on the pile and
+   * storage dialogs): when passed, the list renders as
+   * accordion sections in this order — each item whose
+   * `section` names one stands inside it, and the
+   * ordering (sort + folds) applies WITHIN a section,
+   * never across the boundary. Search still filters the
+   * whole list; a section with no matching rows hides
+   * while a search stands. Omitted = the one flat list,
+   * exactly as before.
+   */
+  sections?: readonly ItemListSection[];
+  /**
+   * When passed with onSelectItem, only rows this
+   * predicate accepts render their name as a selection
+   * button (the rest read as plain text) — the storage
+   * dialog's pack rows stay selectable while its stored
+   * rows never were. Omitted = every row selectable.
+   */
+  selectable?: (item: InventoryItem) => boolean;
+}
+
+/** One accordion section of a sectioned list. */
+export interface ItemListSection {
+  /** Matches the rows' `section` stamp. */
+  id: string;
+  /** The header's name ('Pile', 'Lean-To storage'). */
+  title: string;
+  /** The header's totals line, caller-worded ('Pile · 7 lb'). */
+  meta?: string;
+  /** Line shown inside the section when it holds no rows. */
+  emptyText?: string;
 }
 
 export function ItemListSurface({
@@ -209,6 +241,8 @@ export function ItemListSurface({
   comfortable = false,
   theme = 'mire',
   onInfoItem,
+  sections,
+  selectable,
 }: ItemListSurfaceProps) {
   const t = UI_THEMES[theme];
   const actionBtn = comfortable
@@ -244,9 +278,12 @@ export function ItemListSurface({
   // verbatim): no sortMode = incoming order; Reverse
   // flips the active sort's flattened order — in
   // Grouped that reverses groups and contents together.
-  const orderedItems = ((): InventoryItem[] => {
-    if (sortMode === undefined) return visibleItems;
-    const list = [...visibleItems];
+  // SECTIONS: the same arithmetic runs per section, so
+  // an order never crosses a section boundary (Adam's
+  // ruling — the sections are the grouping that matters).
+  const orderList = (input: InventoryItem[]): InventoryItem[] => {
+    if (sortMode === undefined) return input;
+    const list = [...input];
     if (sortMode === 'recent') {
       const rank = new Map(
         (recencyOrder ?? []).map((id, index) => [id, index] as const),
@@ -270,14 +307,64 @@ export function ItemListSurface({
     }
     if (sortReversed) list.reverse();
     return list;
-  })();
+  };
+  const orderedItems = orderList(visibleItems);
+  // SECTION FOLDS: collapsed section ids, instance-local;
+  // ignored while searching (find-mode shows every match).
+  const [collapsedSections, setCollapsedSections] = useState<
+    ReadonlySet<string>
+  >(new Set());
+  const toggleSection = (id: string): void => {
+    setCollapsedSections((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+  const isSectionFolded = (id: string): boolean =>
+    !searching && collapsedSections.has(id);
+  // The partitions, in the caller's section order; rows
+  // stamped with no listed section gather last, unheaded.
+  const partitions =
+    sections === undefined
+      ? null
+      : sections.map((sec) => ({
+          sec,
+          items: orderList(
+            visibleItems.filter((item) => item.section === sec.id),
+          ),
+        }));
+  const orphanItems =
+    sections === undefined
+      ? []
+      : orderList(
+          visibleItems.filter(
+            (item) =>
+              !sections.some((sec) => sec.id === item.section),
+          ),
+        );
+  const displayItems =
+    partitions === null
+      ? orderedItems
+      : [
+          ...partitions.flatMap((part) => part.items),
+          ...orphanItems,
+        ];
   // VISIBLE ROWS + the digit list: folded-away rows are
   // not visible — no rendering, no badge, no dispatch.
   const isFoldedAway = (item: InventoryItem): boolean =>
     !searching &&
     sortMode === 'grouped' &&
     collapsed.has(item.category ?? 'Other');
-  const shownItems = orderedItems.filter((item) => !isFoldedAway(item));
+  const isSectionFoldedAway = (item: InventoryItem): boolean =>
+    sections !== undefined &&
+    item.section !== undefined &&
+    sections.some((sec) => sec.id === item.section) &&
+    isSectionFolded(item.section);
+  const shownItems = displayItems.filter(
+    (item) => !isFoldedAway(item) && !isSectionFoldedAway(item),
+  );
   const visibleVerbs: ItemListVisibleVerb[] = [];
   for (const item of shownItems) {
     for (const verb of verbsFor(item)) {
@@ -309,6 +396,9 @@ export function ItemListSurface({
   };
   const renderRow = (item: InventoryItem): ReactNode => {
     const selected = item.id === selectedItemId;
+    const canSelect =
+      onSelectItem !== undefined &&
+      (selectable === undefined || selectable(item));
     const nameInner = (
       <span className="flex items-center gap-1.5">
         {item.icon ? (
@@ -319,17 +409,22 @@ export function ItemListSurface({
     );
     return (
       <li
-        key={item.id}
+        // Section-qualified key: a sectioned list can
+        // hold the same kind in two sections (dirt in
+        // the store AND dirt in the pack) — a bare id
+        // key collides there and React mis-reconciles
+        // the rows on a fold toggle.
+        key={`${item.section ?? ''}:${item.id}`}
         className={
           'flex flex-col gap-y-1 @xl:col-span-3 @xl:grid @xl:grid-cols-subgrid @xl:items-center' +
           (item.note ? ' @xl:row-span-2 @xl:grid-rows-subgrid' : '')
         }
       >
         <div className="flex flex-wrap items-center gap-x-2 @xl:contents">
-          {onSelectItem ? (
+          {canSelect ? (
             <button
               type="button"
-              onClick={() => onSelectItem(item.id)}
+              onClick={() => onSelectItem?.(item.id)}
               aria-pressed={selected}
               className={
                 'min-w-[8ch] flex-1 rounded px-2 py-1 text-left @xl:col-start-1 @xl:row-start-1 ' +
@@ -356,11 +451,11 @@ export function ItemListSurface({
         </div>
         {item.note ? (
           <span
-            onClick={onSelectItem ? () => onSelectItem(item.id) : undefined}
+            onClick={canSelect ? () => onSelectItem?.(item.id) : undefined}
             className={
               'block rounded-b px-2 pb-1 text-sm @xl:col-start-1 @xl:row-start-2 ' +
-              (onSelectItem ? 'cursor-pointer ' : '') +
-              (selected && onSelectItem ? t.selected + ' ' : '') +
+              (canSelect ? 'cursor-pointer ' : '') +
+              (selected && canSelect ? t.selected + ' ' : '') +
               t.muted
             }
           >
@@ -427,37 +522,95 @@ export function ItemListSurface({
   // Rows in display order, with Grouped's category
   // headings interleaved — headings are FOLD TOGGLES:
   // a folded heading renders alone, its rows withheld.
-  const rows: ReactNode[] = [];
-  orderedItems.forEach((item, index) => {
-    if (sortMode === 'grouped') {
-      const category = item.category ?? 'Other';
-      const previous =
-        index > 0 ? (orderedItems[index - 1].category ?? 'Other') : null;
-      if (category !== previous) {
-        const folded = !searching && collapsed.has(category);
-        rows.push(
-          <li
-            key={`category:${category}`}
-            className="@xl:col-span-3"
-          >
-            <button
-              type="button"
-              aria-expanded={!folded}
-              onClick={() => toggleFold(category)}
-              className={
-                'w-full pt-1 text-left text-xs font-semibold uppercase tracking-wide ' +
-                t.muted
-              }
+  const buildRows = (list: InventoryItem[]): ReactNode[] => {
+    const built: ReactNode[] = [];
+    list.forEach((item, index) => {
+      if (sortMode === 'grouped') {
+        const category = item.category ?? 'Other';
+        const previous =
+          index > 0 ? (list[index - 1].category ?? 'Other') : null;
+        if (category !== previous) {
+          const folded = !searching && collapsed.has(category);
+          built.push(
+            <li
+              key={`category:${item.section ?? ''}:${category}`}
+              className="@xl:col-span-3"
             >
-              <span aria-hidden="true">{folded ? '▸ ' : '▾ '}</span>
-              {category}
-            </button>
-          </li>,
-        );
+              <button
+                type="button"
+                aria-expanded={!folded}
+                onClick={() => toggleFold(category)}
+                className={
+                  'w-full pt-1 text-left text-xs font-semibold uppercase tracking-wide ' +
+                  t.muted
+                }
+              >
+                <span aria-hidden="true">{folded ? '▸ ' : '▾ '}</span>
+                {category}
+              </button>
+            </li>,
+          );
+        }
       }
-    }
-    if (!isFoldedAway(item)) rows.push(renderRow(item));
-  });
+      if (!isFoldedAway(item)) built.push(renderRow(item));
+    });
+    return built;
+  };
+  const rows: ReactNode[] =
+    partitions === null
+      ? buildRows(orderedItems)
+      : [
+          ...partitions.flatMap((part, partIndex) => {
+            // While searching, a section with no matches
+            // hides whole — header included.
+            if (searching && part.items.length === 0) return [];
+            const folded = isSectionFolded(part.sec.id);
+            const header = (
+              <li
+                key={`section:${part.sec.id}`}
+                className="@xl:col-span-3"
+              >
+                <button
+                  type="button"
+                  aria-expanded={!folded}
+                  onClick={() => toggleSection(part.sec.id)}
+                  className={
+                    'flex w-full items-baseline justify-between gap-2 pt-2 text-left ' +
+                    (partIndex > 0
+                      ? 'border-t border-stone-700/50 '
+                      : '')
+                  }
+                >
+                  <span className={'text-sm font-semibold ' + t.heading}>
+                    <span aria-hidden="true">{folded ? '▸ ' : '▾ '}</span>
+                    {part.sec.title}
+                  </span>
+                  {part.sec.meta ? (
+                    <span className={'text-xs ' + t.muted}>
+                      {part.sec.meta}
+                    </span>
+                  ) : null}
+                </button>
+              </li>
+            );
+            if (folded) return [header];
+            if (part.items.length === 0) {
+              return [
+                header,
+                <li
+                  key={`section-empty:${part.sec.id}`}
+                  className="@xl:col-span-3"
+                >
+                  <p className={'italic ' + t.muted}>
+                    {part.sec.emptyText ?? 'Nothing here.'}
+                  </p>
+                </li>,
+              ];
+            }
+            return [header, ...buildRows(part.items)];
+          }),
+          ...buildRows(orphanItems),
+        ];
   return (
     <>
       {items.length > 0 ? (

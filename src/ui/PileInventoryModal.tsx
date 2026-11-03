@@ -53,16 +53,16 @@ export interface PileInventoryModalProps {
   title: string;
   /**
    * The pile's total weight line (PILE WEIGHTS,
-   * 2026-11-01), caller's words (e.g. "Pile: 7 lb"):
-   * renders under the header. Omitted = no line.
+   * 2026-11-01), caller's words (e.g. "7 lb"): since
+   * the sections landing it rides the Pile section's
+   * header as its meta. Omitted = no meta.
    */
   totalText?: string;
   /**
    * Her carrying line in the pack's own words (e.g.
-   * "Carrying 3 lb / 10 lb"), caller-supplied: renders
-   * beside the total under the header, so the modal
-   * answers "what's here" and "what am I holding"
-   * in one glance. Omitted = no line.
+   * "Carrying 3 lb / 10 lb"), caller-supplied: since
+   * the sections landing it rides the Your pack
+   * section's header as its meta. Omitted = no meta.
    */
   carryingText?: string;
   /** The pile's kinds + carried kinds, as unified item rows. */
@@ -94,6 +94,16 @@ export interface PileInventoryModalProps {
   categoryOrder?: readonly string[];
   /** Look for the modal. Default "mire". */
   theme?: UiThemeName;
+  /**
+   * THE DISAMBIGUATION RIDER (2026-11-02): when the pile
+   * stands within a home's shelter, the house's display
+   * name — the modal then says plainly that this is a
+   * ground pile, NOT that house's storage, and offers
+   * the door to it. Omitted = the pile stands alone.
+   */
+  atHomeName?: string;
+  /** Opens the named house's storage dialog. */
+  onOpenStorage?: () => void;
 }
 
 export function PileInventoryModal({
@@ -112,6 +122,8 @@ export function PileInventoryModal({
   onSortChange,
   categoryOrder,
   theme = 'mire',
+  atHomeName,
+  onOpenStorage,
 }: PileInventoryModalProps) {
   const t = UI_THEMES[theme];
   return (
@@ -130,18 +142,32 @@ export function PileInventoryModal({
         </button>
       </div>
       <VineDivider className="mb-2" />
-      {totalText || carryingText ? (
-        <div className="mb-2 flex flex-wrap items-baseline gap-x-3 text-xs">
-          {totalText ? (
-            <span className={'font-semibold ' + t.heading}>{totalText}</span>
-          ) : null}
-          {carryingText ? <span className={t.muted}>{carryingText}</span> : null}
-        </div>
-      ) : null}
       <p className={'mb-2 text-xs ' + t.muted}>
         ↑ Pick up one · ↑↑ Pick up all · ↓ Drop one here · ↓↓ Drop all here
       </p>
+      {atHomeName ? (
+        <div className="mb-2 rounded bg-black/30 px-2 py-1">
+          <p className="text-xs">
+            A ground pile — not the {atHomeName}&rsquo;s storage.
+          </p>
+          {onOpenStorage ? (
+            <button
+              type="button"
+              onClick={onOpenStorage}
+              className={
+                'mt-1 rounded bg-moss-deep px-2 py-1 text-xs hover:bg-moss'
+              }
+            >
+              Open {atHomeName} storage
+            </button>
+          ) : null}
+        </div>
+      ) : null}
       <ItemListSurface
+        sections={[
+          { id: 'pile', title: 'Pile', meta: totalText },
+          { id: 'pack', title: 'Your pack', meta: carryingText },
+        ]}
         items={items}
         onInfoItem={onInfoItem}
         verbsFor={verbsFor}
