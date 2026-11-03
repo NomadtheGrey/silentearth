@@ -177,6 +177,18 @@ export const ITEMS = {
   // The first salve (2026-11-03 — the feral build's other
   // half; brewed at the cauldron from hive goods).
   salve: 'salve',
+  // Twilight fungus + its rendered dose (2026-11-03 —
+  // the glow-moss road's first piece; the fungus itself
+  // is the source, Adam's fork: 'if twilight fungus
+  // glows, we can use it').
+  twilightFungus: 'twilight-fungus',
+  glowDose: 'glow-dose',
+  // The douse-ables (2026-11-03 — the salves + moss
+  // batch's second half; scent.ts owns their system).
+  repellent: 'repellent',
+  preyLure: 'prey-lure',
+  predatorLure: 'predator-lure',
+  wash: 'wash',
   // Camping (2026-10-28 — sleeping bag + tent; see camping.ts).
   sleepingBag: 'sleeping-bag',
   tent: 'tent',
@@ -623,6 +635,80 @@ const DRAFT_RECIPES: Recipe[] = [
       'and the companion mend multiplier ' +
       '(SALVE_MEND_MULTIPLIER, companions.ts). Quantities ' +
       'draft.',
+  },
+  {
+    id: 'glow-dose',
+    name: 'Glow Dose',
+    status: 'draft',
+    output: { item: ITEMS.glowDose, quantity: 3 },
+    station: 'hand',
+    ingredients: [i(ITEMS.twilightFungus, 1)],
+    useLine: 'Painted on a cave wall — still glowing there',
+    notes:
+      'DRAFT (2026-11-03, the glow-moss road, piece one). ' +
+      'One clump of twilight fungus — harvested where it ' +
+      'grows, at the cave mouths (Background\'s harvest ' +
+      'points) — renders by hand into THREE doses of ' +
+      'glowing paint, the salve\'s payout idiom: the ' +
+      'preparation is the involved part, so one clump ' +
+      'pays out. A dose paints one stretch of cave wall ' +
+      '(UI\'s apply door; the paint\'s per-cave seat and ' +
+      'the glow itself are Background\'s half). Quantities ' +
+      'draft.',
+  },
+  {
+    id: 'repellent',
+    name: 'Repellent',
+    status: 'draft',
+    output: { item: ITEMS.repellent, quantity: 2 },
+    station: 'cauldron',
+    ingredients: [i(ITEMS.tallow, 1), i('poison-mushroom', 1)],
+    useLine: 'Doused herself in it — ferals keep their distance',
+    notes:
+      'DRAFT (2026-11-03, the douse-ables; scent.ts). ' +
+      'Rancid tallow and a poison mushroom, rendered in ' +
+      'the cauldron: she smells WRONG to a hunting nose. ' +
+      'While it stands, ferals will not initiate around ' +
+      'her (PINNED scope: ferals only — the bond road ' +
+      'never fights the bottle). One scent at a time; ' +
+      'the wash strips it. Quantities draft.',
+  },
+  {
+    id: 'prey-lure',
+    name: 'Prey Lure',
+    status: 'draft',
+    output: { item: ITEMS.preyLure, quantity: 2 },
+    station: 'cauldron',
+    ingredients: [i('acorns', 2), i(ITEMS.honey, 1)],
+    useLine: 'Doused herself in it — prey drifts closer',
+    notes:
+      'DRAFT (2026-11-03, the douse-ables; scent.ts). ' +
+      'Acorns and honey — sweet feed, the smell of an ' +
+      'easy meal for the deer-and-rabbit family; the ' +
+      'attractor state carries category \'prey\' and ' +
+      'Background\'s ambient draw reads it. One scent ' +
+      'at a time. (Birds are OUT of the brews — Adam: a ' +
+      'sprinkle of seeds may do for birds; to-do list, ' +
+      'not this build.) Quantities draft.',
+  },
+  {
+    id: 'predator-lure',
+    name: 'Predator Lure',
+    status: 'draft',
+    output: { item: ITEMS.predatorLure, quantity: 2 },
+    station: 'cauldron',
+    ingredients: [i(ITEMS.fishCarcass, 1), i(ITEMS.tallow, 1)],
+    useLine: 'Doused herself in it — predators drift closer',
+    notes:
+      'DRAFT (2026-11-03, the douse-ables; scent.ts; ' +
+      'Systems-priced table). Fish carcass and tallow — ' +
+      'meat and fat, a kill\'s smell carried on the ' +
+      'wind; the attractor state carries category ' +
+      '\'predator\'. A dangerous bottle beside the ' +
+      'feral build: what it draws includes what can ' +
+      'turn feral — the fairness machines still hold ' +
+      '(a drawn feral warns first, as always). ' +
+      'Quantities draft.',
   },
   {
     id: 'candle-from-tallow',

@@ -13,7 +13,7 @@
  * YIELD RULES (from the task brief, not invented here):
  * - Yields use the item vocabulary in src/data/world_data.json
  *   (SNAP_WOOD, TENDER_VINES, PEAT_MOSS, RIVER_SLUDGE, RIVER_STONE, BONE,
- *   SALT_CRYSTAL, DOWNED_OAK, SPORES, DRY_KINDLING, STUMP) plus CLAY —
+ *   DOWNED_OAK, SPORES, DRY_KINDLING, STUMP) plus CLAY —
  *   the one exception, and it is Adam's, not this file's: clay is the
  *   pinned new item reserved for pottery/bricks (2026-10-25; Systems
  *   recipes already spend it), and per Adam's 2026-10-26 ruling it is
@@ -112,7 +112,6 @@ export type ItemId =
   | 'RIVER_STONE'
   | 'FLINT'
   | 'BONE'
-  | 'SALT_CRYSTAL'
   | 'DOWNED_OAK'
   | 'SPORES'
   | 'DRY_KINDLING'
@@ -146,7 +145,14 @@ export type ItemId =
   | 'wood-violet'
   | 'creek-iris'
   | 'white-water-lily'
-  | 'meadow-flower';
+  | 'meadow-flower'
+  /**
+   * The twilight fungus clump (glow-moss build,
+   * 2026-11-03): the item id is Systems' inventory key,
+   * verbatim — the yield below and their ITEMS row meet
+   * on this string.
+   */
+  | 'twilight-fungus';
 
 /**
  * Tool ladder stages for tool-gated yields (the garden trowel and its
@@ -1841,9 +1847,25 @@ export const SOURCES: HarvestSourceDef[] = [
     description:
       'A pale-glowing fungus that grows where the cave ' +
       'still remembers the entrance (Adam, 2026-10-30). ' +
-      'Its light reaches a few steps, no farther.',
-    harvestable: false,
-    permitTier: null,
+      'Its light reaches a few steps, no farther. It can ' +
+      'be picked: rendered down, the clump makes the ' +
+      'glow doses she paints her own light with (the ' +
+      'glow-moss build, 2026-11-03 — Adam\'s fork: if ' +
+      'twilight fungus glows, we can use it).',
+    // HARVESTABLE (2026-11-03): the world's standing
+    // depletion model carries it — a picked clump SHRINKS
+    // and regrows on the per-kind span (3 game days,
+    // harvestState's table), and while it regrows its
+    // light is OUT (the renderer filters shrunk spots):
+    // she can strip her own entry light for doses.
+    harvestable: true,
+    permitTier: 'hand',
+    // Exactly one clump per pick (fixedYield): the entry
+    // well is a handful of clumps per cave, and Systems'
+    // render recipe already triples it into doses.
+    // DRAFT price, for Adam's pin pass.
+    fixedYield: true,
+    primaryYield: 'twilight-fungus',
     secondaryYields: [],
     provenance: 'draft',
     biomes: ['deepBog'],

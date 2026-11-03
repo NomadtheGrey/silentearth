@@ -63,7 +63,8 @@ import {
 import { standingInWater, terrainSpeedAt, WADING_FACTOR, type WaterDisc } from './movement';
 import { riverParamsFor, riverRibbonForChunk } from './river';
 import { barnSite, caveMouthSite, chapelSite, drownedMillSite, farmhouseSite, generalStoreSite, groveSite, pushOutOfWalls, railSidingSite, schoolhouseSite, siloSite, sunkenRoadSite, villageSite, wallsNearSites, type SiteFootprint } from './sites';
-import { caveFootprintFor, caveInstancesInRect, caveLayoutForKey, caveMouthsNear } from './caves';
+import { caveFootprintFor, caveInstancesInRect, caveLayoutForKey, caveMouthsNear, caveSurfaceAim, type CaveSurfaceHit } from './caves';
+import { mossPaintState } from './mossPaintState';
 import { isUpstairsKey, UPSTAIRS_BACKGROUND, UPSTAIRS_FOG_DENSITY } from './attics';
 import { homesteadInstancesInRect } from './homesteads';
 import { farmhouseInstancesInRect } from './farmhouses';
@@ -490,6 +491,72 @@ export const FOG_DENSITY = 0.008;
 /** Rain fog lift at full intensity (W1, DRAFT): standing
  *  rain thickens the air by this factor over the base. */
 export const RAIN_FOG_LIFT = 0.6;
+/**
+ * SWAMP FOG (Adam via DEV, 2026-11-03): fog as a PLACE ×
+ * WEATHER composition, priced here, all DRAFT for his
+ * pin pass. PLACE: the murk weight of the ground under
+ * her — deepBog full, fen and mirewood near-full,
+ * creekBottom a margin's worth (creek banks, pond and
+ * river edges read through it). WEATHER: wet spells
+ * complete the murk; a dry spell leaves it at
+ * SWAMP_DRY_FLOOR of its lift (thinned, not gone). Wet
+ * weather also LENDS light fog to ordinarily-clear
+ * country (meadow/forest after rain, a misty morning
+ * after a wet night) — capped by FOG_LENT_DENSITY. The
+ * DRY-UPLAND BOUNDARY (my price of Adam's open edge):
+ * scrub and rise tops carry no place weight and no lent
+ * weight — they stay clear except in the HEAVIEST rain
+ * (rainIntensity past SWAMP_SPILL_RAIN), which spills a
+ * little fog everywhere.
+ */
+export const SWAMP_FOG_LIFT = 1.4;
+export const SWAMP_DRY_FLOOR = 0.45;
+export const FOG_LENT_DENSITY = 0.0025;
+export const SWAMP_SPILL_RAIN = 0.85;
+/** Trailing-wetness time constants (seconds): the ground
+ *  wets up over ~2 min of rain and dries over ~20 — the
+ *  'morning after a wet night' memory. Presentation only;
+ *  nothing saves it. */
+export const WETNESS_RISE_S = 120;
+export const WETNESS_DRY_S = 1200;
+
+/** The murk weight of a place (0..1) from its biome weights. */
+export function swampPlaceWeight(w: {
+  deepBog: number;
+  fen: number;
+  mirewood: number;
+  creekBottom: number;
+}): number {
+  return Math.min(1, w.deepBog + 0.9 * w.fen + 0.9 * w.mirewood + 0.35 * w.creekBottom);
+}
+
+/**
+ * The composed surface fog density (pure; the frame loop
+ * feeds it). Order: the standing base + rain lift, the
+ * swamp lift on top, the lent fog added, the bat's night
+ * thinning last over the whole — as it always composed.
+ */
+export function surfaceFogDensity(input: {
+  rainIntensity: number;
+  wetness: number;
+  weights: {
+    deepBog: number; fen: number; mirewood: number; creekBottom: number;
+    meadow: number; forest: number;
+  };
+  batFactor: number;
+}): number {
+  const { rainIntensity, wetness, weights } = input;
+  let density = FOG_DENSITY * (1 + RAIN_FOG_LIFT * rainIntensity);
+  const place = swampPlaceWeight(weights);
+  const wet = Math.min(1, 0.7 * rainIntensity + 0.6 * wetness);
+  density *= 1 + SWAMP_FOG_LIFT * place * (SWAMP_DRY_FLOOR + (1 - SWAMP_DRY_FLOOR) * wet);
+  const clearCountry = Math.min(1, weights.meadow + weights.forest);
+  density += FOG_LENT_DENSITY * clearCountry * wet;
+  if (rainIntensity > SWAMP_SPILL_RAIN) {
+    density += FOG_LENT_DENSITY * ((rainIntensity - SWAMP_SPILL_RAIN) / (1 - SWAMP_SPILL_RAIN));
+  }
+  return density * input.batFactor;
+}
 /** Precipitation rig sizes (W1, DRAFT presentation). */
 export const RAIN_STREAK_COUNT = 650;
 export const RAIN_SPLASH_COUNT = 220;
@@ -506,6 +573,18 @@ export const FUNGUS_LIGHT_COLOR = 0x9fd8c8;
 export const FUNGUS_LIGHT_INTENSITY = 12;
 export const FUNGUS_LIGHT_DISTANCE = 9;
 export const FUNGUS_LIGHT_DECAY = 2;
+/**
+ * THE GLOW BUDGET (glow-moss build, 2026-11-03; Adam
+ * settled the shape: 'we'll go with your idea for
+ * lighting'): wherever glow spots live — grown fungus
+ * or her painted marks — the NEAREST this many get real
+ * PointLights on the fungus profile; everything beyond
+ * reads emissive only. A SELECTION rule, not a cave
+ * rule. The dozen is a DRAFT number for his pin pass.
+ */
+export const GLOW_LIGHT_BUDGET = 12;
+/** A painted mark's disc radius (visual only). DRAFT. */
+export const PAINT_DISC_R_M = 0.8;
 /**
  * Bat wing bone — night way-finding (tier-1 charm, DRAFT
  * flagged): fog density factor at full night while carried
@@ -626,6 +705,19 @@ export class WorldRenderer {
    *  while the cave dimension is active — dimensions,
    *  2026-10-30). */
   private fungusLights: THREE.PointLight[] = [];
+  /** The glow-paint disc group (glow-moss build, 2026-11-03):
+   *  one soft disc per seated patch in the active cave
+   *  dimension, rebuilt with the glow selection. */
+  private mossPaintGroup: THREE.Group | null = null;
+  /** The active cave dimension's glow context (seed + key),
+   *  held so bus-triggered rebuilds (a patch seated, a
+   *  fungus picked) re-derive the same glow. */
+  private caveGlow: { seed: string; key: string } | null = null;
+  private unsubMossPainted: (() => void) | null = null;
+  private unsubGlowHarvest: (() => void) | null = null;
+  /** Trailing ground wetness 0..1 (swamp fog's weather
+   *  memory; presentation only, never saved). */
+  private groundWetness = 0;
   /** The village smoke column (scene-level billboards, rebuilt on world change). */
   private smokeGroup: THREE.Group | null = null;
   private smokeSprites: THREE.Sprite[] = [];
@@ -746,7 +838,7 @@ export class WorldRenderer {
    * no encounter can form: the ambient world is the
    * whole story, byte-identical to before.
    */
-  private feralFactsProvider: ((a: AnimalInstance) => { defenderPos: { x: number; z: number } | null } | null) | null = null;
+  private feralFactsProvider: ((a: AnimalInstance) => { defenderPos: { x: number; z: number } | null; repelled?: boolean } | null) | null = null;
   /** Her injury movement factor (DEV's ruling: engine-
    *  side, composed at the terrain speed query's seat).
    *  The shell sets it from her stage; 1 = sound. */
@@ -900,6 +992,17 @@ export class WorldRenderer {
       if (!this.chunks.has(key)) return;
       this.unloadChunk(p.cx, p.cz);
       this.loadChunk(p.cx, p.cz);
+    });
+    // Glow rebuilds (glow-moss build, 2026-11-03): a patch
+    // seated in the active cave dimension, or a scatter
+    // pick underground (a picked fungus stops glowing —
+    // the filter changed), re-derives the glow selection
+    // around where she stands.
+    this.unsubMossPainted = bus.on('moss:painted', (p) => {
+      if (this.caveGlow && p.dimensionKey === this.caveGlow.key) this.rebuildCaveGlow();
+    });
+    this.unsubGlowHarvest = bus.on('harvest:completed', (p) => {
+      if (this.caveGlow && p.kind === 'scatter') this.rebuildCaveGlow();
     });
     // Feral resolutions (2026-11-03): the shell resolves
     // a contact through Systems' ledger and reports the
@@ -1691,7 +1794,7 @@ export class WorldRenderer {
   }
 
   /** Register the shell's feral-facts provider (2026-11-03): see the field's note. */
-  setFeralFactsProvider(fn: ((a: AnimalInstance) => { defenderPos: { x: number; z: number } | null } | null) | null): void {
+  setFeralFactsProvider(fn: ((a: AnimalInstance) => { defenderPos: { x: number; z: number } | null; repelled?: boolean } | null) | null): void {
     this.feralFactsProvider = fn;
   }
 
@@ -2153,6 +2256,8 @@ export class WorldRenderer {
   private rebuildFungusLights(seed: string | null, key?: string, seat?: DimensionSeat): void {
     for (const light of this.fungusLights) this.scene.remove(light);
     this.fungusLights = [];
+    this.caveGlow = null;
+    this.disposeMossPaintGroup();
     if (!seed) return;
     if (seat?.lightSpots) {
       // A seated dimension (upstairs): its spots arrive
@@ -2173,18 +2278,131 @@ export class WorldRenderer {
       }
       return;
     }
-    for (const spot of caveLayoutForKey(seed, key ?? 'cave:main').fungusLights) {
+    // The cave dimension proper: the glow composes grown
+    // fungus (minus what she has picked — a regrowing
+    // clump gives NO light, the trade made visible) with
+    // her painted marks, under the one budget. The
+    // context is held so bus rebuilds re-derive it.
+    this.caveGlow = { seed, key: key ?? 'cave:main' };
+    this.rebuildCaveGlow();
+  }
+
+  private disposeMossPaintGroup(): void {
+    if (!this.mossPaintGroup) return;
+    this.scene.remove(this.mossPaintGroup);
+    this.mossPaintGroup.traverse((o) => {
+      const mesh = o as THREE.Mesh;
+      if (mesh.geometry) mesh.geometry.dispose();
+      const mat = mesh.material as THREE.Material | undefined;
+      if (mat) mat.dispose();
+    });
+    this.mossPaintGroup = null;
+  }
+
+  /**
+   * (Re)build the active cave dimension's glow (2026-11-03):
+   * every glow spot — unshrunk fungus + seated paint —
+   * competes for the GLOW_LIGHT_BUDGET nearest her; the
+   * winners get PointLights on the fungus profile. Paint
+   * discs render for EVERY patch regardless (emissive
+   * only beyond the budget): a soft disc on its surface,
+   * floor discs flat, wall discs on the wall's plane,
+   * ceiling discs facing down.
+   */
+  private rebuildCaveGlow(): void {
+    if (!this.caveGlow) return;
+    const { seed, key } = this.caveGlow;
+    for (const light of this.fungusLights) this.scene.remove(light);
+    this.fungusLights = [];
+    this.disposeMossPaintGroup();
+    const now = Date.now();
+    const layout = caveLayoutForKey(seed, key);
+    interface GlowSpot { x: number; y: number; z: number }
+    const spots: GlowSpot[] = [];
+    for (const spot of layout.fungusLights) {
+      const targetId = scatterTargetId(
+        Math.floor(spot.x / CHUNK_SIZE),
+        Math.floor(spot.z / CHUNK_SIZE),
+        { kind: 'twilightFungus', x: spot.x, z: spot.z },
+      );
+      if (harvestState.isRegrowing(targetId, now)) continue;
+      spots.push({ x: spot.x, y: 0.6, z: spot.z });
+    }
+    const patches = mossPaintState.patchesFor(key);
+    for (const p of patches) {
+      if (p.surface === 'floor') spots.push({ x: p.x, y: 0.6, z: p.z });
+      else if (p.nx === 0 && p.nz === 0) spots.push({ x: p.x, y: p.y - 0.5, z: p.z });
+      else spots.push({ x: p.x + p.nx * 0.5, y: p.y, z: p.z + p.nz * 0.5 });
+    }
+    const hx = this.player?.x ?? 0;
+    const hz = this.player?.z ?? 0;
+    spots.sort((a, b) => Math.hypot(a.x - hx, a.z - hz) - Math.hypot(b.x - hx, b.z - hz));
+    for (const spot of spots.slice(0, GLOW_LIGHT_BUDGET)) {
       const light = new THREE.PointLight(
         FUNGUS_LIGHT_COLOR,
         FUNGUS_LIGHT_INTENSITY,
         FUNGUS_LIGHT_DISTANCE,
         FUNGUS_LIGHT_DECAY,
       );
-      light.position.set(spot.x, 0.6, spot.z);
+      light.position.set(spot.x, spot.y, spot.z);
       light.userData.phase = flamePhase(spot.x, spot.z);
       this.scene.add(light);
       this.fungusLights.push(light);
     }
+    if (patches.length > 0) {
+      const group = new THREE.Group();
+      const geo = new THREE.CircleGeometry(PAINT_DISC_R_M, 20);
+      for (const p of patches) {
+        const mat = new THREE.MeshBasicMaterial({
+          color: FUNGUS_LIGHT_COLOR,
+          transparent: true,
+          opacity: 0.5,
+          depthWrite: false,
+        });
+        const disc = new THREE.Mesh(geo, mat);
+        if (p.surface === 'floor') {
+          disc.rotation.x = -Math.PI / 2;
+          disc.position.set(p.x, p.y + 0.02, p.z);
+        } else if (p.nx === 0 && p.nz === 0) {
+          disc.rotation.x = Math.PI / 2;
+          disc.position.set(p.x, p.y - 0.02, p.z);
+        } else {
+          disc.position.set(p.x + p.nx * 0.03, p.y, p.z + p.nz * 0.03);
+          disc.lookAt(p.x + p.nx, p.y, p.z + p.nz);
+        }
+        group.add(disc);
+      }
+      this.scene.add(group);
+      this.mossPaintGroup = group;
+    }
+  }
+
+  /**
+   * THE FACED-SURFACE READ (glow-moss build, 2026-11-03):
+   * what cave surface the crosshair faces within
+   * maxDistM — cave-local point, surface, axis normal,
+   * distance — or null (not in a cave dimension, or
+   * nothing faced in reach). Consumed through the shell's
+   * renderer ref by the dose's door: tsc does NOT check
+   * this signature (AGENTS.md) — the assembled drive is
+   * its proof.
+   */
+  aimAtCaveSurface(maxDistM: number): CaveSurfaceHit | null {
+    const key = this.gen.dimensionKey;
+    if (!key) return null;
+    const layout = caveLayoutForKey(this.gen.seed, key);
+    const dir = new THREE.Vector3();
+    this.camera.getWorldDirection(dir);
+    return caveSurfaceAim(
+      layout,
+      this.camera.position.x,
+      this.camera.position.y,
+      this.camera.position.z,
+      dir.x,
+      dir.y,
+      dir.z,
+      maxDistM,
+    );
   }
 
   get loadedChunkCount(): number {
@@ -2199,6 +2417,10 @@ export class WorldRenderer {
     this.disposed = true;
     this.unsubHarvestCompleted?.();
     this.unsubHarvestCompleted = null;
+    this.unsubMossPainted?.();
+    this.unsubMossPainted = null;
+    this.unsubGlowHarvest?.();
+    this.unsubGlowHarvest = null;
     for (const unsub of this.unsubPlaced) unsub();
     this.unsubPlaced = [];
     this.proximity.dispose();
@@ -3644,7 +3866,14 @@ export class WorldRenderer {
               (s) => Math.hypot(a.x - s.x, a.z - s.z) - Math.hypot(s.hx, s.hz) <= FERAL_SAFE_HOUSE_M,
             );
             feral = {
-              suppressed: nearSpawn || nearHouse,
+              // The repellent (douse build, 2026-11-03):
+              // the shell wraps Systems' isRepelling()
+              // read into its optional 'repelled' flag, and
+              // it ORs into suppression here — personal
+              // suppression beside safe country, exactly
+              // the seam as named. Nothing here re-derives
+              // the scent's clock; the fact arrives whole.
+              suppressed: nearSpawn || nearHouse || shellFacts.repelled === true,
               playerInside: feralPlayerInside,
               defenderPos: shellFacts.defenderPos,
             };
@@ -4060,12 +4289,30 @@ export class WorldRenderer {
           : CAVE_FOG_DENSITY;
       } else {
         const night = this.sky?.nightFactor ?? 0;
-        // Standing rain thickens the air (W1, DRAFT lift),
-        // under the bat's thinning as before.
-        const base = FOG_DENSITY * (1 + RAIN_FOG_LIFT * wf.rainIntensity);
-        fog.density = this.batNightWayfinding
-          ? base * (1 - (1 - BAT_FOG_FACTOR) * night)
-          : base;
+        // Trailing wetness (swamp fog, 2026-11-03): the
+        // ground wets toward the standing rain fast and
+        // dries slowly — presentation state only.
+        const target = wf.rainIntensity;
+        const tau = target > this.groundWetness ? WETNESS_RISE_S : WETNESS_DRY_S;
+        this.groundWetness += (target - this.groundWetness) * Math.min(1, dt / tau);
+        // Place × weather (Adam's composition): the murk
+        // of the ground under her, completed or thinned
+        // by the weather, lent lightly to clear country
+        // after rain — under the bat's thinning as before.
+        const w = this.gen.weightsAt(this.player.x, this.player.z).weights;
+        fog.density = surfaceFogDensity({
+          rainIntensity: wf.rainIntensity,
+          wetness: this.groundWetness,
+          weights: {
+            deepBog: w.deepBog ?? 0,
+            fen: w.fen ?? 0,
+            mirewood: w.mirewood ?? 0,
+            creekBottom: w.creekBottom ?? 0,
+            meadow: w.meadow ?? 0,
+            forest: w.forest ?? 0,
+          },
+          batFactor: this.batNightWayfinding ? 1 - (1 - BAT_FOG_FACTOR) * night : 1,
+        });
       }
     }
 

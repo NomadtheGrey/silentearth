@@ -31,13 +31,12 @@
  * wants fuel (wood over time, a burn-down clock), that is a
  * later addition on top of this state, not a correction to it.
  *
- * CANDLE FLAG — DO NOT ASSUME (Adam's brief, explicit): she
- * walks around with a candle (avatar flame). This module does
- * NOT assume the candle lights fires or cooks: there is no
- * candle lighting method, and no cook path takes a candle.
- * Candle = light only, unless Adam rules it a fire-starter.
- * That call is flagged here and in the landing report; the code
- * invents nothing about it either way.
+ * CANDLE — RULED (Adam, 2026-11-03): the carried candle IS
+ * a fire-starter (see LightingMethod 'candle' below — an
+ * open flame, no striking, priced a beat faster than
+ * flint, DRAFT). Cooking stays OUT (DEV, same word): a
+ * candle is a flame, not a stove — no cook path takes a
+ * candle, and none ever opens here without a new ruling.
  *
  * WHAT A FIRE IS HERE: FireState is one fire's state (a campfire
  * or hearth the player built and placed — placement itself is
@@ -72,7 +71,7 @@ import { normalizeItemId } from './inventory';
 // Lighting — lane-decided starting tunables (NOT pinned)
 // ---------------------------------------------------------------------------
 
-export type LightingMethod = 'flint' | 'sticks';
+export type LightingMethod = 'flint' | 'sticks' | 'candle';
 
 /**
  * Seconds to light, by method. LANE-DECIDED: flint 3 s (fast —
@@ -82,6 +81,11 @@ export type LightingMethod = 'flint' | 'sticks';
 export const LIGHTING_SECONDS: Readonly<Record<LightingMethod, number>> = {
   flint: 3,
   sticks: 25,
+  // Adam (2026-11-03): the candle is a fire-starter,
+  // 'flint-class speed or better' — priced 2 s, one
+  // beat faster than flint: the flame is already lit,
+  // there is nothing to strike. DRAFT.
+  candle: 2,
 };
 
 /**
@@ -100,6 +104,9 @@ export const LIGHTING_COST_ITEM: Readonly<
 > = {
   flint: ITEMS.flint,
   sticks: ITEMS.dryKindling,
+  // The candle itself, carried — a flame she already
+  // holds, spent on nothing (see COST_CONSUMED).
+  candle: ITEMS.candle,
 };
 
 export const LIGHTING_COST_CONSUMED: Readonly<
@@ -107,6 +114,9 @@ export const LIGHTING_COST_CONSUMED: Readonly<
 > = {
   flint: false,
   sticks: true,
+  // Kept, like the flint: lighting a fire FROM a lit
+  // candle does not use the candle up.
+  candle: false,
 };
 
 // ---------------------------------------------------------------------------

@@ -406,6 +406,131 @@ export function caveFootprintFor(worldSeed: string, key: string = CAVE_DIMENSION
   return caveLayoutForKey(worldSeed, key).footprint;
 }
 
+/** A faced cave surface (the glow-paint aim's answer,
+ *  2026-11-03): cave-local point ON the surface, the
+ *  surface vocabulary the paint register keeps, and the
+ *  distance along the ray. */
+export interface CaveSurfaceHit {
+  x: number;
+  y: number;
+  z: number;
+  surface: 'wall' | 'floor';
+  /** The wall's outward axis normal (0/0: floor, or the ceiling). */
+  nx: number;
+  nz: number;
+  distM: number;
+}
+
+/**
+ * THE FACED-SURFACE READ (Background, 2026-11-03): cast
+ * a ray through the cave's own geometry — the layout's
+ * wall boxes as vertical prisms (floor to
+ * CAVE_WALL_H_M), each layer's floor plane (y = 0) and
+ * ceiling plane (y = CAVE_WALL_H_M) across its grid
+ * square — and answer the NEAREST hit within maxDistM,
+ * or null. The cave is a box world, so the analytic cast
+ * is exact where a scene raycast would wade through
+ * every mesh in the chunk. The direction need not be
+ * normalized; distances come back in meters along it.
+ * A floor point under a wall box is rock, not floor.
+ * Ceiling hits read surface 'wall' with nx = nz = 0
+ * (the register's vocabulary completion).
+ */
+export function caveSurfaceAim(
+  layout: CaveLayout,
+  ox: number,
+  oy: number,
+  oz: number,
+  dx: number,
+  dy: number,
+  dz: number,
+  maxDistM: number,
+): CaveSurfaceHit | null {
+  const len = Math.hypot(dx, dy, dz);
+  if (!(len > 0)) return null;
+  const ux = dx / len;
+  const uy = dy / len;
+  const uz = dz / len;
+  let best: CaveSurfaceHit | null = null;
+  const consider = (hit: CaveSurfaceHit): void => {
+    if (hit.distM >= 0 && hit.distM <= maxDistM && (best === null || hit.distM < best.distM)) {
+      best = hit;
+    }
+  };
+  const inLayerSquare = (x: number, z: number): boolean =>
+    layout.layers.some((layer) => {
+      const half = (layer.grid * CAVE_CELL_M) / 2;
+      return Math.abs(x - layer.origin.x) <= half && Math.abs(z - layer.origin.z) <= half;
+    });
+  // Floor and ceiling planes.
+  if (uy < -1e-9) {
+    const t = -oy / uy;
+    const x = ox + ux * t;
+    const z = oz + uz * t;
+    const underWall = layout.footprint.walls.some(
+      (w) => x >= w.minX && x <= w.maxX && z >= w.minZ && z <= w.maxZ,
+    );
+    if (inLayerSquare(x, z) && !underWall) {
+      consider({ x, y: 0, z, surface: 'floor', nx: 0, nz: 0, distM: t });
+    }
+  }
+  if (uy > 1e-9) {
+    const t = (CAVE_WALL_H_M - oy) / uy;
+    const x = ox + ux * t;
+    const z = oz + uz * t;
+    if (inLayerSquare(x, z)) {
+      consider({ x, y: CAVE_WALL_H_M, z, surface: 'wall', nx: 0, nz: 0, distM: t });
+    }
+  }
+  // Wall prisms: slab-test the ray against each box's XZ
+  // rectangle; the entry face names the normal; the
+  // entry height must stand inside the wall's rise.
+  for (const w of layout.footprint.walls) {
+    let tEnter = -Infinity;
+    let tExit = Infinity;
+    let nx = 0;
+    let nz = 0;
+    if (Math.abs(ux) < 1e-12) {
+      if (ox < w.minX || ox > w.maxX) continue;
+    } else {
+      const t1 = (w.minX - ox) / ux;
+      const t2 = (w.maxX - ox) / ux;
+      const enterFace = ux > 0 ? -1 : 1;
+      tEnter = Math.max(tEnter, Math.min(t1, t2));
+      if (Math.min(t1, t2) === tEnter) nx = enterFace;
+      tExit = Math.min(tExit, Math.max(t1, t2));
+    }
+    if (Math.abs(uz) < 1e-12) {
+      if (oz < w.minZ || oz > w.maxZ) continue;
+      nz = 0;
+    } else {
+      const t1 = (w.minZ - oz) / uz;
+      const t2 = (w.maxZ - oz) / uz;
+      const enterFace = uz > 0 ? -1 : 1;
+      const tmin = Math.min(t1, t2);
+      if (tmin > tEnter) {
+        tEnter = tmin;
+        nx = 0;
+        nz = enterFace;
+      }
+      tExit = Math.min(tExit, Math.max(t1, t2));
+    }
+    if (tEnter > tExit || tEnter < 0) continue;
+    const y = oy + uy * tEnter;
+    if (y < 0 || y > CAVE_WALL_H_M) continue;
+    consider({
+      x: ox + ux * tEnter,
+      y,
+      z: oz + uz * tEnter,
+      surface: 'wall',
+      nx,
+      nz,
+      distM: tEnter,
+    });
+  }
+  return best;
+}
+
 const CAVE_FIELDS: Fields = { wetness: 0.35, elevation: 0, density: 0, mineral: 0.6, creek: 0, distance: 0 };
 const CAVE_WEIGHTS: BiomeWeights = {
   weights: {
