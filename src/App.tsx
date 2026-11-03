@@ -1922,8 +1922,10 @@ import {
   type OwnedToolItem,
 } from './systems/owned-tool';
 import {
+  BONE_QUEST_KINDS,
   QUEST_ACTS,
   QUEST_THREADS,
+  boneAcquisitionsFor,
   evaluateQuests,
   emptyQuestFlags,
   isQuestLive,
@@ -2235,6 +2237,7 @@ const QUEST_HINTS: Record<string, string> = {
   'better-house': 'Raise a thatch hut.',
   'find-bone': 'Find a bone.',
   'wake-charm': 'Complete a Waking ritual.',
+  'one-of-every-bone': 'Gather one bone of every kind.',
   // ALTAR PARITY (the desk claim's rider, 2026-11-01):
   // the step wording names the BASE, never one base —
   // a found stump or a built altar both carry the
@@ -3164,6 +3167,18 @@ export default function App() {
   // completion is the render that latches it; saveNow
   // writes the set back on the quests record.
   const latchedCompletedRef = useRef<ReadonlySet<string>>(new Set());
+  // THE BONE LATCH'S SAVED SET (one-of-every-bone,
+  // LAW 2): the kinds SaveData.boneAcquisitions carried
+  // at boot. saveNow's fold-in replaces it with the
+  // folded union on every save, so the facts site's
+  // bonesAcquired reads the latch as it stands, not as
+  // it booted. The latch is HERS, like the awakenings
+  // and the NameSight counts — regenerate does not
+  // clear it (and the awakened arm of the union would
+  // re-derive the woken kinds regardless).
+  const savedBoneAcquisitionsRef = useRef<readonly string[]>(
+    bootSave?.boneAcquisitions ?? [],
+  );
   const toggleActiveQuestMark = (questId: string) => {
     const next = activeQuestIdRef.current === questId ? null : questId;
     activeQuestIdRef.current = next;
@@ -4098,6 +4113,21 @@ export default function App() {
     try {
       const meta = saveMetaRef.current;
       const player = playerRef.current;
+      // THE BONE LATCH FOLD-IN (one-of-every-bone,
+      // LAW 2): every save folds the acquisition union
+      // (carried ∪ awakened ∪ saved) back into the
+      // record through Systems' one helper, and the
+      // shell's saved set becomes the folded result —
+      // a kind once acquired counts forever, spent,
+      // dropped, or woken.
+      const boneAcquisitionsFold = boneAcquisitionsFor(
+        inventory,
+        charmStateRef.current
+          .snapshot()
+          .map((awakening) => awakening.kind),
+        savedBoneAcquisitionsRef.current,
+      );
+      savedBoneAcquisitionsRef.current = boneAcquisitionsFold;
       const data = serializeSave({
           seed: meta.seed,
           // World name rides saveNow (first-run dialog +
@@ -4301,6 +4331,11 @@ export default function App() {
           // card would read true in-session and empty
           // after a reload.
           knowledge: knowledgeSnapshot(),
+          // THE BONE LATCH (one-of-every-bone, LAW 2):
+          // the folded union rides every save as-is
+          // (Systems' field; the seat kind-validates +
+          // dedupes on read, old saves load []).
+          boneAcquisitions: boneAcquisitionsFold,
           // WORLD-STATE SAVE WIRING: harvest state, sky
           // cycle, and facing ride every save (all three
           // draft fields optional — serialize defaults
@@ -6975,6 +7010,27 @@ export default function App() {
         // hunger band for the quests that declare one —
         // fed from the same HungerState the witness reads.
         hungerStage: hungerRef.current?.stage(),
+        // ONE OF EVERY BONE (Systems' halves, a71d984) —
+        // MET kinds gate the quest's ROWS (LAW 1): the
+        // bone kinds are the NameSight keys for bone
+        // looks, and a pickup counts as a look by the
+        // standing wiring, so a kind stands met when a
+        // look stands recorded under its name.
+        bonesMet: BONE_QUEST_KINDS.filter(
+          (kind) => nameSightRef.current.looksAt(kind) > 0,
+        ),
+        // ACQUIRED kinds judge the quest's COMPLETION
+        // (LAW 2): the latched union through Systems'
+        // one helper — carried now ∪ awakened (the
+        // CharmState snapshot's kinds stand in bone-kind
+        // space) ∪ the saved latch's kinds.
+        bonesAcquired: boneAcquisitionsFor(
+          inventory,
+          charmStateRef.current
+            .snapshot()
+            .map((awakening) => awakening.kind),
+          savedBoneAcquisitionsRef.current,
+        ),
       }
     : undefined;
   // THE LATCH UNION (the latch law): whatever reads
@@ -7030,6 +7086,15 @@ export default function App() {
     cardQuestRow && questFacts
       ? questComponentsFor(cardQuestRow.id, questFacts)
       : [];
+  // THE BONE COUNT (one-of-every-bone, LAW 1): the
+  // card's count for the bone quest is the MET rows'
+  // count and nothing else — the set's size prints
+  // nowhere, on any surface. Other quests carry no
+  // count line.
+  const cardQuestCountLine =
+    cardQuestRow?.id === 'one-of-every-bone'
+      ? `Kinds met: ${cardQuestComponents.length}`
+      : undefined;
   // CRAFTING DERIVATION RELOCATED (2026-10-30): the
   // availableStations -> craftingSections block lives
   // BELOW the useWinner call in this component — the
@@ -14700,6 +14765,7 @@ export default function App() {
         <QuestCard
           title={cardQuestRow.title}
           hint={cardQuestRow.hint}
+          countLine={cardQuestCountLine}
           components={cardQuestComponents}
           marked={cardQuestRow.id === activeQuestId}
           theme={lookThemes.world}
@@ -15755,6 +15821,7 @@ export default function App() {
           <QuestCard
             title={cardQuestRow.title}
             hint={cardQuestRow.hint}
+            countLine={cardQuestCountLine}
             components={cardQuestComponents}
             marked={cardQuestRow.id === activeQuestId}
             theme={lookThemes.world}
