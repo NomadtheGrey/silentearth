@@ -185,6 +185,11 @@ import { normalizeItemId } from './inventory';
 import type { SavedNameLook } from './name-sight';
 import type { KnowledgeSnapshot } from './knowledge-register';
 import type { ColdWetSnapshot } from './cold-wet';
+import {
+  INJURY_STAGES,
+  type InjurySnapshot,
+  type InjuryStage,
+} from './injury';
 // Single source for the ritual records (rituals.ts /
 // charms.ts own them; save.ts imports them — no second
 // mirror to drift, the placed-torch id lesson).
@@ -591,6 +596,18 @@ export interface SavedWeather {
   index: number;
 }
 
+/**
+ * The last completed sleep's seat, as saved (the
+ * crawl-back's encampment record — crawl-back.ts's
+ * resolveEncampment reads it). Position only: what
+ * kind of site it was is the sleep machinery's
+ * business, not the seat's.
+ */
+export interface SavedSleepSite {
+  x: number;
+  z: number;
+}
+
 export interface SaveData {
   version: typeof SAVE_VERSION;
   savedAt: number;
@@ -662,6 +679,16 @@ export interface SaveData {
    * imports nothing from game/). Null for old saves
    * and fresh worlds until the machine seats one. */
   weather: SavedWeather | null;
+  /** Her injury stage (injury.ts); sound for old saves. */
+  injury: InjurySnapshot;
+  /** The last place she COMPLETED a sleep (the
+   * crawl-back's encampment seat); null for old saves
+   * and until she first sleeps. */
+  lastSleepSite: SavedSleepSite | null;
+  /** Ferals that have given their warning (creature
+   * ids — the encounter ledger's seat); [] for old
+   * saves. */
+  feralWarned: string[];
   /** Ritual stagings (site + kind + steps); [] for old saves. */
   stagings: SavedRitualStaging[];
   /** Charm awakenings (kind + tier); [] for old saves. */
@@ -924,6 +951,27 @@ export interface SaveDraft {
     lengthDays: number;
     index: number;
   } | null;
+  /**
+   * Her injury snapshot from InjuryState.snapshot().
+   * OPTIONAL, same wiring-later pattern.
+   */
+  injury?: {
+    stage?: string;
+  };
+  /**
+   * The last completed sleep's seat (the shell writes
+   * it at sleep completion). OPTIONAL; null/absent
+   * writes a null field.
+   */
+  lastSleepSite?: {
+    x: number;
+    z: number;
+  } | null;
+  /**
+   * The encounter ledger from FeralEncounterState.
+   * snapshot(). OPTIONAL, same wiring-later pattern.
+   */
+  feralWarned?: ReadonlyArray<string>;
   /**
    * Ritual stagings from StagingBook.snapshot() +
    * awakenings from CharmState.snapshot(). OPTIONAL so
@@ -1334,6 +1382,29 @@ export function serializeSave(draft: SaveDraft): SaveData {
             index: draft.weather.index,
           }
         : null,
+    // Injury: the stage written when it names a real
+    // stage; anything else writes 'sound' rather than
+    // poison the document.
+    injury: {
+      stage:
+        draft.injury?.stage !== undefined &&
+        (INJURY_STAGES as readonly string[]).includes(draft.injury.stage)
+          ? (draft.injury.stage as InjuryStage)
+          : 'sound',
+    },
+    // Last sleep site: finite coords ride as-is;
+    // anything else writes null (no completed sleep
+    // on record — the encampment chain falls back).
+    lastSleepSite:
+      draft.lastSleepSite !== null &&
+      draft.lastSleepSite !== undefined &&
+      Number.isFinite(draft.lastSleepSite.x) &&
+      Number.isFinite(draft.lastSleepSite.z)
+        ? { x: draft.lastSleepSite.x, z: draft.lastSleepSite.z }
+        : null,
+    // The encounter ledger: written AS-IS (creature
+    // ids are caller-defined); restore validates.
+    feralWarned: [...(draft.feralWarned ?? [])],
     // Ritual stagings + awakenings: written AS-IS (records
     // verbatim, no filtering, no normalization — site keys
     // and bone kinds are caller-defined, not inventory
@@ -2165,6 +2236,45 @@ export function deserializeSave(value: unknown): SaveData | null {
         };
       }
     }
+    // Injury is optional on read, same additive-field
+    // rule: an old v1 save without it loads sound. A
+    // record whose stage names a real stage rides;
+    // anything else loads sound — the section drops,
+    // the document survives.
+    let injury: InjurySnapshot = { stage: 'sound' };
+    if (
+      isRecord(value.injury) &&
+      typeof value.injury.stage === 'string' &&
+      (INJURY_STAGES as readonly string[]).includes(value.injury.stage)
+    ) {
+      injury = { stage: value.injury.stage as InjuryStage };
+    }
+    // The last sleep site is optional on read: a
+    // record with finite coords rides; anything else
+    // loads null (no completed sleep on record).
+    let lastSleepSite: SavedSleepSite | null = null;
+    if (
+      isRecord(value.lastSleepSite) &&
+      Number.isFinite(value.lastSleepSite.x) &&
+      Number.isFinite(value.lastSleepSite.z)
+    ) {
+      lastSleepSite = {
+        x: value.lastSleepSite.x as number,
+        z: value.lastSleepSite.z as number,
+      };
+    }
+    // The encounter ledger is optional on read: string
+    // ids ride, deduped in first-seen order; a
+    // non-array field loads as [] — the section drops,
+    // the document survives.
+    const feralWarned: string[] = [];
+    if (value.feralWarned !== undefined && Array.isArray(value.feralWarned)) {
+      for (const entry of value.feralWarned) {
+        if (typeof entry !== 'string' || entry === '') continue;
+        if (feralWarned.includes(entry)) continue;
+        feralWarned.push(entry);
+      }
+    }
     // Ritual stagings + awakenings are optional on read,
     // same additive-field rule: old v1 saves without them
     // load with stagings: [] + awakenings: []. Non-array
@@ -2330,6 +2440,9 @@ export function deserializeSave(value: unknown): SaveData | null {
       knowledge,
       coldWet,
       weather,
+      injury,
+      lastSleepSite,
+      feralWarned,
       stagings,
       awakenings,
       boneAcquisitions,
