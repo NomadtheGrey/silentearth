@@ -60,6 +60,14 @@ export interface InventoryItem {
   category?: string;
   /** Caller-supplied glyph, rendered before the name. Optional. */
   icon?: ReactNode;
+  /**
+   * Caller-supplied section id (item-list sections,
+   * 2026-11-02): when the surface is given sections,
+   * the row renders inside the named section; the
+   * surface's ordering never crosses a section
+   * boundary. Display data only. Optional.
+   */
+  section?: string;
 }
 
 /**

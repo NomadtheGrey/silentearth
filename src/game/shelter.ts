@@ -123,8 +123,29 @@ export interface TentPosition {
   z: number;
 }
 
-/** Fraction of harshness remaining near a tent (DRAFT for Adam's pin pass). */
-export const TENT_SHELTER_MULTIPLIER = 0.85;
+/**
+ * A placed sleeping-bag position (structural twin of
+ * TentPosition — the shell holds placed bags tent-pattern
+ * and maps them to this for renderer.setBags; game never
+ * imports systems). NOT a HouseType and not a tent: no
+ * shelter of its own in v1 — the bag is camp furniture,
+ * visible world content beside the tent.
+ */
+export interface BagPosition {
+  x: number;
+  z: number;
+}
+
+/** Fraction of harshness remaining near a tent (DRAFT
+ *  for Adam's pin pass). THE THATCH TIER — PINNED BY
+ *  ADAM (2026-11-02): 'Ya let's have the tent be like
+ *  the thatch hut also. I suppose it's a matter of
+ *  style, and it's not costly.' — 0.5, the thatchHut's
+ *  own multiplier; it was 0.85 from the camping landing
+ *  until DEV's reading of his word (the tent remark)
+ *  moved it, and he confirmed the reading as a ruling
+ *  the same evening. */
+export const TENT_SHELTER_MULTIPLIER = 0.5;
 /** Standing within this of a tent center counts as tent-sheltered (DRAFT; matches HARVEST_RANGE). */
 export const TENT_SHELTER_RADIUS_M = 2.5;
 

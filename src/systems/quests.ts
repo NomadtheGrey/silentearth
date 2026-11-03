@@ -125,7 +125,7 @@
  */
 
 import type { PersonalInventory } from './inventory';
-import { FOOD_ITEMS } from './hunger';
+import { FOOD_ITEMS, type HungerStage } from './hunger';
 import { FIRST_CHARM_KIND, boneItemFor } from './charms';
 import { RITUAL_RECIPES } from './rituals';
 import { altarProgressFrom, isConsecratedAltar } from './stumpy-altar';
@@ -208,6 +208,16 @@ export interface QuestFacts {
   /** Placed-torch count, shell-mapped from torchState. */
   placedTorches: number;
   flags: QuestFlags;
+  /**
+   * Her present hunger band — shell-fed from the
+   * HungerState's stage() (hunger.ts's HungerStage).
+   * OPTIONAL: absent reads as no band known. Only a
+   * quest's LIVENESS declaration consults it (see
+   * QuestDefinition.isLive); completion never depends
+   * on it — a quest is done by its facts and flags,
+   * live or not.
+   */
+  hungerStage?: HungerStage;
   /**
    * Whether an altar stands — shell-mapped from the
    * altar state (a stump whose additions carry 'altar';
@@ -337,6 +347,21 @@ export interface QuestDefinition {
    * components' combined state EQUALS isDone — probed.
    */
   componentsMode?: 'all' | 'any';
+  /**
+   * LIVENESS (DEV's word, 2026-11-02, on Adam's QuestCard
+   * objection): whether this quest's moment is live RIGHT
+   * NOW, as distinct from whether it is done. OPTIONAL —
+   * absent reads as always live, which is true of nearly
+   * every quest (a campfire can be made at any hour). A
+   * quest whose trigger is a passing condition declares
+   * it (today: eat-when-hungry alone, gated on the hunger
+   * band; the moon-window Wakings are the pattern's noted
+   * second use). The shell's card FALLBACK consults it —
+   * an undone quest whose moment is not live is not the
+   * card's business; the journal and the marked quest
+   * are unaffected. Completion NEVER reads it.
+   */
+  isLive?: (facts: QuestFacts) => boolean;
 }
 
 /** Every bone item id: generic + all 18 primal-bone kinds. */
@@ -391,6 +416,12 @@ export const QUEST_DEFINITIONS: readonly QuestDefinition[] = [
     thread: 'food',
     act: 'survival',
     isDone: (facts) => facts.flags.ateWhileHungry,
+    // Liveness (2026-11-02): the quest's moment is the
+    // hungry band itself — while she is fed, the card
+    // has no business naming it. The band reads 'hungry'
+    // per the brief's wording; hungry-or-too-hungry
+    // stays the recorded open pin, not baked here.
+    isLive: (facts) => facts.hungerStage === 'hungry',
     components: [
       {
         id: 'eat-while-hungry',
@@ -773,6 +804,20 @@ export function isQuestDone(
   const quest = QUEST_DEFINITIONS.find((candidate) => candidate.id === id);
   if (!quest) return false;
   return quest.isDone(facts) || latchedSet(latched).has(id);
+}
+
+/**
+ * Whether a quest's moment is live right now (see
+ * QuestDefinition.isLive): a definition without a
+ * declaration is always live; an unknown id is not.
+ * The card fallback's one door — done-ness is
+ * isQuestDone's separate question, and neither reads
+ * the other.
+ */
+export function isQuestLive(id: string, facts: QuestFacts): boolean {
+  const quest = QUEST_DEFINITIONS.find((candidate) => candidate.id === id);
+  if (!quest) return false;
+  return quest.isLive === undefined || quest.isLive(facts);
 }
 
 /**

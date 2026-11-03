@@ -10096,6 +10096,7 @@ export default function App() {
       items.push({
         id: stack.item,
         name,
+        section: 'pile',
         category: categoryFor(stack.item as ItemId),
         titleMeta: `${pileTitleMetaFor(stack.item, stack.quantity)} · carried ×${carried}`,
         note: noCarried ? `Needs carried ${name}` : undefined,
@@ -10138,6 +10139,7 @@ export default function App() {
       items.push({
         id: stack.item,
         name,
+        section: 'pack',
         category: categoryFor(stack.item as ItemId),
         titleMeta: `${pileTitleMetaFor(stack.item, stack.quantity)} · pile ×0`,
       });
@@ -15474,7 +15476,7 @@ export default function App() {
                     ? `${displayNameFor(selectedPile.stacks[0].item)} × ${selectedPile.stacks[0].quantity}`
                     : `Pile × ${selectedPile.stacks.reduce((sum, stack) => sum + stack.quantity, 0)} (${selectedPile.stacks.length} kinds)`
                 }
-                totalText={`Pile: ${formatLb(
+                totalText={`${formatLb(
                   selectedPile.stacks.reduce(
                     (sum, stack) =>
                       sum + weightOf(stack.item as ItemId) * stack.quantity,
@@ -15482,6 +15484,22 @@ export default function App() {
                   ),
                 )} lb`}
                 carryingText={capacityText}
+                atHomeName={
+                  shelterHouseId !== null &&
+                  shelterAt(
+                    selectedPile.x,
+                    selectedPile.z,
+                    shelterState.snapshot(),
+                    placedTentsRef.current,
+                  ).houseId === shelterHouseId
+                    ? (shelterHouseName ?? undefined)
+                    : undefined
+                }
+                onOpenStorage={() => {
+                  selectedPileIdRef.current = null;
+                  setSelectedPileId(null);
+                  openInventoryPanel();
+                }}
                 items={pileModel.items}
                 verbsFor={(item) => pileModel.verbsByItem.get(item.id) ?? []}
                 onVerb={(_itemId, verbId) =>
