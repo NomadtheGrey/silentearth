@@ -69,8 +69,16 @@ import { makeCompanionInstance } from './companionRuntime';
 export const GUIDE_ID = 'guide:grove';
 /** She must close within this (m) of the perch before the next hop.
  *  DRAFT (2026-11-01, Adam: 30-40 m is hard to see at dusk —
- *  the distances came IN to twilight-visible range). */
-export const GUIDE_FOLLOW_RANGE_M = 14;
+ *  the distances came IN to twilight-visible range).
+ *  WIDENED 14 -> 20 (2026-11-03, Adam's field report on
+ *  the rework: 'I came as closely as I could. Perhaps
+ *  his radius needs expanded.') — DRAFT for his pin
+ *  pass. Note the interplay: the staging perch lands
+ *  18 m ahead, now INSIDE this ring, so a bird that
+ *  stages near a standing watcher starts leading from
+ *  its first perch once the dwell passes — the lead
+ *  law working as intended, not a staging fault. */
+export const GUIDE_FOLLOW_RANGE_M = 20;
 /** One hop's length (m) toward the Grove — SHORT legs (DRAFT). */
 export const GUIDE_HOP_M = 18;
 /** How far around a hop's ideal end to look for a real
