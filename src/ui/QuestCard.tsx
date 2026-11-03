@@ -32,6 +32,12 @@ export interface QuestCardProps {
   title: string;
   /** The standing quest's one-line hint (draft). */
   hint: string;
+  /**
+   * An optional count line the caller composes (the
+   * bone quest's met count — a count of what she has
+   * met, never a total). Omitted = no line.
+   */
+  countLine?: string;
   /** Component rows with done states; empty renders title + hint only. */
   components: QuestCardComponent[];
   /**
@@ -54,6 +60,7 @@ export interface QuestCardProps {
 export function QuestCard({
   title,
   hint,
+  countLine,
   components,
   marked,
   theme = 'mire',
@@ -89,6 +96,9 @@ export function QuestCard({
       <h3 className={'text-sm font-semibold ' + t.heading}>{title}</h3>
       {hint ? (
         <p className={'mt-0.5 text-xs ' + t.muted}>{hint}</p>
+      ) : null}
+      {countLine ? (
+        <p className={'mt-0.5 text-xs ' + t.muted}>{countLine}</p>
       ) : null}
       {components.length > 0 ? (
         <ul className="mt-1.5 flex flex-col gap-0.5">
