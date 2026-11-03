@@ -43,6 +43,14 @@ export interface BuildRecord {
 
 const ALL_RECORDS: BuildRecord[] = [
   {
+    merge: 'Merge #72',
+    pr: 95,
+    sha: '822a271',
+    date: '2026-11-03',
+    what: 'THE SLEEPING BAG \u2014 a bed wherever she stops. The bag places from her pack onto the ground (the bedroll stands in the world, built on the seam the last merge laid), carries its own chip, and offers Sleep until Sunrise and Pick up; pickup is grant-first, so a full pack leaves the bag where it lies. SLEEPING IN IT shelters her at the thatch tier for that sleep \u2014 the bag she stands beside shelters nothing; the mark is the sleep itself, scoped to the site she sleeps in. THE TENT GAINS CLIMB-IN beside it: the tent menu offers the same Sleep door, same night gate. AND THE BAG TEACHES BY USE: the first completed sleep in it records the use, and the sleeping bag\u2019s card learns what it is for \u2014 not from crafting it, not from placing it; from sleeping in it. RIDING ALONGSIDE: the house upgrade stands visible in its own dialog (the next rung reachable as an upgrade, in place), and the mobile HUD reconciles with the desktop arrangement.',
+    why: 'The card promised a bed; this merge makes the promise a place. The shape worth noticing is the shelter: it belongs to the OCCUPANT, not the object \u2014 a bag is furniture while she stands next to it and a thatch-tier room only for the night she spends inside it, which is the difference between camping gear and a cheat. The learn follows the same ethic: knowledge from the act itself, not from ownership.',
+  },
+  {
     merge: 'Merge #71',
     pr: 95,
     sha: '39cc602',

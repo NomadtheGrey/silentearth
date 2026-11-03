@@ -14,21 +14,28 @@
  * NOT A HOUSETYPE — the choice and its consequences: a tent
  * is NOT a HouseType, so it gets no HomeStorage/Store/Take,
  * no upgrade pill, no FIND CAMP camp (camps = houses), and
- * no home chip (all house-anchored). Shelter effect PROPOSED
- * draft 0.85 (lean-to 0.7, unsheltered 1.0) with NO live
- * benefit until Background's tent-aware shelterQuery branch
- * lands (their claim, DEV-routed) — this module implements
- * no shelter number.
+ * no home chip (all house-anchored). Shelter effect
+ * LIVE in the THATCH TIER: factor 0.5 at 2.5 m from the
+ * engine's live table (Adam's reading, 2026-11-02 —
+ * Background cb42878 moved the proposed 0.85 to 0.5);
+ * this module implements no shelter number.
  *
- * SLEEPING BAG — carried bedding, PASSIVE while carried
- * (umbrella precedent: inventory-carried, no equip, no
- * use-action). It does NOT gate sleep — sleep-anywhere
- * already works. V1 effect is the marker + the fiction:
- * carriesSleepingBag is a live inventory check at sleep
- * time — NO save field, NO number today (no
- * cold/exposure-during-sleep model to attach a number to,
- * and a waking-refresh number would collide with groundhog
- * +10 — Adam's word needed, not baked).
+ * SLEEPING BAG — a PLACED sleep site (Adam's pin,
+ * 2026-11-02; the carried-passive draft this section
+ * carried is superseded): place/pickup mirror the
+ * tent's exactly (validate before consuming; pack-full
+ * pickup leaves the bag placed). The shell hands the
+ * placed record to Background's setBags body; SavedBag
+ * seats it in the save. While she SLEEPS IN the placed
+ * bag, her shelter factor is the thatch hut's 0.5,
+ * read from the engine's live table, scoped to the
+ * sleeping occupant only — no storage, no radius
+ * shelter, no garment row. The learn event is the
+ * FIRST COMPLETED SLEEP (recordItemUse —
+ * knowledge.ts); placement teaches nothing.
+ * carriesSleepingBag remains as the carried-marker
+ * check. The bag still does NOT gate sleep —
+ * sleep-anywhere already works.
  *
  * Numbers DRAFT for Adam's pin pass: bag 2 lb
  * (hooded-cloak precedent), tent 4 lb (carried-structure
@@ -104,9 +111,65 @@ export function pickupTent(inventory: PersonalInventory): {
 }
 
 /**
- * V1 sleeping-bag marker: true while a sleeping bag is
- * carried. The shell checks it at sleep time — live
- * inventory, no save field, no number (see header).
+ * A placed sleeping bag, as handed to Background's
+ * setBags call. Singular by definition: one press
+ * places one bag. `item` is always 'sleeping-bag'.
+ */
+export interface PlacedBag {
+  item: string;
+  x: number;
+  z: number;
+}
+
+/**
+ * Place outcome. `bag` is the record the shell hands to
+ * Background's setBags call; `reason` is player-facing
+ * on failure only. Failure touches nothing.
+ */
+export type PlaceBagOutcome =
+  | { placed: true; bag: PlacedBag }
+  | { placed: false; reason: string };
+
+/**
+ * Move one carried sleeping bag out of the inventory
+ * into a placed-bag record at (x, z). Validates before
+ * mutating (finite position, bag carried), so a failed
+ * place consumes nothing — the tent's grant semantics
+ * whole.
+ */
+export function placeBag(
+  inventory: PersonalInventory,
+  x: number,
+  z: number,
+): PlaceBagOutcome {
+  if (!Number.isFinite(x) || !Number.isFinite(z)) {
+    return { placed: false, reason: 'Invalid position.' };
+  }
+  if (inventory.count(ITEMS.sleepingBag) <= 0) {
+    return { placed: false, reason: 'No sleeping bag carried.' };
+  }
+  inventory.remove(ITEMS.sleepingBag, 1);
+  return { placed: true, bag: { item: ITEMS.sleepingBag, x, z } };
+}
+
+/**
+ * Grant for taking a placed sleeping bag back up:
+ * 1 = the bag is back in the pack (shell removes the
+ * placed record); 0 = pack full, the placed bag stays
+ * where it is (pile-pickup rule: take granted only).
+ */
+export function pickupBag(inventory: PersonalInventory): {
+  granted: number;
+} {
+  const grant = inventory.addPartial(ITEMS.sleepingBag, 1);
+  return { granted: grant.granted };
+}
+
+/**
+ * Sleeping-bag marker: true while a sleeping bag is
+ * carried — a live inventory check, no save field.
+ * (The placed bag is the sleep site; this remains the
+ * carried check the shell may read.)
  */
 export function carriesSleepingBag(inventory: PersonalInventory): boolean {
   return inventory.count(ITEMS.sleepingBag) > 0;

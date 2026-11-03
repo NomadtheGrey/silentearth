@@ -2,7 +2,7 @@
 // the item info card 2026-11-01; gate ratified by DEV
 // the same day).
 //
-// Two sets of earned knowledge:
+// Three sets of earned knowledge:
 //
 // - MET: an item is met when it has entered her pack at
 //   least once. Recorded inside PersonalInventory's gain
@@ -17,6 +17,15 @@
 //   fragment-teaching surface will use when its claim
 //   comes (Adam's pin: 'exercised OR TAUGHT') — one set,
 //   two writers, so the door is not walled later.
+// - USED ITEMS: an item's OWN use, exercised — the
+//   output side of the same law. A placed thing teaches
+//   what it is for when she USES it, not when she makes
+//   or places it: the sleeping bag's learn event is the
+//   first completed sleep (Adam's ruling, 2026-11-02 —
+//   placement is furniture-moving). The shell fires
+//   recordItemUse() at each item's own exercised moment;
+//   crafting NEVER records here (the loom is not the
+//   lesson), so a made-but-unused thing keeps its hole.
 //
 // THIS FILE IS A LEAF ON PURPOSE: it imports nothing but
 // a type, because its writers live in inventory.ts and
@@ -38,6 +47,7 @@ import type { ItemId } from './recipes';
 
 const metItems = new Set<string>();
 const knownUseRecipes = new Set<string>();
+const usedItems = new Set<string>();
 
 /** Record that an item has entered her pack. Called by
  * PersonalInventory's gain choke points; idempotent. */
@@ -68,9 +78,27 @@ export function isRecipeUseKnown(recipeId: string): boolean {
   return knownUseRecipes.has(recipeId);
 }
 
+/**
+ * Record an item's OWN use as EXERCISED (the output
+ * side of the law). Fired by the shell at the item's
+ * own exercised moment — the sleeping bag's first
+ * completed sleep is the first caller. Never fired by
+ * crafting or placement. Idempotent.
+ */
+export function recordItemUse(item: ItemId): void {
+  usedItems.add(item);
+}
+
+export function isItemUseKnown(item: ItemId): boolean {
+  return usedItems.has(item);
+}
+
 export interface KnowledgeSnapshot {
   metItems: string[];
   knownUseRecipes: string[];
+  /** Items whose own use has been exercised. Additive:
+   * older snapshots lack it and restore as []. */
+  usedItems?: string[];
 }
 
 /** Save-format snapshot (first-recorded order). */
@@ -78,15 +106,17 @@ export function knowledgeSnapshot(): KnowledgeSnapshot {
   return {
     metItems: [...metItems],
     knownUseRecipes: [...knownUseRecipes],
+    usedItems: [...usedItems],
   };
 }
 
-/** Boot-only restore: clears and rebuilds both sets. */
+/** Boot-only restore: clears and rebuilds all sets. */
 export function restoreKnowledge(
   snapshot: KnowledgeSnapshot | null | undefined,
 ): void {
   metItems.clear();
   knownUseRecipes.clear();
+  usedItems.clear();
   if (snapshot === null || snapshot === undefined) return;
   for (const item of snapshot.metItems ?? []) {
     if (typeof item === 'string') metItems.add(item);
@@ -94,10 +124,14 @@ export function restoreKnowledge(
   for (const recipeId of snapshot.knownUseRecipes ?? []) {
     if (typeof recipeId === 'string') knownUseRecipes.add(recipeId);
   }
+  for (const item of snapshot.usedItems ?? []) {
+    if (typeof item === 'string') usedItems.add(item);
+  }
 }
 
 /** New game: nothing is known. */
 export function resetKnowledge(): void {
   metItems.clear();
   knownUseRecipes.clear();
+  usedItems.clear();
 }
