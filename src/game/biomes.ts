@@ -254,7 +254,11 @@ export const BIOMES: BiomeDef[] = [
       log: 0.10, snapWood: 0.05, peatMoss: 0.04,
       flower: 0.03, riverStone: 0.02, bone: 0.01, stump: 0.01, bogGrowth: 0.01, edibleMushroom: 0.08, poisonMushroom: 0.08,
       // Flowers landing (2026-10-28): new kinds, pink untouched.
-      aster: 0.007, trillium: 0.008, violet: 0.008, ladySlipper: 0.007,
+      // Lady slipper RETIRED from the mix (places build,
+      // 2026-11-03): the orchid is place-bound — it grows in
+      // grove patches now (worldgen's slipper pass), not as a
+      // forest-wide sprinkle.
+      aster: 0.007, trillium: 0.008, violet: 0.008,
       flint: 0.03, beehive: 0.01,
     },
     // Pretty and deep: tall trees, dappled light, a sparse flower floor.

@@ -1432,13 +1432,28 @@ export class WorldRenderer {
     return sky.cycleT <= 2 / 24;
   }
 
-  /** The nearest real tree point (the guide's perches), generateChunk ground truth, memoized per chunk. */
-  /** A tree kind's crown-top height at scale 1, measured
+  /** The kinds a perch may stand on (sparse-country
+   *  staging, 2026-11-03): a raven can sit on any tall
+   *  tree — the generic tree, the tall scenery tree, the
+   *  pine, and the Grove's own oaks. The search once read
+   *  'tree' only, which made the Grove's own oaks
+   *  invisible as perches and left pine country and
+   *  tall-tree country unstageable however near a tree
+   *  stood. Every consumer of treePointNear inherits the
+   *  widening: the grove seat registration, the staging
+   *  cascade, and every hop's perch search. */
+  private static PERCH_KINDS: ReadonlySet<ScatterKind> = new Set([
+    'tree',
+    'tallTree',
+    'pineTree',
+    'groveOak',
+  ]);
+  /** A perch kind's crown-top height at scale 1, measured
    *  once off its built geometry (geometry top + the
    *  mesh's baseY — the renderer's own placement sum,
    *  so the crown a perch reads is the crown that draws). */
   private crownTopCache = new Map<string, number>();
-  private crownTopFor(kind: 'tree'): number {
+  private crownTopFor(kind: ScatterKind): number {
     let top = this.crownTopCache.get(kind);
     if (top === undefined) {
       const mesh = SOURCE_FOR_KIND[kind].mesh;
@@ -1467,7 +1482,7 @@ export class WorldRenderer {
         if (!pts) {
           pts = [];
           for (const obj of this.gen.generateChunk(cx, cz).objects) {
-            if (obj.kind === 'tree') {
+            if (WorldRenderer.PERCH_KINDS.has(obj.kind)) {
               pts.push({
                 x: obj.x,
                 z: obj.z,

@@ -479,12 +479,17 @@ export const QUEST_DEFINITIONS: readonly QuestDefinition[] = [
     thread: 'food',
     act: 'survival',
     isDone: (facts) => facts.flags.ateWhileHungry,
-    // Liveness (2026-11-02): the quest's moment is the
-    // hungry band itself — while she is fed, the card
-    // has no business naming it. The band reads 'hungry'
-    // per the brief's wording; hungry-or-too-hungry
-    // stays the recorded open pin, not baked here.
-    isLive: (facts) => facts.hungerStage === 'hungry',
+    // Liveness (2026-11-02; band WIDENED on Adam's
+    // word, 2026-11-03): the quest's moment is hunger
+    // itself — while she is fed, the card has no
+    // business naming it. The band reads hungry OR
+    // too-hungry: under the first cut ('hungry' exact)
+    // the card's fallback moved on to Make Campfire at
+    // the very moment she was hungriest. The open pin
+    // is closed by the widening.
+    isLive: (facts) =>
+      facts.hungerStage === 'hungry' ||
+      facts.hungerStage === 'too-hungry',
     components: [
       {
         id: 'eat-while-hungry',
