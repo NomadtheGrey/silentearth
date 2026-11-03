@@ -85,7 +85,7 @@ export interface HungerIndicatorProps {
   warningFlash?: boolean;
 }
 
-const STAGE_WORD: Record<HungerStage, string> = {
+export const STAGE_WORD: Record<HungerStage, string> = {
   fed: 'Fed',
   hungry: 'Hungry',
   'too-hungry': 'Too hungry',

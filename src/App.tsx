@@ -1744,7 +1744,7 @@ import {
 } from './ui/hudLayout';
 import type { HudElementId } from './ui/hudLayout';
 import { WitchHealth } from './ui/WitchHealth';
-import { HungerIndicator } from './ui/HungerIndicator';
+import { HungerIndicator, STAGE_WORD as HUNGER_STAGE_WORD } from './ui/HungerIndicator';
 import { ForageHint } from './ui/ForageHint';
 import { ShelteredIndicator } from './ui/ShelteredIndicator';
 
@@ -1902,6 +1902,8 @@ import {
   type ColdWetFacts,
 } from './systems/cold-wet';
 import {
+  COLD_WORD,
+  WET_WORD,
   WeatherWitness,
   type ColdStageKey,
   type WetStageKey,
@@ -1917,6 +1919,7 @@ import {
   QUEST_THREADS,
   evaluateQuests,
   emptyQuestFlags,
+  isQuestLive,
   newlyCompleted,
   questById,
   questComponentsFor,
@@ -6815,6 +6818,11 @@ export default function App() {
         // reads flag OR count, so a completed rite stays
         // complete in the log's reading too.
         awakenings: charmStateRef.current.snapshot().length,
+        // THE LIVENESS BAND (Systems' 080ff60): the card
+        // fallback consults isQuestLive, which reads the
+        // hunger band for the quests that declare one —
+        // fed from the same HungerState the witness reads.
+        hungerStage: hungerRef.current?.stage(),
       }
     : undefined;
   // THE LATCH UNION (the latch law): whatever reads
@@ -6846,15 +6854,26 @@ export default function App() {
         active: quest.id === activeQuestId,
       }))
     : undefined;
-  // THE CARD'S QUEST: the MARKED quest while it stands
-  // incomplete; otherwise (no mark, or the mark's quest
-  // done) the current quest — the card is never dead
-  // space, and a finished mark quietly hands it over.
-  // All quests done = no card.
+  // THE CARD'S QUEST (composition rule, DEV 2026-11-02,
+  // on Adam's 'Eat When Hungry while fed' objection):
+  // the MARKED quest while it stands incomplete,
+  // UNCHANGED — a mark stands whatever its moment;
+  // otherwise the first not-done quest in definition
+  // order whose liveness holds (isQuestLive — a quest
+  // whose moment is not live, like eating while fed,
+  // never surfaces on the fallback). No live quest =
+  // the card stands down: a card naming nothing she
+  // can act on does not stand. All done = no card.
   const cardQuestRow =
     questDisplay?.find(
       (quest) => quest.id === activeQuestId && !quest.done,
-    ) ?? questDisplay?.find((quest) => !quest.done);
+    ) ??
+    questDisplay?.find(
+      (quest) =>
+        !quest.done &&
+        questFacts !== undefined &&
+        isQuestLive(quest.id, questFacts),
+    );
   const cardQuestComponents =
     cardQuestRow && questFacts
       ? questComponentsFor(cardQuestRow.id, questFacts)
@@ -14975,7 +14994,13 @@ export default function App() {
         </div>
       </div>
 
-      {/* HUD shell: needs row (awaiting survival systems) + HUD block. */}
+      {/* HUD shell: needs row + HUD block. The needs row
+          carries the real survival slots since the
+          mobile reconciliation (2026-11-02) — the
+          'awaiting survival systems' placeholder retired
+          with the weather landing (#61): Hunger, Cold,
+          Wet in the slot idiom, the same stage words the
+          vitals witness shows, on both pointers. */}
       {/* Location chip: top row of the HUD (in-flow
         below the Needs row, via HudShell's topReadout
         slot — NOT the old absolute bottom-centre seat).
@@ -14984,6 +15009,31 @@ export default function App() {
         It hides only while a panel or the modal is open
         (rule unchanged by the move). */}
       <HudShell theme={lookThemes.world}
+        needSlots={[
+          {
+            id: 'hunger',
+            label: 'Hunger',
+            detail: HUNGER_STAGE_WORD[hungerStage],
+          },
+          ...(coldWetUi.cold
+            ? [
+                {
+                  id: 'cold',
+                  label: 'Cold',
+                  detail: COLD_WORD[coldWetUi.cold.stage],
+                },
+              ]
+            : []),
+          ...(coldWetUi.wet
+            ? [
+                {
+                  id: 'wet',
+                  label: 'Wet',
+                  detail: WET_WORD[coldWetUi.wet.stage],
+                },
+              ]
+            : []),
+        ]}
         hideNeeds={isTouch && hudCollapsed}
         topReadout={
           isTouch && chipGateOpen ? (
@@ -15001,7 +15051,14 @@ export default function App() {
               // Reserve: needs row + thumbstick clearance
               // (bottom-24 offset + 128 px ring = 224 px),
               // so the expanded stack never slides under the
-              // stick — 13rem did. DEFECT 3 (2026-11-01,
+              // stick — 13rem did. The sticks dropped to the
+              // corners in the mobile reconciliation
+              // (2026-11-02; ring top now 148 px), so this
+              // reserve stands with more air than it was
+              // measured for — deliberately unshrunk: the
+              // stack gains nothing Adam asked for by
+              // growing, and the clearance only widens.
+              // DEFECT 3 (2026-11-01,
               // measured at 915x412 + 844x360): the old
               // 18rem reserve forgot the LocationChip row
               // (~32 px of flow above the column), so the
@@ -15338,12 +15395,18 @@ export default function App() {
           exactly one card ever stands. It yields to an open
           dialog (the takeover) like the rest of the chrome.
           It sits at z-30, under the pause veil: a readout,
-          not a trapped action — resume brings it forward. */}
+          not a trapped action — resume brings it forward.
+          WIDTH (mobile reconciliation, 2026-11-02): capped
+          at 15rem — at 20rem on a landscape phone the card
+          spanned half the screen and its lower edge reached
+          the MOVE stick; with the sticks dropped to the
+          corners the card at top-28 now bottoms above the
+          disc tops, drive-measured at 915×412. */}
       {hudCollapsed &&
       cardQuestRow &&
       cardQuestRow.id !== dismissedCardQuestId &&
       !anyDialogOpen ? (
-        <div className="pointer-events-none absolute left-2 top-28 z-30 w-[calc(100vw-1rem)] max-w-[20rem]">
+        <div className="pointer-events-none absolute left-2 top-28 z-30 w-[calc(100vw-1rem)] max-w-[15rem]">
           <QuestCard
             title={cardQuestRow.title}
             hint={cardQuestRow.hint}

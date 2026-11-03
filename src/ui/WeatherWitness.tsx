@@ -44,7 +44,7 @@ export interface WeatherWitnessProps {
 }
 
 /** Display words over Systems' keys (DRAFT — W4 pin pass). */
-const COLD_WORD: Record<ColdStageKey, string> = {
+export const COLD_WORD: Record<ColdStageKey, string> = {
   comfortable: 'Warm',
   chilly: 'Cool',
   cold: 'Chilled',
@@ -60,7 +60,7 @@ const COLD_DOT: Record<ColdStageKey, string> = {
 };
 
 /** Display words over Systems' keys (DRAFT — W4 pin pass). */
-const WET_WORD: Record<WetStageKey, string> = {
+export const WET_WORD: Record<WetStageKey, string> = {
   dry: 'Dry',
   damp: 'Damp',
   wet: 'Wet',
