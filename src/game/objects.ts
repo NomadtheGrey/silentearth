@@ -2845,13 +2845,15 @@ export const SOURCES: HarvestSourceDef[] = [
     name: 'Pink Lady Slipper',
     description:
       'Rare forest orchid: a pink pouch (the slipper) with petal discs behind it. ' +
+      'It keeps to the groves — woodland stands on moist, well-drained ground, ' +
+      'in small patches — and does not sprinkle the open forest. ' +
       'SCENERY ONLY v1 — it yields nothing, so its rarity is preserved; a rare-harvest ' +
       'option belongs to the later potion branch, not this landing.',
     harvestable: false,
     permitTier: null,
     secondaryYields: [],
     provenance: 'draft',
-    biomes: ['forest'],
+    biomes: ['forest', 'tanglewood', 'mirewood'],
     mesh: { shape: 'flowerPouch', color: 0xdd7a9a, baseY: 0 },
   },
   {
