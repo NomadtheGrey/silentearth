@@ -574,6 +574,12 @@ export class WorldRenderer {
   private torch: THREE.Group;
   /** Carried-torch point light (scene-level, like the candle's). */
   private torchLight: THREE.PointLight;
+  /** Borrowed dark-sight light (the bat's gift — the familiar
+   *  road, 2026-11-02; scene-level; on only while a borrowing
+   *  of dark-sight stands, shell-driven via setBorrowedSight). */
+  private borrowedSightLight: THREE.PointLight;
+  /** True while a dark-sight borrowing stands (shell-driven). */
+  private borrowedSight = false;
   /** True while a lit torch is carried (shell-driven setter). */
   private carriesLitTorch = false;
   /** Placed-fire point lights (scene-level, rebuilt with the placed group). */
@@ -988,6 +994,14 @@ export class WorldRenderer {
       TORCH_LIGHT_DECAY,
     );
     this.scene.add(this.torchLight);
+    // Borrowed dark-sight (the bat's gift — the familiar
+    // road, 2026-11-02): a cool, steady light that rides at
+    // her own position while a borrowing stands. Dark at
+    // intensity 0 until the shell turns it on — it is how
+    // "see in the dark" reads in a cave at midnight: her
+    // surroundings simply become visible. Tunables DRAFT.
+    this.borrowedSightLight = new THREE.PointLight(0xa8c0ff, 0, 18, 1.4);
+    this.scene.add(this.borrowedSightLight);
 
     window.addEventListener('resize', this.onResize);
     this.loop();
@@ -1021,6 +1035,17 @@ export class WorldRenderer {
     this.carriesLitTorch = carried;
     if (this.torch) this.torch.visible = carried;
     if (this.candle) this.candle.visible = !carried;
+  }
+
+  /**
+   * Borrowed dark-sight (the bat's gift — the familiar
+   * road, 2026-11-02). The shell calls this when a
+   * borrowing of dark-sight begins and ends (FamiliarState
+   * owns the span); the light itself follows her in the
+   * frame loop while the flag stands.
+   */
+  setBorrowedSight(on: boolean): void {
+    this.borrowedSight = on;
   }
 
   /**
@@ -3677,6 +3702,20 @@ export class WorldRenderer {
         const flick = (Math.sin(this.flameTime * 10) + Math.sin(this.flameTime * 23 + 1.7)) / 2;
         this.candleLight.intensity = CANDLE_LIGHT_INTENSITY * (1 + CANDLE_FLICKER_AMPLITUDE * flick);
       }
+    }
+
+    // Borrowed dark-sight rides at her own eye, steady —
+    // no flicker (it is not a flame; it is a borrowed way
+    // of seeing). Intensity DRAFT.
+    if (this.borrowedSight) {
+      this.borrowedSightLight.position.set(
+        this.player.x,
+        1.7 + this.player.yOffset,
+        this.player.z,
+      );
+      this.borrowedSightLight.intensity = 26;
+    } else {
+      this.borrowedSightLight.intensity = 0;
     }
 
     if (this.player.mode === 'first') {

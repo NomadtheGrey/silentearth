@@ -610,6 +610,9 @@ export interface SaveData {
   /** Companion records (touched individuals only);
    * [] for old saves. */
   companions: SavedCompanion[];
+  /** Kinds whose true names she knows by rite (the
+   * familiar road, 2026-11-02); [] for old saves. */
+  familiarNames: string[];
   /** Fragment progress by mark (begun marks only);
    * [] for old saves. */
   fragments: SavedMarkProgress[];
@@ -810,6 +813,12 @@ export interface SaveDraft {
    * absent = [] (no individual has been touched).
    */
   companions?: readonly SavedCompanion[];
+  /**
+   * Kinds whose true names she knows by rite, from
+   * FamiliarState.knownKinds() at save time. OPTIONAL,
+   * same pattern; absent = [] (no name has been taught).
+   */
+  familiarNames?: readonly string[];
   /**
    * Fragment progress, from FragmentState.snapshot()
    * at save time. OPTIONAL, same pattern; absent = []
@@ -1189,6 +1198,9 @@ export function serializeSave(draft: SaveDraft): SaveData {
     companions: (draft.companions ?? []).map((record) => ({
       ...record,
     })),
+    // Familiar names: written AS-IS (the kinds she has
+    // been taught, in the order learned).
+    familiarNames: [...(draft.familiarNames ?? [])],
     // Fragments: written AS-IS (copies deep-copied with
     // their marks). Invalid entries are deserialize's
     // problem, not serialize's.
@@ -1835,7 +1847,12 @@ export function deserializeSave(value: unknown): SaveData | null {
             entry.bond === 'companion' || entry.bond === 'familiar'
               ? entry.bond
               : 'none',
-          origin: entry.origin === 'found' ? 'found' : 'wild',
+          origin:
+            entry.origin === 'found'
+              ? 'found'
+              : entry.origin === 'rite'
+                ? 'rite'
+                : 'wild',
           stance:
             entry.kind !== 'cat' &&
             (entry.stance === 'stay' ||
@@ -1849,6 +1866,22 @@ export function deserializeSave(value: unknown): SaveData | null {
               ? Math.floor(entry.lastFedDay)
               : null,
         });
+      }
+    }
+    // Familiar names are optional on read: an old save
+    // without them loads with familiarNames: []. Entries
+    // are kind strings; anything else drops, duplicates
+    // dedupe (she learns a kind's name once).
+    const familiarNames: string[] = [];
+    if (Array.isArray(value.familiarNames)) {
+      for (const entry of value.familiarNames) {
+        if (
+          typeof entry === 'string' &&
+          entry.length > 0 &&
+          !familiarNames.includes(entry)
+        ) {
+          familiarNames.push(entry);
+        }
       }
     }
     // Fragments are optional on read: an old v1 save
@@ -2103,6 +2136,7 @@ export function deserializeSave(value: unknown): SaveData | null {
         'slept',
         'ritualCompleted',
         'craftedAtStump',
+        'familiarObtained',
       ] as const;
       for (const field of questFields) {
         if (typeof record[field] === 'boolean') {
@@ -2174,6 +2208,7 @@ export function deserializeSave(value: unknown): SaveData | null {
       dimensionVisit,
       acquisitionOrder,
       companions,
+      familiarNames,
       fragments,
       discovery,
       tents,

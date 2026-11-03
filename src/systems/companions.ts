@@ -98,6 +98,42 @@ export function isFeedable(kind: string): boolean {
 }
 
 // ---------------------------------------------------------------------------
+// The sort — which kinds follow, which kinds guard (Adam, 2026-11-02)
+// ---------------------------------------------------------------------------
+//
+// Adam's sort, from the familiar-road design session: a
+// companion that is PRACTICALLY USELESS does not follow —
+// it roams the camp. A useful companion FOLLOWS her, and
+// the capable ones GUARD her (they defend her against the
+// ferals). Two traits, per kind, DRAFT membership for
+// Adam's pin pass — the rulings are his (follow-or-roam,
+// follow-and-guard); the rosters below are the design
+// pass's draft by each kind's nature. The cat is in
+// neither table: it takes no commands and keeps its own
+// road (its runtime is its own).
+
+/** Kinds that travel with her (the rest roam the camp). */
+export const FOLLOWING_KINDS: ReadonlySet<string> = new Set([
+  'wolf', 'bear', 'fox', 'deer', 'beaver', 'raccoon',
+  'groundhog', 'crow', 'owl', 'bat',
+]);
+
+/** Kinds that will fight for her (a subset of the followers). */
+export const GUARDING_KINDS: ReadonlySet<string> = new Set([
+  'wolf', 'bear', 'fox',
+]);
+
+/** True when a companion of this kind follows her. */
+export function followsKind(kind: string): boolean {
+  return FOLLOWING_KINDS.has(kind);
+}
+
+/** True when a companion of this kind defends her. */
+export function guardsKind(kind: string): boolean {
+  return GUARDING_KINDS.has(kind);
+}
+
+// ---------------------------------------------------------------------------
 // Feral — fixed by identity, never rolled in the moment
 // ---------------------------------------------------------------------------
 
@@ -131,7 +167,7 @@ function idHash(id: string): number {
   return (hash >>> 0) / 0x100000000;
 }
 
-export type CompanionOrigin = 'wild' | 'found';
+export type CompanionOrigin = 'wild' | 'found' | 'rite';
 
 /**
  * Is this individual feral — untamable, forever? A
@@ -271,6 +307,23 @@ export type SupersedeRefusalCode =
   | 'no-standing'; // nothing stands to be superseded — plain elevate's job
 
 export type SupersedeResult = { ok: true } | { ok: false; code: SupersedeRefusalCode };
+
+/**
+ * The altar rite's yield (Adam, 2026-11-02 — the familiar
+ * road): 'appeared' = she had no companion of the kind and
+ * the animal came to the rite as her familiar; 'raised' =
+ * her companion of the kind was raised; 'already-familiar'
+ * = the kind's familiar already stands (the waking still
+ * awakens the bone's charm; the bond does not move).
+ * `displaced` carries the former familiar's record when a
+ * standing familiar stepped down to companion.
+ */
+export type RiteOutcome = 'appeared' | 'raised' | 'already-familiar';
+export interface RiteResult {
+  outcome: RiteOutcome;
+  record: SavedCompanion;
+  displaced?: SavedCompanion;
+}
 
 // ---------------------------------------------------------------------------
 // The state — records by creature id
@@ -582,6 +635,70 @@ export class CompanionState {
     standing.bond = 'companion';
     record.bond = 'familiar';
     return { ok: true };
+  }
+
+  /**
+   * OBTAIN BY RITE (Adam, 2026-11-02 — the familiar road's
+   * spine): the familiar is what she obtains from the altar
+   * ritual, and the ritual is worked on a creature's bone —
+   * "she needs the bone for the ritual." The shell calls
+   * this when a Waking completes, with the bone's kind.
+   * The bone is an ABSTRACTION of the kind (Adam: "that's
+   * all we need to know") — no individual provenance is
+   * tracked or wanted.
+   *
+   * - The kind's familiar already stands: nothing moves
+   *   ('already-familiar'); the bone still awakens as a
+   *   charm on the caller's side.
+   * - She keeps a COMPANION of the kind: the rite raises
+   *   that companion ('raised').
+   * - She has no companion of the kind: the animal APPEARS
+   *   and becomes her familiar ('appeared'), as a rite-
+   *   origin record under the shell-supplied stable id
+   *   (one rite animal per kind; a released rite record
+   *   simply lets a later waking make a fresh one).
+   * Either making first steps a standing familiar of
+   * another kind down to companion (the displacement —
+   * Adam: a new waking displaces the old, which resumes
+   * being a companion). The new familiar's stance follows
+   * the sort: following kinds 'follow', the rest 'stay'
+   * (they will roam the camp under the runtime's anchor).
+   */
+  obtainByRite(kind: string, riteCreatureId: string): RiteResult {
+    for (const record of this.records.values()) {
+      if (record.kind === kind && record.bond === 'familiar') {
+        return { outcome: 'already-familiar', record: { ...record } };
+      }
+    }
+    const standing = this.standingFamiliarRecord();
+    let displaced: SavedCompanion | undefined;
+    const stepDownStanding = (): void => {
+      if (standing) {
+        standing.bond = 'companion';
+        displaced = { ...standing };
+      }
+    };
+    for (const record of this.records.values()) {
+      if (record.kind === kind && record.bond === 'companion') {
+        if (!standing || standing.creatureId !== record.creatureId) {
+          stepDownStanding();
+        }
+        record.bond = 'familiar';
+        return { outcome: 'raised', record: { ...record }, displaced };
+      }
+    }
+    stepDownStanding();
+    const record: SavedCompanion = {
+      creatureId: riteCreatureId,
+      kind,
+      trust: TRUST_FOR_BOND,
+      bond: 'familiar',
+      origin: 'rite',
+      stance: followsKind(kind) ? 'follow' : 'stay',
+      lastFedDay: null,
+    };
+    this.records.set(riteCreatureId, record);
+    return { outcome: 'appeared', record: { ...record }, displaced };
   }
 }
 

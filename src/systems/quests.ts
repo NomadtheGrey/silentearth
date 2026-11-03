@@ -154,6 +154,8 @@ export interface QuestFlags {
   slept: boolean;
   ritualCompleted: boolean;
   craftedAtStump: boolean;
+  /** Shell sets when a Waking's rite yields a familiar (the familiar road, 2026-11-02). */
+  familiarObtained: boolean;
 }
 
 /** All-false flags (fresh save / before any flag is set). */
@@ -163,6 +165,7 @@ export function emptyQuestFlags(): QuestFlags {
     slept: false,
     ritualCompleted: false,
     craftedAtStump: false,
+    familiarObtained: false,
   };
 }
 
@@ -176,6 +179,7 @@ export interface SavedQuestFlags {
   slept?: boolean;
   ritualCompleted?: boolean;
   craftedAtStump?: boolean;
+  familiarObtained?: boolean;
   /**
    * The ACTIVE MARK: the one quest id she has marked
    * active (the HUD card's quest), or absent for none.
@@ -723,6 +727,26 @@ export const QUEST_DEFINITIONS: readonly QuestDefinition[] = [
         id: 'wake-the-charm',
         label: 'Wake the charm',
         isDone: (facts) => wakingDone(facts),
+      },
+    ],
+  },
+  {
+    id: 'gain-a-familiar',
+    title: 'Gain a Familiar',
+    // THE FAMILIAR ROAD (Adam, 2026-11-02): the familiar
+    // is what she obtains from the altar ritual worked on
+    // a creature's bone — the Wakings thread's next step
+    // after Wake a Charm. The same completion that wakes
+    // the charm yields the familiar when the ground is an
+    // altar (grade 2); the shell's flag is the fact.
+    thread: 'wakings',
+    act: 'witchery',
+    isDone: (facts) => facts.flags.familiarObtained,
+    components: [
+      {
+        id: 'wake-at-an-altar',
+        label: 'Wake a creature’s bone at an altar',
+        isDone: (facts) => facts.flags.familiarObtained,
       },
     ],
   },

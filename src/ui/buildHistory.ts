@@ -43,6 +43,14 @@ export interface BuildRecord {
 
 const ALL_RECORDS: BuildRecord[] = [
   {
+    merge: 'Merge #70',
+    pr: 95,
+    sha: '5e3ad0a',
+    date: '2026-11-02',
+    what: 'THE FAMILIAR ROAD — the familiar is now what she obtains from the altar ritual, worked on a creature\u2019s bone. When a Waking completes at an altar, her companion of that kind is raised — or, if she has none, the animal comes to the rite and stands as her familiar; a standing familiar of another kind steps down to companion in the same making. The altar panel\u2019s old free-standing raise doors are closed; letting a familiar step down remains. The kind\u2019s true name arrives with the awakening and is written in the journal\u2019s new Names page, with the kind\u2019s gift beside it. Speaking the name — Recite, in the journal — borrows the gift for a while: the bat\u2019s dark-sight and the mole\u2019s passing-unseen work today; the other kinds\u2019 gifts stand named, to be wired as their builds come. A new quest, Gain a Familiar, joins the Wakings thread. Names, gifts, rosters, and borrow spans are draft, awaiting Adam\u2019s pin pass.',
+    why: 'Adam\u2019s design, settled in one sitting: the bone is the ritual\u2019s price and its key — \u201Cshe needs the bone for the ritual\u201D — and the bond systems are optional to play but strongly advised, because feral danger is coming and she should be able to raise companions before it arrives. The name had to live somewhere she carries it; the journal is that book, and the recite is its door.',
+  },
+  {
     merge: 'Merge #69',
     pr: 95,
     sha: 'edf8d82',

@@ -1655,6 +1655,7 @@ import {
   applySnatchSpook,
   biomePresentKinds,
   pickSnatchTarget,
+  setUndetected,
   type AnimalKind,
 } from './game/animals';
 import {
@@ -2028,6 +2029,11 @@ import {
   type CompanionStance,
   type SavedCompanion,
 } from './systems/companions';
+import {
+  FamiliarState,
+  giftFor,
+  trueNameFor,
+} from './systems/familiar';
 import { DiscoveryState } from './systems/discovery';
 import { FragmentState, markDisplayName } from './systems/fragments';
 import {
@@ -3339,6 +3345,20 @@ export default function App() {
       bootSave?.companions ?? [],
     );
   }
+  // FAMILIAR STATE (the familiar road, 2026-11-02): the
+  // shell owns the one FamiliarState (Systems' module) —
+  // the true names the rites teach and the borrowing's
+  // span/rest. Same ref-lazy pattern; the names ride
+  // every saveNow, the borrowing never does. The live
+  // gift id rides borrowLiveRef so the 1 s settle can
+  // take the effect back off when the span lapses.
+  const familiarStateRef = useRef<FamiliarState | null>(null);
+  if (familiarStateRef.current === null) {
+    familiarStateRef.current = new FamiliarState(
+      bootSave?.familiarNames ?? [],
+    );
+  }
+  const borrowLiveRef = useRef<string | null>(null);
   // DISCOVERY STATE (the Raven Guide wiring, 2026-10-31):
   // the shell owns the one DiscoveryState (Systems'
   // module), constructed from the boot save's record —
@@ -4108,6 +4128,10 @@ export default function App() {
           // serialize writes them verbatim, load validates
           // and defaults []). Bonds survive refresh.
           companions: companionStateRef.current.snapshot(),
+          // FAMILIAR NAMES SAVE WIRING (the familiar road,
+          // 2026-11-02): the kinds whose true names she
+          // knows ride every save (FamiliarState's list).
+          familiarNames: familiarStateRef.current.knownKinds(),
           // DISCOVERY SAVE WIRING (the Raven Guide,
           // 2026-10-31): the grove fact rides every save
           // (the day she found it, or null while unfound).
@@ -6028,6 +6052,11 @@ export default function App() {
       // this timer (the sky does not advance while
       // paused, so no window can arrive then either).
       checkRitualCompletions();
+      // The borrowing's end rides the same clock: when a
+      // borrowed gift's span lapses, its effect comes off
+      // and the feed says so (FamiliarState owns the
+      // span/rest arithmetic; the settle only watches).
+      settleBorrow();
     }, 1000);
     // Placed-fire + shelter subscriptions: fires re-read from
     // the engine singleton on every fire event; shelter applies
@@ -8414,6 +8443,102 @@ export default function App() {
       syncCrowTier();
       syncCharmBonuses();
       syncDeerWarning();
+      // THE FAMILIAR RITE (Adam, 2026-11-02 — the familiar
+      // road): the same Waking that awakens the bone is
+      // the altar ritual the familiar is obtained from —
+      // "she needs the bone for the ritual." The state
+      // decides (obtainByRite): her companion of the kind
+      // is raised; or the animal APPEARS at the altar as a
+      // rite-born familiar; a standing familiar of another
+      // kind steps down to companion inside the making.
+      // The shell's arms: a body for the appeared animal,
+      // the movement flip for the raised/displaced, the
+      // feed lines (all DRAFT, Adam's pin pass), the flag.
+      {
+        // The familiar's gate: the rite is worked at an
+        // ALTAR (Adam: "the familiar is what she obtains
+        // from the altar ritual") — grade-2 ground, the
+        // same grade the staging gate already demands.
+        // A Waking completing below grade (only a pre-rule
+        // save's leftover staging can) awakens its charm
+        // and yields no familiar.
+        const riteSite = sitePositionFor(entry.siteKey);
+        const riteAdditions =
+          riteSite?.kind === 'stump'
+            ? (stumpState
+                .snapshot()
+                .find((r) => r.x === riteSite.x && r.z === riteSite.z)
+                ?.additions ?? [])
+            : riteSite?.kind === 'altar'
+              ? (altarState.get(entry.siteKey)?.additions ?? [])
+              : [];
+        const rite =
+          riteSite && siteGrade(riteSite.kind, riteAdditions) >= 2
+            ? companionStateRef.current.obtainByRite(
+                result.kind,
+                `rite:${result.kind}`,
+              )
+            : null;
+        const kindLabel = companionKindLabel(result.kind);
+        if (rite && rite.outcome === 'appeared') {
+          const site = riteSite;
+          if (site) {
+            const seatX = site.x + 1.2;
+            const seatZ = site.z;
+            restoreActor(
+              makeCompanionInstance(
+                rite.record.creatureId,
+                result.kind as AnimalKind,
+                seatX,
+                seatZ,
+              ),
+              rite.record.stance ?? 'follow',
+              seatX,
+              seatZ,
+            );
+            setMovementMode(rite.record.creatureId, 'settleDart');
+          }
+          showFeedback(
+            rite.displaced
+              ? `The ${kindLabel} comes to the rite — your familiar now. The ${companionKindLabel(rite.displaced.kind)} steps down, still your companion.`
+              : `The ${kindLabel} comes to the rite — and stays. Your familiar.`,
+            'gain',
+          );
+        } else if (rite && rite.outcome === 'raised') {
+          applyBondEngineArms(rite.record.creatureId, 'familiar');
+          showFeedback(
+            rite.displaced
+              ? `The ${kindLabel} rises — your familiar now. The ${companionKindLabel(rite.displaced.kind)} steps down, still your companion.`
+              : `The ${kindLabel} rises — your familiar now.`,
+            'gain',
+          );
+        } else if (rite) {
+          showFeedback(
+            `The ${kindLabel} already stands as your familiar.`,
+            'info',
+          );
+        }
+        if (rite?.displaced && rite.outcome !== 'already-familiar') {
+          applyBondEngineArms(rite.displaced.creatureId, 'companion');
+        }
+        if (rite && rite.outcome !== 'already-familiar') {
+          setQuestFlag('familiarObtained');
+          bus.emit('familiar:elevated', { id: rite.record.creatureId });
+          // The name arrives WITH the awakening (Adam):
+          // the rite teaches her the kind's true name,
+          // and the journal keeps it from then on.
+          if (familiarStateRef.current.learnName(result.kind)) {
+            const taught = trueNameFor(result.kind);
+            if (taught) {
+              showFeedback(
+                `Its true name comes to her: ${taught}. It is written in the journal.`,
+                'gain',
+              );
+            }
+          }
+        }
+        setCompanionRecords(companionStateRef.current.snapshot());
+      }
       // The awakening line joins the message feed (it
       // used to anchor at the site — the feed is every
       // line's seat now, so the site lookup is gone).
@@ -8750,6 +8875,57 @@ export default function App() {
     }
     setCompanionRecords(state.snapshot());
     saveNow();
+  };
+
+  // THE RECITE (the familiar road, 2026-11-02 — flagged
+  // reading from Adam's design session: speaking the true
+  // name from the journal is the borrowing's door). The
+  // journal offers it for the standing familiar when its
+  // gift is a working one; FamiliarState owns the span
+  // and the rest; the shell applies the gift's effect —
+  // dark-sight lights her sight in the renderer, and
+  // undetected stills the wild animals' startle.
+  const applyBorrowEffect = (giftId: string, on: boolean) => {
+    if (giftId === 'dark-sight') {
+      rendererRef.current?.setBorrowedSight(on);
+    } else if (giftId === 'undetected') {
+      setUndetected(on);
+    }
+  };
+
+  const handleRecite = (kind: string) => {
+    const standing = companionStateRef.current.familiar();
+    if (!standing || standing.kind !== kind) return;
+    if (!familiarStateRef.current.knowsName(kind)) return;
+    const result = familiarStateRef.current.tryBorrow(
+      kind,
+      Date.now() / 1000,
+    );
+    if (!result.ok) return;
+    const gift = giftFor(kind);
+    if (gift?.giftId) {
+      applyBorrowEffect(gift.giftId, true);
+      borrowLiveRef.current = gift.giftId;
+    }
+    showFeedback(
+      `She speaks the name — ${gift?.phrase ?? 'the gift'} is hers for a while.`,
+      'gain',
+    );
+  };
+
+  // The borrowing's end (the 1 s timer rides this): when
+  // the span lapses, the effect comes off and the feed
+  // says so. Rest arithmetic lives in FamiliarState.
+  const settleBorrow = () => {
+    const was = borrowLiveRef.current;
+    const live = familiarStateRef.current.activeBorrow(Date.now() / 1000);
+    if (was && !live) {
+      applyBorrowEffect(was, false);
+      borrowLiveRef.current = null;
+      showFeedback('The borrowing fades.', 'info');
+    } else if (live) {
+      borrowLiveRef.current = live.giftId;
+    }
   };
 
   const handleGiveOffering = (
@@ -10791,26 +10967,25 @@ export default function App() {
       : companionRecords.find(
           (record) => record.creatureId === pendingRite.creatureId,
         );
-  const riteActs: { id: string; label: string }[] = bondedCompanions.map(
-    (record) => {
-      const label = companionKindLabel(record.kind);
-      if (record.bond === 'familiar') {
-        return {
-          id: `relinquish:${record.creatureId}`,
-          label: `Let the ${label} step down`,
-        };
-      }
-      return standingFamiliarRecord
-        ? {
-            id: `supersede:${record.creatureId}`,
-            label: `Raise the ${label} in the ${companionKindLabel(standingFamiliarRecord.kind)}'s place`,
-          }
-        : {
-            id: `elevate:${record.creatureId}`,
-            label: `Raise the ${label} as your familiar`,
-          };
-    },
-  );
+  // The familiar's rite acts (REWORKED, Adam 2026-11-02 —
+  // the familiar road): raising no longer stands here as a
+  // free-standing door. The familiar is what she obtains
+  // from the altar ritual WORKED ON A BONE — a Waking's
+  // completion raises her companion of the kind or brings
+  // the animal to her (CompanionState.obtainByRite, called
+  // from checkRitualCompletions), and displacement lives
+  // inside that making. What remains at the altar is the
+  // step-down: the standing familiar may be let go back to
+  // companion here, bone-free, as it always was.
+  const riteActs: { id: string; label: string }[] =
+    standingFamiliarRecord
+      ? [
+          {
+            id: `relinquish:${standingFamiliarRecord.creatureId}`,
+            label: `Let the ${companionKindLabel(standingFamiliarRecord.kind)} step down`,
+          },
+        ]
+      : [];
 
   // The pile whose menu is open, with its anchor.
   // Live menu pile: the menu renders from piles state, not a
@@ -13958,6 +14133,36 @@ export default function App() {
       };
     });
 
+  // The journal's NAMES page (the familiar road,
+  // 2026-11-02): one row per kind whose true name a rite
+  // has taught her, in the order learned; the standing
+  // familiar's row carries its borrow posture for the
+  // Recite door (FamiliarState owns the arithmetic; this
+  // only reads it at render).
+  const journalNameRows = familiarStateRef.current
+    .knownKinds()
+    .map((kind) => {
+      const gift = giftFor(kind);
+      const standingFamiliar = companionStateRef.current.familiar();
+      const isFamiliar = standingFamiliar?.kind === kind;
+      const nowSec = Date.now() / 1000;
+      return {
+        kind,
+        label: companionKindLabel(kind),
+        name: trueNameFor(kind) ?? kind,
+        gift: gift?.phrase ?? '—',
+        isFamiliar,
+        giftWorking: gift?.giftId != null,
+        borrowState: !isFamiliar
+          ? undefined
+          : familiarStateRef.current.activeBorrow(nowSec)
+            ? ('borrowed' as const)
+            : familiarStateRef.current.isResting(nowSec)
+              ? ('resting' as const)
+              : ('ready' as const),
+      };
+    });
+
   // DESKTOP PILE PICKUP (see the header): the mouse twin
   // of R's pile second — shown only when the faced
   // winner IS a pile, so the button never contradicts
@@ -15631,6 +15836,8 @@ export default function App() {
         {journalOpen ? (
           <JournalPanel theme={lookThemes.world}
             marks={journalRows}
+            names={journalNameRows}
+            onRecite={handleRecite}
             quests={questDisplay}
             onMarkQuest={toggleActiveQuestMark}
             onClose={() => setJournalOpen(false)}
