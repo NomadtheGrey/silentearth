@@ -1702,6 +1702,7 @@ import { harvestState } from './game/harvestState';
 import {
   SOURCE_BY_ID,
   SOURCE_FOR_KIND,
+  harvestSourceLinesFor,
   type ToolTier,
 } from './game/objects';
 import type { FireType } from './game/fire';
@@ -1814,6 +1815,7 @@ import type {
 } from './ui/types';
 import {
   ITEM_CATEGORY_ORDER,
+  ITEM_ID_ALIASES,
   PersonalInventory,
   categoryFor,
   descriptionFor,
@@ -1886,6 +1888,7 @@ import {
   turnOn,
 } from './systems/cloudSaves';
 import {
+  isItemMet,
   itemFactsFor,
   knowledgeSnapshot,
   recordItemUse,
@@ -16988,6 +16991,35 @@ export default function App() {
             </p>
             {(() => {
               const facts = itemFactsFor(normalizeItemId(itemInfoId));
+              // The harvest-source seam (Background's
+              // SOURCE_YIELD_INDEX in game/objects.ts,
+              // 2026-11-03): the harvest lines join the
+              // card here, where both layers are visible
+              // — under the SAME met gate itemFactsFor
+              // applies internally, so an unmet item
+              // shows no sources at all. The shell also
+              // TRANSLATES (DEV's ratification of the
+              // drive finding, 2026-11-03): the index is
+              // keyed in the defs' spelling space
+              // (UPPER_SNAKE legacy yields, kebab
+              // flowers) while the card's ids are
+              // canonical, and the two spaces meet only
+              // in Systems' ITEM_ID_ALIASES — so the
+              // lines are read under the canonical id
+              // AND under its alias key, whichever the
+              // defs used. An item's lines live under
+              // exactly one spelling, so the order
+              // within the section is the index's own.
+              if (isItemMet(normalizeItemId(itemInfoId))) {
+                const infoId = normalizeItemId(itemInfoId);
+                facts.sources.push(...harvestSourceLinesFor(infoId));
+                const aliasKey = Object.keys(ITEM_ID_ALIASES).find(
+                  (key) => ITEM_ID_ALIASES[key] === infoId,
+                );
+                if (aliasKey !== undefined && aliasKey !== infoId) {
+                  facts.sources.push(...harvestSourceLinesFor(aliasKey));
+                }
+              }
               return (
                 <>
                   <div>

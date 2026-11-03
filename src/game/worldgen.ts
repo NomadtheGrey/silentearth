@@ -23,6 +23,7 @@ import { CHUNK_SIZE, BASE_SCATTER_PER_CHUNK, GROUND_SEGMENTS } from '../constant
 import { caveInstancesInRect } from './caves';
 import { homesteadInstancesInRect } from './homesteads';
 import { farmhouseInstancesInRect } from './farmhouses';
+import { villageInstancesInRect } from './villages';
 import type { BiomeWeights, ChunkData, ScatterKind, ScatterObject } from '../types';
 
 export interface WorldGen {
@@ -115,8 +116,13 @@ export const CLUSTER_PRESENCE_SMALL = 0.3;
 // null before it existed, so every standing derivation
 // is byte-identical. Stands plant UNNAMED (Adam deferred
 // naming the same day — 'maybe a Mark of Naming', a
-// parked seed, not a build). DRAFT.
-export const CLUSTER_PRESENCE_PINE = 0.25;
+// parked seed, not a build). Presence PINNED by Adam the
+// same day ('Then we can do one third'), after the first
+// build's census corrected the rate's yield: at one
+// third, measured on the true grid, the default world
+// stands 30 pine stands per ±2048 m (was 24 at the
+// draft quarter) and 'Blah' stands 49 (was 33).
+export const CLUSTER_PRESENCE_PINE = 1 / 3;
 // Fraction of lone trees (outside every grove) culled
 // (DRAFT; raised hard in the 2026-10-30 tuning pass, on
 // Adam's verdict that the clustered woods read as
@@ -460,6 +466,7 @@ export function createWorldGen(seed: string): WorldGen {
     ...caveInstancesInRect(seed, spawnOnce(), weightsAtPos, rect),
     ...homesteadInstancesInRect(seed, spawnOnce(), weightsAtPos, rect),
     ...farmhouseInstancesInRect(seed, spawnOnce(), weightsAtPos, rect),
+    ...villageInstancesInRect(seed, spawnOnce(), weightsAtPos, rect),
   ];
 
   const getSites = (): SiteFootprint[] => {

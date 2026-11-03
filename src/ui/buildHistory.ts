@@ -43,6 +43,14 @@ export interface BuildRecord {
 
 const ALL_RECORDS: BuildRecord[] = [
   {
+    merge: 'Merge #76',
+    pr: 95,
+    sha: 'b22ab81',
+    date: '2026-11-03',
+    what: 'VILLAGES — the world populates: other burnt villages now stand in the creek-and-oldfield country beside the authored first, derived on seed and location like the caves and homesteads before them. Each is enumerated by the size law — three to six structures, exploding on a third roll for three to six more — and the count is honest: houses plus exactly one general store, counted within the roll, standing at the street\u2019s centre and never rolled away to nothing. One house in every village is the hearth house, forced standing, and its hearthstone carries Home — so Home completes the way Adam ruled it should, through the populated world rather than a single seat. Bone spots ride each village as they do the first. Two smaller pins ride the batch: the pine stands\u2019 presence is settled at one third (Adam\u2019s pin, measured since at 30 stands on the home world and 49 on Blah), and the item cards gain their harvest lines — where a thing is gathered, joined to the card under the same gate as the rest of its facts, the spelling translated at the shell where the two vocabularies meet.',
+    why: 'The population law made flesh: there is not only one of anything in an infinitely walkable world. The first village was a first, not an only — and with the family standing, the world\u2019s emptiest promise (a fragment mark carried by two singular stones) becomes a property of ranging itself.',
+  },
+  {
     merge: 'Merge #75',
     pr: 95,
     sha: 'eb57cfd',
