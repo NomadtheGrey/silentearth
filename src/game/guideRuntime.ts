@@ -43,11 +43,22 @@
  * working an audience of one. The distances are
  * twilight distances (short legs, a close lead ring —
  * if she can't see it at dusk it isn't guiding); every
- * flight bows across her view; on the perch she turns
- * to watch her, fidgets and hop-flaps; and when she
- * dawdles the bird escalates 'over here' — call, flap
- * display, a display arc back to the same perch — and
+ * flight bows across her view; on the perch she
+ * fidgets and hop-flaps; and when she dawdles the bird
+ * escalates 'over here' — call, flap display — and
  * never leaves. Her pace sets its tempo.
+ *
+ * THE LEAD REWORK (Adam's verdict, 2026-11-03: 'He just
+ * hovers and stares' — the composed gates parked her at
+ * one tree for any audience that did not walk straight
+ * at her): LEAD, DON'T WAIT. Within her leash she hops
+ * onward on her own clock — no closing evidence
+ * required — perched proud, facing along her route
+ * except when her audience is close or she has just
+ * called. The display arc back to the same perch is
+ * retired: its slot belongs to a real hop onward. The
+ * gaze rebalance is the one change to the 2026-11-01
+ * watch-her spec, under Adam's trial standard.
  */
 import { bus } from './events';
 import { stepAnimalAnimation } from './animals';
@@ -62,8 +73,12 @@ export const GUIDE_ID = 'guide:grove';
 export const GUIDE_FOLLOW_RANGE_M = 14;
 /** One hop's length (m) toward the Grove — SHORT legs (DRAFT). */
 export const GUIDE_HOP_M = 18;
-/** How far around a hop's ideal end to look for a real tree. */
-export const GUIDE_PERCH_SNAP_M = 10;
+/** How far around a hop's ideal end to look for a real
+ *  tree. WIDENED 2026-11-03 (the stall fix): at 10 m a
+ *  sparse stretch left no tree within reach of the hop
+ *  end or its shortenings and the bird parked forever,
+ *  even with her standing under it. */
+export const GUIDE_PERCH_SNAP_M = 16;
 /** Flight speed and cruise height. */
 export const GUIDE_FLY_MPS = 8;
 export const GUIDE_CRUISE_Y_M = 7;
@@ -77,12 +92,30 @@ export const GUIDE_PERCH_DWELL_S = 2.5;
 /** Stage on a tree about this far ahead of her (m) (DRAFT — in from 30). */
 export const GUIDE_STAGE_AHEAD_M = 18;
 /** The dawdle ladder (DRAFT, s of no closing): she turns
- *  and calls, then FLAPS in place, then flies a display
- *  arc back to the same perch. Escalating 'over here' —
- *  a dawdle never makes her leave. */
+ *  and calls, then FLAPS in place. Escalating 'over
+ *  here' — a dawdle never makes her leave. The ladder's
+ *  old third rung — a display arc back to the SAME
+ *  perch at 40 s — is RETIRED (2026-11-03, the lead
+ *  rework): motion that went nowhere. Its span constant
+ *  keeps its second job, the attending latch's lapse. */
 export const GUIDE_DAWDLE_CALL_S = 10;
 export const GUIDE_DAWDLE_FLAP_S = 22;
 export const GUIDE_DAWDLE_ARC_S = 40;
+/** THE LEAD PAUSE (DRAFT, s past the dwell): within her
+ *  leash (GUIDE_ATTEND_RANGE_M) and not receded from,
+ *  she hops onward on her own clock once the perch is
+ *  this old — no closing evidence required (the lead
+ *  rework, 2026-11-03). It sits just past the ladder's
+ *  call rung: one 'over here', then she MOVES. Closing
+ *  evidence still advances her sooner (the engagement
+ *  gate below); her pace sets the tempo, her slowness
+ *  no longer parks the bird. */
+export const GUIDE_LEAD_PAUSE_S = 10;
+/** The gaze's call beat (DRAFT, s): for this long after
+ *  a call she faces her audience; otherwise, off follow
+ *  range, she faces along her route (the gaze law in
+ *  the perched step). */
+export const GUIDE_GAZE_CALL_S = 1.2;
 /** Closing this much (m) counts as following: the ladder resets. */
 export const GUIDE_CLOSING_RESET_M = 2;
 /** ENGAGEMENT (Adam's sentence, 2026-11-01: 'the raven
@@ -98,7 +131,10 @@ export const GUIDE_CLOSING_RESET_M = 2;
  *  twilight window's close is DEFERRED — the road runs
  *  past the window's edge. On genuine disengagement
  *  with the window closed she leaves by a DEPARTURE
- *  FLIGHT home, never a blink. */
+ *  FLIGHT home, never a blink. THE RANGE DOUBLES as
+ *  the lead rework's LEASH (2026-11-03): within it she
+ *  self-advances on the lead pause even unattended;
+ *  beyond it she holds and performs the ladder. */
 export const GUIDE_ATTEND_RANGE_M = 60;
 /** Improving on the best distance by this much (m)
  *  counts as fresh evidence of attending. */
@@ -209,7 +245,9 @@ export interface GuideActor {
   glideToZ: number;
   /** Seconds since she last closed on the perch (the dawdle clock). */
   waitT: number;
-  /** The dawdle ladder's current rung (0 none, 1 called, 2 flapped, 3 arced). */
+  /** The dawdle ladder's current rung (0 none, 1 called,
+   *  2 flapped — the ladder caps at 2 since the arc's
+   *  retirement, 2026-11-03). */
   dawdleStage: number;
   /** Her distance at the last perched step (closing detection). */
   lastDistP: number;
@@ -315,6 +353,12 @@ let lastStepDimensionActive = false;
 export interface GuideTagSeat {
   x: number;
   z: number;
+  /** The bird's live height (m) — the seat's y, carried
+   *  since 2026-11-03 (the tag diagnosis: the shell
+   *  projected every tag at 1 m, so 'Raven' rendered at
+   *  the trunk, metres under the perched bird).
+   *  Consumers project at it when present. */
+  y: number;
   state: 'perched' | 'flying' | 'departing';
 }
 
@@ -322,7 +366,7 @@ export function guideTagSeat(): GuideTagSeat | null {
   if (!guide || lastStepDimensionActive) return null;
   const s = guide.state;
   if (s !== 'perched' && s !== 'flying' && s !== 'departing') return null;
-  return { x: guide.instance.x, z: guide.instance.z, state: s };
+  return { x: guide.instance.x, z: guide.instance.z, y: guide.instance.y, state: s };
 }
 
 export function clearGuide(): void {
@@ -553,10 +597,19 @@ export function stepGuide(dt: number, ctx: GuideStepContext): void {
   if (g.state === 'perched') {
     g.callT += dt;
     g.perchT += dt;
-    // She watches her audience: the perch heading tracks
-    // the player (the turn-to-look is continuous, so the
-    // ladder's first rung never needs a snap).
-    inst.heading = Math.atan2(ctx.playerX - inst.x, ctx.playerZ - inst.z);
+    const distP = Math.hypot(ctx.playerX - inst.x, ctx.playerZ - inst.z);
+    // THE GAZE (rebalanced 2026-11-03, Adam's trial —
+    // the one change to his 2026-11-01 watch-her spec):
+    // she faces her audience while it is CLOSE (inside
+    // follow range) and in the beat after a call; the
+    // rest of the time she faces ALONG HER ROUTE,
+    // toward the Grove — her body says where she is
+    // going. (Facing her every frame composed with the
+    // old gates into the stare he named.)
+    const faceHer = distP <= GUIDE_FOLLOW_RANGE_M || g.callT < GUIDE_GAZE_CALL_S;
+    inst.heading = faceHer
+      ? Math.atan2(ctx.playerX - inst.x, ctx.playerZ - inst.z)
+      : Math.atan2(grovePoint.x - inst.x, grovePoint.z - inst.z);
     // Wing pose: a flap burst or fidget flick reads as
     // instance.flying to the pose, while the STATE stays
     // perched (she has not left).
@@ -598,7 +651,6 @@ export function stepGuide(dt: number, ctx: GuideStepContext): void {
       inst.z = g.glideFromZ + (g.glideToZ - g.glideFromZ) * smooth;
     }
     if (g.callT >= GUIDE_CALL_REPEAT_S) call(g, ctx.playerX, ctx.playerZ);
-    const distP = Math.hypot(ctx.playerX - inst.x, ctx.playerZ - inst.z);
     // Her pace sets the tempo: real closing resets the
     // dawdle ladder; standing in range holds it at zero.
     if (distP < g.lastDistP - GUIDE_CLOSING_RESET_M || distP <= GUIDE_FOLLOW_RANGE_M) {
@@ -612,13 +664,17 @@ export function stepGuide(dt: number, ctx: GuideStepContext): void {
       if (g.attending) {
         // Attention is proven: the ladder's premise is
         // its absence, so the dawdle clock holds at zero
-        // and she falls through to the advance gate.
+        // and she falls through to the advance gates.
         g.waitT = 0;
         g.dawdleStage = 0;
       } else {
         // THE DAWDLE LADDER — she escalates 'over here',
         // she never leaves. (Runs at the final perch too:
-        // the audience is still owed a performance.)
+        // the audience is still owed a performance.) The
+        // ladder no longer ends the step: past its rungs
+        // the advance gates below decide, and within her
+        // leash the lead pause — not a display arc back
+        // to this same perch — is what answers a dawdle.
         g.waitT += dt;
         if (g.dawdleStage < 1 && g.waitT >= GUIDE_DAWDLE_CALL_S) {
           g.dawdleStage = 1;
@@ -627,37 +683,35 @@ export function stepGuide(dt: number, ctx: GuideStepContext): void {
           g.dawdleStage = 2;
           g.flapT = GUIDE_FLAP_DISPLAY_S;
           call(g, ctx.playerX, ctx.playerZ);
-        } else if (g.dawdleStage < 3 && g.waitT >= GUIDE_DAWDLE_ARC_S) {
-          g.dawdleStage = 3;
-          // The display arc: up, across her view on the
-          // bow, and back to THIS perch; the landing calls.
-          beginFlight(g, g.homeX, g.homeZ, ctx.playerX, ctx.playerZ, g.homeY);
-          if (!g.hasVia) {
-            // Seated exactly on the target — force a loop:
-            // out toward her side, across, and back.
-            const toX = ctx.playerX - inst.x;
-            const toZ = ctx.playerZ - inst.z;
-            const toD = Math.hypot(toX, toZ) || 1;
-            g.viaX = inst.x + (toX / toD) * 3 - (toZ / toD) * 4;
-            g.viaZ = inst.z + (toZ / toD) * 3 + (toX / toD) * 4;
-            g.hasVia = true;
-          }
         }
-        return; // inattention: she waits at this perch
       }
     }
     if (g.atFinalPerch) return; // the edge perch: it waits for her discovery
     if (g.perchT < GUIDE_PERCH_DWELL_S) return; // the staging beat
     if (distP > GUIDE_FOLLOW_RANGE_M) {
-      // THE ADVANCE GATE (engagement): beyond follow
-      // range an attended follow still moves right
-      // along — she must be within attend range and
-      // have been closed on by the closing measure
-      // since this perch was taken. (Within follow
-      // range the hop below is the standing law.)
-      if (!g.attending) return;
-      if (distP > GUIDE_ATTEND_RANGE_M) return;
-      if (g.perchDistP - distP < GUIDE_CLOSING_RESET_M) return;
+      // THE ADVANCE GATES (beyond follow range; within
+      // it the hop below is the standing law). Either
+      // road may open:
+      //  ENGAGED (2026-11-01): an attended follow moves
+      //  right along — within attend range and closed
+      //  on by the closing measure since this perch.
+      //  SELF-LED (the lead rework, 2026-11-03): the
+      //  perch has outlasted the dwell + lead pause,
+      //  she is within the leash (the attend range),
+      //  and she has not RECEDED from the perch's
+      //  anchor by more than the closing measure — so
+      //  she hops onward on her own clock. A parked
+      //  watcher inside the leash gets a guide that
+      //  LEADS; only distance or retreat holds her.
+      const engaged =
+        g.attending &&
+        distP <= GUIDE_ATTEND_RANGE_M &&
+        g.perchDistP - distP >= GUIDE_CLOSING_RESET_M;
+      const selfLed =
+        g.perchT >= GUIDE_PERCH_DWELL_S + GUIDE_LEAD_PAUSE_S &&
+        distP <= GUIDE_ATTEND_RANGE_M &&
+        distP <= g.perchDistP + GUIDE_CLOSING_RESET_M;
+      if (!engaged && !selfLed) return;
     }
     // The next hop: toward the Grove, onto a real tree —
     // clamped so the flight ends AT the lead ring, never
@@ -672,19 +726,47 @@ export function stepGuide(dt: number, ctx: GuideStepContext): void {
     const hop = Math.min(GUIDE_HOP_M, distG - GUIDE_LEAD_RING_M);
     const hx = inst.x + (dx / distG) * hop;
     const hz = inst.z + (dz / distG) * hop;
+    // THE SEARCH (widened 2026-11-03, the stall fix):
+    // every candidate must make real PROGRESS — strictly
+    // closer to the Grove than this seat — because the
+    // shortened searches can otherwise re-pick the tree
+    // she is sitting on and burn the hop in place; and
+    // when the whole line is bare, a BEARING FAN either
+    // side of the grove line takes an off-line tree
+    // rather than parking her for good.
+    const progress = (p: { x: number; z: number } | null): boolean =>
+      p !== null && Math.hypot(p.x - grovePoint.x, p.z - grovePoint.z) < distG - 0.5;
     let perch = ctx.perchNear(hx, hz, GUIDE_PERCH_SNAP_M);
+    if (!progress(perch)) perch = null;
     if (!perch) {
       // Shorten the hop to the farthest tree on the line.
-      for (const frac of [0.7, 0.45, 0.25]) {
-        perch = ctx.perchNear(
+      for (const frac of [0.8, 0.65, 0.5, 0.35, 0.2]) {
+        const p = ctx.perchNear(
           inst.x + (dx / distG) * hop * frac,
           inst.z + (dz / distG) * hop * frac,
           GUIDE_PERCH_SNAP_M,
         );
-        if (perch) break;
+        if (progress(p)) {
+          perch = p;
+          break;
+        }
       }
     }
-    if (!perch) return; // treeless stretch — waits and calls
+    if (!perch) {
+      // The bearing fan: the full hop, swung either side.
+      for (const ang of [0.45, -0.45, 0.9, -0.9]) {
+        const cos = Math.cos(ang);
+        const sin = Math.sin(ang);
+        const rx = (dx / distG) * cos - (dz / distG) * sin;
+        const rz = (dx / distG) * sin + (dz / distG) * cos;
+        const p = ctx.perchNear(inst.x + rx * hop, inst.z + rz * hop, GUIDE_PERCH_SNAP_M);
+        if (progress(p)) {
+          perch = p;
+          break;
+        }
+      }
+    }
+    if (!perch) return; // truly treeless stretch — waits and calls
     g.atFinalPerch = Math.hypot(perch.x - grovePoint.x, perch.z - grovePoint.z) <= GUIDE_LEAD_RING_M;
     beginFlight(g, perch.x, perch.z, ctx.playerX, ctx.playerZ, seatYFor(perch));
     return;
