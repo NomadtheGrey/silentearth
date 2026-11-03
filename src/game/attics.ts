@@ -218,6 +218,62 @@ const layoutCache = new Map<string, UpstairsLayout>();
  * that names no house, or a form the house doesn't
  * carry.
  */
+/**
+ * ATTIC CONTENTS (Background, 2026-11-03 — the attics'
+ * lootable half, claimed with DEV): what each eaves
+ * crate holds, derived per (world seed, attic key,
+ * house state) on a stream of its own, so the layout
+ * derivation above never re-rolls. A crate's content is
+ * a world fact; TAKING it is state (the harvest 'taken'
+ * record, bucketed per dimension when Systems' swap
+ * lands). Tables + prices are DRAFT for the pin pass;
+ * the junk table is the draft Adam's design session
+ * replaces (his catalog: more than eight, by class).
+ */
+export const ATTIC_CONTENT_GOODS: readonly ScatterKind[] = [
+  'storedCandle',
+  'storedTallow',
+  'storedBeeswax',
+];
+export const ATTIC_CONTENT_JUNK: readonly ScatterKind[] = [
+  'junkIron',
+  'junkToaster',
+  'junkKettle',
+  'junkCellphone',
+  'junkRadio',
+  'junkDrill',
+  'junkWrench',
+  'junkRifle',
+  'junkLamp',
+  'junkTypewriter',
+];
+/** Chance a crate holds anything at all, by house state. DRAFT. */
+export const ATTIC_CONTENT_CHANCE = { standing: 0.55, ransacked: 0.4 } as const;
+/** Of what a crate holds, the junk share, by house
+ *  state — a ransacked house reads junk-heavy (the
+ *  tossers took the goods and left the junk). DRAFT. */
+export const ATTIC_JUNK_SHARE = { standing: 0.3, ransacked: 0.65 } as const;
+
+/** One content (or null) per crate index, in seat order. */
+export function atticContentsFor(
+  worldSeed: string,
+  key: string,
+  state: 'standing' | 'ransacked',
+  crateCount: number,
+): (ScatterKind | null)[] {
+  const rand = mulberry32(deriveSeed(worldSeed, `dimension:${key}:contents`));
+  const out: (ScatterKind | null)[] = [];
+  for (let i = 0; i < crateCount; i++) {
+    if (rand() >= ATTIC_CONTENT_CHANCE[state]) {
+      out.push(null);
+      continue;
+    }
+    const table = rand() < ATTIC_JUNK_SHARE[state] ? ATTIC_CONTENT_JUNK : ATTIC_CONTENT_GOODS;
+    out.push(table[Math.floor(rand() * table.length)]);
+  }
+  return out;
+}
+
 export function atticLayoutForKey(
   worldSeed: string,
   spawn: { x: number; z: number },
@@ -317,11 +373,26 @@ export function atticLayoutForKey(
     // lines' outer side, count on the house's
     // dressing richness.
     const crates = 2 + Math.floor(facts.dressing * 2.99);
+    const crateSeats: { lx: number; lz: number }[] = [];
     for (let i = 0; i < crates; i++) {
       const side = rand() < 0.5 ? -1 : 1;
       const lx = -L / 2 + 0.7 + rand() * (L - 1.4);
-      feat('farmCrateOpen', lx, side * (kneeZ + 0.55), 0, Math.floor(rand() * 4) * (Math.PI / 2));
+      const lz = side * (kneeZ + 0.55);
+      feat('farmCrateOpen', lx, lz, 0, Math.floor(rand() * 4) * (Math.PI / 2));
+      crateSeats.push({ lx, lz });
     }
+    // CONTENTS (attic contents build, 2026-11-03): what
+    // the crates hold, derived on its OWN stream (the
+    // layout stream above never feels it) from the same
+    // seeds. A content seats at its crate, a step toward
+    // the room and at crate-top height; the take is the
+    // standing harvest machine's ('taken' sources).
+    const contents = atticContentsFor(worldSeed, key, facts.state, crateSeats.length);
+    crateSeats.forEach((seat, i) => {
+      const kind = contents[i];
+      if (!kind) return;
+      feat(kind, seat.lx, seat.lz - Math.sign(seat.lz) * 0.3, 0.55, 0);
+    });
   } else {
     // FLOOR form: perimeter in the upper rhythm kind,
     // a landing strip at the stair end, bedrooms east

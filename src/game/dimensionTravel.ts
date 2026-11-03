@@ -65,7 +65,8 @@ import {
 } from './attics';
 import { farmhouseInstanceForKey } from './farmhouses';
 import { farmhouseSite } from './sites';
-import { dimensionState } from './dimensionState';
+import { dimensionState, SURFACE_DIMENSION_KEY } from './dimensionState';
+import { dimensionBuckets } from './dimensionBuckets';
 import type { WorldGen } from './worldgen';
 import type { BiomeWeights } from '../types';
 import type { WorldRenderer } from './renderer';
@@ -157,6 +158,9 @@ export function enterCave(
   capturedSurfaceGen = surfaceGen;
   capturedUpstairsReturn = null;
   renderer.setDimensionGen(createCaveGen(seed, resolved.key));
+  // The bucket swap rides the travel swap: the cave's own
+  // piles + harvest become the live stores before she lands.
+  dimensionBuckets.swapActiveStores(resolved.key);
   placeAt(player, anchor);
   dimensionState.enter(resolved.key, mouthId);
   return { ok: true };
@@ -184,6 +188,7 @@ export function exitCave(renderer: WorldRenderer, player: PlayerController): Tra
     return { ok: false, reason: 'anchor-blocked' };
   }
   renderer.setDimensionGen(surfaceGen);
+  dimensionBuckets.swapActiveStores(SURFACE_DIMENSION_KEY);
   placeAt(player, { x: mouth.spot.x, z: mouth.spot.z, yaw: mouth.exitYaw });
   dimensionState.exit();
   capturedSurfaceGen = null;
@@ -297,6 +302,7 @@ export function enterUpstairs(
     lightColor: UPSTAIRS_LIGHT_COLOR,
     lightY: 1.6,
   });
+  dimensionBuckets.swapActiveStores(mouth.zoneKey);
   placeAt(player, layout.entryAnchor);
   dimensionState.enter(mouth.zoneKey, houseKey);
   return { ok: true };
@@ -328,6 +334,7 @@ export function exitUpstairs(renderer: WorldRenderer, player: PlayerController):
   }
   const anchor = capturedUpstairsReturn;
   renderer.setDimensionGen(surfaceGen);
+  dimensionBuckets.swapActiveStores(SURFACE_DIMENSION_KEY);
   placeAt(player, anchor);
   dimensionState.exit();
   capturedSurfaceGen = null;

@@ -182,7 +182,7 @@ const OPTION_TABS = [
   { id: 'hud', label: 'HUD' },
 ] as const;
 
-type OptionsTabId = (typeof OPTION_TABS)[number]['id'];
+export type OptionsTabId = (typeof OPTION_TABS)[number]['id'];
 
 /** One HUD element's row in the HUD tab. */
 export interface OptionsHudItem {
@@ -239,6 +239,23 @@ export interface OptionsModalProps {
    * pattern).
    */
   hud?: OptionsHudProps;
+  /**
+   * The tab the modal opens on. Omitted = Settings
+   * (the standing default). The modal mounts fresh
+   * per open, so the initial tab is read once, at
+   * mount; the New World dialog's Cloud Saves door
+   * passes 'cloud'.
+   */
+  initialTab?: OptionsTabId;
+  /**
+   * Paint above the z-50 dialog family instead of
+   * within it. The New World dialog (also z-50)
+   * renders later in the tree than this modal's
+   * seat, so an Options opened FROM that dialog
+   * would otherwise hide beneath it; the caller
+   * raises the modal for exactly that open.
+   */
+  stackAbove?: boolean;
   /** Called when the modal is closed. */
   onClose?: () => void;
   /** Bottom-sheet layout + thumb-sized controls on touch. Default false. */
@@ -258,12 +275,16 @@ export function OptionsModal({
   quests,
   cloud,
   hud,
+  initialTab,
+  stackAbove = false,
   onClose,
   comfortable = false,
   theme = 'mire',
 }: OptionsModalProps) {
   const t = UI_THEMES[theme];
-  const [activeTab, setActiveTab] = useState<OptionsTabId>('settings');
+  const [activeTab, setActiveTab] = useState<OptionsTabId>(
+    initialTab ?? 'settings',
+  );
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent): void => {
@@ -277,7 +298,7 @@ export function OptionsModal({
     FONT_OPTIONS.find((option) => option.id === font)?.label ?? 'IM Fell English';
 
   return (
-    <div className="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-label="Options">
+    <div className={'fixed inset-0 ' + (stackAbove ? 'z-[60]' : 'z-50')} role="dialog" aria-modal="true" aria-label="Options">
       <div
         className="absolute inset-0 bg-black/60"
         onClick={() => onClose?.()}

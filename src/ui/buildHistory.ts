@@ -43,6 +43,14 @@ export interface BuildRecord {
 
 const ALL_RECORDS: BuildRecord[] = [
   {
+    merge: 'Merge #79',
+    pr: 95,
+    sha: '79aa457',
+    date: '2026-11-03',
+    what: 'ATTICS AND CANDLES — the houses keep things now, and her candle answers at every fire. Every fire menu offers ‘Light with candle’: the carried light starts any fire, two seconds in the hand, and is never used up — while torches ride unlit in the pack and light on demand, in her hand or set down where she stands. The workstation is craftable by hand: six downed logs and four twined cordage, no stump needed, so the bench can be raised in stump-less country. The New World screen carries a Cloud Saves door, and closing Options returns to the same dialog with her typed name and seed intact. Attics hold things: crates in the attic-form farmhouses carry stored goods and old-world junk — a stored candle, tallow, beeswax, and the leavings of the world before (an iron weight, a letter machine, a glass lamp among them) — each taken once and gone. Each dimension keeps its own book: the piles and harvests of a cave stay in that cave and the surface’s stay the surface’s, and saving underground can no longer write the cave’s stores over the surface’s — a pile of three comes back three. And graphics recover: a lost graphics context restores itself, with a standing note that the world is still running and progress is safe, and the deprecated clock under the frame loop is replaced.',
+    why: 'Adam’s playtest found her standing at her own campfire holding a lit candle with no way to use it — the door simply never offered the method — and the attic crates stood empty because no dimension had a book of its own to keep what she left there. This batch gives the carried light its due at every hearth, gives the houses their keeping, and makes each world’s stores its own, so what she leaves in a cave waits in that cave and nowhere else.',
+  },
+  {
     merge: 'Merge #78',
     pr: 95,
     sha: '6ae553e',

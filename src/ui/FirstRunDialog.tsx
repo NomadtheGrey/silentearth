@@ -26,6 +26,15 @@
  * parks nothing). The first-run seat passes neither:
  * Begin-only remains the law where there is nowhere
  * to go back to.
+ *
+ * THE CLOUD SAVES DOOR (Adam's direct request,
+ * 2026-11-03): both seats may pass `onCloudSaves` —
+ * a button beside Begin that opens Options on its
+ * Cloud Saves tab OVER this dialog. It is not an
+ * exit and not a dismiss: the dialog stands beneath
+ * with its fields intact, and closing Options
+ * returns to it. Begin-only still governs leaving
+ * the dialog itself.
  */
 
 import { useState, type ReactNode } from 'react';
@@ -38,6 +47,17 @@ export interface FirstRunDialogProps {
   warning?: ReactNode;
   /** New-game mode: renders a Back button beside Begin. */
   onBack?: () => void;
+  /**
+   * Renders a Cloud Saves button beside Begin: the
+   * door to Options' Cloud Saves tab (Adam's direct
+   * request, 2026-11-03) — a player whose world
+   * lives on the shelf can reach it BEFORE beginning
+   * a fresh one. The dialog itself neither begins
+   * nor discards anything; the caller opens Options
+   * over it and the dialog stands beneath, fields
+   * intact, for the return.
+   */
+  onCloudSaves?: () => void;
   /** Touch layout (bottom sheet) vs desktop (centered). */
   comfortable?: boolean;
   theme?: UiThemeName;
@@ -47,6 +67,7 @@ export function FirstRunDialog({
   onBegin,
   warning,
   onBack,
+  onCloudSaves,
   comfortable = false,
   theme = 'mire',
 }: FirstRunDialogProps) {
@@ -127,6 +148,19 @@ export function FirstRunDialog({
             >
               Begin
             </button>
+            {onCloudSaves ? (
+              <button
+                type="button"
+                onClick={onCloudSaves}
+                className={
+                  comfortable
+                    ? 'rounded px-3 py-2 text-sm min-h-[44px] ' + t.button
+                    : 'rounded px-2 py-1 text-sm ' + t.button
+                }
+              >
+                Cloud Saves
+              </button>
+            ) : null}
             {onBack ? (
               <button
                 type="button"

@@ -152,7 +152,27 @@ export type ItemId =
    * verbatim — the yield below and their ITEMS row meet
    * on this string.
    */
-  | 'twilight-fungus';
+  | 'twilight-fungus'
+  /**
+   * Attic contents (2026-11-03): stored-goods yields
+   * (Systems items, verbatim) and the JUNK yields — the
+   * junk ids are the contract Systems' no-use rows mint
+   * against; the wiring names them first, by the claim's
+   * order (kinds join the buckets; rows follow).
+   */
+  | 'candle'
+  | 'beeswax'
+  | 'tallow'
+  | 'junk-clothes-iron'
+  | 'junk-toaster'
+  | 'junk-kettle'
+  | 'junk-cellphone'
+  | 'junk-radio'
+  | 'junk-hand-drill'
+  | 'junk-wrench-set'
+  | 'junk-rifle'
+  | 'junk-lamp'
+  | 'junk-typewriter';
 
 /**
  * Tool ladder stages for tool-gated yields (the garden trowel and its
@@ -3035,6 +3055,221 @@ export const SOURCES: HarvestSourceDef[] = [
     provenance: 'draft',
     biomes: ['oldfieldRise', 'meadow'],
     mesh: { shape: 'appleTree', color: 0x4a2e18, extraColor: 0x4a7a30, baseY: 0 },
+  },
+  // ATTIC CONTENTS (Background, 2026-11-03 — the
+  // lootable half of the attics, claimed with DEV):
+  // sources seated ONLY by attics.ts's content
+  // derivation inside attic zones (biomes [] — no
+  // surface scatter pool names them, so they can never
+  // seat on the surface). Every content is 'taken'
+  // (one take, gone; the removal records into the
+  // dimension's bucket when Systems' swap lands) and
+  // fixedYield exactly 1. GOODS: stores a household
+  // kept under its roof.
+  {
+    id: 'storedCandle',
+    kind: 'storedCandle',
+    name: 'Stored Candle',
+    description: 'A candle kept in a crate under the eaves, its wax unburned (DRAFT, 2026-11-03).',
+    harvestable: true,
+    permitTier: 'hand',
+    fixedYield: true,
+    primaryYield: 'candle',
+    secondaryYields: [],
+    renewal: 'taken',
+    provenance: 'draft',
+    biomes: [],
+    mesh: { shape: 'stone', color: 0xe8dcc0, extraColor: 0xcbb98a, baseY: 0 },
+  },
+  {
+    id: 'storedTallow',
+    kind: 'storedTallow',
+    name: 'Stored Tallow',
+    description: 'A crock of tallow put by under the eaves (DRAFT, 2026-11-03).',
+    harvestable: true,
+    permitTier: 'hand',
+    fixedYield: true,
+    primaryYield: 'tallow',
+    secondaryYields: [],
+    renewal: 'taken',
+    provenance: 'draft',
+    biomes: [],
+    mesh: { shape: 'stone', color: 0xd8cdb4, extraColor: 0xb8ac8e, baseY: 0 },
+  },
+  {
+    id: 'storedBeeswax',
+    kind: 'storedBeeswax',
+    name: 'Stored Beeswax',
+    description: 'A block of beeswax wrapped and stored under the eaves (DRAFT, 2026-11-03).',
+    harvestable: true,
+    permitTier: 'hand',
+    fixedYield: true,
+    primaryYield: 'beeswax',
+    secondaryYields: [],
+    renewal: 'taken',
+    provenance: 'draft',
+    biomes: [],
+    mesh: { shape: 'stone', color: 0xd9a441, extraColor: 0xb4832e, baseY: 0 },
+  },
+  // JUNK (Adam's old-world junk, decided 2026-11-01 — a
+  // SECRET TREASURE class: the player recognizes every
+  // piece at a glance; she can neither identify nor use
+  // any of it, and her tag names are crude reads at
+  // most, DRAFT for his design session, which also owns
+  // the catalog's final size — more than eight, by
+  // class; this draft table runs ten). The yields are
+  // Systems' no-use junk items. The player-legible
+  // SILHOUETTES are Models' later program; v1 renders
+  // the generic stone in junk colors.
+  {
+    id: 'junkIron',
+    kind: 'junkIron',
+    name: 'Handle Weight',
+    description: 'Heavy flat iron with a handle. It does nothing she knows (DRAFT, 2026-11-03).',
+    harvestable: true,
+    permitTier: 'hand',
+    fixedYield: true,
+    primaryYield: 'junk-clothes-iron',
+    secondaryYields: [],
+    renewal: 'taken',
+    provenance: 'draft',
+    biomes: [],
+    mesh: { shape: 'stone', color: 0x3a3a40, extraColor: 0x26262b, baseY: 0 },
+  },
+  {
+    id: 'junkToaster',
+    kind: 'junkToaster',
+    name: 'Slotted Box',
+    description: 'A bright metal box with two slots in its top. It does nothing she knows (DRAFT, 2026-11-03).',
+    harvestable: true,
+    permitTier: 'hand',
+    fixedYield: true,
+    primaryYield: 'junk-toaster',
+    secondaryYields: [],
+    renewal: 'taken',
+    provenance: 'draft',
+    biomes: [],
+    mesh: { shape: 'stone', color: 0x9aa0a4, extraColor: 0x6e7478, baseY: 0 },
+  },
+  {
+    id: 'junkKettle',
+    kind: 'junkKettle',
+    name: 'Spout Pot',
+    description: 'A metal pot with a spout and a whistle she cannot name (DRAFT, 2026-11-03).',
+    harvestable: true,
+    permitTier: 'hand',
+    fixedYield: true,
+    primaryYield: 'junk-kettle',
+    secondaryYields: [],
+    renewal: 'taken',
+    provenance: 'draft',
+    biomes: [],
+    mesh: { shape: 'stone', color: 0x707880, extraColor: 0x4c545c, baseY: 0 },
+  },
+  {
+    id: 'junkCellphone',
+    kind: 'junkCellphone',
+    name: 'Black Slab',
+    description: 'A small black slab, glass-faced, dead. It does nothing she knows (DRAFT, 2026-11-03).',
+    harvestable: true,
+    permitTier: 'hand',
+    fixedYield: true,
+    primaryYield: 'junk-cellphone',
+    secondaryYields: [],
+    renewal: 'taken',
+    provenance: 'draft',
+    biomes: [],
+    mesh: { shape: 'stone', color: 0x14161a, extraColor: 0x23262c, baseY: 0 },
+  },
+  {
+    id: 'junkRadio',
+    kind: 'junkRadio',
+    name: 'Knob Box',
+    description: 'A box of knobs and a wire tail, silent. It does nothing she knows (DRAFT, 2026-11-03).',
+    harvestable: true,
+    permitTier: 'hand',
+    fixedYield: true,
+    primaryYield: 'junk-radio',
+    secondaryYields: [],
+    renewal: 'taken',
+    provenance: 'draft',
+    biomes: [],
+    mesh: { shape: 'stone', color: 0x6b4a2f, extraColor: 0x4a3220, baseY: 0 },
+  },
+  {
+    id: 'junkDrill',
+    kind: 'junkDrill',
+    name: 'Grip Tool',
+    description: 'A grip with a biting nose and a dead cord. It does nothing she knows (DRAFT, 2026-11-03).',
+    harvestable: true,
+    permitTier: 'hand',
+    fixedYield: true,
+    primaryYield: 'junk-hand-drill',
+    secondaryYields: [],
+    renewal: 'taken',
+    provenance: 'draft',
+    biomes: [],
+    mesh: { shape: 'stone', color: 0x2f5d3a, extraColor: 0x1e4028, baseY: 0 },
+  },
+  {
+    id: 'junkWrench',
+    kind: 'junkWrench',
+    name: 'Iron Turner',
+    description: 'A flat iron bar with a jaw at its end. It does nothing she knows (DRAFT, 2026-11-03).',
+    harvestable: true,
+    permitTier: 'hand',
+    fixedYield: true,
+    primaryYield: 'junk-wrench-set',
+    secondaryYields: [],
+    renewal: 'taken',
+    provenance: 'draft',
+    biomes: [],
+    mesh: { shape: 'stone', color: 0x8a8f94, extraColor: 0x5f6468, baseY: 0 },
+  },
+  {
+    id: 'junkRifle',
+    kind: 'junkRifle',
+    name: 'Long Iron',
+    description: 'A long iron tube on a wooden body, rust at its seams. It does nothing she knows (DRAFT, 2026-11-03).',
+    harvestable: true,
+    permitTier: 'hand',
+    fixedYield: true,
+    primaryYield: 'junk-rifle',
+    secondaryYields: [],
+    renewal: 'taken',
+    provenance: 'draft',
+    biomes: [],
+    mesh: { shape: 'stone', color: 0x2c2620, extraColor: 0x4a3a28, baseY: 0 },
+  },
+  {
+    id: 'junkLamp',
+    kind: 'junkLamp',
+    name: 'Glass Stem',
+    description: 'A glass bulb on a stem, its cord cut. It does nothing she knows (DRAFT, 2026-11-03).',
+    harvestable: true,
+    permitTier: 'hand',
+    fixedYield: true,
+    primaryYield: 'junk-lamp',
+    secondaryYields: [],
+    renewal: 'taken',
+    provenance: 'draft',
+    biomes: [],
+    mesh: { shape: 'stone', color: 0xc8b98a, extraColor: 0x8f8262, baseY: 0 },
+  },
+  {
+    id: 'junkTypewriter',
+    kind: 'junkTypewriter',
+    name: 'Key Slab',
+    description: 'A heavy slab of little lettered keys, all stuck. It does nothing she knows (DRAFT, 2026-11-03).',
+    harvestable: true,
+    permitTier: 'hand',
+    fixedYield: true,
+    primaryYield: 'junk-typewriter',
+    secondaryYields: [],
+    renewal: 'taken',
+    provenance: 'draft',
+    biomes: [],
+    mesh: { shape: 'stone', color: 0x24262a, extraColor: 0x3a3d42, baseY: 0 },
   },
 ];
 

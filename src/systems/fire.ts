@@ -104,8 +104,12 @@ export const LIGHTING_COST_ITEM: Readonly<
 > = {
   flint: ITEMS.flint,
   sticks: ITEMS.dryKindling,
-  // The candle itself, carried — a flame she already
-  // holds, spent on nothing (see COST_CONSUMED).
+  // The candle names the method's instrument — the
+  // carried light she always has (Adam, 2026-11-03).
+  // light() demands NO candle ITEM for it: the
+  // crafted item keeps its other uses (altar
+  // offerings and the like), and the method is spent
+  // on nothing (see COST_CONSUMED).
   candle: ITEMS.candle,
 };
 
@@ -201,7 +205,18 @@ export class FireState {
       throw new Error('Fire is already lit.');
     }
     const costItem = LIGHTING_COST_ITEM[method];
-    if (costItem !== null && inventory.count(costItem) < 1) {
+    // The candle method's instrument is the carried
+    // LIGHT, not the crafted item (Adam, 2026-11-03:
+    // 'she walks around with a candle — why doesn't
+    // she light fires with that?'): no item is checked
+    // for this method, and none is consumed (below).
+    // Flint and sticks keep their carried-item checks
+    // whole.
+    if (
+      method !== 'candle' &&
+      costItem !== null &&
+      inventory.count(costItem) < 1
+    ) {
       throw new Error(
         `Cannot light a fire with ${method}: no ${costItem} carried.`,
       );
