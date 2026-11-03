@@ -203,6 +203,38 @@ export const SPOOK_BURST_FACTOR = 3;
 export const SNAP_LUNGE_S = 0.28;
 export const SNAP_LUNGE_SPEED_MPS = 5;
 export const SNAP_STOP_SHORT_M = 0.8;
+/** Feral encounters (2026-11-03, all DRAFT — the
+ *  behavior half of the feral build; Adam's fairness
+ *  machines as execution): how close she must come
+ *  before a dangerous feral engages; the range at which
+ *  it stops to wind up; the telegraph's length (no
+ *  telegraph, no strike — structural); the lunge's
+ *  contact reach; the pursuit's leash from the
+ *  encounter's anchor and its give-up clock without
+ *  contact; the recovery beat between strikes; the
+ *  warning disengage's length; the telegraph's crouch. */
+export const FERAL_AGGRO_RANGE_M = 18;
+export const FERAL_STRIKE_RANGE_M = 2.4;
+export const FERAL_TELEGRAPH_S = 0.8;
+export const FERAL_TELEGRAPH_SLACK_M = 1.0;
+export const FERAL_STRIKE_CONTACT_M = 1.7;
+export const FERAL_LEASH_M = 55;
+export const FERAL_PURSUIT_GIVE_UP_S = 20;
+export const FERAL_RECOVER_S = 1.2;
+export const FERAL_DISENGAGE_S = 1.5;
+export const FERAL_CROUCH_Y = -0.12;
+/** Safe country (DRAFT): initiation is suppressed this
+ *  close to spawn, and this close to any standing
+ *  house's walls. The renderer composes these (it holds
+ *  the houses); the numbers live here with the rest of
+ *  the encounter's pricing. */
+export const FERAL_SAFE_SPAWN_M = 40;
+export const FERAL_SAFE_HOUSE_M = 25;
+/** The dangerous kinds in v1 (lane-decided under the
+ *  ratified claim): the two kinds whose pursuit is a
+ *  real threat. The snake's place-strike is a follow-up
+ *  question, held — not silently included. */
+export const FERAL_DANGEROUS_KINDS: readonly AnimalKind[] = ['wolf', 'bear'];
 /** Squirrel climb (2026-10-31, all DRAFT): refuge reach, rise speed, perch height, coast-clear range + delay. */
 export const SQUIRREL_TREE_REACH_M = 12;
 export const SQUIRREL_CLIMB_SPEED_MPS = 1.4;
@@ -278,6 +310,45 @@ export interface AnimalInstance {
   snapT: number;
   /** Squirrel climb state (see ClimbState); 'none' for every other kind. */
   climbState: ClimbState;
+  /**
+   * Feral encounter state (2026-11-03): 'none' for every
+   * animal not in an encounter — the ambient mass of the
+   * world never leaves 'none'. The encounter's timers
+   * ride feralT; its leash anchors at feralAnchor.
+   */
+  feralState: 'none' | 'stalk' | 'telegraph' | 'strike' | 'recover' | 'disengage';
+  /** The active encounter state's clock (seconds). */
+  feralT: number;
+  /** The pursuit's own clock: seconds since the last
+   *  completed strike (the give-up reads it; a telegraph
+   *  interlude does not reset it). */
+  feralStalkT: number;
+  /** Where the encounter began (the leash's anchor). */
+  feralAnchorX: number;
+  feralAnchorZ: number;
+  /** The strike lunge's captured target point. */
+  feralStrikeX: number;
+  feralStrikeZ: number;
+  /**
+   * Armed for exactly one step when a strike lunge
+   * completes in contact range: the renderer consumes
+   * it and reports the contact to the shell's strike
+   * door (bus 'animal:feral-contact'). Never set without
+   * a completed telegraph before it.
+   */
+  feralContact: boolean;
+  /**
+   * Armed for exactly one step when a telegraph begins:
+   * the renderer consumes it and sounds the cue (bus
+   * 'animal:feral-telegraph').
+   */
+  feralTelegraphPulse: boolean;
+  /**
+   * Set by the renderer when the shell resolves a strike
+   * as the WARNING: the animal breaks off (disengage) at
+   * its next step, whatever state it was in.
+   */
+  feralBreak: boolean;
   /** Seconds she has stayed beyond coast-clear range of a perched squirrel. */
   clearT: number;
   /** Water points (water kinds) / perch points (flying kinds) in this chunk. */
@@ -414,6 +485,16 @@ export function spawnAnimalsForChunk(input: SpawnAnimalsInput): AnimalInstance[]
       spookT: 0,
       snapT: 0,
       climbState: 'none',
+      feralState: 'none',
+      feralT: 0,
+      feralStalkT: 0,
+      feralAnchorX: 0,
+      feralAnchorZ: 0,
+      feralStrikeX: 0,
+      feralStrikeZ: 0,
+      feralContact: false,
+      feralTelegraphPulse: false,
+      feralBreak: false,
       clearT: 0,
       anchors: [],
     };
@@ -490,10 +571,34 @@ export function biomePresentKinds(
   );
 }
 
+/**
+ * The encounter facts for one animal for one step,
+ * composed by the renderer (2026-11-03): present ONLY
+ * for a feral of a dangerous kind — its absence is the
+ * ambient world's whole story. The renderer merges the
+ * shell's knowledge (the defender's seat) with its own
+ * (safe country, interiors); this module never learns
+ * where either half came from.
+ */
+export interface FeralFacts {
+  /** Initiation is suppressed here (spawn's skirt, a
+   *  standing house's skirt): the feral stays ambient. */
+  suppressed: boolean;
+  /** She stands inside a house: pursuit breaks at the
+   *  threshold and never follows her in. */
+  playerInside: boolean;
+  /** A standing defender's seat, when one guards her:
+   *  the encounter prices the defender's body instead. */
+  defenderPos: { x: number; z: number } | null;
+}
+
 export interface AnimalUpdateInput {
   playerX: number;
   playerZ: number;
   night: boolean;
+  /** Feral encounter facts (see FeralFacts); absent or
+   *  null for every animal outside the danger story. */
+  feral?: FeralFacts | null;
 }
 
 /**
@@ -613,9 +718,197 @@ function stepSquirrelClimb(
  * flyers, water patrol for swimmers. Night kinds (owl, bat) fly
  * at night and perch by day; day kinds rest at night.
  */
+/** Move an animal toward a point at a speed; sets its
+ *  heading on the module's convention. Returns the
+ *  distance remaining. */
+function feralMoveToward(a: AnimalInstance, tx: number, tz: number, speed: number, dt: number): number {
+  const dx = tx - a.x;
+  const dz = tz - a.z;
+  const dist = Math.hypot(dx, dz);
+  if (dist > 0.001) {
+    const step = Math.min(dist, speed * dt);
+    a.x += (dx / dist) * step;
+    a.z += (dz / dist) * step;
+    a.heading = Math.atan2(dx, dz);
+  }
+  return dist;
+}
+
+/**
+ * THE FERAL ENCOUNTER (2026-11-03 — the behavior half
+ * of the feral build; composes against Systems'
+ * FeralEncounterState through the shell's door).
+ * Returns true when the encounter handled the whole
+ * step (the squirrel climb's shape).
+ *
+ * The fairness machines, as state machinery:
+ * - Initiation only in the open: not suppressed country,
+ *   not while she stands inside a house, only while the
+ *   animal is active, and never interrupting a snap or
+ *   a spook already in flight.
+ * - The strike is reachable ONLY through a completed
+ *   telegraph against a target still in range at its
+ *   end — whiffing is priced into the wind-up, and the
+ *   contact flag arms only at the lunge's end, in
+ *   contact range. No telegraph, no strike is a state
+ *   graph fact, not a promise.
+ * - Escape is priced in ground: the pursuit leashes to
+ *   the encounter's anchor and gives up on a clock
+ *   without contact; her crossing into any house ends
+ *   it at the threshold.
+ * - The warning breaks the animal off: feralBreak (set
+ *   by the renderer when the shell resolves 'warning')
+ *   drops any state into the disengage bolt.
+ */
+function stepFeralEncounter(a: AnimalInstance, dt: number, input: AnimalUpdateInput, active: boolean): boolean {
+  if (a.feralState === undefined) a.feralState = 'none';
+  if (a.feralStalkT === undefined) a.feralStalkT = 0;
+  const facts = input.feral ?? null;
+
+  // The warning's break pre-empts every state.
+  if (a.feralBreak) {
+    a.feralBreak = false;
+    if (a.feralState !== 'none' && a.feralState !== 'disengage') {
+      a.feralState = 'disengage';
+      a.feralT = FERAL_DISENGAGE_S;
+      // The bolt's target: away from her, on the spook
+      // idiom (a far point on the away line).
+      const dx = a.x - input.playerX;
+      const dz = a.z - input.playerZ;
+      const d = Math.hypot(dx, dz);
+      const ux = d > 0.001 ? dx / d : 1;
+      const uz = d > 0.001 ? dz / d : 0;
+      a.targetX = a.x + ux * 14;
+      a.targetZ = a.z + uz * 14;
+    }
+  }
+
+  if (a.feralState === 'none') {
+    if (!facts || !active) return false;
+    if (a.snapT > 0 || a.spookT > 0) return false;
+    if (facts.suppressed || facts.playerInside) return false;
+    const distP = Math.hypot(a.x - input.playerX, a.z - input.playerZ);
+    if (distP > FERAL_AGGRO_RANGE_M) return false;
+    // Initiation: the encounter anchors where it began.
+    a.feralState = 'stalk';
+    a.feralT = 0;
+    a.feralStalkT = 0;
+    a.feralAnchorX = a.x;
+    a.feralAnchorZ = a.z;
+  }
+
+  // The encounter's target: the defender's body when a
+  // defender stands, else hers. Breaks always measure
+  // HER (the defender stands with her).
+  const tp = facts?.defenderPos ?? { x: input.playerX, z: input.playerZ };
+  const distToTarget = Math.hypot(a.x - tp.x, a.z - tp.z);
+  const herDistFromAnchor = Math.hypot(input.playerX - a.feralAnchorX, input.playerZ - a.feralAnchorZ);
+  let moving = false;
+
+  const exitEncounter = (): boolean => {
+    a.feralState = 'none';
+    a.mode = 'idle';
+    a.flying = false;
+    a.timer = 2;
+    stepAnimalAnimation(a, dt, false);
+    return true;
+  };
+
+  switch (a.feralState) {
+    case 'stalk': {
+      a.feralStalkT += dt;
+      if (facts?.playerInside) return exitEncounter();
+      if (herDistFromAnchor > FERAL_LEASH_M) return exitEncounter();
+      if (a.feralStalkT > FERAL_PURSUIT_GIVE_UP_S) return exitEncounter();
+      if (distToTarget <= FERAL_STRIKE_RANGE_M) {
+        a.feralState = 'telegraph';
+        a.feralT = FERAL_TELEGRAPH_S;
+        a.feralTelegraphPulse = true;
+        a.mode = 'idle';
+        a.flying = false;
+        break;
+      }
+      feralMoveToward(a, tp.x, tp.z, FLEE_SPEED_MPS, dt);
+      a.mode = 'flee';
+      moving = true;
+      break;
+    }
+    case 'telegraph': {
+      // Frozen, facing the target; the crouch is applied
+      // after the animation step below.
+      const dx = tp.x - a.x;
+      const dz = tp.z - a.z;
+      if (Math.hypot(dx, dz) > 0.001) a.heading = Math.atan2(dx, dz);
+      a.mode = 'idle';
+      a.feralT -= dt;
+      if (distToTarget > FERAL_STRIKE_RANGE_M + FERAL_TELEGRAPH_SLACK_M) {
+        // Whiffed by ground: she opened the range during
+        // the wind-up. Back to the stalk.
+        a.feralState = 'stalk';
+        break;
+      }
+      if (a.feralT <= 0) {
+        a.feralState = 'strike';
+        a.feralT = SNAP_LUNGE_S;
+        a.feralStrikeX = tp.x;
+        a.feralStrikeZ = tp.z;
+      }
+      break;
+    }
+    case 'strike': {
+      feralMoveToward(a, a.feralStrikeX, a.feralStrikeZ, SNAP_LUNGE_SPEED_MPS, dt);
+      a.mode = 'flee';
+      moving = true;
+      a.feralT -= dt;
+      if (a.feralT <= 0) {
+        // Contact is measured against the target NOW —
+        // a lunge she outran in its last beat still
+        // whiffs. The completed strike resets the
+        // pursuit's give-up clock either way.
+        if (distToTarget <= FERAL_STRIKE_CONTACT_M) a.feralContact = true;
+        a.feralStalkT = 0;
+        a.feralState = 'recover';
+        a.feralT = FERAL_RECOVER_S;
+        a.mode = 'idle';
+      }
+      break;
+    }
+    case 'recover': {
+      a.mode = 'idle';
+      a.feralT -= dt;
+      if (facts?.playerInside) return exitEncounter();
+      if (a.feralT <= 0) {
+        a.feralState = 'stalk';
+      }
+      break;
+    }
+    case 'disengage': {
+      feralMoveToward(a, a.targetX, a.targetZ, FLEE_SPEED_MPS * SPOOK_BURST_FACTOR, dt);
+      a.mode = 'flee';
+      moving = true;
+      a.feralT -= dt;
+      if (a.feralT <= 0) return exitEncounter();
+      break;
+    }
+    default:
+      return false;
+  }
+  stepAnimalAnimation(a, dt, moving);
+  // The telegraph's posture: a crouch under the pose the
+  // animation step just wrote (bob is the renderer's
+  // vertical offset — negative reads as a coiled hold).
+  if (a.feralState === 'telegraph') a.bob = FERAL_CROUCH_Y;
+  return true;
+}
+
 export function updateAnimal(a: AnimalInstance, dt: number, input: AnimalUpdateInput): void {
   const def = ANIMAL_DEFS[a.kind];
   const active = def.active === 'night' ? input.night : !input.night;
+  // Feral encounters (2026-11-03): the encounter
+  // machinery handles the whole step when it takes it.
+  if (input.feral !== undefined) {
+    if (stepFeralEncounter(a, dt, input, active)) return;
+  }
   const fleeRadius = def.temperament === 'wary' ? WARY_FLEE_RADIUS_M : FLEE_RADIUS_M;
   const dxP = a.x - input.playerX;
   const dzP = a.z - input.playerZ;
