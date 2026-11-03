@@ -838,7 +838,7 @@ export class WorldRenderer {
    * no encounter can form: the ambient world is the
    * whole story, byte-identical to before.
    */
-  private feralFactsProvider: ((a: AnimalInstance) => { defenderPos: { x: number; z: number } | null } | null) | null = null;
+  private feralFactsProvider: ((a: AnimalInstance) => { defenderPos: { x: number; z: number } | null; repelled?: boolean } | null) | null = null;
   /** Her injury movement factor (DEV's ruling: engine-
    *  side, composed at the terrain speed query's seat).
    *  The shell sets it from her stage; 1 = sound. */
@@ -1794,7 +1794,7 @@ export class WorldRenderer {
   }
 
   /** Register the shell's feral-facts provider (2026-11-03): see the field's note. */
-  setFeralFactsProvider(fn: ((a: AnimalInstance) => { defenderPos: { x: number; z: number } | null } | null) | null): void {
+  setFeralFactsProvider(fn: ((a: AnimalInstance) => { defenderPos: { x: number; z: number } | null; repelled?: boolean } | null) | null): void {
     this.feralFactsProvider = fn;
   }
 
@@ -3866,7 +3866,14 @@ export class WorldRenderer {
               (s) => Math.hypot(a.x - s.x, a.z - s.z) - Math.hypot(s.hx, s.hz) <= FERAL_SAFE_HOUSE_M,
             );
             feral = {
-              suppressed: nearSpawn || nearHouse,
+              // The repellent (douse build, 2026-11-03):
+              // the shell wraps Systems' isRepelling()
+              // read into its optional 'repelled' flag, and
+              // it ORs into suppression here — personal
+              // suppression beside safe country, exactly
+              // the seam as named. Nothing here re-derives
+              // the scent's clock; the fact arrives whole.
+              suppressed: nearSpawn || nearHouse || shellFacts.repelled === true,
               playerInside: feralPlayerInside,
               defenderPos: shellFacts.defenderPos,
             };
