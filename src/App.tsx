@@ -2904,6 +2904,20 @@ export default function App() {
     setSheltered(true);
     setShelterHouseName(house ? HOUSE_DEFS[house.type].name : undefined);
     setShelterHouseId(houseId);
+    // THE STORE RESOLVES WHEN SHE SHELTERS (the upgrade
+    // door's fix, 2026-11-02): the home menu's Upgrade
+    // row and the storage section both READ the house's
+    // HomeStorage through openHomeStore, which never
+    // creates one — so a house placed this session,
+    // whose store only a deposit (or the boot restore)
+    // would have created, showed no Upgrade row at all:
+    // Adam's 'there doesn't seem to be a way to upgrade
+    // a lean-to' was a store that did not exist yet,
+    // not a missing door. Creating it here — an event
+    // path (proximity cadence, placement, boot), never
+    // a render — seats the store from the moment she is
+    // home, and every reader downstream finds it.
+    getHomeStore(houseId);
   };
 
   // Night gate for the sleep button, read from the live sky
