@@ -198,6 +198,18 @@ export function seatYFor(perch: { crownY?: number }): number {
  *  twilight distances. */
 export const GUIDE_BIAS_AHEAD_M = 14;
 export const GUIDE_BIAS_RADIUS_M = 22;
+/** The far rung (sparse-country staging, 2026-11-03):
+ *  when every nearer search misses, one last search
+ *  centred this far (m) toward the Grove with this
+ *  radius — reach along the bearing to AHEAD + RADIUS.
+ *  Measured need (both seeds): without it, ~44% of
+ *  sampled country cannot stage at all, including the
+ *  player's own camp on 'Blah', whose nearest tree
+ *  stands 62.8 m out almost exactly on the Grove line.
+ *  The rung fires ONLY on a total miss, so country that
+ *  stages today stages identically. DRAFT. */
+export const GUIDE_FAR_AHEAD_M = 48;
+export const GUIDE_FAR_RADIUS_M = 30;
 /** At a window's opening she FLIES IN from this far (m)
  *  out at cruise height and calls on landing — she is
  *  never seated invisibly between frames. */
@@ -568,7 +580,8 @@ export function stepGuide(dt: number, ctx: GuideStepContext): void {
     // player-centred ring seated her behind-left, low,
     // and 'faintly' said nothing) — first the grove-
     // shifted centre, whose nearest tree is grove-side
-    // by construction; only then her own ring.
+    // by construction; then her own ring; and last, in
+    // sparse country, the far rung up the bearing.
     const ux = distGrovePlayer > 0.001 ? dxG / distGrovePlayer : 0;
     const uz = distGrovePlayer > 0.001 ? dzG / distGrovePlayer : 1;
     const ahead = ctx.perchNear(
@@ -583,7 +596,18 @@ export function stepGuide(dt: number, ctx: GuideStepContext): void {
         ctx.playerZ + uz * GUIDE_BIAS_AHEAD_M,
         GUIDE_BIAS_RADIUS_M,
       );
-    const perch = biased ?? ctx.perchNear(ctx.playerX, ctx.playerZ, 30);
+    const ring = biased ?? ctx.perchNear(ctx.playerX, ctx.playerZ, 30);
+    // The far rung: sparse country gets one last search,
+    // far up the Grove bearing (see GUIDE_FAR_AHEAD_M).
+    // Ordered last — it fires only where staging fails
+    // outright today.
+    const perch =
+      ring ??
+      ctx.perchNear(
+        ctx.playerX + ux * GUIDE_FAR_AHEAD_M,
+        ctx.playerZ + uz * GUIDE_FAR_AHEAD_M,
+        GUIDE_FAR_RADIUS_M,
+      );
     if (!perch) return; // no tree to haunt — tries again next frame
     g.atFinalPerch = Math.hypot(perch.x - grovePoint.x, perch.z - grovePoint.z) <= GUIDE_LEAD_RING_M;
     // The visible arrival: she starts FLYING, a short
