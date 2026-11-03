@@ -10366,25 +10366,18 @@ export default function App() {
   };
 
   /**
-   * Inventory Light press (unlit torch rows only): the
-   * CANDLE route of Systems' batch lighting (Adam's
-   * on-demand ruling + DEV's wiring word, 2026-11-03)
-   * — she lights them off her carried candle: always
-   * available, nothing consumed, every carried unlit
-   * torch lit in one press. The door names the route
-   * explicitly (one behavior everywhere — the same
-   * route as the fire menu's pill); the fire/flint
-   * routes stay in the API unused by the doors. This
-   * press was the flint route before (flint + river-
-   * stone or a refusal — exactly the failure the
-   * on-demand shape removes). Same refresh + save
-   * shape as eating (panel action, not world action).
+   * Inventory Light press (unlit torch rows only): the FLINT
+   * route of Systems' batch lighting — flint + river-stone
+   * carried, both kept, every carried unlit torch lit in
+   * one press. litFirePresent is false here on purpose:
+   * the fire route arrives with UI's lit-fire 'light
+   * torches' pill (selected fire = present by definition),
+   * and inventing a "nearby fire" range for this button
+   * would be a new mechanic. Same refresh + save shape
+   * as eating (panel action, not world action).
    */
   const handleLightTorchItem = (_itemId: string) => {
-    const outcome = lightTorches(inventory, {
-      litFirePresent: false,
-      route: 'candle',
-    });
+    const outcome = lightTorches(inventory, { litFirePresent: false });
     // Equality check, not truthiness: this repo runs tsc
     // without strict mode, and truthiness narrowing on
     // this union's boolean discriminant does not narrow
@@ -10394,7 +10387,7 @@ export default function App() {
       setTorchNote(outcome.reason);
     } else {
       setTorchNote(
-        `Lit ${outcome.count} torch${outcome.count === 1 ? '' : 'es'}.`,
+        `Lit ${outcome.count} torch${outcome.count === 1 ? '' : 'es'} with flint and stone.`,
       );
     }
     refreshInventory();
@@ -10867,22 +10860,16 @@ export default function App() {
       mirrorLightingStart(fireId, 'friction');
       say('Rubbing… wait, then rub again.', 'info');
     } else if (actionId === 'light-torches') {
-      // Candle route (Adam's on-demand ruling + DEV's
-      // wiring word, 2026-11-03): one behavior
-      // everywhere — she lights them off her carried
-      // candle, even here beside a lit fire (the door
-      // names the route; the fire/flint routes stay in
-      // the API unused by the doors). Batch: ALL
-      // carried unlit torches in one press, nothing
-      // consumed. The menu stays open; the pill itself
+      // Fire route: this menu only opens on a lit fire's
+      // chip, so litFirePresent is true — nothing
+      // consumed, fire wins when both routes are
+      // available. Batch: ALL carried unlit torches in
+      // one press. The menu stays open; the pill itself
       // is gone on re-render (count is 0), leaving cook.
       // Equality check, not truthiness: non-strict tsc
       // does not narrow this union's boolean discriminant
       // on truthiness (see the torch Light button handler).
-      const outcome = lightTorches(inventory, {
-        litFirePresent: true,
-        route: 'candle',
-      });
+      const outcome = lightTorches(inventory, { litFirePresent: true });
       if (outcome.lit === false) {
         say(outcome.reason, 'blocked');
       } else {
