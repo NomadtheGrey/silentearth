@@ -13,7 +13,7 @@
  * YIELD RULES (from the task brief, not invented here):
  * - Yields use the item vocabulary in src/data/world_data.json
  *   (SNAP_WOOD, TENDER_VINES, PEAT_MOSS, RIVER_SLUDGE, RIVER_STONE, BONE,
- *   SALT_CRYSTAL, DOWNED_OAK, SPORES, DRY_KINDLING, STUMP) plus CLAY —
+ *   DOWNED_OAK, SPORES, DRY_KINDLING, STUMP) plus CLAY —
  *   the one exception, and it is Adam's, not this file's: clay is the
  *   pinned new item reserved for pottery/bricks (2026-10-25; Systems
  *   recipes already spend it), and per Adam's 2026-10-26 ruling it is
@@ -112,7 +112,6 @@ export type ItemId =
   | 'RIVER_STONE'
   | 'FLINT'
   | 'BONE'
-  | 'SALT_CRYSTAL'
   | 'DOWNED_OAK'
   | 'SPORES'
   | 'DRY_KINDLING'

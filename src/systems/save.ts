@@ -433,6 +433,33 @@ export interface SavedPatch {
 }
 
 /**
+ * One painted glow-moss patch, as saved (Background's
+ * mossPaintState register record — the MossPaintPatch
+ * seam facts, via DEV 2026-11-03): a CAVE-LOCAL mark
+ * carried WHOLE — { id, x, y, z, surface, nx, nz }:
+ * the 3D centre ON the surface (y = 0 for floors, the
+ * aim height for walls), whether it paints a wall or
+ * the floor, and the wall's axis normal. A mark stored
+ * without its height, surface, and normal cannot
+ * re-render — it has nowhere to stand. The id is
+ * POSITION-KEYED by the register
+ * ('moss-paint:<dimensionKey>:<x>,<y>,<z>', 2-dp) and
+ * stable across save/load with no counter, so the
+ * seat round-trips by construction. The jar patches'
+ * SavedPatch is the precedent; the whole-mark payload
+ * and the dimension keying are the differences.
+ */
+export interface SavedMossPaintMark {
+  id: string;
+  x: number;
+  y: number;
+  z: number;
+  surface: 'wall' | 'floor';
+  nx: number;
+  nz: number;
+}
+
+/**
  * The boot-at-the-mouth fact: the cave visit a save
  * was written in, as handed over by Background's
  * dimensionState.snapshot() (the shell passes its
@@ -642,6 +669,11 @@ export interface SaveData {
   cauldrons: SavedCauldron[];
   /** Jar-made ground patches (mud/water); [] for old saves. */
   patches: SavedPatch[];
+  /** Painted glow-moss patches, keyed by dimension
+   * (Background's mossPaintState register, HOSTED:
+   * Systems seats the record, the register owns its
+   * meaning); {} for old saves. */
+  mossPaint: Record<string, SavedMossPaintMark[]>;
   /** The cave visit this save was written in (boot-at-the-mouth
    * fact); null for surface saves and old saves. */
   dimensionVisit: SavedDimensionVisit | null;
@@ -845,6 +877,24 @@ export interface SaveDraft {
     kind: 'mud' | 'water';
     x: number;
     z: number;
+  }>;
+  /**
+   * Painted glow-moss patches from the mossPaintState
+   * register's snapshot ({ dimensionKey, patches }[]
+   * — the register's own shape). OPTIONAL, same
+   * trap-save pattern.
+   */
+  mossPaint?: ReadonlyArray<{
+    dimensionKey: string;
+    patches: ReadonlyArray<{
+      id: string;
+      x: number;
+      y: number;
+      z: number;
+      surface: 'wall' | 'floor';
+      nx: number;
+      nz: number;
+    }>;
   }>;
   /**
    * The cave visit, from dimensionState.snapshot() at
@@ -1276,6 +1326,30 @@ export function serializeSave(draft: SaveDraft): SaveData {
       x: patch.x,
       z: patch.z,
     })),
+    // Moss paint: the register hands over its
+    // snapshot as { dimensionKey, patches }[] and the
+    // seat stores the KEYED RECORD — the conversion
+    // is field-for-field (groups sharing a key merge
+    // in draft order; every patch carried WHOLE, deep-
+    // copied). Validation is restore()'s problem, not
+    // the writer's.
+    mossPaint: (draft.mossPaint ?? []).reduce<
+      Record<string, SavedMossPaintMark[]>
+    >((record, group) => {
+      const bucket = (record[group.dimensionKey] ??= []);
+      for (const patch of group.patches) {
+        bucket.push({
+          id: patch.id,
+          x: patch.x,
+          y: patch.y,
+          z: patch.z,
+          surface: patch.surface,
+          nx: patch.nx,
+          nz: patch.nz,
+        });
+      }
+      return record;
+    }, {}),
     // The visit fact: written AS-IS (dimension key +
     // entry mouth verbatim). Absent/null in the draft
     // writes null — a surface save.
@@ -1914,6 +1988,42 @@ export function deserializeSave(value: unknown): SaveData | null {
         });
       }
     }
+    // Moss paint is optional on read, same additive
+    // rule: an old v1 save without it loads with {}.
+    // The field is a HOSTED keyed record: buckets pass
+    // by their dimension key verbatim; within a bucket
+    // a mark rides WHOLE — string id, finite centre
+    // (x, y, z), a surface this document knows ('wall'
+    // / 'floor' — the SavedPatch kind rule), finite
+    // normals — a bad mark drops alone, an emptied
+    // bucket is not kept. A non-record field loads {}.
+    const mossPaint: Record<string, SavedMossPaintMark[]> = {};
+    if (isRecord(value.mossPaint)) {
+      for (const [key, bucket] of Object.entries(value.mossPaint)) {
+        if (!Array.isArray(bucket)) continue;
+        const marks: SavedMossPaintMark[] = [];
+        for (const entry of bucket) {
+          if (!isRecord(entry)) continue;
+          if (typeof entry.id !== 'string' || entry.id === '') continue;
+          if (entry.surface !== 'wall' && entry.surface !== 'floor') continue;
+          if (
+            !Number.isFinite(entry.x) || !Number.isFinite(entry.y) ||
+            !Number.isFinite(entry.z) || !Number.isFinite(entry.nx) ||
+            !Number.isFinite(entry.nz)
+          ) continue;
+          marks.push({
+            id: entry.id,
+            x: entry.x as number,
+            y: entry.y as number,
+            z: entry.z as number,
+            surface: entry.surface,
+            nx: entry.nx as number,
+            nz: entry.nz as number,
+          });
+        }
+        if (marks.length > 0) mossPaint[key] = marks;
+      }
+    }
     // The visit fact is optional on read: an old v1
     // save without it loads with dimensionVisit: null.
     // A record passes with its key verbatim and its
@@ -2428,6 +2538,7 @@ export function deserializeSave(value: unknown): SaveData | null {
       desks,
       cauldrons,
       patches,
+      mossPaint,
       dimensionVisit,
       acquisitionOrder,
       companions,

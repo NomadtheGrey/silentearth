@@ -177,6 +177,12 @@ export const ITEMS = {
   // The first salve (2026-11-03 — the feral build's other
   // half; brewed at the cauldron from hive goods).
   salve: 'salve',
+  // Twilight fungus + its rendered dose (2026-11-03 —
+  // the glow-moss road's first piece; the fungus itself
+  // is the source, Adam's fork: 'if twilight fungus
+  // glows, we can use it').
+  twilightFungus: 'twilight-fungus',
+  glowDose: 'glow-dose',
   // Camping (2026-10-28 — sleeping bag + tent; see camping.ts).
   sleepingBag: 'sleeping-bag',
   tent: 'tent',
@@ -622,6 +628,26 @@ const DRAFT_RECIPES: Recipe[] = [
       'The tending acts: tendWithSalve (hers, injury.ts) ' +
       'and the companion mend multiplier ' +
       '(SALVE_MEND_MULTIPLIER, companions.ts). Quantities ' +
+      'draft.',
+  },
+  {
+    id: 'glow-dose',
+    name: 'Glow Dose',
+    status: 'draft',
+    output: { item: ITEMS.glowDose, quantity: 3 },
+    station: 'hand',
+    ingredients: [i(ITEMS.twilightFungus, 1)],
+    useLine: 'Painted on a cave wall — still glowing there',
+    notes:
+      'DRAFT (2026-11-03, the glow-moss road, piece one). ' +
+      'One clump of twilight fungus — harvested where it ' +
+      'grows, at the cave mouths (Background\'s harvest ' +
+      'points) — renders by hand into THREE doses of ' +
+      'glowing paint, the salve\'s payout idiom: the ' +
+      'preparation is the involved part, so one clump ' +
+      'pays out. A dose paints one stretch of cave wall ' +
+      '(UI\'s apply door; the paint\'s per-cave seat and ' +
+      'the glow itself are Background\'s half). Quantities ' +
       'draft.',
   },
   {
