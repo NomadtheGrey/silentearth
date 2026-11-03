@@ -43,6 +43,14 @@ export interface BuildRecord {
 
 const ALL_RECORDS: BuildRecord[] = [
   {
+    merge: 'Merge #71',
+    pr: 95,
+    sha: '39cc602',
+    date: '2026-11-02',
+    what: 'SECTIONS & SHELTER \u2014 five landings around how her things stand. PILE AND STORAGE, IN SECTIONS (UI, Adam\u2019s ruling): the pile dialog and the house-storage dialog each stand in two plainly-headed sections \u2014 the container on top with its total on the header, her pack below \u2014 search and sorting work inside each section and never smear across the seam; and a ground pile standing at her house now says so in words, \u2018A ground pile \u2014 not the house\u2019s storage\u2019, with a door straight to the real storage (the deposit Adam thought had gone into a pile had in fact filed correctly all along \u2014 the dialogs simply never said which was which). QUEST LIVENESS (Systems): the quest card no longer offers \u2018Eat When Hungry\u2019 while she is fed \u2014 a quest shows only while it is live, judged on its own facts. ONE SHELTER TABLE (Systems): the staged copy of the shelter table is retired whole; the engine\u2019s live table is the single source every lane reads. THE TENT AT THE THATCH TIER (Adam\u2019s pin: \u2018Ya let\u2019s have the tent be like the thatch hut also\u2019): a tent now shelters exactly as well as a thatch hut \u2014 which, honestly named, means a tent out-shelters a lean-to. THE SLEEPING BAG\u2019S BODY (Background): a placed bag now has a visible bedroll in the world \u2014 sheet, blanket roll, pillow \u2014 ready for the bag build that wires it; until then it is a seam, not a feature.',
+    why: 'The thread through all five: the game saying plainly what is what. Two dialogs that looked alike and filed differently now label their sections and point at each other; a quest card stops suggesting what is already done; one shelter table ends a two-copies drift; the tent\u2019s warmth is the tier Adam chose, with its consequence (past the lean-to) stated rather than smoothed.',
+  },
+  {
     merge: 'Merge #70',
     pr: 95,
     sha: '5e3ad0a',
