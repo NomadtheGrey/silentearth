@@ -491,6 +491,72 @@ export const FOG_DENSITY = 0.008;
 /** Rain fog lift at full intensity (W1, DRAFT): standing
  *  rain thickens the air by this factor over the base. */
 export const RAIN_FOG_LIFT = 0.6;
+/**
+ * SWAMP FOG (Adam via DEV, 2026-11-03): fog as a PLACE ×
+ * WEATHER composition, priced here, all DRAFT for his
+ * pin pass. PLACE: the murk weight of the ground under
+ * her — deepBog full, fen and mirewood near-full,
+ * creekBottom a margin's worth (creek banks, pond and
+ * river edges read through it). WEATHER: wet spells
+ * complete the murk; a dry spell leaves it at
+ * SWAMP_DRY_FLOOR of its lift (thinned, not gone). Wet
+ * weather also LENDS light fog to ordinarily-clear
+ * country (meadow/forest after rain, a misty morning
+ * after a wet night) — capped by FOG_LENT_DENSITY. The
+ * DRY-UPLAND BOUNDARY (my price of Adam's open edge):
+ * scrub and rise tops carry no place weight and no lent
+ * weight — they stay clear except in the HEAVIEST rain
+ * (rainIntensity past SWAMP_SPILL_RAIN), which spills a
+ * little fog everywhere.
+ */
+export const SWAMP_FOG_LIFT = 1.4;
+export const SWAMP_DRY_FLOOR = 0.45;
+export const FOG_LENT_DENSITY = 0.0025;
+export const SWAMP_SPILL_RAIN = 0.85;
+/** Trailing-wetness time constants (seconds): the ground
+ *  wets up over ~2 min of rain and dries over ~20 — the
+ *  'morning after a wet night' memory. Presentation only;
+ *  nothing saves it. */
+export const WETNESS_RISE_S = 120;
+export const WETNESS_DRY_S = 1200;
+
+/** The murk weight of a place (0..1) from its biome weights. */
+export function swampPlaceWeight(w: {
+  deepBog: number;
+  fen: number;
+  mirewood: number;
+  creekBottom: number;
+}): number {
+  return Math.min(1, w.deepBog + 0.9 * w.fen + 0.9 * w.mirewood + 0.35 * w.creekBottom);
+}
+
+/**
+ * The composed surface fog density (pure; the frame loop
+ * feeds it). Order: the standing base + rain lift, the
+ * swamp lift on top, the lent fog added, the bat's night
+ * thinning last over the whole — as it always composed.
+ */
+export function surfaceFogDensity(input: {
+  rainIntensity: number;
+  wetness: number;
+  weights: {
+    deepBog: number; fen: number; mirewood: number; creekBottom: number;
+    meadow: number; forest: number;
+  };
+  batFactor: number;
+}): number {
+  const { rainIntensity, wetness, weights } = input;
+  let density = FOG_DENSITY * (1 + RAIN_FOG_LIFT * rainIntensity);
+  const place = swampPlaceWeight(weights);
+  const wet = Math.min(1, 0.7 * rainIntensity + 0.6 * wetness);
+  density *= 1 + SWAMP_FOG_LIFT * place * (SWAMP_DRY_FLOOR + (1 - SWAMP_DRY_FLOOR) * wet);
+  const clearCountry = Math.min(1, weights.meadow + weights.forest);
+  density += FOG_LENT_DENSITY * clearCountry * wet;
+  if (rainIntensity > SWAMP_SPILL_RAIN) {
+    density += FOG_LENT_DENSITY * ((rainIntensity - SWAMP_SPILL_RAIN) / (1 - SWAMP_SPILL_RAIN));
+  }
+  return density * input.batFactor;
+}
 /** Precipitation rig sizes (W1, DRAFT presentation). */
 export const RAIN_STREAK_COUNT = 650;
 export const RAIN_SPLASH_COUNT = 220;
@@ -649,6 +715,9 @@ export class WorldRenderer {
   private caveGlow: { seed: string; key: string } | null = null;
   private unsubMossPainted: (() => void) | null = null;
   private unsubGlowHarvest: (() => void) | null = null;
+  /** Trailing ground wetness 0..1 (swamp fog's weather
+   *  memory; presentation only, never saved). */
+  private groundWetness = 0;
   /** The village smoke column (scene-level billboards, rebuilt on world change). */
   private smokeGroup: THREE.Group | null = null;
   private smokeSprites: THREE.Sprite[] = [];
@@ -4213,12 +4282,30 @@ export class WorldRenderer {
           : CAVE_FOG_DENSITY;
       } else {
         const night = this.sky?.nightFactor ?? 0;
-        // Standing rain thickens the air (W1, DRAFT lift),
-        // under the bat's thinning as before.
-        const base = FOG_DENSITY * (1 + RAIN_FOG_LIFT * wf.rainIntensity);
-        fog.density = this.batNightWayfinding
-          ? base * (1 - (1 - BAT_FOG_FACTOR) * night)
-          : base;
+        // Trailing wetness (swamp fog, 2026-11-03): the
+        // ground wets toward the standing rain fast and
+        // dries slowly — presentation state only.
+        const target = wf.rainIntensity;
+        const tau = target > this.groundWetness ? WETNESS_RISE_S : WETNESS_DRY_S;
+        this.groundWetness += (target - this.groundWetness) * Math.min(1, dt / tau);
+        // Place × weather (Adam's composition): the murk
+        // of the ground under her, completed or thinned
+        // by the weather, lent lightly to clear country
+        // after rain — under the bat's thinning as before.
+        const w = this.gen.weightsAt(this.player.x, this.player.z).weights;
+        fog.density = surfaceFogDensity({
+          rainIntensity: wf.rainIntensity,
+          wetness: this.groundWetness,
+          weights: {
+            deepBog: w.deepBog ?? 0,
+            fen: w.fen ?? 0,
+            mirewood: w.mirewood ?? 0,
+            creekBottom: w.creekBottom ?? 0,
+            meadow: w.meadow ?? 0,
+            forest: w.forest ?? 0,
+          },
+          batFactor: this.batNightWayfinding ? 1 - (1 - BAT_FOG_FACTOR) * night : 1,
+        });
       }
     }
 
