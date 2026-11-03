@@ -137,13 +137,14 @@ export interface BagPosition {
 }
 
 /** Fraction of harshness remaining near a tent (DRAFT
- *  for Adam's pin pass). THE THATCH TIER (2026-11-02,
- *  DEV's reading of Adam's word, stated openly to him:
- *  'The tent is also [as warm as a thatch hut], but at
- *  least that could have a campfire inside') — 0.5,
- *  the thatchHut's own multiplier; it was 0.85 from the
- *  camping landing until this reading moved it. If
- *  Adam countermands, it reverts — one number. */
+ *  for Adam's pin pass). THE THATCH TIER — PINNED BY
+ *  ADAM (2026-11-02): 'Ya let's have the tent be like
+ *  the thatch hut also. I suppose it's a matter of
+ *  style, and it's not costly.' — 0.5, the thatchHut's
+ *  own multiplier; it was 0.85 from the camping landing
+ *  until DEV's reading of his word (the tent remark)
+ *  moved it, and he confirmed the reading as a ruling
+ *  the same evening. */
 export const TENT_SHELTER_MULTIPLIER = 0.5;
 /** Standing within this of a tent center counts as tent-sheltered (DRAFT; matches HARVEST_RANGE). */
 export const TENT_SHELTER_RADIUS_M = 2.5;
