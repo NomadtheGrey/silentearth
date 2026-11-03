@@ -21,12 +21,15 @@
  * IDS, not a flag — inventory stacks carry item + quantity
  * only, so there is nowhere else for it to live. 'torch' =
  * unlit (crafted); 'lit-torch' = lit (after lightTorches).
- * START LIT (Adam, 2026-11-03): while a candle is carried,
- * a torch entering her pack comes out lit — the conversion
- * lives at the inventory gain choke points, with
- * sweepTorchesStartLit below for restored packs; the
- * unlit form remains only for the no-candle case, and
- * lightTorches stays its road.
+ * ON DEMAND (Adam, 2026-11-03, the settled shape after
+ * two earlier coats were struck): torches ride in her
+ * pack UNLIT — 'it makes no sense to carry lit torches
+ * in pretty much any container' — and 'lit-torch' means
+ * the one in her hand. She lights them ON DEMAND off
+ * the candle she always carries (the candle ROUTE in
+ * lightTorches below): no gain conversion, no boot
+ * sweep; a restored pack's unlit torches are correct
+ * as they stand.
  * The carried-unlit query is inventory.count(ITEMS.torch):
  * UI's lit-fire 'light torches' pill appears ONLY when that
  * count is >= 1. The batch call is lightTorches() below;
@@ -44,6 +47,11 @@
  *   that is a one-line change here.
  * Fire wins when both routes are available (the fire was
  * sought out; flint stays in the pack either way).
+ * - Candle: the candle in her hand (Adam, 2026-11-03).
+ *   ALWAYS available — no items, nothing consumed. The
+ *   auto order tries it LAST; a door may name it
+ *   directly via the context's route (see
+ *   TorchLightContext).
  *
  * NO HUNGER GATE (lane call, flagged): lighting a torch is
  * a lighting action, not a build — it mirrors fire lighting
@@ -93,7 +101,7 @@ import { ITEMS } from './recipes';
 import { PersonalInventory } from './inventory';
 
 /** Lighting route taken by a successful batch. */
-export type TorchLightMethod = 'fire' | 'flint';
+export type TorchLightMethod = 'fire' | 'flint' | 'candle';
 
 /**
  * Batch outcome. `count` is the feedback number UI asked
@@ -113,6 +121,19 @@ export type LightTorchesOutcome =
  */
 export interface TorchLightContext {
   litFirePresent: boolean;
+  /**
+   * The route the DOOR asks for (Adam's on-demand
+   * ruling, 2026-11-03): 'candle' is ALWAYS available
+   * — she lights them off the candle in her hand,
+   * nothing consumed, no flint, no stone, no fire
+   * needed. 'fire' requires litFirePresent; 'flint'
+   * requires flint + river-stone; a named route that
+   * is not available fails with its reason rather
+   * than falling through. UNSET keeps the standing
+   * auto order (fire, then flint, then candle), so
+   * existing doors see no change.
+   */
+  route?: TorchLightMethod;
 }
 
 /**
@@ -130,20 +151,36 @@ export function lightTorches(
   if (count <= 0) {
     return { lit: false, count: 0, reason: 'No unlit torch carried.' };
   }
-  let method: TorchLightMethod | null = null;
-  if (context.litFirePresent) {
-    method = 'fire';
-  } else if (
+  const fireAvailable = context.litFirePresent;
+  const flintAvailable =
     inventory.count(ITEMS.flint) > 0 &&
-    inventory.count(ITEMS.riverStone) > 0
-  ) {
+    inventory.count(ITEMS.riverStone) > 0;
+  let method: TorchLightMethod | null = null;
+  if (context.route === 'candle') {
+    method = 'candle';
+  } else if (context.route === 'fire') {
+    if (fireAvailable) method = 'fire';
+  } else if (context.route === 'flint') {
+    if (flintAvailable) method = 'flint';
+  } else if (fireAvailable) {
+    method = 'fire';
+  } else if (flintAvailable) {
     method = 'flint';
+  } else {
+    // The candle in her hand: always there (Adam,
+    // 2026-11-03 — torches light ON DEMAND). The auto
+    // order tries it last so fire/flint behavior at
+    // existing doors is unchanged.
+    method = 'candle';
   }
   if (method === null) {
     return {
       lit: false,
       count: 0,
-      reason: 'Needs flint + river-stone, or a lit fire.',
+      reason:
+        context.route === 'fire'
+          ? 'No lit fire here.'
+          : 'Needs flint + river-stone.',
     };
   }
   // Clone-simulate: a failed grant must not strand torches
@@ -164,30 +201,6 @@ export function lightTorches(
   return { lit: true, method, count };
 }
 
-/**
- * TORCHES START LIT — THE BOOT SWEEP (Adam's pin,
- * 2026-11-03): a restored pack whose candle is in it
- * has its carried unlit torches converted to lit,
- * once, before play — the save-side twin of the gain
- * choke-point rule in inventory.ts (a gained torch
- * lands lit while a candle is carried; a gained
- * candle converts the stock). The shell seats this
- * call beside its other boot compositions. Piles and
- * PLACED torches are not her pack and never convert.
- * Returns the count converted (0 when no candle is
- * carried or no unlit torch is held).
- */
-export function sweepTorchesStartLit(
-  inventory: PersonalInventory,
-): number {
-  if (inventory.count(ITEMS.candle) < 1) return 0;
-  const count = inventory.count(ITEMS.torch);
-  if (count <= 0) return 0;
-  inventory.remove(ITEMS.torch, count);
-  inventory.addPartial(ITEMS.litTorch, count);
-  return count;
-}
-
 // ---------------------------------------------------------------------------
 // Placed torches (Adam, DEV chat 2026-10-27: "She should also
 // be able to place torches, to light an area or path" + "Or
@@ -196,11 +209,12 @@ export function sweepTorchesStartLit(
 // torches are not candles.
 //
 // RULES (Adam's, via DEV):
-// - PLACE: a carried LIT torch ('lit-torch') leaves the
-//   inventory and becomes a placed torch at her position.
-//   Placed torches are LIT — she places light, not sticks.
-//   An unlit torch can never be placed (placeTorch counts
-//   litTorch only).
+// - PLACE: a carried torch leaves the inventory and
+//   becomes a placed torch at her position. Placed
+//   torches are LIT — she places light, not sticks: a
+//   carried lit torch places as-is, and an unlit one
+//   is lit in the act of setting it down (Adam,
+//   2026-11-03, the on-demand ruling).
 // - PICK UP: a placed torch returns to inventory as
 //   'lit-torch' — lit, not unlit. Picking it back up does
 //   not unlight it.
@@ -254,10 +268,13 @@ export type PlaceTorchOutcome =
   | { placed: false; reason: string };
 
 /**
- * Move one carried LIT torch out of the inventory into a
- * placed-torch record at (x, z). Validates before
- * mutating (finite position, lit torch carried), so a
- * failed place consumes nothing.
+ * Move one carried torch out of the inventory into a
+ * placed-torch record at (x, z): a carried LIT torch is
+ * preferred; an UNLIT one is lit in the act of setting
+ * it down, so the seated record is 'lit-torch' either
+ * way. Validates before mutating (finite position, a
+ * torch of either form carried), so a failed place
+ * consumes nothing.
  */
 export function placeTorch(
   inventory: PersonalInventory,
@@ -267,10 +284,17 @@ export function placeTorch(
   if (!Number.isFinite(x) || !Number.isFinite(z)) {
     return { placed: false, reason: 'Invalid position.' };
   }
-  if (inventory.count(ITEMS.litTorch) <= 0) {
-    return { placed: false, reason: 'No lit torch carried.' };
+  if (inventory.count(ITEMS.litTorch) > 0) {
+    inventory.remove(ITEMS.litTorch, 1);
+  } else if (inventory.count(ITEMS.torch) > 0) {
+    // She lights it in the act of setting it down
+    // (Adam, 2026-11-03): an unlit torch places as a
+    // burning one — the placed record is lit either
+    // way.
+    inventory.remove(ITEMS.torch, 1);
+  } else {
+    return { placed: false, reason: 'No torch carried.' };
   }
-  inventory.remove(ITEMS.litTorch, 1);
   return { placed: true, torch: { item: ITEMS.litTorch, x, z } };
 }
 

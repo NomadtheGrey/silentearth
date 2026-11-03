@@ -1224,52 +1224,15 @@ export class PersonalInventory implements CraftingInventory {
     return this.stacks.get(normalizeItemId(item)) ?? 0;
   }
 
-  /**
-   * TORCHES START LIT (Adam's pin, 2026-11-03): she
-   * walks around with a candle, so a torch that
-   * enters her pack while a candle is carried comes
-   * out LIT. The rule lives at the gain choke points
-   * (add / addPartial — every door into the pack
-   * flows through them): startLitId swaps a gained
-   * 'torch' for 'lit-torch' when a candle is carried
-   * at that moment, and convertUnlitStock (called
-   * after a candle gain) converts the whole carried
-   * unlit stock in the same act, so entry order never
-   * matters. Conversion is weight-neutral (both forms
-   * 0.5 lb), so capacity math never shifts mid-gain.
-   * Losing the candle later unlights NOTHING — lit is
-   * lit (no burnout, pinned). Restored packs are the
-   * boot sweep's business (torch.ts), not the
-   * constructor's: the initial seed writes stacks
-   * directly and does not convert.
-   */
-  private startLitId(id: ItemId): ItemId {
-    return id === ITEMS.torch && this.count(ITEMS.candle) >= 1
-      ? ITEMS.litTorch
-      : id;
-  }
-
-  /** Convert every carried unlit torch to lit (a candle is carried). */
-  private convertUnlitStock(): void {
-    const n = this.count(ITEMS.torch);
-    if (n === 0 || this.count(ITEMS.candle) < 1) return;
-    this.stacks.delete(ITEMS.torch);
-    this.dropFromOrder(ITEMS.torch);
-    this.stacks.set(ITEMS.litTorch, this.count(ITEMS.litTorch) + n);
-    this.noteGain(ITEMS.litTorch);
-    markItemMet(ITEMS.litTorch);
-  }
-
   add(item: ItemId, quantity: number): void {
     assertPositiveInteger(quantity, 'add');
-    const id = this.startLitId(normalizeItemId(item));
+    const id = normalizeItemId(item);
     if (!isCarryingGear(id) && !this.canCarry(id, quantity)) {
       throw new InventoryCapacityError(id, quantity, this.free());
     }
     this.stacks.set(id, this.count(id) + quantity);
     this.noteGain(id);
     markItemMet(id);
-    if (id === ITEMS.candle) this.convertUnlitStock();
   }
 
   /**
@@ -1296,7 +1259,7 @@ export class PersonalInventory implements CraftingInventory {
    */
   addPartial(item: ItemId, quantity: number): PartialGrant {
     assertPositiveInteger(quantity, 'addPartial');
-    const id = this.startLitId(normalizeItemId(item));
+    const id = normalizeItemId(item);
     let granted: number;
     if (isCarryingGear(id) || this.worn.has(id)) {
       granted = quantity;
@@ -1323,7 +1286,6 @@ export class PersonalInventory implements CraftingInventory {
       this.stacks.set(id, this.count(id) + granted);
       this.noteGain(id);
       markItemMet(id);
-      if (id === ITEMS.candle) this.convertUnlitStock();
     }
     return { item: id, granted, remainder: quantity - granted };
   }
