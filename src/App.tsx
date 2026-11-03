@@ -4348,6 +4348,31 @@ export default function App() {
   const pausedRef = useRef(false);
   const [paused, setPaused] = useState(false);
 
+  // THE LOST-GRAPHICS NOTE (UI, 2026-11-03; pair to
+  // Background's renderer context recovery, 7b2b94c):
+  // while the WebGL context is lost the canvas is
+  // white and reads as a dead game — this state
+  // carries the plain line that says otherwise. The
+  // bus pair is the whole contract (show on lost,
+  // clear on restored); the game recovers with or
+  // without the note.
+  const [contextLost, setContextLost] = useState(false);
+  useEffect(() => {
+    const offLost = bus.on('renderer:context-lost', () =>
+      setContextLost(true),
+    );
+    const offRestored = bus.on('renderer:context-restored', () =>
+      setContextLost(false),
+    );
+    // Seed from the renderer's own fact in case the
+    // loss predates this subscription.
+    if (rendererRef.current?.isContextLost()) setContextLost(true);
+    return () => {
+      offLost();
+      offRestored();
+    };
+  }, []);
+
   const refreshInventory = () => {
     refreshFillOffer();
     setInventoryItems(
@@ -18468,6 +18493,24 @@ export default function App() {
       ) : null}
 
 
+
+      {/* THE LOST-GRAPHICS NOTE (see the state above):
+        a plain standing line while the context is
+        lost — over the white canvas, under the
+        dialogs, never a surface (pointer-events
+        none): the world is still running beneath it. */}
+      {contextLost ? (
+        <div className="pointer-events-none fixed inset-x-0 top-14 z-[55] flex justify-center px-4">
+          <p
+            role="status"
+            className="max-w-md rounded-xl bg-black/70 px-4 py-3 text-center text-sm leading-relaxed text-stone-200"
+          >
+            Graphics lost — the world is still running and your
+            progress is safe. It usually comes back on its own;
+            if it doesn’t, reloading the page is safe.
+          </p>
+        </div>
+      ) : null}
 
       {/* Paused control: only while the engine flag is set. It
         renders regardless of panels (a global state control,
