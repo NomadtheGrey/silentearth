@@ -601,14 +601,22 @@ const DRAFT_RECIPES: Recipe[] = [
     status: 'draft',
     output: { item: ITEMS.salve, quantity: 2 },
     station: 'cauldron',
-    ingredients: [i(ITEMS.beeswax, 1), i(ITEMS.honey, 1)],
+    ingredients: [
+      i(ITEMS.beeswax, 1),
+      i(ITEMS.honey, 1),
+      i(ITEMS.meadowFlower, 1),
+    ],
     useLine: 'Rubbed on a hurt — mends one stage of injury',
     notes:
       'DRAFT (2026-11-03, the feral build). THE FIRST SALVE ' +
       '(Adam\'s settled road: companions mend with time, ' +
       'salves mend much more quickly — and the same pot ' +
-      'tends her own stages; injury.ts). Beeswax + honey, ' +
-      'melted smooth in the cauldron (the clay-pots thread: ' +
+      'tends her own stages; injury.ts). Beeswax + honey ' +
+      '+ a meadow flower (Adam\'s amendment, 2026-11-03: ' +
+      'a flower type mixed in — the meadow flower, the ' +
+      'pickable one already in her pack; the lady ' +
+      'slipper is settled OUT as an ingredient), melted ' +
+      'smooth in the cauldron (the clay-pots thread: ' +
       'salves brew in clay at the pot site) — one melt ' +
       'makes TWO pots, the candle melt\'s payout shape. ' +
       'The tending acts: tendWithSalve (hers, injury.ts) ' +

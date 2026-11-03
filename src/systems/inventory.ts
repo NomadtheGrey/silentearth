@@ -641,7 +641,7 @@ export const ITEM_DESCRIPTIONS: Readonly<Record<string, string>> = {
   'charcoal-stick': 'A stick with one end burned to charcoal, for drawing. Char one at a lit fire, or at the fire\'s own panel.',
   candle: 'Made by dipping a twined-cordage wick in wax melted in a cauldron at a lit hearth — one melt makes three. One of the three things a Stumpy Altar asks for: stone, glyph, and flame.',
   beeswax: 'Wax gathered from a wild hive, alongside the honey. Melts in the cauldron at a lit hearth.',
-  salve: 'Beeswax and honey, melted smooth in the cauldron. Rubbed on a hurt — hers or a companion\'s — to mend it.',
+  salve: 'Beeswax, honey, and a meadow flower, melted smooth in the cauldron. Rubbed on a hurt — hers or a companion\'s — to mend it.',
   tallow: 'Fat rendered from a trap carcass, in the cauldron at a lit hearth. Melts into a candle.',
   clay: 'Clay. Pots, bricks, and daub — shaped, then fired.',
   flint: 'Strikes a fire fast. Kept, never consumed.',
