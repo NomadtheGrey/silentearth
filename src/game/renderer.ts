@@ -74,7 +74,7 @@ import { altarState } from './altarState';
 import { cauldronState } from './cauldronState';
 import { deskState } from './deskState';
 import { ritualSiteState } from './ritualSite';
-import type { PlacedHouse, TentPosition } from './shelter';
+import type { BagPosition, PlacedHouse, TentPosition } from './shelter';
 import { FIRE_DEFS } from './fire';
 import { shelterState, HOUSE_DEFS } from './shelter';
 import { loomState } from './loomState';
@@ -253,6 +253,39 @@ export const PLACEMENT_PREVIEW_LIFT_M = 0.03;
  * can measure it: 16 meshes, ~1.3 m wide, 0.85 m tall.
  * Deterministic — no randomness, fixed angles and colors.
  */
+
+/**
+ * The placed sleeping bag: an unrolled bedroll on a
+ * ground sheet — sheet, a blanket roll along z, a
+ * pillow roll across the head end, two strap bands.
+ * Exported (not a rebuildPlacedGroup local) so a
+ * headless probe can measure it: 5 meshes, ~0.9 m
+ * wide, 2.0 m long, ~0.36 m tall. Deterministic —
+ * no randomness, fixed angles and colors. Unrotated
+ * in v1: it lies along z beside the tent.
+ */
+export function buildBedrollGroup(): THREE.Group {
+  const g = new THREE.Group();
+  const sheet = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.03, 2.0), lambert(0x6a5a3a));
+  sheet.position.set(0, 0.015, 0);
+  g.add(sheet);
+  const roll = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.17, 1.55, 10), lambert(0x8a4a3a));
+  roll.rotation.x = Math.PI / 2;
+  roll.position.set(0, 0.19, 0.12);
+  g.add(roll);
+  const pillow = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.11, 0.62, 8), lambert(0xd8c9a8));
+  pillow.rotation.z = Math.PI / 2;
+  pillow.position.set(0, 0.13, -0.78);
+  g.add(pillow);
+  for (const dz of [-0.35, 0.55]) {
+    const strap = new THREE.Mesh(new THREE.CylinderGeometry(0.185, 0.185, 0.07, 10), lambert(0x4a3220));
+    strap.rotation.x = Math.PI / 2;
+    strap.position.set(0, 0.19, 0.12 + dz);
+    g.add(strap);
+  }
+  return g;
+}
+
 export function buildCampfireGroup(): THREE.Group {
   const g = new THREE.Group();
   // Stone ring (7 stones) + ash bed, unchanged from the old fire.
@@ -603,6 +636,8 @@ export class WorldRenderer {
   private campArrowsVisible = false;
   /** Tent positions for the placed group (shell-driven via setTents — no game tent state exists; camping state is systems-side). */
   private tents: TentPosition[] = [];
+  /** Sleeping-bag positions for the placed group (shell-driven via setBags — the tent pattern; UI's bag build holds the state). */
+  private bags: BagPosition[] = [];
   /** Pigeon wing bone — way-home sense (tier-1 charm): arrows show without water while carried + awakened. */
   private pigeonWayHome = false;
   /** Bat wing bone — night way-finding (tier-1 charm): fog thins at night while carried + awakened. */
@@ -1079,6 +1114,23 @@ export class WorldRenderer {
    */
   setTents(positions: TentPosition[]): void {
     this.tents = [...positions];
+    this.rebuildPlacedGroup();
+    this.proximity.recompute();
+  }
+
+  /**
+   * Set the sleeping-bag list for the placed group
+   * (shell-driven, the setTents pattern verbatim: the
+   * shell calls this on place / pickup / boot restore).
+   * Rebuilds the placed group immediately and nudges the
+   * proximity tracker, so the bag is visible world
+   * content the moment it lands — the tag law: a placed
+   * bag you cannot see is not placed. No bus event. No
+   * heading in v1: a bedroll reads honestly unrotated,
+   * lying along z beside the tent.
+   */
+  setBags(positions: BagPosition[]): void {
+    this.bags = [...positions];
     this.rebuildPlacedGroup();
     this.proximity.recompute();
   }
@@ -1829,6 +1881,8 @@ export class WorldRenderer {
     // Placed tents belong to the old world's map too (the shell
     // re-supplies them via setTents on boot restore).
     this.tents = [];
+    // Placed bags likewise (re-supplied via setBags).
+    this.bags = [];
     this.rebuildPlacedGroup();
     // Staged bones belong to the old world's sites too.
     ritualSiteState.clear();
@@ -2869,6 +2923,14 @@ export class WorldRenderer {
       tg.add(door);
       tg.add(box(1.6, 0.02, 2.2, 0x6a5a3a, 0, 0.01, 0));
       group.add(tg);
+    }
+    for (const bag of this.bags) {
+      // The placed sleeping bag (UI's bag build supplies
+      // positions via setBags): the bedroll, unrotated,
+      // lying along z like the tent it camps beside.
+      const bg = buildBedrollGroup();
+      bg.position.set(bag.x, 0, bag.z);
+      group.add(bg);
     }
     this.scene.add(group);
     this.placedGroup = group;
