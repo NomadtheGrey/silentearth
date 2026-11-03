@@ -173,6 +173,23 @@ export type ScatterKind =
   | 'farmChairToppled'
   | 'farmShelfToppled'
   | 'farmCrateOpen'
+  // Attic contents (Background, 2026-11-03): what the
+  // eaves crates hold — stored goods and old-world junk,
+  // seated ONLY in attic zones by attics.ts's content
+  // derivation. Takeable ('taken' sources in objects.ts).
+  | 'storedCandle'
+  | 'storedTallow'
+  | 'storedBeeswax'
+  | 'junkIron'
+  | 'junkToaster'
+  | 'junkKettle'
+  | 'junkCellphone'
+  | 'junkRadio'
+  | 'junkDrill'
+  | 'junkWrench'
+  | 'junkRifle'
+  | 'junkLamp'
+  | 'junkTypewriter'
   | 'farmDrawersOpen'
   | 'farmBarrelSpilled'
   // Site-pass kinds (the ATTIC interior bricks — the

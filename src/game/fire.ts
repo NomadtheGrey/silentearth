@@ -21,14 +21,23 @@
  * is SLOW (rub, wait 20–30 s, rub). Counts/timing below are
  * lane-decided tunables (flagged), inside Adam's shapes.
  *
- * CANDLE — LIGHT SETTLED, STARTER STILL OPEN (Adam, 2026-10-26):
- * the carried candle PROVIDES LIGHT (visible model + real point
- * light, renderer/models — see buildCandle + candleLight). That
- * settles the light half of this flag. The starter half is STILL
- * UNDECIDED: the candle lights NO fires and cooks NOTHING —
- * lighting methods here stay flint and friction only, and no code
- * path reads the candle as a starter. Do not wire it as one
- * quietly; that call is still Adam's.
+ * CANDLE — RULED (Adam, 2026-11-03): the carried candle IS
+ * a fire-starter — a third lighting path beside the two
+ * pinned above. LightingMethod 'candle' (fireState: a short
+ * wait, CANDLE_WAIT_MS, then lit outright — the flame was
+ * already lit, so there is no second verb). It is the
+ * CARRIED LIGHT that satisfies the method, not a candle
+ * item: nothing seeds one into a fresh pack, the method
+ * requires no item and consumes nothing, and the crafted
+ * candle item keeps its other uses (altar offerings). This
+ * supersedes the 2026-10-26 flag, which held the starter
+ * half open ('the candle lights NO fires… do not wire it
+ * as one' — struck on this ruling; systems/fire.ts records
+ * the same word). The light half stands as settled
+ * 2026-10-26: the carried candle PROVIDES LIGHT (visible
+ * model + real point light, renderer/models — see
+ * buildCandle + candleLight). Cooking stays OUT: a candle
+ * is a flame, not a stove — no cook path takes a candle.
  *
  * LIGHT DIRECTION (Adam, 2026-10-26 — NOTED, NOT A BUILD ORDER:
  * do not pull this into the fire/shelters round): when light
@@ -49,8 +58,9 @@
  * The rest is still unbuilt here: no cycle, no darkness
  * mechanic, no torch item, no placeable candle entity
  * (carried light itself landed in renderer/models, Adam
- * 2026-10-26). And carried light does NOT settle the
- * candle-as-starter flag above — that call is still open.
+ * 2026-10-26). The candle-as-starter call stayed open past
+ * this note until Adam's 2026-11-03 ruling settled it —
+ * see the CANDLE paragraph above.
  *
  * SCOPE BOUNDARIES: placement here is a cost-free engine
  * primitive — recipe/cost gating lives with Systems + UI, not in
