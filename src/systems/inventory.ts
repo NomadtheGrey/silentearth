@@ -1005,6 +1005,13 @@ export interface CapacityBreakdown {
   worn: number;
   /** Charm bonus in pounds (bear, Track B; 0 with no bear charm). */
   charms: number;
+  /**
+   * The capacity multiplier applied to the summed
+   * total LAST (the injury carry cut — injury.ts's
+   * INJURY_EFFECTS, shell-synced; 1 = sound). The
+   * parts above always describe the uncut sum.
+   */
+  capacityMultiplier: number;
   total: number;
   largeBasketMode: LargeBasketMode;
   /** PINNED 50 lb (Adam 2026-10-26) — the live Trundle-Tool bonus. */
@@ -1070,6 +1077,15 @@ export class PersonalInventory implements CraftingInventory {
    * the awakening record, which IS saved. Default 0.
    */
   private charmBonusLb = 0;
+
+  /**
+   * Capacity multiplier (the injury carry cut):
+   * session state, shell-synced (setCapacityMultiplier
+   * on injury stage change) — never saved; derives
+   * from InjuryState, whose snapshot IS saved.
+   * Default 1 (sound: no cut).
+   */
+  private capacityMult = 1;
 
   constructor(options: PersonalInventoryOptions) {
     this.largeBasketMode = options.largeBasketMode;
@@ -1239,6 +1255,31 @@ export class PersonalInventory implements CraftingInventory {
     return this.charmBonusLb;
   }
 
+  /**
+   * Set the capacity multiplier (INJURY_EFFECTS'
+   * carryMultiplier for her stage — 1 sound, less
+   * when hurt). Must be finite, > 0, and ≤ 1: this
+   * seam only ever CUTS the summed total, applied
+   * inside capacityBreakdown so every grant door
+   * (addPartial / canCarry, through capacityUnits)
+   * honors it from one place. Cutting below the
+   * current load ejects nothing — doors simply
+   * refuse new grants until she sheds weight.
+   */
+  setCapacityMultiplier(multiplier: number): void {
+    if (!Number.isFinite(multiplier) || multiplier <= 0 || multiplier > 1) {
+      throw new Error(
+        'Capacity multiplier must be a finite number in (0, 1].',
+      );
+    }
+    this.capacityMult = multiplier;
+  }
+
+  /** Current capacity multiplier (1 = no cut). */
+  capacityMultiplier(): number {
+    return this.capacityMult;
+  }
+
   // --- Capacity (pounds) ---
 
   /** Total carrying capacity right now, given owned gear, in pounds. */
@@ -1283,17 +1324,23 @@ export class PersonalInventory implements CraftingInventory {
       trundleTool: hasTrundleTool ? TRUNDLE_TOOL_BONUS : 0,
       worn,
       charms: this.charmBonusLb,
+      capacityMultiplier: this.capacityMult,
       total: 0,
       largeBasketMode: this.largeBasketMode,
       trundleToolBonus: TRUNDLE_TOOL_BONUS,
     };
+    // The multiplier takes the summed total LAST, so
+    // the parts stay the honest uncut sum and every
+    // consumer of the total (capacity, capacityUnits,
+    // free) sees the cut from this one place.
     breakdown.total =
-      breakdown.pockets +
-      breakdown.smallBasket +
-      breakdown.largeBasket +
-      breakdown.trundleTool +
-      breakdown.worn +
-      breakdown.charms;
+      (breakdown.pockets +
+        breakdown.smallBasket +
+        breakdown.largeBasket +
+        breakdown.trundleTool +
+        breakdown.worn +
+        breakdown.charms) *
+      breakdown.capacityMultiplier;
     return breakdown;
   }
 
