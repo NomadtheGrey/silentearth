@@ -67,6 +67,7 @@ import { caveFootprintFor, caveInstancesInRect, caveLayoutForKey, caveMouthsNear
 import { isUpstairsKey, UPSTAIRS_BACKGROUND, UPSTAIRS_FOG_DENSITY } from './attics';
 import { homesteadInstancesInRect } from './homesteads';
 import { farmhouseInstancesInRect } from './farmhouses';
+import { villageInstancesInRect } from './villages';
 import type { RiverParams } from './river';
 import { fireState } from './fireState';
 import { torchState } from './torchState';
@@ -1617,8 +1618,19 @@ export class WorldRenderer {
         minZ: z - 64,
         maxZ: z + 64,
       });
-      if (near.length > 0 || nearHomes.length > 0 || nearFarms.length > 0)
-        sites = [...sites, ...near, ...nearHomes, ...nearFarms];
+      // The recurring villages likewise (2026-11-03
+      // integration): their standing wall segments collide.
+      // The query rect runs wider than the other families'
+      // — a village's clearing (and so its bounds) can
+      // reach well past 64 m from its centre.
+      const nearVillages = villageInstancesInRect(seed, this.wallsSpawnMemo.spawn, (wx, wz) => this.gen.weightsAt(wx, wz), {
+        minX: x - 192,
+        maxX: x + 192,
+        minZ: z - 192,
+        maxZ: z + 192,
+      });
+      if (near.length > 0 || nearHomes.length > 0 || nearFarms.length > 0 || nearVillages.length > 0)
+        sites = [...sites, ...near, ...nearHomes, ...nearFarms, ...nearVillages];
     }
     return wallsNearSites(sites, x, z, 2);
   }
