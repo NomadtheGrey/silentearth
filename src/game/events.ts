@@ -502,6 +502,25 @@ export interface EventMap {
   'companion:feral-snap': { id: string };
   'companion:stance': { id: string; stance: 'stay' | 'follow' };
   /**
+   * Feral encounters (2026-11-03 — the feral build's
+   * world↔shell contract). 'animal:feral-telegraph' —
+   * the WORLD (renderer) emits when a dangerous feral
+   * begins its wind-up: the sound cue hangs here; the
+   * telegraph is priced, so this event is the fairness
+   * machine made audible. 'animal:feral-contact' — the
+   * WORLD emits when a strike lunge completes in contact
+   * range (reachable only through a completed telegraph):
+   * the shell's strike door (applyFeralStrike) hangs on
+   * it and resolves through Systems' ledger.
+   * 'animal:feral-resolved' — the SHELL emits after
+   * resolving, carrying the outcome back to the world:
+   * on 'warning' the renderer breaks the animal off and
+   * displaces her; the other outcomes are the record.
+   */
+  'animal:feral-telegraph': { id: string; kind: string };
+  'animal:feral-contact': { id: string };
+  'animal:feral-resolved': { id: string; outcome: 'warning' | 'intercepted' | 'wound' | 'down' };
+  /**
    * The familiar's rite (Build 2; the SHELL emits on
    * Systems' bond transitions, after the transition
    * lands — the fact on the bus, not a grant channel).

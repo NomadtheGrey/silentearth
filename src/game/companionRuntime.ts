@@ -182,6 +182,19 @@ export function makeCompanionInstance(
     spookT: 0,
     snapT: 0,
     climbState: 'none',
+    // A companion is never a feral encounter actor (the
+    // runtime steps it, not updateAnimal); the encounter
+    // fields ride inert at their spawn values.
+    feralState: 'none',
+    feralT: 0,
+    feralStalkT: 0,
+    feralAnchorX: 0,
+    feralAnchorZ: 0,
+    feralStrikeX: 0,
+    feralStrikeZ: 0,
+    feralContact: false,
+    feralTelegraphPulse: false,
+    feralBreak: false,
     clearT: 0,
     anchors: [],
   };

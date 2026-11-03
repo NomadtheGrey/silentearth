@@ -38,8 +38,8 @@ import {
   TRUST_MARKER_RANGE_M,
   type MarkerState,
 } from './trustMarkers';
-import { spawnAnimalsForChunk, updateAnimal } from './animals';
-import type { AnimalInstance, AnimalKind } from './animals';
+import { spawnAnimalsForChunk, updateAnimal, FERAL_SAFE_HOUSE_M, FERAL_SAFE_SPAWN_M } from './animals';
+import type { AnimalInstance, AnimalKind, FeralFacts } from './animals';
 import {
   actorById,
   allActors,
@@ -737,6 +737,23 @@ export class WorldRenderer {
   /** Memo for the site-walls query's cave-instance spawn (see siteWallsAt). */
   private wallsSpawnMemo: { seed: string; spawn: { x: number; z: number } } | null = null;
   /**
+   * Feral encounters (2026-11-03): the shell registers a
+   * facts provider — given an animal, it answers the
+   * defender's seat for a feral of a dangerous kind, or
+   * null for everything else. The renderer merges those
+   * facts with its own (safe country, interiors) into
+   * the FeralFacts the behavior steps on. Unregistered,
+   * no encounter can form: the ambient world is the
+   * whole story, byte-identical to before.
+   */
+  private feralFactsProvider: ((a: AnimalInstance) => { defenderPos: { x: number; z: number } | null } | null) | null = null;
+  /** Her injury movement factor (DEV's ruling: engine-
+   *  side, composed at the terrain speed query's seat).
+   *  The shell sets it from her stage; 1 = sound. */
+  private injurySpeedFactor = 1;
+  private unsubFeralResolved: (() => void) | null = null;
+  private feralSpawnMemo: { seed: string; spawn: { x: number; z: number } } | null = null;
+  /**
    * Dropped-pile meshes (harvest overflow, Adam 2026-10-26): one
    * small heap + marker flag per pile, NOT chunk-filtered — piles
    * are few, and a pile must stay visible wherever it lies. Shares
@@ -802,7 +819,7 @@ export class WorldRenderer {
     // (setWorldGen) flow through without re-wiring. The wrapped
     // generator delegates fieldsAt/weightsAt untouched, so the
     // slow reads true world data, not harvest state.
-    this.player.setTerrainSpeedQuery((x, z) => terrainSpeedAt(this.gen, x, z));
+    this.player.setTerrainSpeedQuery((x, z) => terrainSpeedAt(this.gen, x, z) * this.injurySpeedFactor);
     // Water query (ground resistance, 2026-10-30): the wading
     // half of the terrain story, wired beside the terrain query.
     // The pond / standing-water discs around her chunk are
@@ -883,6 +900,20 @@ export class WorldRenderer {
       if (!this.chunks.has(key)) return;
       this.unloadChunk(p.cx, p.cz);
       this.loadChunk(p.cx, p.cz);
+    });
+    // Feral resolutions (2026-11-03): the shell resolves
+    // a contact through Systems' ledger and reports the
+    // outcome back. On the WARNING the world answers:
+    // the animal breaks off (its next step reads
+    // feralBreak) and she is displaced — the warning
+    // costs no stage, but it moves her.
+    this.unsubFeralResolved = bus.on('animal:feral-resolved', (p) => {
+      const inst = this.peekChunkAnimal(p.id);
+      if (!inst) return;
+      if (p.outcome === 'warning') {
+        inst.feralBreak = true;
+        this.displacePlayerFrom(inst.x, inst.z);
+      }
     });
     // Placed-group rebuild on placement + lighting: a new fire,
     // house, or loom appears, and a lit fire gains its flame.
@@ -1657,6 +1688,108 @@ export class WorldRenderer {
       for (const pair of loaded.animals) out.push(pair.instance);
     }
     return out;
+  }
+
+  /** Register the shell's feral-facts provider (2026-11-03): see the field's note. */
+  setFeralFactsProvider(fn: ((a: AnimalInstance) => { defenderPos: { x: number; z: number } | null } | null) | null): void {
+    this.feralFactsProvider = fn;
+  }
+
+  /** Set her injury movement factor (1 = sound; the shell derives it from her stage's INJURY_EFFECTS). */
+  setInjurySpeedFactor(f: number): void {
+    this.injurySpeedFactor = Number.isFinite(f) && f > 0 ? f : 1;
+  }
+
+  /** One standing house's seat for the feral facts: centre + half extents (+ yaw for her placed houses, whose frames turn freely). */
+  private feralHouseSpotsAround(x: number, z: number): { x: number; z: number; hx: number; hz: number; rotY?: number }[] {
+    const spots: { x: number; z: number; hx: number; hz: number; rotY?: number }[] = [];
+    for (const house of shelterState.snapshot()) {
+      const half = HOUSE_DEFS[house.type].footprint / 2;
+      spots.push({ x: house.x, z: house.z, hx: half, hz: half, rotY: house.rotY ?? 0 });
+    }
+    const seed = String(this.gen.seed);
+    if (!this.feralSpawnMemo || this.feralSpawnMemo.seed !== seed) {
+      this.feralSpawnMemo = { seed, spawn: this.gen.findSpawn() };
+    }
+    const spawn = this.feralSpawnMemo.spawn;
+    const wAt = (wx: number, wz: number) => this.gen.weightsAt(wx, wz);
+    const rect = { minX: x - 200, maxX: x + 200, minZ: z - 200, maxZ: z + 200 };
+    for (const v of villageInstancesInRect(seed, spawn, wAt, rect)) {
+      for (const p of v.plots) {
+        if (p.state === 'gone' || p.state === 'collapsed') continue;
+        spots.push({ x: p.x, z: p.z, hx: 3.5, hz: 3.5 });
+      }
+    }
+    for (const h of homesteadInstancesInRect(seed, spawn, wAt, rect)) {
+      spots.push({ x: h.center.x, z: h.center.z, hx: 3, hz: 3 });
+    }
+    const hullOf = (walls: { minX: number; maxX: number; minZ: number; maxZ: number }[]) => {
+      if (walls.length === 0) return null;
+      let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+      for (const w of walls) {
+        minX = Math.min(minX, w.minX); maxX = Math.max(maxX, w.maxX);
+        minZ = Math.min(minZ, w.minZ); maxZ = Math.max(maxZ, w.maxZ);
+      }
+      return { x: (minX + maxX) / 2, z: (minZ + maxZ) / 2, hx: (maxX - minX) / 2, hz: (maxZ - minZ) / 2 };
+    };
+    for (const f of farmhouseInstancesInRect(seed, spawn, wAt, rect)) {
+      const hull = hullOf(f.walls);
+      if (hull) spots.push(hull);
+    }
+    const authored = villageSite(seed, spawn, wAt);
+    for (const p of authored.plots) {
+      if (p.state === 'gone' || p.state === 'collapsed') continue;
+      spots.push({ x: p.x, z: p.z, hx: 3.5, hz: 3.5 });
+    }
+    const farm = farmhouseSite(seed, spawn, wAt);
+    const farmHull = hullOf(farm.walls);
+    if (farmHull) spots.push(farmHull);
+    return spots;
+  }
+
+  /** Is a point inside any standing house (her placed houses read in their own turned frame)? */
+  private pointInsideHouse(x: number, z: number, spots: { x: number; z: number; hx: number; hz: number; rotY?: number }[]): boolean {
+    for (const s of spots) {
+      let dx = x - s.x;
+      let dz = z - s.z;
+      if (s.rotY) {
+        const c = Math.cos(-s.rotY);
+        const sn = Math.sin(-s.rotY);
+        const rx = dx * c - dz * sn;
+        const rz = dx * sn + dz * c;
+        dx = rx; dz = rz;
+      }
+      if (Math.abs(dx) <= s.hx && Math.abs(dz) <= s.hz) return true;
+    }
+    return false;
+  }
+
+  /**
+   * Displace her directly away from a striker (the
+   * warning's world half, 2026-11-03): a short knockback
+   * whose destination is validated against the wall
+   * truth before it applies — the placement law applied
+   * to her body. Full distance, then half, then quarter;
+   * a wall at every reach means no displacement rather
+   * than a wall.
+   */
+  private displacePlayerFrom(sx: number, sz: number): void {
+    const dx = this.player.x - sx;
+    const dz = this.player.z - sz;
+    const d = Math.hypot(dx, dz);
+    const ux = d > 0.001 ? dx / d : 1;
+    const uz = d > 0.001 ? dz / d : 0;
+    for (const dist of [2.2, 1.4, 0.7]) {
+      const cx = this.player.x + ux * dist;
+      const cz = this.player.z + uz * dist;
+      const walls = this.siteWallsAt(cx, cz) ?? [];
+      const inside = walls.some((w) => cx >= w.minX - 0.3 && cx <= w.maxX + 0.3 && cz >= w.minZ - 0.3 && cz <= w.maxZ + 0.3);
+      if (!inside) {
+        this.player.x = cx;
+        this.player.z = cz;
+        return;
+      }
+    }
   }
 
   /** Find a loaded chunk instance by its stable id, without removing it (the feral snap's peek). */
@@ -3482,13 +3615,58 @@ export class WorldRenderer {
     // Night reads last frame's sky factor (sky updates later in
     // this loop) — a one-frame lag, invisible in practice.
     const night = (this.sky?.nightFactor ?? 0) >= 0.5;
+    // Feral facts frame (2026-11-03): composed once per
+    // step, only when the shell registered its provider —
+    // her interior state and the standing houses around
+    // her. Unregistered, animals step exactly as before.
+    const feralProvider = this.feralFactsProvider;
+    let feralSpots: { x: number; z: number; hx: number; hz: number; rotY?: number }[] | null = null;
+    let feralPlayerInside = false;
+    let feralSpawn: { x: number; z: number } | null = null;
+    if (feralProvider) {
+      feralSpots = this.feralHouseSpotsAround(this.player.x, this.player.z);
+      feralPlayerInside = this.pointInsideHouse(this.player.x, this.player.z, feralSpots);
+      const seed = String(this.gen.seed);
+      if (!this.feralSpawnMemo || this.feralSpawnMemo.seed !== seed) {
+        this.feralSpawnMemo = { seed, spawn: this.gen.findSpawn() };
+      }
+      feralSpawn = this.feralSpawnMemo.spawn;
+    }
     for (const loaded of this.chunks.values()) {
       for (const pair of loaded.animals) {
+        let feral: FeralFacts | null = null;
+        if (feralProvider && feralSpots && feralSpawn) {
+          const shellFacts = feralProvider(pair.instance);
+          if (shellFacts) {
+            const a = pair.instance;
+            const nearSpawn = Math.hypot(a.x - feralSpawn.x, a.z - feralSpawn.z) <= FERAL_SAFE_SPAWN_M;
+            const nearHouse = feralSpots.some(
+              (s) => Math.hypot(a.x - s.x, a.z - s.z) - Math.hypot(s.hx, s.hz) <= FERAL_SAFE_HOUSE_M,
+            );
+            feral = {
+              suppressed: nearSpawn || nearHouse,
+              playerInside: feralPlayerInside,
+              defenderPos: shellFacts.defenderPos,
+            };
+          }
+        }
         updateAnimal(pair.instance, dt, {
           playerX: this.player.x,
           playerZ: this.player.z,
           night,
+          feral,
         });
+        // The encounter's outward reports, consumed the
+        // step they arm: the telegraph's cue and the
+        // strike's contact, on the bus contract.
+        if (pair.instance.feralTelegraphPulse) {
+          pair.instance.feralTelegraphPulse = false;
+          bus.emit('animal:feral-telegraph', { id: pair.instance.id, kind: pair.instance.kind });
+        }
+        if (pair.instance.feralContact) {
+          pair.instance.feralContact = false;
+          bus.emit('animal:feral-contact', { id: pair.instance.id });
+        }
         this.poseAnimal(pair.instance, pair.group);
         this.updateTrustMarker(pair.instance, pair.group);
       }

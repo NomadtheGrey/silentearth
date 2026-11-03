@@ -1654,6 +1654,7 @@ import { TRAP_DEFS } from './game/traps';
 import {
   applySnatchSpook,
   biomePresentKinds,
+  FERAL_DANGEROUS_KINDS,
   pickSnatchTarget,
   setUndetected,
   type AnimalKind,
@@ -1728,6 +1729,7 @@ import { portionsForKind, lookKeyForTarget } from './ui/lookPortions';
 import { cycleSplit, cyclePhase, currentMoonPhase } from './game/sky';
 import { createSleepListener } from './game/sleep';
 import {
+  CHUNK_SIZE,
   DEFAULT_SEED,
   PLAYER_EYE_HEIGHT,
   THIRD_PERSON_OFFSET,
@@ -1913,11 +1915,23 @@ import {
 } from './systems/cold-wet';
 import {
   COLD_WORD,
+  INJURY_WORD,
   WET_WORD,
   WeatherWitness,
   type ColdStageKey,
   type WetStageKey,
 } from './ui/WeatherWitness';
+import {
+  InjuryState,
+  SALVE_ITEM,
+  tendWithSalve,
+  type InjuryStage,
+} from './systems/injury';
+import {
+  planCrawlBack,
+  resolveEncampment,
+  WAKE_HUNGER,
+} from './systems/crawl-back';
 import {
   ownedStage,
   ownedTier,
@@ -2035,8 +2049,10 @@ import {
 } from './systems/rituals';
 import {
   CompanionState,
+  FeralEncounterState,
   TRUST_FOR_BOND,
   dietFor,
+  guardsKind,
   isFeedable,
   isFeral,
   provisioningCatchesFor,
@@ -2368,6 +2384,8 @@ const FOOD_IDS: ReadonlySet<string> = new Set([
  * lit-menu fix fe7b304.
  */
 const TORCH_IDS: ReadonlySet<string> = new Set([ITEMS.torch]);
+/** The salve's row verb set (the feral build): the one tendable item. */
+const TENDABLE_IDS: ReadonlySet<string> = new Set([SALVE_ITEM]);
 
 /**
  * Her books (First-Fragment Presentation, 2026-10-31;
@@ -2705,6 +2723,281 @@ export default function App() {
     cold: { value: number; stage: ColdStageKey };
     wet: { value: number; stage: WetStageKey };
   }>(() => coldWet.vitals());
+  // THE FERAL SEATS (the feral build, 2026-11-03;
+  // Systems' core a6f501f + 591b45f): the shell owns the
+  // one InjuryState and the one FeralEncounterState, on
+  // the coldWet pattern — built here from the save,
+  // snapshotted into every save. The witness reads the
+  // stage mirror; nothing else keeps an injury stage or
+  // a warned-id anywhere. lastSleepSite is the
+  // crawl-back's encampment record: stamped where a
+  // sleep completes (the sleep:completed consumer),
+  // read only when a down fires.
+  const injuryRef = useRef<InjuryState | null>(null);
+  if (injuryRef.current === null) {
+    const seated = new InjuryState();
+    seated.restore(bootSave?.injury);
+    injuryRef.current = seated;
+  }
+  const injury = injuryRef.current;
+  const feralRef = useRef<FeralEncounterState | null>(null);
+  if (feralRef.current === null) {
+    const seated = new FeralEncounterState();
+    seated.restore(bootSave?.feralWarned);
+    feralRef.current = seated;
+  }
+  const lastSleepSiteRef = useRef<{ x: number; z: number } | null>(
+    bootSave?.lastSleepSite ?? null,
+  );
+  const [injuryUi, setInjuryUi] = useState<{ stage: InjuryStage }>(() => ({
+    stage: injury.stage(),
+  }));
+  // The witness refresh is also the EFFECTS SYNC:
+  // every stage-affecting path funnels through here —
+  // strikes, tends, sleeps, wakes, and the 1 s tick —
+  // so neither the inventory's capacity multiplier
+  // (Systems' seat 9f8fd00) nor the renderer's injury
+  // speed factor (Background's seat, DEV's engine-side
+  // ruling) ever sits a stage behind the ladder.
+  // Idempotent by design (the charm-bonus sync idiom).
+  const refreshInjuryUi = () => {
+    const effects = injury.effects();
+    inventory.setCapacityMultiplier(effects.carryMultiplier);
+    rendererRef.current?.setInjurySpeedFactor(effects.movementMultiplier);
+    setInjuryUi({ stage: injury.stage() });
+  };
+  // THE CRAWL-BACK BEAT (the staging, UI's under Adam's
+  // trust, 2026-11-03): while a down's staging stands,
+  // the world is covered and input waits — the executor
+  // below performs the move inside the black, then the
+  // beat clears onto the waking. Phase: 'fall' (fading
+  // in, line not yet shown), 'line' (the held beat),
+  // 'wake' (fading out over the encampment).
+  const [crawlBeat, setCrawlBeat] = useState<{
+    line: string;
+    phase: 'fall' | 'line' | 'wake';
+  } | null>(null);
+  const crawlBeatRef = useRef(false);
+
+  // THE STANDING DEFENDER (the feral build): a bonded
+  // companion of a guarding kind, close enough to take
+  // a strike's place (12 m, DRAFT). One composition,
+  // two consumers: the renderer's facts provider (the
+  // behavior prices the defender's body as the target)
+  // and the strike door's resolveStrike facts.
+  const standingDefender = (): { x: number; z: number } | null => {
+    const renderer = rendererRef.current;
+    const player = playerRef.current;
+    if (!renderer || !player) return null;
+    const bonded = new Map<string, SavedCompanion>();
+    for (const record of companionStateRef.current?.snapshot() ?? []) {
+      bonded.set(record.creatureId, record);
+    }
+    for (const animal of renderer.getVisibleAnimals()) {
+      const record = bonded.get(animal.id);
+      if (!record) continue;
+      if (record.bond !== 'companion' && record.bond !== 'familiar') {
+        continue;
+      }
+      if (!guardsKind(record.kind)) continue;
+      if (Math.hypot(animal.x - player.x, animal.z - player.z) <= 12) {
+        return { x: animal.x, z: animal.z };
+      }
+    }
+    return null;
+  };
+
+  // THE FERAL FACTS PROVIDER (Background's contract,
+  // renderer.setFeralFactsProvider): identity + the
+  // defender's seat. Null for everything that is not a
+  // feral of a dangerous kind — unregistered or
+  // null-answering, no encounter can form. Installed
+  // on the renderer at construction (below); the
+  // closure reads live refs, so this one definition
+  // serves the session.
+  const feralFactsProvider = (animal: {
+    id: string;
+    kind: string;
+  }): { defenderPos: { x: number; z: number } | null } | null => {
+    if (!isFeral(animal.id)) return null;
+    if (
+      !(FERAL_DANGEROUS_KINDS as readonly string[]).includes(animal.kind)
+    ) {
+      return null;
+    }
+    return { defenderPos: standingDefender() };
+  };
+
+  // THE FERAL DOOR (the feral build, 2026-11-03; the
+  // bus contract is Background's, events.ts): the
+  // world emits 'animal:feral-contact' when a strike
+  // lunge completes in range; the shell answers — it
+  // holds the ledger and the ladder, resolves through
+  // Systems' resolveStrike in the pinned fairness
+  // order, applies the outcome, and reports it back
+  // on 'animal:feral-resolved' (on 'warning' the
+  // renderer breaks the animal off and displaces
+  // her). Registered once; everything it touches is
+  // a ref-held instance or a module singleton, so the
+  // first closure stays live (the harvest listeners'
+  // pattern).
+  useEffect(() => {
+    refreshInjuryUi();
+
+    // The waking, shared by every down path: dawn of
+    // the next day, the hungry floor, hurt — never
+    // sound (the crawl is the recovery's beginning).
+    const finishWake = () => {
+      const renderer = rendererRef.current;
+      const sky = renderer?.snapshotSky();
+      renderer?.restoreSky({
+        cycleT: 0,
+        daysElapsed: (sky?.daysElapsed ?? 0) + 1,
+      });
+      const delta = WAKE_HUNGER - hunger.value();
+      if (delta > 0) hunger.restore(delta);
+      else if (delta < 0) hunger.drain(-delta);
+      setHungerStage(hunger.stage());
+      setHungerValue(hunger.value());
+      injury.wakeFromDown();
+      refreshInjuryUi();
+      refreshInventory();
+      saveNow();
+    };
+
+    const executeCrawlBack = (fallX: number, fallZ: number) => {
+      // The fallen pile: Systems' plan over the pack,
+      // the exempt set composed here (the finalized
+      // claim): the owned ladder tool, what she wears,
+      // and awakened charms are never the toll.
+      const exempt = new Set<string>();
+      const tool = ownedToolItem(inventory);
+      if (tool !== 'none') exempt.add(tool);
+      for (const wornItem of inventory.wornItems()) exempt.add(wornItem);
+      for (const stack of inventory.stacksSnapshot()) {
+        if (charmStateRef.current?.isAwakened(stack.item)) {
+          exempt.add(stack.item);
+        }
+      }
+      const plan = planCrawlBack(inventory, exempt, Math.random);
+      for (const stack of plan.dropped) {
+        inventory.remove(stack.item as ItemId, stack.quantity);
+        pileState.drop(stack.item, stack.quantity, fallX, fallZ);
+      }
+      // The move: out of any dimension first (the
+      // encampment is a surface seat). If the way out
+      // refuses, she wakes where she fell — the pile
+      // is there, and no inconsistent state is made.
+      const renderer = rendererRef.current;
+      const player = playerRef.current;
+      const gen = genRef.current;
+      if (dimensionState.isUnderground() && renderer && player) {
+        const out = exitCave(renderer, player);
+        if (out.ok === false) {
+          finishWake();
+          return;
+        }
+      }
+      if (player && gen) {
+        const home = homedHouse();
+        const firstHouse = shelterState.snapshot()[0];
+        const boundHome = home
+          ? { x: home.x, z: home.z }
+          : firstHouse
+            ? { x: firstHouse.x, z: firstHouse.z }
+            : null;
+        const target = resolveEncampment(
+          lastSleepSiteRef.current,
+          boundHome,
+          gen.findSpawn(),
+        );
+        // The placeAt pattern (dimensionTravel): a
+        // travel IS a move, so the emit rides along.
+        player.x = target.x;
+        player.z = target.z;
+        bus.emit('player:moved', {
+          x: player.x,
+          z: player.z,
+          chunkX: Math.floor(player.x / CHUNK_SIZE),
+          chunkZ: Math.floor(player.z / CHUNK_SIZE),
+        });
+      }
+      finishWake();
+    };
+
+    const WOUND_LINES: Record<string, string> = {
+      hurt: 'teeth find her — she is hurt.',
+      wounded: 'tears at her again — wounded.',
+      critical: 'nearly has her — one more landing like that and she goes down.',
+    };
+
+    const offStrike = bus.on('animal:feral-contact', ({ id }) => {
+      if (crawlBeatRef.current) return;
+      const ledger = feralRef.current;
+      if (!ledger) return;
+      // The contact payload carries the id alone; the
+      // kind is the feed's fact for that id (the animal
+      // is at her feet, in the visible set by
+      // construction).
+      const kind =
+        rendererRef.current
+          ?.getVisibleAnimals()
+          .find((animal) => animal.id === id)?.kind ?? 'beast';
+      const outcome = ledger.resolveStrike(id, {
+        defenderPresent: standingDefender() !== null,
+        injuryStage: injury.stage(),
+      });
+      // The outcome goes back to the world at once —
+      // on 'warning' the renderer breaks the animal
+      // off and displaces her; the rest are the record.
+      bus.emit('animal:feral-resolved', { id, outcome });
+      if (outcome === 'warning') {
+        showFeedback(
+          `The ${kind} lunges — a warning. It will not warn her twice.`,
+          'blocked',
+        );
+        saveNow();
+        return;
+      }
+      if (outcome === 'intercepted') {
+        showFeedback('Her defender takes the blow meant for her.', 'info');
+        return;
+      }
+      if (outcome === 'wound') {
+        injury.strike();
+        refreshInjuryUi();
+        const stage = injury.stage();
+        showFeedback(
+          `The ${kind} ${WOUND_LINES[stage] ?? 'strikes her.'}`,
+          'blocked',
+        );
+        saveNow();
+        return;
+      }
+      // THE DOWN: the staging covers the world, the
+      // executor works inside the black, and the beat
+      // clears onto the waking.
+      const player = playerRef.current;
+      const fallX = player?.x ?? 0;
+      const fallZ = player?.z ?? 0;
+      crawlBeatRef.current = true;
+      const line =
+        'The wild got the better of her. She crawls back to her last fire ' +
+        'and wakes with the dawn — some of what she carried lies where she fell.';
+      setCrawlBeat({ line, phase: 'fall' });
+      window.setTimeout(() => setCrawlBeat({ line, phase: 'line' }), 750);
+      window.setTimeout(() => executeCrawlBack(fallX, fallZ), 1500);
+      window.setTimeout(() => setCrawlBeat({ line, phase: 'wake' }), 3600);
+      window.setTimeout(() => {
+        setCrawlBeat(null);
+        crawlBeatRef.current = false;
+      }, 4400);
+    });
+    return () => {
+      offStrike();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   // The LocationChip's reserved second line (date +
   // weather word), composed on the same 1 s cadence from
   // W1's facts; null until the first facts land, so the
@@ -2884,6 +3177,7 @@ export default function App() {
     if (!facts) return false;
     coldWet.tick(dtSeconds, facts);
     setColdWetUi(coldWet.vitals());
+    refreshInjuryUi();
     const wf = currentWeatherFacts();
     if (wf) setChipLine(chipLineFor(wf));
     const next = {
@@ -3047,6 +3341,18 @@ export default function App() {
       const stash = sleepTickRef.current;
       sleepTickRef.current = null;
       if (!stash) return;
+      // THE ENCAMPMENT RECORD (the feral build): a
+      // COMPLETED sleep stamps its seat — the
+      // crawl-back's first fallback rung. The stash's
+      // x/z are her position when the sleep was
+      // requested, which is the site she slept at.
+      lastSleepSiteRef.current = { x: stash.x, z: stash.z };
+      // REST EASES (injury.ts's own clause: a full
+      // sleep's rest walks the ladder back one stage).
+      if (injury.ease()) {
+        refreshInjuryUi();
+        showFeedback('She wakes steadier — rest has eased her hurt.', 'gain');
+      }
       // THE LEARN (landed composed, 2026-11-03): the
       // first COMPLETED sleep in the placed bag — and
       // only there — records the bag's use, through
@@ -4353,6 +4659,13 @@ export default function App() {
           // seam). Null until the machine seats one.
           weather: rendererRef.current?.weatherRecord() ?? null,
           coldWet: coldWetRef.current?.snapshot(),
+          // THE FERAL SEATS ride every save (save.ts
+          // hosts all three leniently): her injury
+          // stage, the encounter ledger's warned ids,
+          // and the last completed sleep's seat.
+          injury: injuryRef.current?.snapshot(),
+          feralWarned: feralRef.current?.snapshot(),
+          lastSleepSite: lastSleepSiteRef.current,
           facing: player ? player.snapshotFacing() : undefined,
         });
       saveGame(data);
@@ -5740,6 +6053,12 @@ export default function App() {
     const renderer = new WorldRenderer(container, gen, player);
     player.attach(renderer.domElement);
     rendererRef.current = renderer;
+    // THE FERAL SEATS ON THE RENDERER (the feral
+    // build): the facts provider (identity + defender
+    // — unregistered, no encounter can form) and her
+    // injury speed factor at her boot stage.
+    renderer.setFeralFactsProvider(feralFactsProvider);
+    renderer.setInjurySpeedFactor(injury.effects().movementMultiplier);
     // LOOK owl hook (hook only): the owl charm is a later
     // charm (fashioned/enchanted, id not decided), so the
     // shell wires not-owned until charm ownership lands.
@@ -7167,6 +7486,16 @@ export default function App() {
   const executeCraftNow = (recipeId: string) => {
     const recipe = RECIPES.find((candidate) => candidate.id === recipeId);
     if (!recipe) return;
+    // THE INJURY WORK GATE (the feral build): at
+    // critical, crafting — heavy work — is refused
+    // before anything is consumed, in the stump
+    // backstop's shape directly below (Systems'
+    // isBadlyHurt() gate query; an honest note,
+    // never a silent no-op).
+    if (injury.isBadlyHurt()) {
+      setCraftNote('She is too badly hurt for heavy work.');
+      return;
+    }
     const ownedBefore = ownedToolItem(inventory);
     // STUMPY PRESS-REFUSE BACKSTOP (shell-side guard):
     // an upgradesStump press at an already-workbench
@@ -7318,6 +7647,15 @@ export default function App() {
   const handleCraftPrerequisite = (recipeId: string, item: string) => {
     const recipe = RECIPES.find((candidate) => candidate.id === recipeId);
     if (!recipe) return;
+    // THE INJURY WORK GATE (the feral build): the
+    // chain door carries the same refusal as
+    // executeCraftNow — a prerequisite craft is
+    // heavy work too, and the two doors may not
+    // disagree about whether she can work.
+    if (injury.isBadlyHurt()) {
+      setCraftNote('She is too badly hurt for heavy work.');
+      return;
+    }
     try {
       const result = executeCraftChain(
         recipe,
@@ -7359,6 +7697,16 @@ export default function App() {
     // and the completed/failed/progress subscriptions above render
     // the feedback. Nothing here grants, counts, or previews an
     // outcome ahead of those events.
+    // THE INJURY WORK GATE (the feral build): at
+    // critical, heavy work is refused — Systems'
+    // isBadlyHurt() gate query, applied here in the
+    // too-hungry gate's shape: an honest spoken
+    // refusal before anything is emitted, never a
+    // silent no-op.
+    if (injury.isBadlyHurt()) {
+      showFeedback('She is too badly hurt for heavy work.', 'blocked');
+      return;
+    }
     bus.emit('harvest:requested', request);
   };
 
@@ -9509,6 +9857,35 @@ export default function App() {
         error instanceof Error ? error.message : 'Could not eat that.',
       );
     }
+    refreshInventory();
+    saveNow();
+  };
+
+  /**
+   * Inventory Tend press (the salve's row): Systems'
+   * tendWithSalve in the eat() posture — checks before
+   * removing anything, so a refused tend costs nothing.
+   * A successful tend is the salve's exercised door:
+   * recordItemUse teaches its use line (Systems' core
+   * note names this as the shell's half). Refusals
+   * speak in the panel's note, like eating's.
+   */
+  const handleTendSalve = (_itemId: string) => {
+    const result = tendWithSalve(inventory, injury);
+    // Equality check, not truthiness: this repo runs
+    // tsc without strict mode, and truthiness does
+    // not narrow the TendResult union.
+    if (result.ok === false) {
+      setEatNote(
+        result.code === 'not-hurt'
+          ? 'She is not hurt — the salve would be wasted.'
+          : 'No salve to tend with.',
+      );
+      return;
+    }
+    recordItemUse(SALVE_ITEM);
+    refreshInjuryUi();
+    setEatNote('She tends her hurt with the salve.');
     refreshInventory();
     saveNow();
   };
@@ -14756,6 +15133,11 @@ export default function App() {
           theme={lookThemes.world}
           cold={coldWetUi.cold}
           wet={coldWetUi.wet}
+          injury={
+            injuryUi.stage !== 'sound'
+              ? { stage: injuryUi.stage }
+              : undefined
+          }
         />
       </div>
       <div className="mt-2">
@@ -15451,6 +15833,15 @@ export default function App() {
                 },
               ]
             : []),
+          ...(injuryUi.stage !== 'sound'
+            ? [
+                {
+                  id: 'injury',
+                  label: 'Injury',
+                  detail: INJURY_WORD[injuryUi.stage],
+                },
+              ]
+            : []),
         ]}
         hideNeeds={isTouch && hudCollapsed}
         topReadout={
@@ -16025,6 +16416,8 @@ export default function App() {
             onReadItem={handleReadItem}
             dumpableIds={DUMPABLE_IDS}
             onDumpItem={() => handleDumpItem()}
+            tendableIds={TENDABLE_IDS}
+            onTendItem={handleTendSalve}
             wakeableIds={WAKEABLE_IDS}
             onWakeItem={handleWakeItem}
             storage={storageSection}
@@ -16516,6 +16909,31 @@ export default function App() {
           </div>
         </div>
       </Popup>
+
+      {/* THE CRAWL-BACK BEAT (the feral build): the
+        down's staging — a full black cover (input
+        waits), the line held in the dark, then the
+        cover lifts over the encampment at dawn. The
+        executor works inside the black; this element
+        only presents the phases it is handed. */}
+      {crawlBeat !== null ? (
+        <div
+          role="presentation"
+          aria-label="She crawls back"
+          className={
+            'fixed inset-0 z-[80] flex items-center justify-center bg-black transition-opacity duration-700 ' +
+            (crawlBeat.phase === 'wake'
+              ? 'pointer-events-none opacity-0'
+              : 'pointer-events-auto opacity-100')
+          }
+        >
+          {crawlBeat.phase !== 'fall' ? (
+            <p className="max-w-md px-6 text-center text-base leading-relaxed text-stone-200">
+              {crawlBeat.line}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
 
       {/* The teaching beat (First-Fragment
         Presentation): a NON-confirm Popup — a mark's

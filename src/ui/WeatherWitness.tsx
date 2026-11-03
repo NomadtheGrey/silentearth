@@ -24,6 +24,14 @@
  * Chilled for cold's first three rungs) — a copy table,
  * settled with Adam at the W4 pin pass; the keys, and
  * therefore the logic, never change with the words.
+ *
+ * THE INJURY WITNESS (the feral build, 2026-11-03):
+ * Systems' injury ladder (injury.ts: sound / hurt /
+ * wounded / critical) joins the same witness as a stage
+ * pill — the shell passes it only when she is not
+ * sound, and it carries no bar and no number: the
+ * ladder is stages, not a gauge, and this element
+ * invents no value the state does not hold.
  */
 
 import { UI_THEMES, type UiThemeName } from './themes';
@@ -32,16 +40,43 @@ import { UI_THEMES, type UiThemeName } from './themes';
 export type ColdStageKey = 'comfortable' | 'chilly' | 'cold' | 'freezing';
 /** Wet stage keys, exactly as Systems' ColdWetState names them. */
 export type WetStageKey = 'dry' | 'damp' | 'wet' | 'soaked';
+/** Injury stage keys, exactly as Systems' InjuryState names them. */
+export type InjuryStageKey = 'sound' | 'hurt' | 'wounded' | 'critical';
 
 export interface WeatherWitnessProps {
   /** Cold gauge: value 0–100 + stage key, from the one meter. */
   cold?: { value: number; stage: ColdStageKey };
   /** Wet gauge: value 0–100 + stage key, from the one meter. */
   wet?: { value: number; stage: WetStageKey };
+  /**
+   * Injury stage, from the one ladder (Systems' injury.ts).
+   * The shell passes it only when she is not sound — the
+   * witness stands when there is something to witness.
+   * The ladder carries no gauge value, so the pill is a
+   * stage pill (word + dot), never a bar with an invented
+   * number.
+   */
+  injury?: { stage: InjuryStageKey };
   /** Look for the pills. Default "mire" (the world outside). */
   theme?: UiThemeName;
   className?: string;
 }
+
+/** Display words over Systems' injury keys (DRAFT — pin pass). */
+export const INJURY_WORD: Record<InjuryStageKey, string> = {
+  sound: 'Sound',
+  hurt: 'Hurt',
+  wounded: 'Wounded',
+  critical: 'Critical',
+};
+
+/** Dot colours up the injury rungs: amber, rust, deep red. */
+const INJURY_DOT: Record<InjuryStageKey, string> = {
+  sound: '#5c823d',
+  hurt: '#d4b768',
+  wounded: '#c47b3a',
+  critical: '#b03a2e',
+};
 
 /** Display words over Systems' keys (DRAFT — W4 pin pass). */
 export const COLD_WORD: Record<ColdStageKey, string> = {
@@ -119,13 +154,44 @@ function GaugePill({
   );
 }
 
+function StagePill({
+  label,
+  word,
+  dot,
+  theme,
+}: {
+  label: string;
+  word: string;
+  dot: string;
+  theme: UiThemeName;
+}) {
+  const t = UI_THEMES[theme];
+  return (
+    <div
+      className={'rounded px-3 py-2 text-sm text-stone-200 ' + t.overlay}
+      aria-label={`${label}: ${word}`}
+    >
+      <div className="flex items-baseline gap-2">
+        <span
+          aria-hidden="true"
+          className="inline-block h-2 w-2 shrink-0 translate-y-[-1px] rounded-full"
+          style={{ backgroundColor: dot }}
+        />
+        <span>{label}</span>
+        <span className="text-stone-400">{word}</span>
+      </div>
+    </div>
+  );
+}
+
 export function WeatherWitness({
   cold,
   wet,
+  injury,
   theme = 'mire',
   className,
 }: WeatherWitnessProps) {
-  if (!cold && !wet) return null;
+  if (!cold && !wet && !injury) return null;
   return (
     <div className={'flex flex-col gap-2 ' + (className ?? '')}>
       {cold ? (
@@ -143,6 +209,14 @@ export function WeatherWitness({
           word={WET_WORD[wet.stage]}
           dot={WET_DOT[wet.stage]}
           value={wet.value}
+          theme={theme}
+        />
+      ) : null}
+      {injury ? (
+        <StagePill
+          label="Injury"
+          word={INJURY_WORD[injury.stage]}
+          dot={INJURY_DOT[injury.stage]}
           theme={theme}
         />
       ) : null}

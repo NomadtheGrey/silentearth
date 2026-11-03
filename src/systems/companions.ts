@@ -48,6 +48,7 @@ import { ITEMS, type ItemId } from './recipes';
 import { normalizeItemId, type PersonalInventory } from './inventory';
 import type { CraftingInventory } from './crafting';
 import type { HungerState } from './hunger';
+import type { InjuryStage } from './injury';
 
 // ---------------------------------------------------------------------------
 // Diets — what each kind eats (DRAFT, authored per kind)
@@ -783,4 +784,100 @@ export function snatchFish(
   }
   const grant = inventory.addPartial(ITEMS.fishCarcass, 1);
   return grant.granted > 0 ? 'caught' : 'slipped';
+}
+
+
+// ---------------------------------------------------------------------------
+// Feral encounters (2026-11-03 — the feral build; Adam's
+// pins, the finalized claim)
+// ---------------------------------------------------------------------------
+
+/**
+ * The mend a salve buys a COMPANION: injured companions
+ * heal with time on their own (ruled), and a tending
+ * salve multiplies that mend — 'much more quickly',
+ * priced here as a multiplier (DRAFT). The companion's
+ * own injury state lives on the creature side
+ * (Background); this is the priced fact the tending
+ * act applies.
+ */
+export const SALVE_MEND_MULTIPLIER = 3;
+
+export type FeralStrikeOutcome =
+  /** First contact: the warning — displaces, never wounds. */
+  | 'warning'
+  /** A standing defender took the strike's place. */
+  | 'intercepted'
+  /** A landed strike: one injury stage (injury.ts). */
+  | 'wound'
+  /** At critical, a landed strike: the crawl-back. */
+  | 'down';
+
+export interface FeralStrikeFacts {
+  /** A bonded companion of a guarding kind stands with
+   * her (shell-composed from CompanionState + presence). */
+  defenderPresent: boolean;
+  /** Her current injury stage (InjuryState.stage()). */
+  injuryStage: InjuryStage;
+}
+
+/**
+ * THE ENCOUNTER LEDGER: which ferals have given their
+ * warning. The warning is per CREATURE, not per
+ * meeting — a feral that has warned her once has
+ * engaged; if she presses back in, consequence is
+ * live. Seated in the save (save.ts feralWarned) so a
+ * reload cannot reset the law. Runtime state here;
+ * snapshot/restore on the nameSight pattern.
+ */
+export class FeralEncounterState {
+  private warnedIds = new Set<string>();
+
+  hasWarned(creatureId: string): boolean {
+    return this.warnedIds.has(creatureId);
+  }
+
+  /**
+   * Resolve one incoming strike from a feral creature.
+   * The fairness order, exactly as pinned:
+   * 1. A standing defender intercepts — first contact
+   *    or pressed, the companion takes the strike's
+   *    place (its own injury rides the ruled road).
+   *    The warning still records: the feral has engaged.
+   * 2. An unwarned feral's first strike is the WARNING
+   *    — it displaces her and costs no stage, ever.
+   * 3. A warned feral, pressed, lands: a wound — or,
+   *    at critical, the down.
+   * The strike's application (the stage step, the
+   * crawl-back) is the caller's, from the outcome.
+   */
+  resolveStrike(
+    creatureId: string,
+    facts: FeralStrikeFacts,
+  ): FeralStrikeOutcome {
+    const firstContact = !this.warnedIds.has(creatureId);
+    if (firstContact) this.warnedIds.add(creatureId);
+    if (facts.defenderPresent) return 'intercepted';
+    if (firstContact) return 'warning';
+    return facts.injuryStage === 'critical' ? 'down' : 'wound';
+  }
+
+  /** The warned creature ids (first-warning order). */
+  snapshot(): string[] {
+    return [...this.warnedIds];
+  }
+
+  /** Boot-only restore: clears and rebuilds. */
+  restore(ids: readonly string[] | null | undefined): void {
+    this.warnedIds.clear();
+    if (!ids) return;
+    for (const id of ids) {
+      if (typeof id === 'string' && id !== '') this.warnedIds.add(id);
+    }
+  }
+
+  /** New game: no feral has engaged. */
+  reset(): void {
+    this.warnedIds.clear();
+  }
 }
