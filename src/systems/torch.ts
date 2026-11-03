@@ -21,6 +21,12 @@
  * IDS, not a flag — inventory stacks carry item + quantity
  * only, so there is nowhere else for it to live. 'torch' =
  * unlit (crafted); 'lit-torch' = lit (after lightTorches).
+ * START LIT (Adam, 2026-11-03): while a candle is carried,
+ * a torch entering her pack comes out lit — the conversion
+ * lives at the inventory gain choke points, with
+ * sweepTorchesStartLit below for restored packs; the
+ * unlit form remains only for the no-candle case, and
+ * lightTorches stays its road.
  * The carried-unlit query is inventory.count(ITEMS.torch):
  * UI's lit-fire 'light torches' pill appears ONLY when that
  * count is >= 1. The batch call is lightTorches() below;
@@ -156,6 +162,30 @@ export function lightTorches(
   inventory.remove(ITEMS.torch, count);
   inventory.addPartial(ITEMS.litTorch, count);
   return { lit: true, method, count };
+}
+
+/**
+ * TORCHES START LIT — THE BOOT SWEEP (Adam's pin,
+ * 2026-11-03): a restored pack whose candle is in it
+ * has its carried unlit torches converted to lit,
+ * once, before play — the save-side twin of the gain
+ * choke-point rule in inventory.ts (a gained torch
+ * lands lit while a candle is carried; a gained
+ * candle converts the stock). The shell seats this
+ * call beside its other boot compositions. Piles and
+ * PLACED torches are not her pack and never convert.
+ * Returns the count converted (0 when no candle is
+ * carried or no unlit torch is held).
+ */
+export function sweepTorchesStartLit(
+  inventory: PersonalInventory,
+): number {
+  if (inventory.count(ITEMS.candle) < 1) return 0;
+  const count = inventory.count(ITEMS.torch);
+  if (count <= 0) return 0;
+  inventory.remove(ITEMS.torch, count);
+  inventory.addPartial(ITEMS.litTorch, count);
+  return count;
 }
 
 // ---------------------------------------------------------------------------

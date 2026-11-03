@@ -728,6 +728,11 @@ const DRAFT_RECIPES: Recipe[] = [
   },
 
   // --- Torch: stick + binding + tinder, made by hand (Adam, 2026-10-27).
+  // START LIT (Adam, 2026-11-03): the output below is the
+  // unlit form, but while she carries a candle the gain
+  // itself converts it — a crafted torch comes out LIT
+  // (the conversion lives at the inventory choke point,
+  // inventory.ts; the recipe does not change).
   {
     id: 'torch',
     name: 'Torch',
