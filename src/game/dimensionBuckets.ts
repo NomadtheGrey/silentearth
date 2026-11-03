@@ -27,9 +27,13 @@
  * SHELL SEATS (UI wires these; the module is game-layer and
  * speaks game shapes — the shell converts to Systems' saved
  * shapes exactly as it already does for the top level):
- * - saveNow: draft.dimensionStates <= snapshotBuckets(),
- *   each value mapped { piles: .map(stacks/x/z), harvest }
- *   with the same expressions as the top-level fields.
+ * - saveNow: the top-level piles + harvestState <=
+ *   snapshotSurface() (the surface's stores even while she
+ *   is underground — the live stores then are the active
+ *   dimension's), and draft.dimensionStates <=
+ *   snapshotBuckets(), each value mapped
+ *   { piles: .map(stacks/x/z), harvest } with the same
+ *   expressions as the top-level fields.
  * - boot restore (beside the surface restores, BEFORE any
  *   travel): restoreBuckets(bootSaved.dimensionStates
  *   converted back — piles ride pileState.restore's input
@@ -180,6 +184,49 @@ class DimensionBuckets {
       };
     }
     return out;
+  }
+
+  /**
+   * The SURFACE's stores, for the save's top level — which
+   * by the design's law always carries the surface's piles
+   * + harvest, byte-for-byte, no matter where she stands.
+   * On the surface that is the live stores; inside a
+   * dimension the live stores are the dimension's, so the
+   * surface reads from its parked slot instead. (Reading
+   * the live stores underground writes the active
+   * dimension's state at BOTH levels, and the reload
+   * relocation pass then merges the stray top-level copy
+   * into the bucket — a doubled pile.) The result is a
+   * copy, as snapshotBuckets' values are: the caller may
+   * serialize or map it without touching the slot.
+   */
+  snapshotSurface(): DimensionBucketStores {
+    if (this.activeKey === SURFACE_DIMENSION_KEY) {
+      return {
+        piles: pileState.snapshot(),
+        harvest: harvestState.snapshot(),
+      };
+    }
+    const slot = this.parked.get(SURFACE_DIMENSION_KEY) ?? emptyStores();
+    const h = slot.harvest;
+    return {
+      piles: slot.piles.map((p) => ({
+        ...p,
+        stacks: p.stacks.map((s) => ({ ...s })),
+      })),
+      harvest: {
+        shrunk: h.shrunk.map((e) => ({ ...e })),
+        removed: [...h.removed],
+        progress: h.progress.map((e) => ({ ...e })),
+        spawnedLogs: h.spawnedLogs.map((e) => ({ ...e })),
+        pendingSpawns: h.pendingSpawns.map((e) => ({ ...e })),
+        spawnCounter: h.spawnCounter,
+        felled: h.felled.map((e) => ({ ...e })),
+        saplings: h.saplings.map((e) => ({ ...e })),
+        saplingCounter: h.saplingCounter,
+        clearedSpots: h.clearedSpots.map((e) => ({ ...e })),
+      },
+    };
   }
 
   /**
