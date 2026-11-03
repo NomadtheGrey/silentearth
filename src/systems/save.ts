@@ -447,9 +447,9 @@ export interface SavedPatch {
  * stable across save/load with no counter, so the
  * seat round-trips by construction. The jar patches'
  * SavedPatch is the precedent; the whole-mark payload
- * and the dimension keying are the differences.
+ * and the dimension grouping are the differences.
  */
-export interface SavedMossPaintMark {
+export interface SavedMossPaintPatch {
   id: string;
   x: number;
   y: number;
@@ -457,6 +457,12 @@ export interface SavedMossPaintMark {
   surface: 'wall' | 'floor';
   nx: number;
   nz: number;
+}
+
+/** One dimension's painted patches, as saved. */
+export interface SavedMossPaintDimension {
+  dimensionKey: string;
+  patches: SavedMossPaintPatch[];
 }
 
 /**
@@ -672,8 +678,8 @@ export interface SaveData {
   /** Painted glow-moss patches, keyed by dimension
    * (Background's mossPaintState register, HOSTED:
    * Systems seats the record, the register owns its
-   * meaning); {} for old saves. */
-  mossPaint: Record<string, SavedMossPaintMark[]>;
+   * meaning); [] for old saves. */
+  mossPaint: SavedMossPaintDimension[];
   /** The cave visit this save was written in (boot-at-the-mouth
    * fact); null for surface saves and old saves. */
   dimensionVisit: SavedDimensionVisit | null;
@@ -1326,30 +1332,27 @@ export function serializeSave(draft: SaveDraft): SaveData {
       x: patch.x,
       z: patch.z,
     })),
-    // Moss paint: the register hands over its
-    // snapshot as { dimensionKey, patches }[] and the
-    // seat stores the KEYED RECORD — the conversion
-    // is field-for-field (groups sharing a key merge
-    // in draft order; every patch carried WHOLE, deep-
-    // copied). Validation is restore()'s problem, not
-    // the writer's.
-    mossPaint: (draft.mossPaint ?? []).reduce<
-      Record<string, SavedMossPaintMark[]>
-    >((record, group) => {
-      const bucket = (record[group.dimensionKey] ??= []);
-      for (const patch of group.patches) {
-        bucket.push({
-          id: patch.id,
-          x: patch.x,
-          y: patch.y,
-          z: patch.z,
-          surface: patch.surface,
-          nx: patch.nx,
-          nz: patch.nz,
-        });
-      }
-      return record;
-    }, {}),
+    // Moss paint: the register's snapshot written
+    // AS-IS (dimension groups + patches verbatim,
+    // deep-copied, every patch WHOLE — draft, stored
+    // field, and restore all carry the snapshot's own
+    // shape; DEV's final settle 2026-11-03). The
+    // keyed-record variant stood for one commit
+    // (6365cc9, the countermand followed literally
+    // mid-crossing) and does not stand. Validation is
+    // restore()'s problem, not the writer's.
+    mossPaint: (draft.mossPaint ?? []).map((group) => ({
+      dimensionKey: group.dimensionKey,
+      patches: group.patches.map((patch) => ({
+        id: patch.id,
+        x: patch.x,
+        y: patch.y,
+        z: patch.z,
+        surface: patch.surface,
+        nx: patch.nx,
+        nz: patch.nz,
+      })),
+    })),
     // The visit fact: written AS-IS (dimension key +
     // entry mouth verbatim). Absent/null in the draft
     // writes null — a surface save.
@@ -1989,20 +1992,25 @@ export function deserializeSave(value: unknown): SaveData | null {
       }
     }
     // Moss paint is optional on read, same additive
-    // rule: an old v1 save without it loads with {}.
-    // The field is a HOSTED keyed record: buckets pass
-    // by their dimension key verbatim; within a bucket
-    // a mark rides WHOLE — string id, finite centre
+    // rule: an old v1 save without it loads with [].
+    // The field is a HOSTED snapshot: groups pass by
+    // their dimension key verbatim; within a group, a
+    // patch rides WHOLE — string id, finite centre
     // (x, y, z), a surface this document knows ('wall'
     // / 'floor' — the SavedPatch kind rule), finite
-    // normals — a bad mark drops alone, an emptied
-    // bucket is not kept. A non-record field loads {}.
-    const mossPaint: Record<string, SavedMossPaintMark[]> = {};
-    if (isRecord(value.mossPaint)) {
-      for (const [key, bucket] of Object.entries(value.mossPaint)) {
-        if (!Array.isArray(bucket)) continue;
-        const marks: SavedMossPaintMark[] = [];
-        for (const entry of bucket) {
+    // normals — a bad patch drops alone, a group left
+    // empty is not kept. A non-array field loads [] —
+    // including a keyed-record field written by the
+    // one-commit variant (6365cc9): it drops whole
+    // rather than be misread.
+    const mossPaint: SavedMossPaintDimension[] = [];
+    if (value.mossPaint !== undefined && Array.isArray(value.mossPaint)) {
+      for (const group of value.mossPaint) {
+        if (!isRecord(group)) continue;
+        if (typeof group.dimensionKey !== 'string' || group.dimensionKey === '') continue;
+        if (!Array.isArray(group.patches)) continue;
+        const patches: SavedMossPaintPatch[] = [];
+        for (const entry of group.patches) {
           if (!isRecord(entry)) continue;
           if (typeof entry.id !== 'string' || entry.id === '') continue;
           if (entry.surface !== 'wall' && entry.surface !== 'floor') continue;
@@ -2011,7 +2019,7 @@ export function deserializeSave(value: unknown): SaveData | null {
             !Number.isFinite(entry.z) || !Number.isFinite(entry.nx) ||
             !Number.isFinite(entry.nz)
           ) continue;
-          marks.push({
+          patches.push({
             id: entry.id,
             x: entry.x as number,
             y: entry.y as number,
@@ -2021,7 +2029,9 @@ export function deserializeSave(value: unknown): SaveData | null {
             nz: entry.nz as number,
           });
         }
-        if (marks.length > 0) mossPaint[key] = marks;
+        if (patches.length > 0) {
+          mossPaint.push({ dimensionKey: group.dimensionKey, patches });
+        }
       }
     }
     // The visit fact is optional on read: an old v1
