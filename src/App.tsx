@@ -1646,7 +1646,11 @@ import {
   type FireResult,
 } from './game/fireState';
 import { loomState } from './game/loomState';
-import { pileState, type PileTarget } from './game/pileState';
+import { pileState, pileIdFor, type PileTarget } from './game/pileState';
+import {
+  dimensionBuckets,
+  type DimensionBucketInput,
+} from './game/dimensionBuckets';
 import { HARVEST_RANGE } from './game/proximity';
 import { trapState, type PlacedTrap } from './game/trapState';
 import { stumpState, type StumpAddition } from './game/stumpState';
@@ -4693,6 +4697,19 @@ export default function App() {
         savedBoneAcquisitionsRef.current,
       );
       savedBoneAcquisitionsRef.current = boneAcquisitionsFold;
+      // DIMENSION BUCKETS — THE SURFACE READ (Background's
+      // snapshotSurface, 9d1d324): the save's top level
+      // carries the SURFACE's stores byte-for-byte wherever
+      // she stands. Underground the live pile/harvest
+      // stores are the active dimension's, so the top-level
+      // piles + harvestState below read from this one
+      // surface snapshot (live on the surface, the parked
+      // slot inside a dimension) — reading the live stores
+      // underground would write the dimension's state at
+      // both levels, and the boot relocation pass would
+      // merge the stray copy into the bucket (a doubled
+      // pile). One read, both expressions.
+      const surfaceStores = dimensionBuckets.snapshotSurface();
       const data = serializeSave({
           seed: meta.seed,
           // World name rides saveNow (first-run dialog +
@@ -4748,13 +4765,14 @@ export default function App() {
             rotY: loom.rotY ?? 0,
           })),
           // PILE SAVE WIRING (multi-kind, 2026-10-27): the
-          // live pile set rides every save as stacks +
+          // The SURFACE pile set (the surfaceStores read
+          // above) rides every save as stacks +
           // position (no id in the document — boot restore
           // derives it from coords; serializeSave writes
           // stacks normalized, order preserved, never
           // merged). The legacy first-kind-only map is
           // gone: it lost non-first kinds across a save.
-          piles: pileState.snapshot().map((pile) => ({
+          piles: surfaceStores.piles.map((pile) => ({
             stacks: pile.stacks.map((stack) => ({
               item: stack.item,
               quantity: stack.quantity,
@@ -4762,6 +4780,33 @@ export default function App() {
             x: pile.x,
             z: pile.z,
           })),
+          // DIMENSION BUCKETS (the store swap, cd1ef2e;
+          // the shell seat, 2026-11-03): the non-surface
+          // dimensions' parked piles + harvest ride as
+          // Systems' dimensionStates — the surface never
+          // appears (it keeps the top-level fields above,
+          // byte-for-byte). The mapping mirrors the
+          // top-level expressions exactly: piles as
+          // stacks + position, the harvest snapshot
+          // as-is (serialize deep-copies both).
+          dimensionStates: Object.fromEntries(
+            Object.entries(dimensionBuckets.snapshotBuckets()).map(
+              ([key, bucket]) => [
+                key,
+                {
+                  piles: bucket.piles.map((pile) => ({
+                    stacks: pile.stacks.map((stack) => ({
+                      item: stack.item,
+                      quantity: stack.quantity,
+                    })),
+                    x: pile.x,
+                    z: pile.z,
+                  })),
+                  harvest: bucket.harvest,
+                },
+              ],
+            ),
+          ),
           // TRAP SAVE WIRING: the live trap set rides every
           // save (snapshot as-is — ids + types verbatim, no
           // filtering; serializeSave writes them verbatim and
@@ -4912,7 +4957,7 @@ export default function App() {
           // draft fields optional — serialize defaults
           // missing ones; the sky reads the live renderer,
           // null when the rig is gone).
-          harvestState: harvestState.snapshot(),
+          harvestState: surfaceStores.harvest,
           sky: rendererRef.current?.snapshotSky() ?? undefined,
           // The weather spell record rides beside the sky
           // (W1 save plumbing; the field is Systems',
@@ -6431,6 +6476,50 @@ export default function App() {
             pileState.drop(stack.item, stack.quantity, pile.x, pile.z);
           }
         }
+        // DIMENSION BUCKETS — THE BOOT SEAT (the store
+        // swap, cd1ef2e; the shell wiring, 2026-11-03):
+        // the parked mirror restores from the save's
+        // dimensionStates (the live stores are the
+        // surface's and stay on the top-level path —
+        // restoreBuckets never touches them), then the
+        // two relocation passes run ONCE, in the
+        // module's order (cave takes, then piles), on
+        // the surface stores this effect and the
+        // construction effect just restored — the
+        // migration for saves written before buckets
+        // existed. Saved piles re-key to their spot id
+        // (pileIdFor — the same derivation restore
+        // rekeys by). All of it lands before any
+        // travel can swap the stores.
+        const bucketsIn: Record<string, DimensionBucketInput> = {};
+        if (saved.dimensionStates) {
+          for (const key of Object.keys(saved.dimensionStates)) {
+            const bucket = saved.dimensionStates[key];
+            bucketsIn[key] = {
+              piles: bucket.piles.map((pile) => ({
+                id: pileIdFor(pile.x, pile.z),
+                stacks: pile.stacks.map((stack) => ({
+                  item: stack.item,
+                  quantity: stack.quantity,
+                })),
+                x: pile.x,
+                z: pile.z,
+              })),
+              harvest: bucket.harvest,
+            };
+          }
+        }
+        dimensionBuckets.restoreBuckets(bucketsIn);
+        dimensionBuckets.relocateLegacyCaveTakes(
+          saved.seed,
+          gen.findSpawn(),
+          (x, z) => gen.weightsAt(x, z),
+        );
+        dimensionBuckets.relocateSurfacePilesToCaves(
+          saved.seed,
+          gen.findSpawn(),
+          (x, z) => gen.weightsAt(x, z),
+        );
         // BOOT-AT-THE-MOUTH (cave close-out, 2026-10-30):
         // a save written underground carries its visit —
         // boot always starts on the surface, so she wakes
@@ -7435,6 +7524,10 @@ export default function App() {
     // A new world clears placed bags with the tents
     // (the clear syncs via updatePlacedBags).
     updatePlacedBags([]);
+    // A new world clears the dimension buckets with
+    // the stores (the store swap's shell seat): the
+    // parked mirror empties with the world.
+    dimensionBuckets.clearBuckets();
     // A new world clears the scry reveal (new camps, new water).
     divinationRef.current.dismiss();
     renderer.setCampArrowsVisible(false);
@@ -10273,18 +10366,25 @@ export default function App() {
   };
 
   /**
-   * Inventory Light press (unlit torch rows only): the FLINT
-   * route of Systems' batch lighting — flint + river-stone
-   * carried, both kept, every carried unlit torch lit in
-   * one press. litFirePresent is false here on purpose:
-   * the fire route arrives with UI's lit-fire 'light
-   * torches' pill (selected fire = present by definition),
-   * and inventing a "nearby fire" range for this button
-   * would be a new mechanic. Same refresh + save shape
-   * as eating (panel action, not world action).
+   * Inventory Light press (unlit torch rows only): the
+   * CANDLE route of Systems' batch lighting (Adam's
+   * on-demand ruling + DEV's wiring word, 2026-11-03)
+   * — she lights them off her carried candle: always
+   * available, nothing consumed, every carried unlit
+   * torch lit in one press. The door names the route
+   * explicitly (one behavior everywhere — the same
+   * route as the fire menu's pill); the fire/flint
+   * routes stay in the API unused by the doors. This
+   * press was the flint route before (flint + river-
+   * stone or a refusal — exactly the failure the
+   * on-demand shape removes). Same refresh + save
+   * shape as eating (panel action, not world action).
    */
   const handleLightTorchItem = (_itemId: string) => {
-    const outcome = lightTorches(inventory, { litFirePresent: false });
+    const outcome = lightTorches(inventory, {
+      litFirePresent: false,
+      route: 'candle',
+    });
     // Equality check, not truthiness: this repo runs tsc
     // without strict mode, and truthiness narrowing on
     // this union's boolean discriminant does not narrow
@@ -10294,7 +10394,7 @@ export default function App() {
       setTorchNote(outcome.reason);
     } else {
       setTorchNote(
-        `Lit ${outcome.count} torch${outcome.count === 1 ? '' : 'es'} with flint and stone.`,
+        `Lit ${outcome.count} torch${outcome.count === 1 ? '' : 'es'}.`,
       );
     }
     refreshInventory();
@@ -10767,16 +10867,22 @@ export default function App() {
       mirrorLightingStart(fireId, 'friction');
       say('Rubbing… wait, then rub again.', 'info');
     } else if (actionId === 'light-torches') {
-      // Fire route: this menu only opens on a lit fire's
-      // chip, so litFirePresent is true — nothing
-      // consumed, fire wins when both routes are
-      // available. Batch: ALL carried unlit torches in
-      // one press. The menu stays open; the pill itself
+      // Candle route (Adam's on-demand ruling + DEV's
+      // wiring word, 2026-11-03): one behavior
+      // everywhere — she lights them off her carried
+      // candle, even here beside a lit fire (the door
+      // names the route; the fire/flint routes stay in
+      // the API unused by the doors). Batch: ALL
+      // carried unlit torches in one press, nothing
+      // consumed. The menu stays open; the pill itself
       // is gone on re-render (count is 0), leaving cook.
       // Equality check, not truthiness: non-strict tsc
       // does not narrow this union's boolean discriminant
       // on truthiness (see the torch Light button handler).
-      const outcome = lightTorches(inventory, { litFirePresent: true });
+      const outcome = lightTorches(inventory, {
+        litFirePresent: true,
+        route: 'candle',
+      });
       if (outcome.lit === false) {
         say(outcome.reason, 'blocked');
       } else {
