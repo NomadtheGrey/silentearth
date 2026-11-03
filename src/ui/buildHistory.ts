@@ -43,6 +43,14 @@ export interface BuildRecord {
 
 const ALL_RECORDS: BuildRecord[] = [
   {
+    merge: 'Merge #74',
+    pr: 95,
+    sha: 'e14ed30',
+    date: '2026-11-03',
+    what: 'THE RAVEN LEADS \u2014 the Grove\u2019s guide reworked on the verdict she earned: \u2018He just hovers and stares.\u2019 She now LEADS: perched within her leash (60 m) and not receded from, she hops onward toward the Grove on her own clock \u2014 a short pause, one call, and she moves, no proof of following required; the display arc that flew out and came back to the same perch is retired. Her gaze turns with the job: she faces along her route, and faces HER only when she is close or in the beat after a call. The perch search widened (a broader snap, more shortenings, a swing to either side of the line, and a rule that every seat must be closer to the Grove than the last), so sparse country cannot park her mid-route. The follow ring widened too, 14 m to 20, on the guide\u2019s own field evidence: \u2018I came as closely as I could. Perhaps his radius needs expanded.\u2019 And her tag seat now carries her height, so her name can stand on the bird instead of at the trunk.',
+    why: 'A guide that waits to be followed is a watcher. The old gates each looked reasonable and composed into a bird that sat in one tree performing at her \u2014 the road never moved first. Now the road moves first, at her pace when she follows and at its own pace when she dawdles, and only distance or retreat holds it.',
+  },
+  {
     merge: 'Merge #73',
     pr: 95,
     sha: '73522d9',
