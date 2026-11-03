@@ -586,6 +586,56 @@ export function emptySavedHarvestState(): SavedHarvestState {
 }
 
 /**
+ * One dimension's world state, as saved (the lootable-
+ * buckets build, 2026-11-03 — the 2026-10-31 design):
+ * the piles and harvest state that belong to ONE
+ * dimension, in that dimension's own coordinates. The
+ * SURFACE is not a bucket — it keeps the document's
+ * top-level piles + harvestState byte-for-byte, and
+ * "no bucket" IS the surface. A bucket exists only
+ * for a dimension she has changed state in.
+ */
+export interface SavedDimensionWorldState {
+  piles: SavedPile[];
+  harvest: SavedHarvestState;
+}
+
+/** A fresh, empty bucket (fresh arrays per call). */
+export function emptyDimensionWorldState(): SavedDimensionWorldState {
+  return { piles: [], harvest: emptySavedHarvestState() };
+}
+
+/** A deep copy of a saved harvest state (serialize). */
+function copySavedHarvestState(h: SavedHarvestState): SavedHarvestState {
+  return {
+    shrunk: h.shrunk.map((e) => ({ ...e })),
+    removed: [...h.removed],
+    progress: h.progress.map((e) => ({ ...e })),
+    spawnedLogs: h.spawnedLogs.map((e) => ({ ...e })),
+    pendingSpawns: h.pendingSpawns.map((e) => ({ ...e })),
+    spawnCounter: h.spawnCounter,
+    felled: h.felled.map((e) => ({ ...e })),
+    saplings: h.saplings.map((e) => ({ ...e })),
+    saplingCounter: h.saplingCounter,
+    clearedSpots: h.clearedSpots.map((e) => ({ ...e })),
+  };
+}
+
+/**
+ * A saved harvest state read from a document field:
+ * a record passes through VERBATIM (the engine's
+ * per-field guards validate at restore, the surface
+ * rule since the world-state format landed); anything
+ * else loads the empty state.
+ */
+function readSavedHarvestState(raw: unknown): SavedHarvestState {
+  return isRecord(raw)
+    ? (raw as unknown as SavedHarvestState)
+    : emptySavedHarvestState();
+}
+
+
+/**
  * Sky state, as saved. Structural mirror of the game layer's
  * SkySnapshot (sky.ts) by literal: cycle position t in [0,1)
  * + dawn count daysElapsed (month is an input, not state).
@@ -744,6 +794,10 @@ export interface SaveData {
   quests?: SavedQuestFlags;
   /** World harvest state; empty snapshot for old saves. */
   harvestState: SavedHarvestState;
+  /** Per-dimension world state (lootable buckets);
+   * {} for old saves. The surface is NOT a bucket —
+   * it is the top-level piles + harvestState above. */
+  dimensionStates: Record<string, SavedDimensionWorldState>;
   /** Sky cycle position; dawn ({ cycleT: 0 }) for old saves. */
   sky: SavedSky;
   /** Facing (yaw/pitch); default look for old saves. */
@@ -793,6 +847,13 @@ export interface SaveDraft {
    * missing fields, deserialize defaults them on read.
    */
   harvestState?: SavedHarvestState;
+  /**
+   * Per-dimension buckets from the live stores
+   * (dimension key -> that dimension's piles +
+   * harvest snapshots). OPTIONAL, the trap pattern:
+   * existing saveNow call sites compile unchanged.
+   */
+  dimensionStates?: Record<string, SavedDimensionWorldState>;
   sky?: SavedSky;
   facing?: SavedFacing;
   /**
@@ -1211,25 +1272,25 @@ export function serializeSave(draft: SaveDraft): SaveData {
     // always carries the full shape.
     harvestState:
       draft.harvestState !== undefined
-        ? {
-            shrunk: draft.harvestState.shrunk.map((e) => ({ ...e })),
-            removed: [...draft.harvestState.removed],
-            progress: draft.harvestState.progress.map((e) => ({ ...e })),
-            spawnedLogs: draft.harvestState.spawnedLogs.map((e) => ({
-              ...e,
-            })),
-            pendingSpawns: draft.harvestState.pendingSpawns.map((e) => ({
-              ...e,
-            })),
-            spawnCounter: draft.harvestState.spawnCounter,
-            felled: draft.harvestState.felled.map((e) => ({ ...e })),
-            saplings: draft.harvestState.saplings.map((e) => ({ ...e })),
-            saplingCounter: draft.harvestState.saplingCounter,
-            clearedSpots: draft.harvestState.clearedSpots.map((e) => ({
-              ...e,
-            })),
-          }
+        ? copySavedHarvestState(draft.harvestState)
         : emptySavedHarvestState(),
+    // Dimension buckets: written AS-IS (each bucket's
+    // piles + harvest deep-copied, keys verbatim).
+    // Buckets ride only for dimensions the caller
+    // seats — an untouched dimension writes nothing.
+    dimensionStates: Object.fromEntries(
+      Object.entries(draft.dimensionStates ?? {}).map(([key, bucket]) => [
+        key,
+        {
+          piles: bucket.piles.map((pile) => ({
+            stacks: pile.stacks.map((s) => ({ ...s })),
+            x: pile.x,
+            z: pile.z,
+          })),
+          harvest: copySavedHarvestState(bucket.harvest),
+        },
+      ]),
+    ),
     // Sky: built EXPLICITLY, not spread — the old spread
     // hid the daysElapsed field (it rode along invisibly
     // while deserialize stripped it, so the moon phase
@@ -1618,6 +1679,105 @@ function parseStringArray(value: unknown): string[] | null {
   return (value as string[]).map(normalizeItemId);
 }
 
+/**
+ * Saved piles, parsed from a document field.
+ */
+function parseSavedPiles(raw: unknown): SavedPile[] | null {
+    // The piles read (the ONE parser, factored
+    // 2026-11-03 for the buckets build): an absent
+    // field loads []; a present-but-malformed list
+    // returns null — the SURFACE caller treats null
+    // as whole-document corruption (its standing
+    // strictness, same as fires/houses), a BUCKET
+    // caller drops that bucket. MIGRATION (multi-kind,
+    // 2026-10-27): entries may be the OLD single-kind shape
+    // { item, quantity, x, z } or the NEW stacks shape
+    // { stacks: [{ item, quantity }], x, z } (extra id /
+    // legacy fields ignored — ids are never trusted, the
+    // runtime id derives from coords). Entries are GROUPED
+    // by rounded coords into one stacks pile per spot,
+    // kinds in saved order (a duplicate kind at one spot
+    // sums, first-seen order kept) — the same rule as
+    // pileState.restore() for old-shape inputs — so no
+    // pile is ever dropped in migration. The grouped
+    // pile's position is its first entry's coords (the
+    // runtime pile keeps its first drop's coords too).
+    const pilesBySpot = new Map<string, SavedPile>();
+    if (raw !== undefined) {
+      if (!Array.isArray(raw)) return null;
+      for (const entry of raw) {
+        if (!isRecord(entry)) return null;
+        if (!isFiniteNumber(entry.x) || !isFiniteNumber(entry.z)) {
+          return null;
+        }
+        // Kinds for this entry: stacks shape wins when
+        // present; otherwise the old single-kind shape.
+        // A stacks value that is present but malformed
+        // (not an array, empty, or holding a bad stack)
+        // is corrupt — no fallback to the legacy fields.
+        let kinds: { item: string; quantity: number }[];
+        if (entry.stacks !== undefined) {
+          if (!Array.isArray(entry.stacks) || entry.stacks.length === 0) {
+            return null;
+          }
+          kinds = [];
+          for (const stack of entry.stacks) {
+            if (!isRecord(stack)) return null;
+            if (typeof stack.item !== 'string' || stack.item.length === 0) {
+              return null;
+            }
+            if (
+              !Number.isInteger(stack.quantity) ||
+              (stack.quantity as number) <= 0
+            ) {
+              return null;
+            }
+            kinds.push({
+              item: stack.item,
+              quantity: stack.quantity as number,
+            });
+          }
+        } else {
+          if (typeof entry.item !== 'string' || entry.item.length === 0) {
+            return null;
+          }
+          if (
+            !Number.isInteger(entry.quantity) ||
+            (entry.quantity as number) <= 0
+          ) {
+            return null;
+          }
+          kinds = [
+            { item: entry.item, quantity: entry.quantity as number },
+          ];
+        }
+        const key = `${entry.x.toFixed(2)},${entry.z.toFixed(2)}`;
+        let pile = pilesBySpot.get(key);
+        for (const kind of kinds) {
+          const id = normalizeItemId(kind.item);
+          // Retired kinds drop on load (see
+          // RETIRED_ITEM_IDS). The pile is created lazily,
+          // on its first surviving kind, so a spot whose
+          // kinds all retired vanishes instead of restoring
+          // as an empty pile; a surviving pile's position is
+          // its first surviving entry's coords.
+          if (RETIRED_ITEM_IDS.has(id)) continue;
+          if (!pile) {
+            pile = { stacks: [], x: entry.x, z: entry.z };
+            pilesBySpot.set(key, pile);
+          }
+          const existing = pile.stacks.find((s) => s.item === id);
+          if (existing) {
+            existing.quantity += kind.quantity;
+          } else {
+            pile.stacks.push({ item: id, quantity: kind.quantity });
+          }
+        }
+      }
+    }
+    return [...pilesBySpot.values()];
+}
+
 /** Validate an unknown value as a v1 save, or return null. */
 export function deserializeSave(value: unknown): SaveData | null {
   try {
@@ -1722,97 +1882,15 @@ export function deserializeSave(value: unknown): SaveData | null {
           : {}),
       });
     }
-    // Piles are optional on read: an old v1 save without them
-    // loads with piles: []. When present, a malformed entry
-    // makes the whole document corrupt (same strictness as
-    // fires/houses — a half-valid pile list must not restore
-    // piles onto wrong positions). MIGRATION (multi-kind,
-    // 2026-10-27): entries may be the OLD single-kind shape
-    // { item, quantity, x, z } or the NEW stacks shape
-    // { stacks: [{ item, quantity }], x, z } (extra id /
-    // legacy fields ignored — ids are never trusted, the
-    // runtime id derives from coords). Entries are GROUPED
-    // by rounded coords into one stacks pile per spot,
-    // kinds in saved order (a duplicate kind at one spot
-    // sums, first-seen order kept) — the same rule as
-    // pileState.restore() for old-shape inputs — so no
-    // pile is ever dropped in migration. The grouped
-    // pile's position is its first entry's coords (the
-    // runtime pile keeps its first drop's coords too).
-    const pilesBySpot = new Map<string, SavedPile>();
-    if (value.piles !== undefined) {
-      if (!Array.isArray(value.piles)) return null;
-      for (const entry of value.piles) {
-        if (!isRecord(entry)) return null;
-        if (!isFiniteNumber(entry.x) || !isFiniteNumber(entry.z)) {
-          return null;
-        }
-        // Kinds for this entry: stacks shape wins when
-        // present; otherwise the old single-kind shape.
-        // A stacks value that is present but malformed
-        // (not an array, empty, or holding a bad stack)
-        // is corrupt — no fallback to the legacy fields.
-        let kinds: { item: string; quantity: number }[];
-        if (entry.stacks !== undefined) {
-          if (!Array.isArray(entry.stacks) || entry.stacks.length === 0) {
-            return null;
-          }
-          kinds = [];
-          for (const stack of entry.stacks) {
-            if (!isRecord(stack)) return null;
-            if (typeof stack.item !== 'string' || stack.item.length === 0) {
-              return null;
-            }
-            if (
-              !Number.isInteger(stack.quantity) ||
-              (stack.quantity as number) <= 0
-            ) {
-              return null;
-            }
-            kinds.push({
-              item: stack.item,
-              quantity: stack.quantity as number,
-            });
-          }
-        } else {
-          if (typeof entry.item !== 'string' || entry.item.length === 0) {
-            return null;
-          }
-          if (
-            !Number.isInteger(entry.quantity) ||
-            (entry.quantity as number) <= 0
-          ) {
-            return null;
-          }
-          kinds = [
-            { item: entry.item, quantity: entry.quantity as number },
-          ];
-        }
-        const key = `${entry.x.toFixed(2)},${entry.z.toFixed(2)}`;
-        let pile = pilesBySpot.get(key);
-        for (const kind of kinds) {
-          const id = normalizeItemId(kind.item);
-          // Retired kinds drop on load (see
-          // RETIRED_ITEM_IDS). The pile is created lazily,
-          // on its first surviving kind, so a spot whose
-          // kinds all retired vanishes instead of restoring
-          // as an empty pile; a surviving pile's position is
-          // its first surviving entry's coords.
-          if (RETIRED_ITEM_IDS.has(id)) continue;
-          if (!pile) {
-            pile = { stacks: [], x: entry.x, z: entry.z };
-            pilesBySpot.set(key, pile);
-          }
-          const existing = pile.stacks.find((s) => s.item === id);
-          if (existing) {
-            existing.quantity += kind.quantity;
-          } else {
-            pile.stacks.push({ item: id, quantity: kind.quantity });
-          }
-        }
-      }
-    }
-    const piles: SavedPile[] = [...pilesBySpot.values()];
+    // Piles: the surface read of the ONE parser
+    // (parseSavedPiles), under the surface's standing
+    // strictness — an old save without the field loads
+    // [], and a malformed list makes the whole
+    // document corrupt. The same parser reads each
+    // dimension bucket below, where a null drops the
+    // BUCKET instead of the document.
+    const piles = parseSavedPiles(value.piles);
+    if (piles === null) return null;
     // World state: optional on read, same additive-field rule
     // as piles/traps — an old v1 save without these fields
     // loads defaults, never breaks. Invalid entries pass
@@ -1822,9 +1900,9 @@ export function deserializeSave(value: unknown): SaveData | null {
     // ignore bad snapshots), so a bad world-state record can
     // never corrupt the whole document. A missing or
     // non-record field loads its default.
-    const harvestState: SavedHarvestState = isRecord(value.harvestState)
-      ? (value.harvestState as unknown as SavedHarvestState)
-      : emptySavedHarvestState();
+    const harvestState: SavedHarvestState = readSavedHarvestState(
+      value.harvestState,
+    );
     // Sky: daysElapsed passes through ONLY when a finite
     // number — absent or non-finite loads as absent (the
     // old-save shape), and Background's restore handles
@@ -2585,6 +2663,38 @@ export function deserializeSave(value: unknown): SaveData | null {
     // drops the field, never the document.
     const worldName =
       typeof value.worldName === 'string' ? value.worldName : undefined;
+    // Dimension buckets are optional on read, same
+    // additive rule: an old v1 save without the field
+    // loads {}. Each bucket is validated by the SAME
+    // parsers the surface uses (piles via
+    // parseSavedPiles, harvest via the verbatim read);
+    // a bucket that fails drops WHOLE — the document
+    // and its sibling buckets survive (the contrast
+    // with the surface piles' strictness is the
+    // design's: a bad bucket is one place's state, not
+    // the world's). An empty-string key drops (it
+    // would counterfeit the surface); a key no longer
+    // resolving is inert data, kept, never reaped.
+    const dimensionStates: Record<string, SavedDimensionWorldState> = {};
+    if (isRecord(value.dimensionStates)) {
+      for (const [key, bucket] of Object.entries(value.dimensionStates)) {
+        if (key === '') continue;
+        if (!isRecord(bucket)) continue;
+        const bucketPiles = parseSavedPiles(bucket.piles);
+        if (bucketPiles === null) continue;
+        dimensionStates[key] = {
+          piles: bucketPiles,
+          harvest: readSavedHarvestState(bucket.harvest),
+        };
+      }
+    }
+    // NOTE (2026-11-03): cave takes do NOT move
+    // here. Their ids are scatter target ids (chunk,
+    // kind, position — nothing names the cave), so no
+    // document-side rule can assign them a bucket; the
+    // relocation is a shell-side pass in the swap
+    // wiring, against Background's cave feature index.
+    // This seat only stores the buckets it is given.
     return {
       version: SAVE_VERSION,
       savedAt: value.savedAt,
@@ -2629,6 +2739,7 @@ export function deserializeSave(value: unknown): SaveData | null {
       boneAcquisitions,
       ...(quests !== undefined ? { quests } : {}),
       harvestState,
+      dimensionStates,
       sky,
       facing,
     };
