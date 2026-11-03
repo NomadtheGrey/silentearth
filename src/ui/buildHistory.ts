@@ -43,6 +43,14 @@ export interface BuildRecord {
 
 const ALL_RECORDS: BuildRecord[] = [
   {
+    merge: 'Merge #75',
+    pr: 95,
+    sha: 'eb57cfd',
+    date: '2026-11-03',
+    what: 'PINE STANDS \u2014 the scrub grows forests, sometimes: where scrub rules a cell, a one-in-four roll (draft) now stands a grove of pines \u2014 twelve to forty trees in the small and large classes \u2014 purely additive over the scatter Adam let stand (\u2018For scrub, scattered is fine. I see no reason we can\u2019t have pine forests though sometimes\u2019). The stands plant unnamed; naming country is deferred (\u2018maybe a Mark of Naming\u2019). With them, the lady slipper completes her two homes: her grove patches \u2014 themselves new in this batch, replacing the old generic sprinkle with patches only where the ground reads woodland and moist-but-drained \u2014 now extend into the moist pine stands under the same band, one law for both companies. The Raven completes too: her name stands at her live height on the bird herself, a singular pill that never competes with the country\u2019s ambient tags, and her staging reaches sparse country \u2014 a far rung on her catch cascade, and every tall kind (tall tree, pine, grove oak) admitted as a perch, so thin woods no longer leave her unborn; the camp that staged under no old rung stages now. Small work riding the grouping: the eat-when-hungry quest stays live through her hungriest stage and not just its first; the cloud wake offer standing over Options hears its own dismissal keys at last (the ladder claims keys topmost-first); and the shelter comments cite the tent\u2019s true tier.',
+    why: 'Adam\u2019s grouping rule \u2014 batches sensibly grouped, small things sliding in where they fit the sitting. This batch is one country pass: a new layer of the living world, the flower and the guide each made whole across both their halves, and the sitting\u2019s small fixes carried with them instead of scattering across merges.',
+  },
+  {
     merge: 'Merge #74',
     pr: 95,
     sha: 'e14ed30',
