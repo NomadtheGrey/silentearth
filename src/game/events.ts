@@ -487,6 +487,14 @@ export interface EventMap {
    */
   'dimension:entered': { key: string; mouthId: string };
   'dimension:exited': { key: string };
+  /**
+   * The pile/harvest stores were swapped for a travel
+   * (dimensionBuckets.swapActiveStores, inside the travel
+   * swap): the live stores now belong to `key`. The
+   * renderer rebuilds the pile group on it — a swap into
+   * an empty bucket fires no per-pile events of its own.
+   */
+  'dimension:stores-swapped': { key: string };
   'dimension:layer': { key: string; layer: number };
   /**
    * Companions (Adam 2026-10-31, Build 1 — the friendship

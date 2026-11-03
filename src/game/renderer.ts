@@ -1080,6 +1080,10 @@ export class WorldRenderer {
       bus.on('pile:dropped', rebuildPiles),
       bus.on('pile:changed', rebuildPiles),
       bus.on('pile:removed', rebuildPiles),
+      // A travel store swap (dimensionBuckets) replaces the
+      // whole pile set: rebuild even when the incoming
+      // bucket is empty and no per-pile event fires.
+      bus.on('dimension:stores-swapped', rebuildPiles),
     );
     this.rebuildPileGroup();
     // Placed traps rebuild on their own event, like piles.
@@ -2242,7 +2246,12 @@ export class WorldRenderer {
     const showPlaced = !underground;
     if (this.placedGroup) this.placedGroup.visible = showPlaced;
     if (this.companionGroup) this.companionGroup.visible = showPlaced;
-    if (this.pileGroup) this.pileGroup.visible = showPlaced;
+    // The pile group is NOT surface-only anymore: the store
+    // swap (dimensionBuckets) makes pileState always hold the
+    // ACTIVE dimension's piles in the active frame, so the
+    // group renders in every dimension — a pile dropped in a
+    // cave is the cave bucket's, drawn at its cave coords.
+    if (this.pileGroup) this.pileGroup.visible = true;
     if (this.trapGroup) this.trapGroup.visible = showPlaced;
     if (this.stagedBoneGroup) this.stagedBoneGroup.visible = showPlaced;
     if (this.campArrowGroup) this.campArrowGroup.visible = showPlaced;
