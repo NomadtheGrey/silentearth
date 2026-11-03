@@ -5025,6 +5025,21 @@ export default function App() {
     local: SaveData;
     parked: SaveData | null;
   } | null>(null);
+  // THE NEW WORLD → CLOUD SAVES DOOR (Adam's direct
+  // request, 2026-11-03): the tab a pending Options
+  // open should land on, set by the FirstRunDialog's
+  // Cloud Saves button ('cloud') and cleared when
+  // Options closes, so every ordinary open still
+  // lands on Settings. Non-null also raises the
+  // modal above the dialog family (stackAbove) —
+  // the dialog renders later in the tree at the
+  // same z-50 and would otherwise cover it.
+  // Declared with the cloud state (not beside
+  // optionsOpen, far below) because the folded
+  // dialog's Esc effect above reads it as its
+  // stand-aside guard.
+  const [optionsTabRequest, setOptionsTabRequest] =
+    useState<'cloud' | null>(null);
 
   const refreshCloudState = () => {
     const nextSync = syncState();
@@ -5557,15 +5572,23 @@ export default function App() {
   // The folded dialog's Esc = its Back (the Popup shell
   // that used to carry this confirm mapped Esc to its
   // cancel; the fold keeps the key's meaning): close
-  // parking nothing.
+  // parking nothing. It stands aside while the
+  // dialog's own Cloud Saves door holds Options over
+  // it (2026-11-03): that Esc belongs to Options,
+  // and closing Options must return to this dialog,
+  // not dismiss it. (The guard reads the door's
+  // request state: no other path can open Options
+  // over this dialog — it covers the screen, and
+  // the central Esc ladder already stands aside
+  // for it.)
   useEffect(() => {
-    if (cloudPendingNewGame === null) return;
+    if (cloudPendingNewGame === null || optionsTabRequest !== null) return;
     const onKeyDown = (e: KeyboardEvent): void => {
       if (e.key === 'Escape' || e.key === 'x' || e.key === 'X') setCloudPendingNewGame(null);
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [cloudPendingNewGame]);
+  }, [cloudPendingNewGame, optionsTabRequest]);
 
   const cloudPanelProps = {
     sync: cloudSync,
@@ -12102,6 +12125,9 @@ export default function App() {
       : (piles.find((pile) => pile.id === selectedPileId) ?? null);
 
   const [optionsOpen, setOptionsOpen] = useState(false);
+  // (optionsTabRequest — the New World → Cloud Saves
+  // door's state — is declared with the cloud state
+  // above; the folded dialog's Esc effect reads it.)
 
   // Refresh cloud state + list whenever Options opens.
   // (Placed here, not in the cloud block above: the deps
@@ -17303,7 +17329,12 @@ export default function App() {
             onToggle: (id, hidden) => hudLayout.setHidden(id, hidden),
             onReset: () => hudLayout.reset(),
           }}
-          onClose={() => setOptionsOpen(false)}
+          initialTab={optionsTabRequest ?? undefined}
+          stackAbove={optionsTabRequest !== null}
+          onClose={() => {
+            setOptionsOpen(false);
+            setOptionsTabRequest(null);
+          }}
           comfortable={isTouch}
         />
       ) : null}
@@ -17524,6 +17555,10 @@ export default function App() {
       {firstRunDialogOpen ? (
         <FirstRunDialog theme={lookThemes.world}
           onBegin={handleFirstRunBegin}
+          onCloudSaves={() => {
+            setOptionsTabRequest('cloud');
+            setOptionsOpen(true);
+          }}
           comfortable={isTouch}
         />
       ) : null}
@@ -17544,6 +17579,10 @@ export default function App() {
       {cloudPendingNewGame !== null ? (
         <FirstRunDialog theme={lookThemes.world}
           onBegin={beginFoldedNewGame}
+          onCloudSaves={() => {
+            setOptionsTabRequest('cloud');
+            setOptionsOpen(true);
+          }}
           onBack={() => setCloudPendingNewGame(null)}
           warning={
             <>
