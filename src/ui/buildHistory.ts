@@ -43,6 +43,14 @@ export interface BuildRecord {
 
 const ALL_RECORDS: BuildRecord[] = [
   {
+    merge: 'Merge #77',
+    pr: 95,
+    sha: '892022c',
+    date: '2026-11-03',
+    what: 'FERAL DANGER — the wild can hurt her now, and the hurt is honest: a feral wolf or bear that finds her in open country stalks her, and before any strike it must stop and wind up where she can see it — frozen, facing her, a priced beat long — because no telegraph means no strike, in the state machinery itself and not as a promise. The first contact is always the warning: it costs no wound, knocks her back a step (the landing checked against the walls first), and the animal remembers her for it. Pressed past the warning, strikes climb the injury ladder — hurt, wounded, critical — slowing her steps and her carry and finally refusing deep-stage work, until one strike too many puts her DOWN: no death, ever, but the crawl back to her last encampment, waking at dawn hurt and hungry, a third of what she carried left in a pile where she fell, waiting for her to walk back for it. The counters are priced in the ground: pursuits leash to where the fight began and give up, no animal follows her into a house, and nothing starts near spawn or any standing house. A bonded familiar standing guard takes the blow instead, winding the animal up at its own body. The mending is the first salve — beeswax, honey, and meadow flower, rendered at the cauldron — and a completed sleep eases one stage. Her stage shows as a plain word on the witness pill and in her needs, never a bar or a number.',
+    why: 'Adam ruled the shape of consequence himself: not death and not a health bar, but the crawl-back — danger with a story in it, and fairness machines (sight, telegraph, warning, escape, safe country, the companion\\u2019s body) adopted whole so the world\\u2019s teeth are always honest teeth.',
+  },
+  {
     merge: 'Merge #76',
     pr: 95,
     sha: 'b22ab81',
