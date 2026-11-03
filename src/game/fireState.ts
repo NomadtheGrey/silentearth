@@ -20,6 +20,13 @@
  *   ('still-waiting', wait NOT reset); a rub at/after the wait
  *   ends lights the fire. advanceLighting(now) moves
  *   'waiting' → 'ready' for display once the wait passes.
+ * - Candle (2026-11-03): startLighting(method 'candle')
+ *   opens a short wait (CANDLE_WAIT_MS, 2 s — Systems'
+ *   price, agreed across both unions); when it elapses,
+ *   advanceLighting lights the fire outright — the flame
+ *   was already lit, so there is no second verb. The
+ *   candle itself is kept, never consumed (Systems'
+ *   inventory side owns that fact).
  * A lit fire stays lit (no extinguish/fuel in this MVP — see
  * fire.ts). Method availability (does she HAVE flint?) is the
  * caller's check (Systems inventory + UI), not this machine's:
@@ -50,6 +57,7 @@ import {
   FIRE_DEFS,
   FLINT_CLICKS,
   FRICTION_WAIT_MS,
+  CANDLE_WAIT_MS,
   type FireType,
   type LightingMethod,
 } from './fire';
@@ -57,7 +65,8 @@ import {
 /** Lighting in progress on an unlit fire. */
 export type LightingProcess =
   | { method: 'flint'; clicks: number }
-  | { method: 'friction'; phase: 'waiting' | 'ready'; waitUntil: number };
+  | { method: 'friction'; phase: 'waiting' | 'ready'; waitUntil: number }
+  | { method: 'candle'; phase: 'waiting'; waitUntil: number };
 
 /** A placed fire entity. */
 export interface PlacedFire {
@@ -191,7 +200,7 @@ class FireState {
         [...this.fires.values()]
           .filter((f) => {
             const lighting = f.lighting;
-            return lighting?.method === 'friction' && lighting.phase === 'waiting';
+            return (lighting?.method === 'friction' || lighting?.method === 'candle') && lighting.phase === 'waiting';
           })
           .map((f) => f.id),
       );
@@ -206,7 +215,7 @@ class FireState {
     for (const id of ids) {
       const fire = this.fires.get(id);
       const lighting = fire?.lighting;
-      if (lighting?.method === 'friction' && lighting.phase === 'waiting') {
+      if ((lighting?.method === 'friction' || lighting?.method === 'candle') && lighting.phase === 'waiting') {
         lighting.waitUntil += pausedMs;
       }
     }
@@ -220,13 +229,15 @@ class FireState {
     fire.lighting =
       method === 'flint'
         ? { method: 'flint', clicks: 0 }
-        : { method: 'friction', phase: 'waiting', waitUntil: now + FRICTION_WAIT_MS };
+        : method === 'candle'
+          ? { method: 'candle', phase: 'waiting', waitUntil: now + CANDLE_WAIT_MS }
+          : { method: 'friction', phase: 'waiting', waitUntil: now + FRICTION_WAIT_MS };
     bus.emit('fire:lighting', {
       id,
       type: fire.type,
       method,
       clicks: 0,
-      phase: method === 'friction' ? 'waiting' : null,
+      phase: method === 'flint' ? null : 'waiting',
     });
     return { ok: true, fire };
   }
@@ -271,9 +282,22 @@ class FireState {
     return { ok: true, fire };
   }
 
-  /** Move friction waits that have elapsed into 'ready' (display). */
+  /** Move friction waits that have elapsed into 'ready' (display).
+   *  A CANDLE wait that elapses LIGHTS the fire outright:
+   *  the flame was already lit — there is no second verb. */
   advanceLighting(now: number): void {
     for (const fire of this.fires.values()) {
+      if (
+        fire.lighting &&
+        fire.lighting.method === 'candle' &&
+        fire.lighting.phase === 'waiting' &&
+        now >= fire.lighting.waitUntil
+      ) {
+        fire.lit = true;
+        fire.lighting = null;
+        bus.emit('fire:lit', { id: fire.id, type: fire.type, x: fire.x, z: fire.z, method: 'candle' });
+        continue;
+      }
       if (
         fire.lighting &&
         fire.lighting.method === 'friction' &&
@@ -318,6 +342,12 @@ function validLighting(
       return null;
     }
     return { method: 'friction', phase: lighting.phase, waitUntil: lighting.waitUntil };
+  }
+  if (lighting.method === 'candle') {
+    if (lighting.phase !== 'waiting' || !Number.isFinite(lighting.waitUntil)) {
+      return null;
+    }
+    return { method: 'candle', phase: 'waiting', waitUntil: lighting.waitUntil };
   }
   return null;
 }

@@ -113,6 +113,14 @@ export interface EventMap {
    * that chunk (the harvested object shrinks, or leaves on remove). Yields are already
    * merged by item (one entry per item).
    */
+  /**
+   * A glow dose was painted onto a cave surface
+   * (mossPaintState.ts, 2026-11-03): the patch seated in
+   * the named dimension under this id. The renderer
+   * rebuilds the dimension's glow (meshes + the shared
+   * light selection) from the register on this signal.
+   */
+  'moss:painted': { dimensionKey: string; id: string };
   'harvest:completed': {
     targetId: string;
     sourceId: string;

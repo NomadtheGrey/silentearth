@@ -1707,7 +1707,11 @@ import {
   type ToolTier,
 } from './game/objects';
 import type { FireType } from './game/fire';
-import { FLINT_CLICKS, FRICTION_WAIT_MS } from './game/fire';
+import {
+  CANDLE_WAIT_MS,
+  FLINT_CLICKS,
+  FRICTION_WAIT_MS,
+} from './game/fire';
 import {
   shelterState,
   shelterAt,
@@ -1723,7 +1727,11 @@ import {
   findCamps,
   CampDivination,
 } from './systems/divination';
-import { siteWaterFacts, stillWatersNear } from './game/waterProximity';
+import {
+  isNearWater,
+  siteWaterFacts,
+  stillWatersNear,
+} from './game/waterProximity';
 import { NameSight } from './systems/name-sight';
 import { portionsForKind, lookKeyForTarget } from './ui/lookPortions';
 import { cycleSplit, cyclePhase, currentMoonPhase } from './game/sky';
@@ -1918,6 +1926,7 @@ import {
   INJURY_WORD,
   WET_WORD,
   WeatherWitness,
+  scentWord,
   type ColdStageKey,
   type WetStageKey,
 } from './ui/WeatherWitness';
@@ -1927,6 +1936,13 @@ import {
   tendWithSalve,
   type InjuryStage,
 } from './systems/injury';
+import { applyGlowDose } from './systems/glow-paint';
+import {
+  ScentState,
+  applyDouse,
+  mixWash,
+  useWash,
+} from './systems/scent';
 import {
   planCrawlBack,
   resolveEncampment,
@@ -1967,6 +1983,7 @@ import { torchState, type PlacedTorch as PlacedTorchEntity } from './game/torchS
 import { lightTorches, placeTorch as grantPlaceTorch, pickupTorch as grantPickupTorch } from './systems/torch';
 import { altarState, type PlacedAltar as PlacedAltarEntity } from './game/altarState';
 import { jarPatchState } from './game/jarPatchState';
+import { mossPaintState } from './game/mossPaintState';
 import { placeAltar as grantPlaceAltar } from './systems/altar';
 import {
   altarProgressFrom,
@@ -2401,6 +2418,47 @@ const TENDABLE_IDS: ReadonlySet<string> = new Set([SALVE_ITEM]);
 // verb (the pour's aim arm). The empty jar carries
 // none — filling lives on the water's own pill.
 const DUMPABLE_IDS: ReadonlySet<string> = new Set(['water-jar']);
+/**
+ * The glow-paint build (2026-11-03): the dose item's
+ * id, named by Systems in their moss-parts report
+ * (the clump is 'twilight-fungus'; the dose renders
+ * from it, 0.1 lb, Materials).
+ */
+const GLOW_DOSE_ID = 'glow-dose';
+const APPLIABLE_IDS: ReadonlySet<string> = new Set([GLOW_DOSE_ID]);
+
+/**
+ * The douse-ables' row sets (the douse build, 2026-11-03;
+ * Systems' scent.ts): the three brews carry Douse; the
+ * mixed wash carries Wash; the filled jar carries Mix
+ * (mixing the wash out of it). Literal ids, Systems'
+ * built values.
+ */
+const DOUSEABLE_IDS: ReadonlySet<string> = new Set([
+  'repellent',
+  'prey-lure',
+  'predator-lure',
+]);
+const WASHABLE_IDS: ReadonlySet<string> = new Set(['wash']);
+const MIXABLE_IDS: ReadonlySet<string> = new Set(['water-jar']);
+/** How far her arm reaches with a dose (DRAFT). */
+const PAINT_REACH_M = 3;
+/** The apply aim's certification, read live by the card. */
+type ApplyAim = {
+  cert: 'not-underground' | 'nothing-faced' | 'already-painted' | 'clear';
+  surface: 'wall' | 'floor' | null;
+};
+/** The full certification: the aim plus the faced spot, when one stands. */
+type ApplyCert = ApplyAim & {
+  spot: {
+    x: number;
+    y: number;
+    z: number;
+    surface: 'wall' | 'floor';
+    nx: number;
+    nz: number;
+  } | null;
+};
 
 // The shrew's wake door: the found shrew skull's row
 // carries the Wake verb — Systems' charm-path grant,
@@ -2740,6 +2798,20 @@ export default function App() {
     injuryRef.current = seated;
   }
   const injury = injuryRef.current;
+  // THE SCENT SEAT (the douse build, 2026-11-03;
+  // Systems' scent.ts): the shell owns the one
+  // ScentState on the injury pattern — built here
+  // from the save, snapshotted into every save,
+  // ticked on the 1 s clock. The witness reads the
+  // fact mirror; the feral facts provider reads
+  // isRepelling() live.
+  const scentRef = useRef<ScentState | null>(null);
+  if (scentRef.current === null) {
+    const seated = new ScentState();
+    seated.restore(bootSave?.scent);
+    scentRef.current = seated;
+  }
+  const scentState = scentRef.current;
   const feralRef = useRef<FeralEncounterState | null>(null);
   if (feralRef.current === null) {
     const seated = new FeralEncounterState();
@@ -2765,6 +2837,22 @@ export default function App() {
     inventory.setCapacityMultiplier(effects.carryMultiplier);
     rendererRef.current?.setInjurySpeedFactor(effects.movementMultiplier);
     setInjuryUi({ stage: injury.stage() });
+  };
+  const [scentUi, setScentUi] = useState<{
+    kind: 'repellent' | 'attractor' | null;
+    category: string | null;
+  }>(() => {
+    const facts = scentState.scent();
+    return { kind: facts.kind, category: facts.category };
+  });
+  // The scent mirror refresh: the witness shows
+  // words, not seconds, so callers refresh on acts
+  // (douse/wash) and the 1 s tick refreshes only
+  // when the word could change (kind/category flip
+  // or the clock running out).
+  const refreshScentUi = () => {
+    const facts = scentState.scent();
+    setScentUi({ kind: facts.kind, category: facts.category });
   };
   // THE CRAWL-BACK BEAT (the staging, UI's under Adam's
   // trust, 2026-11-03): while a down's staging stands,
@@ -2818,14 +2906,25 @@ export default function App() {
   const feralFactsProvider = (animal: {
     id: string;
     kind: string;
-  }): { defenderPos: { x: number; z: number } | null } | null => {
+  }): {
+    defenderPos: { x: number; z: number } | null;
+    repelled?: boolean;
+  } | null => {
     if (!isFeral(animal.id)) return null;
     if (
       !(FERAL_DANGEROUS_KINDS as readonly string[]).includes(animal.kind)
     ) {
       return null;
     }
-    return { defenderPos: standingDefender() };
+    return {
+      defenderPos: standingDefender(),
+      // THE REPELLENT rides the same channel
+      // (Background's seam, the douse build): the
+      // renderer ORs it into suppression beside
+      // safe country — ferals only, the bond road
+      // never sees this channel.
+      repelled: scentState.isRepelling(),
+    };
   };
 
   // THE FERAL DOOR (the feral build, 2026-11-03; the
@@ -4135,6 +4234,9 @@ export default function App() {
   // the stack card + touch bar read it live.
   const [dumpArmed, setDumpArmed] = useState(false);
   const dumpArmedRef = useRef(false);
+  const [applyArmed, setApplyArmed] = useState(false);
+  const applyArmedRef = useRef(false);
+  const [applyAim, setApplyAim] = useState<ApplyAim | null>(null);
   const [dumpAim, setDumpAim] = useState<{
     x: number;
     z: number;
@@ -4279,13 +4381,22 @@ export default function App() {
     );
   };
 
-  // The FILL offer recompute (the jar build): composed
-  // water facts at her feet + an empty jar carried.
+  // The FILL offer recompute (the jar build): water
+  // within reach + an empty jar carried.
+  // THE FILL GATE WIDENED (Adam's commission, the
+  // salves + moss batch, 2026-11-03): the offer stands
+  // NEAR water, not only in it — an empty jar carried
+  // and water within reach raises the option on the
+  // bank as at the wade. The range is the water
+  // module's own proximity read at the scry's reach
+  // (FILL_WATER_RANGE, DRAFT — one range for both
+  // water doors unless Adam splits them).
+  const FILL_WATER_RANGE = 2.5;
   const refreshFillOffer = (): void => {
     const player = playerRef.current;
     const offer =
       player !== null &&
-      siteWaterFacts(genRef.current, player.x, player.z).inWater &&
+      isNearWater(genRef.current, player.x, player.z, FILL_WATER_RANGE) &&
       inventory.count('clay-jar') > 0;
     fillOfferRef.current = offer;
     setFillOffer(offer);
@@ -4378,6 +4489,126 @@ export default function App() {
       showFeedback('The mud rises to water.', 'gain');
     }
     cancelDump();
+    refreshInventory();
+    saveNow();
+  };
+
+  // THE APPLY DOOR (the glow-paint build, 2026-11-03;
+  // Background's ratified claim, DEV's seam relay):
+  // the dose row's Apply verb arms the application,
+  // the dump arm's twin — the pack closes, the other
+  // arms yield, and the crosshair takes over. The
+  // certification is the claim's refusal ladder, read
+  // shell-side: not underground (the paint holds only
+  // in cave dark) / nothing faced (the renderer's
+  // cave-surface raycast comes back empty) / already
+  // painted (the register's pre-read holds the spot).
+  // THE GRANT (Systems, revised contract, DEV relay
+  // 2026-11-03): applyGlowDose wraps the consumption —
+  // the register crosses into Systems as the shell's
+  // bound seat callback, never an import. The
+  // aim-side refusals (not underground, nothing
+  // faced) stay the door's voice and precede the
+  // seat; the grant owns the dose check ('no-dose'),
+  // the occupied refusal (the seat's null), the one
+  // consumption, and the exercised door — a refusal
+  // consumes nothing and teaches nothing, in one
+  // tested home.
+  const certifyApplyTarget = (): ApplyCert => {
+    if (!dimensionState.isUnderground()) {
+      return { cert: 'not-underground', surface: null, spot: null };
+    }
+    const aim = rendererRef.current?.aimAtCaveSurface(PAINT_REACH_M) ?? null;
+    if (aim === null) {
+      return { cert: 'nothing-faced', surface: null, spot: null };
+    }
+    const patch = mossPaintState.patchAt(
+      dimensionState.activeKey(),
+      aim.x,
+      aim.y,
+      aim.z,
+    );
+    if (patch !== null) {
+      return { cert: 'already-painted', surface: aim.surface, spot: null };
+    }
+    return {
+      cert: 'clear',
+      surface: aim.surface,
+      spot: {
+        x: aim.x,
+        y: aim.y,
+        z: aim.z,
+        surface: aim.surface,
+        nx: aim.nx,
+        nz: aim.nz,
+      },
+    };
+  };
+
+  const handleApplyItem = (): void => {
+    if (inventory.count(GLOW_DOSE_ID) <= 0) return;
+    setInventoryOpen(false);
+    if (placementRef.current !== null) handlePlaceCancel();
+    if (dumpArmedRef.current) cancelDump();
+    applyArmedRef.current = true;
+    setApplyArmed(true);
+    // The aim certifies NOW, not only on the next
+    // anchor pass (the dump arm's discipline).
+    const cert = certifyApplyTarget();
+    setApplyAim({ cert: cert.cert, surface: cert.surface });
+  };
+
+  const cancelApply = (): void => {
+    applyArmedRef.current = false;
+    setApplyArmed(false);
+    setApplyAim(null);
+  };
+
+  // The application: the aim-side refusals speak
+  // first, in the door's voice (the arm STAYS up —
+  // the dump arm's refusal discipline); then the
+  // grant runs with the bound seat, and its two
+  // codes voice the rest. The seat callback folds
+  // the register's pre-read into the seat attempt:
+  // a held spot returns null without seating, a
+  // seat's own null is the same answer — the grant
+  // reads both as 'occupied'.
+  const confirmApply = (): void => {
+    const cert = certifyApplyTarget();
+    setApplyAim({ cert: cert.cert, surface: cert.surface });
+    if (cert.cert === 'not-underground') {
+      showFeedback(
+        'Open sky drinks the glow — the paint holds only in cave dark.',
+        'blocked',
+      );
+      return;
+    }
+    if (cert.cert === 'nothing-faced' || cert.spot === null) {
+      showFeedback('Nothing faced to paint.', 'blocked');
+      return;
+    }
+    const spot = cert.spot;
+    const dimensionKey = dimensionState.activeKey();
+    const outcome = applyGlowDose(inventory, () => {
+      if (
+        mossPaintState.patchAt(dimensionKey, spot.x, spot.y, spot.z) !== null
+      ) {
+        return null;
+      }
+      const patch = mossPaintState.seatPatch(dimensionKey, spot);
+      return patch?.id ?? null;
+    });
+    if (outcome.ok === false) {
+      showFeedback(
+        outcome.code === 'no-dose'
+          ? 'She carries no dose to paint with.'
+          : 'That spot already glows.',
+        'blocked',
+      );
+      return;
+    }
+    showFeedback('She paints the glow on — the light will stay.', 'gain');
+    cancelApply();
     refreshInventory();
     saveNow();
   };
@@ -4586,6 +4817,12 @@ export default function App() {
           // but no shell wiring — the snapshot joins the
           // draft here, beside its sibling states).
           patches: jarPatchState.snapshot(),
+          // Glow-paint patches (the glow-paint build):
+          // the register's snapshot rides every save
+          // beside its sibling states, whole and opaque
+          // (SaveData.mossPaint, Systems' seat — the
+          // snapshot shape passes through unconverted).
+          mossPaint: mossPaintState.snapshot(),
           // RITUAL SAVE WIRING: stagings + awakenings ride
           // every save as-is (StagingBook / CharmState
           // snapshots; serialize writes them verbatim,
@@ -4666,6 +4903,9 @@ export default function App() {
           injury: injuryRef.current?.snapshot(),
           feralWarned: feralRef.current?.snapshot(),
           lastSleepSite: lastSleepSiteRef.current,
+          // THE SCENT rides every save on the same
+          // pattern (save.ts hosts it leniently).
+          scent: scentRef.current?.snapshot(),
           facing: player ? player.snapshotFacing() : undefined,
         });
       saveGame(data);
@@ -5641,6 +5881,13 @@ export default function App() {
           : null,
       );
     }
+    // The APPLY aim (the glow-paint build): while the
+    // application is armed, the same cadence re-reads
+    // the certification at the faced cave surface.
+    if (applyArmedRef.current) {
+      const cert = certifyApplyTarget();
+      setApplyAim({ cert: cert.cert, surface: cert.surface });
+    }
   };
 
   // Re-derive the in-range pile list straight from pileState
@@ -5946,6 +6193,10 @@ export default function App() {
         // boot never called it; a poured patch died at
         // reload). Silent; unknown kinds drop inside.
         jarPatchState.restore(bootSaved.patches ?? []);
+        // Glow-paint restore (the glow-paint build):
+        // the register re-seats before construction,
+        // the jar idiom. Silent; [] for old saves.
+        mossPaintState.restore(bootSaved.mossPaint ?? []);
         // A boot standing in water with an empty jar
         // shows the Fill offer before the first step.
         refreshFillOffer();
@@ -6535,6 +6786,22 @@ export default function App() {
       // world stepped yet) simply skips the tick.
       const cwPlayer = playerRef.current;
       if (cwPlayer) tickColdWet(1, cwPlayer.x, cwPlayer.z);
+      // The scent clock on the same 1 s beat (the
+      // douse build): Systems' ScentState owns the
+      // duration; the shell ticks it. The mirror
+      // refreshes only when the word could change —
+      // the witness shows words, not seconds.
+      if (scentState.isActive()) {
+        const before = scentState.scent();
+        scentState.tick(1);
+        const after = scentState.scent();
+        if (
+          after.kind !== before.kind ||
+          after.category !== before.category
+        ) {
+          refreshScentUi();
+        }
+      }
       // Hunger changed: latch update + drain multiplier
       // re-sync (the drain rate for the NEXT tick
       // follows the current carried/awakened state).
@@ -9890,6 +10157,73 @@ export default function App() {
     saveNow();
   };
 
+  // THE DOUSE DOORS (the douse build, 2026-11-03;
+  // Systems' scent.ts grants): Douse lays a brew's
+  // scent (one at a time — a new douse replaces);
+  // Wash spends the mixed wash to strip it early;
+  // Mix turns a filled jar + a meadow flower into
+  // the wash (the jar comes back empty). All copy
+  // DRAFT for Adam's pin pass; the grants own the
+  // consumption and the learn.
+  const handleDouseItem = (itemId: string) => {
+    const result = applyDouse(
+      inventory,
+      scentState,
+      itemId as ItemId,
+    );
+    if (result.ok === false) {
+      setEatNote(
+        result.code === 'not-carried'
+          ? 'She does not carry that brew.'
+          : 'That is no scent brew.',
+      );
+      return;
+    }
+    refreshScentUi();
+    setEatNote(
+      itemId === 'repellent'
+        ? 'She douses herself — the reek will keep the wild off.'
+        : itemId === 'prey-lure'
+          ? 'She douses herself — the smell of prey drifts out.'
+          : 'She douses herself — the smell of a hunter drifts out.',
+    );
+    refreshInventory();
+    saveNow();
+  };
+
+  const handleWashItem = (_itemId: string) => {
+    const result = useWash(inventory, scentState);
+    if (result.ok === false) {
+      setEatNote(
+        result.code === 'no-scent'
+          ? 'No scent on her to wash off.'
+          : 'She carries no wash.',
+      );
+      return;
+    }
+    refreshScentUi();
+    setEatNote('She washes the scent off.');
+    refreshInventory();
+    saveNow();
+  };
+
+  const handleMixWashItem = (_itemId: string) => {
+    const result = mixWash(inventory);
+    if (result.ok === false) {
+      setEatNote(
+        result.code === 'no-filled-jar'
+          ? 'No filled jar to mix with.'
+          : result.code === 'no-flower'
+            ? 'No meadow flower to mix in.'
+            : 'Too full to take the wash.',
+      );
+      return;
+    }
+    setEatNote('She mixes the wash — jar water and meadow flower.');
+    refreshInventory();
+    saveNow();
+  };
+
   /**
    * Inventory Light press (unlit torch rows only): the FLINT
    * route of Systems' batch lighting — flint + river-stone
@@ -10172,6 +10506,25 @@ export default function App() {
         Math.max(
           0,
           1 - (lighting.waitUntil - Date.now()) / FRICTION_WAIT_MS,
+        ),
+      );
+      return bar(fraction, `Waiting… ${Math.round(fraction * 100)}%`);
+    }
+    if (lighting.method === 'candle') {
+      // The candle's wait (the salves + moss batch,
+      // 2026-11-03): Background's engine rider made
+      // the candle a waiting process on friction's
+      // shape — the bar mirrors that shape over the
+      // candle's own 2 s wait. Without this branch
+      // the bar fell through to the flint clicks
+      // reading (Systems' flag on the assembled
+      // tree) and rendered a clicks count the
+      // process does not carry.
+      const fraction = Math.min(
+        1,
+        Math.max(
+          0,
+          1 - (lighting.waitUntil - Date.now()) / CANDLE_WAIT_MS,
         ),
       );
       return bar(fraction, `Waiting… ${Math.round(fraction * 100)}%`);
@@ -12275,6 +12628,10 @@ export default function App() {
       cancelDump();
       return true;
     }
+    if (applyArmed) {
+      cancelApply();
+      return true;
+    }
     if (homeMenuOpen) {
       setHomeMenuOpen(false);
       return true;
@@ -13485,11 +13842,12 @@ export default function App() {
   // R is a no-op there (hive Relocate is an unbuilt
   // seed, named not built).
   const handleSecondInteract = (): void => {
-    // The jar's FILL (Adam's door set): while she stands
-    // in water with an empty jar, the water's own pill
-    // reads 'Fill Jar [R]' — R belongs to the water
-    // while the offer stands, ahead of the winner's
-    // second act. Stepping out restores the winner's R.
+    // The jar's FILL (Adam's door set): while the fill
+    // offer stands (near water, an empty jar carried),
+    // the water's own pill reads 'Fill Jar [R]' — R
+    // belongs to the water while the offer stands,
+    // ahead of the winner's second act. Stepping away
+    // restores the winner's R.
     if (fillOfferRef.current) {
       runFillJar();
       return;
@@ -13827,6 +14185,11 @@ export default function App() {
         if (key === 'enter') confirmDump();
         return;
       }
+      // The apply arm: Enter paints, on the same law.
+      if (applyArmed) {
+        if (key === 'enter') confirmApply();
+        return;
+      }
       // A world menu/panel is open: digits fire its
       // actions in render order, every other key waits
       // (Esc closes, in the Esc listener above). Above
@@ -13948,6 +14311,8 @@ export default function App() {
     firstRunDone,
     placement,
     handlePlaceConfirm,
+    applyArmed,
+    confirmApply,
     homeMenuOpen,
     selectedPileId,
     selectedTentId,
@@ -14026,6 +14391,10 @@ export default function App() {
         confirmDump();
         return;
       }
+      if (applyArmed) {
+        confirmApply();
+        return;
+      }
       // Inventory is NOT a gate here (Adam, 2026-10-31):
       // the pack left the modal set for world interaction
       // (see the keydown's panel-family branch), and this
@@ -14054,8 +14423,10 @@ export default function App() {
     journalOpen,
     placement,
     dumpArmed,
+    applyArmed,
     handlePlaceConfirm,
     confirmDump,
+    confirmApply,
     handleUseInteract,
     handleWorldPlaceTorch,
   ]);
@@ -15138,6 +15509,11 @@ export default function App() {
               ? { stage: injuryUi.stage }
               : undefined
           }
+          scent={
+            scentUi.kind !== null
+              ? { kind: scentUi.kind, category: scentUi.category }
+              : undefined
+          }
         />
       </div>
       <div className="mt-2">
@@ -15277,6 +15653,60 @@ export default function App() {
         <button
           type="button"
           onClick={cancelDump}
+          className={
+            isTouch
+              ? 'rounded bg-moss-deep px-3 py-2 text-sm min-h-[44px] hover:bg-moss'
+              : 'rounded bg-moss-deep px-2 py-0.5 text-xs hover:bg-moss'
+          }
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
+  ) : null;
+
+  // THE APPLY CARD (the glow-paint build): the dump
+  // card's twin — the live certification reads in
+  // plain lines, Paint there confirms, Cancel yields.
+  // Copy DRAFT for Adam's pin pass.
+  const applyCard = applyArmed ? (
+    <div className="rounded bg-black/45 px-2 py-1 text-sm">
+      <p>
+        {applyAim === null
+          ? 'Paint the glow where you aim.'
+          : applyAim.cert === 'not-underground'
+            ? 'Open air — the paint holds only in a cave.'
+            : applyAim.cert === 'nothing-faced'
+              ? 'Face a cave wall or floor, close.'
+              : applyAim.cert === 'already-painted'
+                ? 'That spot already glows.'
+                : applyAim.surface === 'wall'
+                  ? 'Bare wall — the paint will hold its light here.'
+                  : 'Bare floor — the paint will hold its light here.'}
+      </p>
+      <div className="mt-1 flex gap-2">
+        <button
+          type="button"
+          onClick={confirmApply}
+          className={
+            isTouch
+              ? 'rounded bg-moss-deep px-3 py-2 text-sm min-h-[44px] hover:bg-moss'
+              : 'rounded bg-moss-deep px-2 py-0.5 text-xs hover:bg-moss'
+          }
+        >
+          Paint there
+          {!isTouch ? (
+            <span
+              aria-hidden="true"
+              className={'ml-1 ' + KEY_BADGE_CLASS}
+            >
+              Enter
+            </span>
+          ) : null}
+        </button>
+        <button
+          type="button"
+          onClick={cancelApply}
           className={
             isTouch
               ? 'rounded bg-moss-deep px-3 py-2 text-sm min-h-[44px] hover:bg-moss'
@@ -15842,6 +16272,15 @@ export default function App() {
                 },
               ]
             : []),
+          ...(scentUi.kind !== null
+            ? [
+                {
+                  id: 'scent',
+                  label: 'Scent',
+                  detail: scentWord(scentUi.kind, scentUi.category),
+                },
+              ]
+            : []),
         ]}
         hideNeeds={isTouch && hudCollapsed}
         topReadout={
@@ -15901,6 +16340,7 @@ export default function App() {
         >
           {placementCard}
           {dumpCard}
+          {applyCard}
           {/* SEAT (Adam, 2026-11-02, from his SE Notes): the
               status bars — health, hunger, cold, wet — stand at
               the TOP of the stack, directly under the transient
@@ -16418,6 +16858,14 @@ export default function App() {
             onDumpItem={() => handleDumpItem()}
             tendableIds={TENDABLE_IDS}
             onTendItem={handleTendSalve}
+            appliableIds={APPLIABLE_IDS}
+            onApplyItem={() => handleApplyItem()}
+            douseableIds={DOUSEABLE_IDS}
+            onDouseItem={handleDouseItem}
+            washableIds={WASHABLE_IDS}
+            onWashItem={handleWashItem}
+            mixableIds={MIXABLE_IDS}
+            onMixItem={handleMixWashItem}
             wakeableIds={WAKEABLE_IDS}
             onWakeItem={handleWakeItem}
             storage={storageSection}
@@ -17620,6 +18068,7 @@ export default function App() {
       {(scryVisible || fillOffer) &&
       placement === null &&
       !dumpArmed &&
+      !applyArmed &&
       !inventoryOpen &&
       !craftingOpen &&
       !charmsOpen &&
@@ -17748,6 +18197,52 @@ export default function App() {
             <button
               type="button"
               onClick={cancelDump}
+              className="min-h-[44px] rounded bg-moss-deep px-3 py-2 text-sm hover:bg-moss"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {/* TOUCH APPLY BAR: the dump bar's twin — the
+          apply card's touch door under the same law. */}
+      {hudCollapsed &&
+      applyArmed &&
+      !inventoryOpen &&
+      !craftingOpen &&
+      !charmsOpen &&
+      !companionsOpen &&
+      !journalOpen &&
+      !optionsOpen &&
+      !introOpen &&
+      !pendingTrapRecipe &&
+      pendingRemoveTarget === null ? (
+        <div className="pointer-events-auto absolute bottom-24 left-1/2 z-50 -translate-x-1/2 rounded bg-black/60 px-3 py-2 text-center">
+          <p className="text-sm text-stone-100">
+            {applyAim === null
+              ? 'Paint the glow where you aim.'
+              : applyAim.cert === 'not-underground'
+                ? 'Open air — the paint holds only in a cave.'
+                : applyAim.cert === 'nothing-faced'
+                  ? 'Face a cave wall or floor, close.'
+                  : applyAim.cert === 'already-painted'
+                    ? 'That spot already glows.'
+                    : applyAim.surface === 'wall'
+                      ? 'Bare wall — the paint will hold its light here.'
+                      : 'Bare floor — the paint will hold its light here.'}
+          </p>
+          <div className="mt-1 flex justify-center gap-2">
+            <button
+              type="button"
+              onClick={confirmApply}
+              className="min-h-[44px] rounded bg-moss-deep px-3 py-2 text-sm hover:bg-moss"
+            >
+              Paint there
+            </button>
+            <button
+              type="button"
+              onClick={cancelApply}
               className="min-h-[44px] rounded bg-moss-deep px-3 py-2 text-sm hover:bg-moss"
             >
               Cancel

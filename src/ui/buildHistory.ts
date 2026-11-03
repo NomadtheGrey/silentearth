@@ -43,6 +43,14 @@ export interface BuildRecord {
 
 const ALL_RECORDS: BuildRecord[] = [
   {
+    merge: 'Merge #78',
+    pr: 95,
+    sha: '6ae553e',
+    date: '2026-11-03',
+    what: 'SALVES AND MOSS \u2014 her own light, and the scents she wears. The twilight fungus at a cave\u2019s entry is pickable now (Adam\u2019s fork: if it glows, she can use it): one clump renders into three glow doses, and a dose painted on a cave wall, floor, or ceiling seats a mark of pale light that lasts \u2014 while a picked clump gives no light until it grows back, so she can strip her own entry glow for paint and pays for it in the dark she made. Grown fungus and her marks share one budget: the nearest dozen burn as real lights around her, the rest read as embers of themselves. The douse-ables join her: a repellent brewed of tallow and poison mushroom that turns feral teeth aside for a day, prey and predator lures, and a flower wash that strips a scent clean \u2014 all of it worn on the witness beside her injury, none of it stacking. A candle is a fire-starter now, two seconds in the hand and never consumed, its wait drawn honestly on the lighting bar. The world\u2019s clocks were re-priced in game days: surface growth takes at least a day to return, deadfall a day, a felled tree\u2019s sapling three. And the swamp breathes fog as place married to weather \u2014 the deep bog murkiest, wet spells completing what dry spells only thin, a mist lent to meadows after rain, while the dry rises stay clear except in the heaviest weather. A carried jar offers its fill at the water\u2019s edge now, not only standing in it.',
+    why: 'Depth should not be darkness she cannot answer. The paint makes light a thing she carries and spends; the scents make the feral country negotiable on her terms for a priced day; the retime makes the living world keep a day\u2019s dignity instead of a two-minute errand; and the fog is the swamp being the swamp \u2014 a place fact the weather leans on, not a curtain dropped from the sky.',
+  },
+  {
     merge: 'Merge #77',
     pr: 95,
     sha: '892022c',

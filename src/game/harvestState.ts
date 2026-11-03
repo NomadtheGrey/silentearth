@@ -24,11 +24,26 @@
  *   remove action is gone permanently — the removed set, never
  *   regrown. See harvest.ts for the remove action itself.
  *
- * TIMING CONSTANTS (lane-decided starting values, NOT pinned —
- * flagged for Adam's tuning pass):
- * - REGROW_MS = 120_000 (2 minutes): a shrunk plant regrows.
- * - LOG_SPAWN_MS = 180_000 (3 minutes): a fresh log spawns near
+ * TIMING CONSTANTS — RETIMED 2026-11-03 under Adam's
+ * regrowth pin (DEV chat): 'Surface stuff should take
+ * at least a day. Longer for stuff that's harder to
+ * grow back.' The reading is GAME days (GAME_DAY_MS,
+ * constants.ts — the 10-minute cycle expressed once).
+ * The old 2-minute surface clock is RETIRED under the
+ * pin. Per-mechanism prices (all DRAFT under his
+ * principle, for his pin pass):
+ * - REGROW_MS = 1 game day: a shrunk plant regrows —
+ *   the pin's floor, for ordinary surface growth.
+ * - LOG_SPAWN_MS = 1 game day: a fresh log spawns near
  *   trees after a log is taken.
+ * - SAPLING_GROWTH_MS = 3 game days: a felled tree's
+ *   sapling grows back into a tree — the 'harder to
+ *   grow back' case.
+ * - Per-KIND spans ride REGROW_SPAN_MS_BY_KIND (today:
+ *   the twilight fungus at 3 game days — the glow-moss
+ *   build's price); an entry's span is stored on the
+ *   entry and re-derived from the target id's kind on
+ *   restore, so spans stay single-sourced in the table.
  * - SHRINK_SCALE = 0.35: a shrunk plant renders at about a third
  *   of its size. Purely visual; yields are unaffected.
  * - REMOVE_YIELD_MULTIPLIER = 3: a removed plant pays 3x its
@@ -42,18 +57,27 @@
  * rewrites (it only filters or scales at render/target time).
  */
 
-import { CHUNK_SIZE } from '../constants';
+import { CHUNK_SIZE, GAME_DAY_MS } from '../constants';
 import { hashSeed } from './seed';
 import type { WorldGen } from './worldgen';
 import type { ScatterObject } from '../types';
 
-/** Lane-decided starting values — see the header. Not pinned. */
-export const REGROW_MS = 120_000;
-export const LOG_SPAWN_MS = 180_000;
+/** Regrow prices under Adam's 2026-11-03 floor pin — see the header. */
+export const REGROW_MS = GAME_DAY_MS;
+export const LOG_SPAWN_MS = GAME_DAY_MS;
 export const SHRINK_SCALE = 0.35;
 export const REMOVE_YIELD_MULTIPLIER = 3;
 /** A felled tree's sapling grows into a full tree over this long. */
-export const SAPLING_GROWTH_MS = 300_000;
+export const SAPLING_GROWTH_MS = 3 * GAME_DAY_MS;
+/**
+ * Per-kind regrow spans (2026-11-03): kinds priced above
+ * the floor under Adam's 'longer for stuff that's harder
+ * to grow back'. Consulted at the shrink call (harvest.ts)
+ * and re-derived from the target id's kind on restore.
+ */
+export const REGROW_SPAN_MS_BY_KIND: Readonly<Record<string, number>> = {
+  twilightFungus: 3 * GAME_DAY_MS,
+};
 /** Intentionally cleared ground suppresses saplings within this far. */
 export const CLEARED_SPOT_RADIUS = 3.0;
 
@@ -88,6 +112,8 @@ interface ShrunkEntry {
   harvestedAt: number;
   cx: number;
   cz: number;
+  /** This entry's regrow span (per-kind table or the floor). */
+  regrowMs: number;
 }
 
 interface PendingLogSpawn {
@@ -173,24 +199,26 @@ export class HarvestState {
 
   // --- Shrink / regrow ---
 
-  /** Mark a target harvested: it shrinks now, regrows at +REGROW_MS. */
-  shrink(targetId: string, cx: number, cz: number, now: number): void {
-    this.shrunk.set(targetId, { harvestedAt: now, cx, cz });
+  /** Mark a target harvested: it shrinks now, regrows at
+   *  +span (the per-kind table's price for its kind, or
+   *  the REGROW_MS floor when no span is passed). */
+  shrink(targetId: string, cx: number, cz: number, now: number, regrowMs: number = REGROW_MS): void {
+    this.shrunk.set(targetId, { harvestedAt: now, cx, cz, regrowMs });
     this.progress.delete(targetId);
     this._version++;
   }
 
-  /** Still regrowing (shrunk and regrow time not yet reached)? */
+  /** Still regrowing (shrunk and its span not yet reached)? */
   isRegrowing(targetId: string, now: number): boolean {
     const entry = this.shrunk.get(targetId);
-    return entry !== undefined && now < entry.harvestedAt + REGROW_MS;
+    return entry !== undefined && now < entry.harvestedAt + entry.regrowMs;
   }
 
   /** Milliseconds until regrow (0 when fully grown / never shrunk). */
   regrowRemainingMs(targetId: string, now: number): number {
     const entry = this.shrunk.get(targetId);
     if (!entry) return 0;
-    return Math.max(0, entry.harvestedAt + REGROW_MS - now);
+    return Math.max(0, entry.harvestedAt + entry.regrowMs - now);
   }
 
   /**
@@ -202,7 +230,7 @@ export class HarvestState {
   pruneExpiredRegrows(now: number): string[] {
     const chunks: string[] = [];
     for (const [id, entry] of this.shrunk) {
-      if (now >= entry.harvestedAt + REGROW_MS) {
+      if (now >= entry.harvestedAt + entry.regrowMs) {
         this.shrunk.delete(id);
         const key = `${entry.cx},${entry.cz}`;
         if (!chunks.includes(key)) chunks.push(key);
@@ -554,7 +582,18 @@ export class HarvestState {
         ) {
           continue;
         }
-        this.shrunk.set(e.id, { harvestedAt: e.harvestedAt, cx: e.cx, cz: e.cz });
+        this.shrunk.set(e.id, {
+          harvestedAt: e.harvestedAt,
+          cx: e.cx,
+          cz: e.cz,
+          // The span is NOT saved (the snapshot shape is
+          // unchanged): it re-derives from the target
+          // id's kind ('scatter:<cx>,<cz>:<kind>:<x>,<z>')
+          // against the per-kind table, floor otherwise —
+          // so a re-priced table re-prices restored
+          // entries too, from the one source.
+          regrowMs: REGROW_SPAN_MS_BY_KIND[e.id.split(':')[2] ?? ''] ?? REGROW_MS,
+        });
       }
     }
     if (Array.isArray(snap.removed)) {

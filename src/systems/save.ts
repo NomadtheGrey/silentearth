@@ -190,6 +190,7 @@ import {
   type InjurySnapshot,
   type InjuryStage,
 } from './injury';
+import type { ScentSnapshot } from './scent';
 // Single source for the ritual records (rituals.ts /
 // charms.ts own them; save.ts imports them — no second
 // mirror to drift, the placed-torch id lesson).
@@ -220,7 +221,8 @@ export type SaveCameraMode = 'first' | 'third' | 'behind';
  */
 export type SavedLightingProcess =
   | { method: 'flint'; clicks: number }
-  | { method: 'friction'; phase: 'waiting' | 'ready'; waitUntil: number };
+  | { method: 'friction'; phase: 'waiting' | 'ready'; waitUntil: number }
+  | { method: 'candle'; phase: 'waiting'; waitUntil: number };
 
 export interface SavedFire {
   /**
@@ -433,6 +435,39 @@ export interface SavedPatch {
 }
 
 /**
+ * One painted glow-moss patch, as saved (Background's
+ * mossPaintState register record — the MossPaintPatch
+ * seam facts, via DEV 2026-11-03): a CAVE-LOCAL mark
+ * carried WHOLE — { id, x, y, z, surface, nx, nz }:
+ * the 3D centre ON the surface (y = 0 for floors, the
+ * aim height for walls), whether it paints a wall or
+ * the floor, and the wall's axis normal. A mark stored
+ * without its height, surface, and normal cannot
+ * re-render — it has nowhere to stand. The id is
+ * POSITION-KEYED by the register
+ * ('moss-paint:<dimensionKey>:<x>,<y>,<z>', 2-dp) and
+ * stable across save/load with no counter, so the
+ * seat round-trips by construction. The jar patches'
+ * SavedPatch is the precedent; the whole-mark payload
+ * and the dimension grouping are the differences.
+ */
+export interface SavedMossPaintPatch {
+  id: string;
+  x: number;
+  y: number;
+  z: number;
+  surface: 'wall' | 'floor';
+  nx: number;
+  nz: number;
+}
+
+/** One dimension's painted patches, as saved. */
+export interface SavedMossPaintDimension {
+  dimensionKey: string;
+  patches: SavedMossPaintPatch[];
+}
+
+/**
  * The boot-at-the-mouth fact: the cave visit a save
  * was written in, as handed over by Background's
  * dimensionState.snapshot() (the shell passes its
@@ -642,6 +677,11 @@ export interface SaveData {
   cauldrons: SavedCauldron[];
   /** Jar-made ground patches (mud/water); [] for old saves. */
   patches: SavedPatch[];
+  /** Painted glow-moss patches, keyed by dimension
+   * (Background's mossPaintState register, HOSTED:
+   * Systems seats the record, the register owns its
+   * meaning); [] for old saves. */
+  mossPaint: SavedMossPaintDimension[];
   /** The cave visit this save was written in (boot-at-the-mouth
    * fact); null for surface saves and old saves. */
   dimensionVisit: SavedDimensionVisit | null;
@@ -681,6 +721,9 @@ export interface SaveData {
   weather: SavedWeather | null;
   /** Her injury stage (injury.ts); sound for old saves. */
   injury: InjurySnapshot;
+  /** Her applied scent (scent.ts); unscented for old
+   * saves. */
+  scent: ScentSnapshot;
   /** The last place she COMPLETED a sleep (the
    * crawl-back's encampment seat); null for old saves
    * and until she first sleeps. */
@@ -847,6 +890,24 @@ export interface SaveDraft {
     z: number;
   }>;
   /**
+   * Painted glow-moss patches from the mossPaintState
+   * register's snapshot ({ dimensionKey, patches }[]
+   * — the register's own shape). OPTIONAL, same
+   * trap-save pattern.
+   */
+  mossPaint?: ReadonlyArray<{
+    dimensionKey: string;
+    patches: ReadonlyArray<{
+      id: string;
+      x: number;
+      y: number;
+      z: number;
+      surface: 'wall' | 'floor';
+      nx: number;
+      nz: number;
+    }>;
+  }>;
+  /**
    * The cave visit, from dimensionState.snapshot() at
    * save time (the shell passes key + mouthId; the
    * snapshot's layer is not persisted — see
@@ -957,6 +1018,15 @@ export interface SaveDraft {
    */
   injury?: {
     stage?: string;
+  };
+  /**
+   * Her scent snapshot from ScentState.snapshot().
+   * OPTIONAL, same wiring-later pattern.
+   */
+  scent?: {
+    kind?: string | null;
+    category?: string | null;
+    secondsLeft?: number;
   };
   /**
    * The last completed sleep's seat (the shell writes
@@ -1276,6 +1346,27 @@ export function serializeSave(draft: SaveDraft): SaveData {
       x: patch.x,
       z: patch.z,
     })),
+    // Moss paint: the register's snapshot written
+    // AS-IS (dimension groups + patches verbatim,
+    // deep-copied, every patch WHOLE — draft, stored
+    // field, and restore all carry the snapshot's own
+    // shape; DEV's final settle 2026-11-03). The
+    // keyed-record variant stood for one commit
+    // (6365cc9, the countermand followed literally
+    // mid-crossing) and does not stand. Validation is
+    // restore()'s problem, not the writer's.
+    mossPaint: (draft.mossPaint ?? []).map((group) => ({
+      dimensionKey: group.dimensionKey,
+      patches: group.patches.map((patch) => ({
+        id: patch.id,
+        x: patch.x,
+        y: patch.y,
+        z: patch.z,
+        surface: patch.surface,
+        nx: patch.nx,
+        nz: patch.nz,
+      })),
+    })),
     // The visit fact: written AS-IS (dimension key +
     // entry mouth verbatim). Absent/null in the draft
     // writes null — a surface save.
@@ -1392,6 +1483,26 @@ export function serializeSave(draft: SaveDraft): SaveData {
           ? (draft.injury.stage as InjuryStage)
           : 'sound',
     },
+    // Scent: a record naming a real kind with a
+    // finite clock rides (category kept for the
+    // attractor, dropped otherwise); anything else
+    // writes the unscented record.
+    scent:
+      (draft.scent?.kind === 'repellent' ||
+        draft.scent?.kind === 'attractor') &&
+      typeof draft.scent?.secondsLeft === 'number' &&
+      Number.isFinite(draft.scent.secondsLeft) &&
+      draft.scent.secondsLeft > 0
+        ? {
+            kind: draft.scent.kind,
+            category:
+              draft.scent.kind === 'attractor' &&
+              typeof draft.scent.category === 'string'
+                ? draft.scent.category
+                : null,
+            secondsLeft: draft.scent.secondsLeft,
+          }
+        : { kind: null, category: null, secondsLeft: 0 },
     // Last sleep site: finite coords ride as-is;
     // anything else writes null (no completed sleep
     // on record — the encampment chain falls back).
@@ -1914,6 +2025,49 @@ export function deserializeSave(value: unknown): SaveData | null {
         });
       }
     }
+    // Moss paint is optional on read, same additive
+    // rule: an old v1 save without it loads with [].
+    // The field is a HOSTED snapshot: groups pass by
+    // their dimension key verbatim; within a group, a
+    // patch rides WHOLE — string id, finite centre
+    // (x, y, z), a surface this document knows ('wall'
+    // / 'floor' — the SavedPatch kind rule), finite
+    // normals — a bad patch drops alone, a group left
+    // empty is not kept. A non-array field loads [] —
+    // including a keyed-record field written by the
+    // one-commit variant (6365cc9): it drops whole
+    // rather than be misread.
+    const mossPaint: SavedMossPaintDimension[] = [];
+    if (value.mossPaint !== undefined && Array.isArray(value.mossPaint)) {
+      for (const group of value.mossPaint) {
+        if (!isRecord(group)) continue;
+        if (typeof group.dimensionKey !== 'string' || group.dimensionKey === '') continue;
+        if (!Array.isArray(group.patches)) continue;
+        const patches: SavedMossPaintPatch[] = [];
+        for (const entry of group.patches) {
+          if (!isRecord(entry)) continue;
+          if (typeof entry.id !== 'string' || entry.id === '') continue;
+          if (entry.surface !== 'wall' && entry.surface !== 'floor') continue;
+          if (
+            !Number.isFinite(entry.x) || !Number.isFinite(entry.y) ||
+            !Number.isFinite(entry.z) || !Number.isFinite(entry.nx) ||
+            !Number.isFinite(entry.nz)
+          ) continue;
+          patches.push({
+            id: entry.id,
+            x: entry.x as number,
+            y: entry.y as number,
+            z: entry.z as number,
+            surface: entry.surface,
+            nx: entry.nx as number,
+            nz: entry.nz as number,
+          });
+        }
+        if (patches.length > 0) {
+          mossPaint.push({ dimensionKey: group.dimensionKey, patches });
+        }
+      }
+    }
     // The visit fact is optional on read: an old v1
     // save without it loads with dimensionVisit: null.
     // A record passes with its key verbatim and its
@@ -2249,6 +2403,31 @@ export function deserializeSave(value: unknown): SaveData | null {
     ) {
       injury = { stage: value.injury.stage as InjuryStage };
     }
+    // Scent is optional on read, same additive rule:
+    // an old v1 save without it loads unscented. A
+    // record naming a real kind with a finite
+    // positive clock rides (category kept for the
+    // attractor); anything else loads unscented —
+    // ScentState.restore applies the same leniency
+    // at its own seat.
+    let scent: ScentSnapshot = { kind: null, category: null, secondsLeft: 0 };
+    if (
+      isRecord(value.scent) &&
+      (value.scent.kind === 'repellent' || value.scent.kind === 'attractor') &&
+      typeof value.scent.secondsLeft === 'number' &&
+      Number.isFinite(value.scent.secondsLeft) &&
+      value.scent.secondsLeft > 0
+    ) {
+      scent = {
+        kind: value.scent.kind,
+        category:
+          value.scent.kind === 'attractor' &&
+          typeof value.scent.category === 'string'
+            ? value.scent.category
+            : null,
+        secondsLeft: value.scent.secondsLeft,
+      };
+    }
     // The last sleep site is optional on read: a
     // record with finite coords rides; anything else
     // loads null (no completed sleep on record).
@@ -2428,6 +2607,7 @@ export function deserializeSave(value: unknown): SaveData | null {
       desks,
       cauldrons,
       patches,
+      mossPaint,
       dimensionVisit,
       acquisitionOrder,
       companions,
@@ -2441,6 +2621,7 @@ export function deserializeSave(value: unknown): SaveData | null {
       coldWet,
       weather,
       injury,
+      scent,
       lastSleepSite,
       feralWarned,
       stagings,

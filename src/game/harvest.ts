@@ -196,6 +196,7 @@ import {
 } from './proximity';
 import {
   harvestState,
+  REGROW_SPAN_MS_BY_KIND,
   REMOVE_YIELD_MULTIPLIER,
   scatterTargetId,
   type HarvestState,
@@ -999,12 +1000,15 @@ export function createHarvestOutcomeListener(
       // removes it from view.
       state.remove(req.targetId);
     } else {
-      // Ordinary sources SHRINK and REGROW (Adam, 2026-10-26).
+      // Ordinary sources SHRINK and REGROW (Adam, 2026-10-26;
+      // spans retimed 2026-11-03 under his day floor — the
+      // per-kind table prices the harder cases).
       state.shrink(
         req.targetId,
         Math.floor(req.x / CHUNK_SIZE),
         Math.floor(req.z / CHUNK_SIZE),
         nowMs,
+        REGROW_SPAN_MS_BY_KIND[source.kind],
       );
     }
     bus.emit('harvest:completed', {

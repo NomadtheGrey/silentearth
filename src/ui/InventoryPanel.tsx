@@ -138,6 +138,38 @@ export interface InventoryPanelProps {
   onTendItem?: (id: string) => void;
   onDumpItem?: (id: string) => void;
   /**
+   * Item ids that carry an Apply verb (the glow-paint
+   * dose). Items in this set gain an Apply button;
+   * applying itself is the caller's job. Omitted = no
+   * Apply buttons.
+   */
+  appliableIds?: ReadonlySet<string>;
+  /** Called when the player presses Apply on an item. Optional. */
+  onApplyItem?: (id: string) => void;
+  /**
+   * Item ids that carry a Douse verb (the scent
+   * brews). Items in this set gain a Douse button;
+   * dousing itself is the caller's job.
+   */
+  douseableIds?: ReadonlySet<string>;
+  /** Called when the player presses Douse on an item. Optional. */
+  onDouseItem?: (id: string) => void;
+  /**
+   * Item ids that carry a Wash verb (the mixed wash).
+   * Items in this set gain a Wash button.
+   */
+  washableIds?: ReadonlySet<string>;
+  /** Called when the player presses Wash on an item. Optional. */
+  onWashItem?: (id: string) => void;
+  /**
+   * Item ids that carry a Mix verb (the filled jar —
+   * mixing the wash). Items in this set gain a Mix
+   * button.
+   */
+  mixableIds?: ReadonlySet<string>;
+  /** Called when the player presses Mix on an item. Optional. */
+  onMixItem?: (id: string) => void;
+  /**
    * The shrew's wake door: rows whose item carries a
    * Wake verb (the found shrew skull), and its press.
    * The caller owns the grant; this layer only reports.
@@ -250,6 +282,14 @@ export function InventoryPanel({
   onDumpItem,
   tendableIds,
   onTendItem,
+  appliableIds,
+  onApplyItem,
+  douseableIds,
+  onDouseItem,
+  washableIds,
+  onWashItem,
+  mixableIds,
+  onMixItem,
   wakeableIds,
   onWakeItem,
   onInfoItem,
@@ -298,6 +338,18 @@ export function InventoryPanel({
     if ((tendableIds?.has(item.id) ?? false) && onTendItem) {
       verbs.push({ id: 'tend', label: 'Tend', ariaLabel: `Tend with ${item.name}` });
     }
+    if ((appliableIds?.has(item.id) ?? false) && onApplyItem) {
+      verbs.push({ id: 'apply', label: 'Apply', ariaLabel: `Apply ${item.name}` });
+    }
+    if ((douseableIds?.has(item.id) ?? false) && onDouseItem) {
+      verbs.push({ id: 'douse', label: 'Douse', ariaLabel: `Douse with ${item.name}` });
+    }
+    if ((washableIds?.has(item.id) ?? false) && onWashItem) {
+      verbs.push({ id: 'wash', label: 'Wash', ariaLabel: `Wash with ${item.name}` });
+    }
+    if ((mixableIds?.has(item.id) ?? false) && onMixItem) {
+      verbs.push({ id: 'mix', label: 'Mix', ariaLabel: `Mix wash with ${item.name}` });
+    }
     if ((wakeableIds?.has(item.id) ?? false) && onWakeItem) {
       verbs.push({ id: 'wake', label: 'Wake', ariaLabel: `Wake ${item.name}` });
     }
@@ -331,6 +383,10 @@ export function InventoryPanel({
     else if (verbId === 'read') onReadItem?.(itemId);
     else if (verbId === 'dump') onDumpItem?.(itemId);
     else if (verbId === 'tend') onTendItem?.(itemId);
+    else if (verbId === 'apply') onApplyItem?.(itemId);
+    else if (verbId === 'douse') onDouseItem?.(itemId);
+    else if (verbId === 'wash') onWashItem?.(itemId);
+    else if (verbId === 'mix') onMixItem?.(itemId);
     else if (verbId === 'wake') onWakeItem?.(itemId);
     else if (verbId === 'deposit') onDepositItem?.(itemId);
     else if (verbId === 'drop-one') onDropItem?.(itemId);

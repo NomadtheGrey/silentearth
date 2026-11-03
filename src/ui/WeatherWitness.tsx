@@ -57,6 +57,13 @@ export interface WeatherWitnessProps {
    * number.
    */
   injury?: { stage: InjuryStageKey };
+  /**
+   * The scent she wears, from Systems' ScentState
+   * facts. The shell passes it only while a scent
+   * stands — the witness stands when there is
+   * something to witness, like the injury pill.
+   */
+  scent?: { kind: ScentKindKey; category: string | null };
   /** Look for the pills. Default "mire" (the world outside). */
   theme?: UiThemeName;
   className?: string;
@@ -76,6 +83,31 @@ const INJURY_DOT: Record<InjuryStageKey, string> = {
   hurt: '#d4b768',
   wounded: '#c47b3a',
   critical: '#b03a2e',
+};
+
+/** Scent kinds, exactly as Systems' ScentState names them. */
+export type ScentKindKey = 'repellent' | 'attractor';
+
+/**
+ * Display words over Systems' scent facts (DRAFT —
+ * pin pass). Systems names no stage words; the
+ * witness voices its own from kind + category (the
+ * injury pill's idiom).
+ */
+export function scentWord(
+  kind: ScentKindKey,
+  category: string | null,
+): string {
+  if (kind === 'repellent') return 'Repellent';
+  if (category === 'prey') return 'Lure · Prey';
+  if (category === 'predator') return 'Lure · Predator';
+  return 'Lure';
+}
+
+/** Dot colours for the scents: rust keeps off, green draws in. */
+const SCENT_DOT: Record<ScentKindKey, string> = {
+  repellent: '#c47b3a',
+  attractor: '#7da05c',
 };
 
 /** Display words over Systems' keys (DRAFT — W4 pin pass). */
@@ -188,10 +220,11 @@ export function WeatherWitness({
   cold,
   wet,
   injury,
+  scent,
   theme = 'mire',
   className,
 }: WeatherWitnessProps) {
-  if (!cold && !wet && !injury) return null;
+  if (!cold && !wet && !injury && !scent) return null;
   return (
     <div className={'flex flex-col gap-2 ' + (className ?? '')}>
       {cold ? (
@@ -217,6 +250,14 @@ export function WeatherWitness({
           label="Injury"
           word={INJURY_WORD[injury.stage]}
           dot={INJURY_DOT[injury.stage]}
+          theme={theme}
+        />
+      ) : null}
+      {scent ? (
+        <StagePill
+          label="Scent"
+          word={scentWord(scent.kind, scent.category)}
+          dot={SCENT_DOT[scent.kind]}
           theme={theme}
         />
       ) : null}
