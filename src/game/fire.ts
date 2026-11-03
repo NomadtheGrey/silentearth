@@ -65,8 +65,9 @@
 /** Placeable fire entity types, in ladder order. */
 export type FireType = 'campfire' | 'hearth' | 'kiln';
 
-/** How a fire gets lit. Flint is fast; friction is slow. */
-export type LightingMethod = 'flint' | 'friction';
+/** How a fire gets lit. Flint is fast; friction is slow;
+ *  a candle is a flame already lit, carried to the tinder. */
+export type LightingMethod = 'flint' | 'friction' | 'candle';
 
 /**
  * Flint clicks to ignition (lane-decided, flagged): click-click-
@@ -80,6 +81,16 @@ export const FLINT_CLICKS = 3;
  * flagged): inside Adam's 20–30 s window, at 25 s.
  */
 export const FRICTION_WAIT_MS = 25_000;
+
+/**
+ * Candle lighting time, in ms (2026-11-03): the price
+ * Systems' fire.ts names for the method — 2 s, one beat
+ * faster than flint's three clicks — and the two unions'
+ * prices must agree (one price, both twins). The candle
+ * is KEPT, never consumed: this is only the time the
+ * flame takes to catch.
+ */
+export const CANDLE_WAIT_MS = 2_000;
 
 /** Fire entity definition: display + role only, no mechanics. */
 export interface FireDef {
