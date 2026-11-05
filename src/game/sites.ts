@@ -1273,6 +1273,14 @@ export function villageSite(
         hearthSpot: spot,
         smokeAnchor: { x: chimney.x, z: chimney.z, y: 5.2 },
       };
+      // THE HEARTHSTONE SEAT (2026-11-05, DEV filing from
+      // Adam's playtest): the carrier resolves at this
+      // spot, so a dressed stone stands at it — charred,
+      // as the village is burnt — sized to read at a
+      // glance. No wall box (the farmhouse great stone's
+      // precedent: low, and she steps to it). The carrier
+      // point and every fact stay exactly where they were.
+      feat('hearthStoneCharred', spot.x, spot.z, 0, 1.1, theta);
     }
   });
 

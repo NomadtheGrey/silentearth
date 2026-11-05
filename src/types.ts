@@ -141,6 +141,7 @@ export type ScatterKind =
   | 'farmRoof'
   | 'farmPorch'
   | 'hearthStone'
+  | 'hearthStoneCharred'
   // Site-pass kinds (the Farmhouse FAMILY, 2026-10-31 —
   // same rule; the two-story variant-kind kit: upper-story
   // wall segments in two window rhythms, an interior stair
