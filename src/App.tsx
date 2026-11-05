@@ -6889,6 +6889,19 @@ export default function App() {
     // probes' pattern).
     installGuideProbes({
       groveDiscovered: () => discoveryStateRef.current.groveDiscovered(),
+      // THE LESSER-GLEAM PROBE (Background's grove
+      // family, 9238bbd; installed 2026-11-05): the
+      // raven's lesser retarget skips groves she has
+      // already gleamed — a lesser grove's carrier is
+      // a Circle fragment (id '<grove key>:fragment'),
+      // so gleamed = that id stands among her Circle
+      // copies. Uninstalled, the probe defaulted
+      // ungleamed forever and the bird would have led
+      // her back to harvested groves.
+      lesserGroveGleamed: (fragmentId) =>
+        (
+          fragmentStateRef.current.progressFor('circle')?.copies ?? []
+        ).some((copy) => copy.fragmentId === fragmentId),
     });
     // TRUST MARKER INSTALL (Background's marker layer,
     // 2026-11-01): the renderer's trust sprites read
