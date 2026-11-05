@@ -967,6 +967,19 @@ export function createHarvestOutcomeListener(
         );
       }
     }
+    // Cuttings — the bush's one gift (Adam's Hedge rule,
+    // 2026-11-05): the FIRST time she harvests a bush it
+    // gives 1–2 cuttings (DRAFT) alongside its usual
+    // finds, and never again. Rolled here with the yields;
+    // the id is recorded below at completion only — a
+    // press that failed, or is still mid-progress on a
+    // multi-step source, never reaches this point, so the
+    // gift cannot burn early.
+    const cuttingsGift =
+      source.kind === 'bush' && !state.hasGivenCuttings(req.targetId)
+        ? 1 + (rng() < 0.5 ? 1 : 0)
+        : 0;
+    if (cuttingsGift > 0) mergeYields(yields, 'cuttings', cuttingsGift);
     // Drop any empty-item entry (a source without a primary yield
     // cannot reach here — harvestable sources all have one — but a
     // merged '' would corrupt the inventory, so never emit it).
@@ -1011,6 +1024,9 @@ export function createHarvestOutcomeListener(
         REGROW_SPAN_MS_BY_KIND[source.kind],
       );
     }
+    // The harvest is complete (grant-or-pile cannot fail):
+    // only now does the bush's gift count as given.
+    if (cuttingsGift > 0) state.markCuttingsGiven(req.targetId);
     bus.emit('harvest:completed', {
       targetId: req.targetId,
       sourceId: req.sourceId,

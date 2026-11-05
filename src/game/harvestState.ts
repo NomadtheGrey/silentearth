@@ -173,6 +173,14 @@ export interface HarvestStateSnapshot {
   saplings: Sapling[];
   saplingCounter: number;
   clearedSpots: Array<{ x: number; z: number }>;
+  /**
+   * Bush scatter target ids that have given their one
+   * gift of cuttings (Adam's Hedge rule, 2026-11-05:
+   * a bush gives 1–2 cuttings the FIRST time she
+   * harvests it, never again). Mirrors Systems'
+   * SavedHarvestState.cuttingsGiven by literal.
+   */
+  cuttingsGiven: string[];
 }
 
 /** World harvest state: shrink/regrow + removed + spawned logs +
@@ -188,7 +196,24 @@ export class HarvestState {
   private saplings = new Map<string, Sapling>();
   private saplingCounter = 0;
   private clearedSpots: ClearedSpot[] = [];
+  /** Bush target ids that have given their cuttings (see the snapshot). */
+  private cuttingsGiven = new Set<string>();
   private _version = 0;
+
+  /** True when this bush target has already given its cuttings. */
+  hasGivenCuttings(id: string): boolean {
+    return this.cuttingsGiven.has(id);
+  }
+
+  /**
+   * Record a bush's cuttings gift. The harvest listener
+   * calls this ONLY on a completed harvest — a press
+   * that failed or is still mid-progress must never
+   * burn the bush's one gift (Systems' seam, 2026-11-05).
+   */
+  markCuttingsGiven(id: string): void {
+    this.cuttingsGiven.add(id);
+  }
 
   /** Bumped on every state change the renderer must redraw for
    *  (shrink, remove, spawn, regrow prune). The renderer polls it
@@ -553,6 +578,7 @@ export class HarvestState {
       saplings: [...this.saplings.values()].map((s) => ({ ...s })),
       saplingCounter: this.saplingCounter,
       clearedSpots: this.clearedSpots.map((s) => ({ ...s })),
+      cuttingsGiven: [...this.cuttingsGiven],
     };
   }
 
@@ -698,6 +724,14 @@ export class HarvestState {
         this.clearedSpots.push({ x: s.x, z: s.z });
       }
     }
+    // Cuttings gifts (2026-11-05): lenient — a snapshot
+    // written before this field existed simply has no
+    // cuttings history; those bushes still hold their gift.
+    if (Array.isArray(snap.cuttingsGiven)) {
+      for (const id of snap.cuttingsGiven) {
+        if (typeof id === 'string' && id !== '') this.cuttingsGiven.add(id);
+      }
+    }
   }
 
   /** Seed change / world reset: shrink, removed, progress, spawned
@@ -714,6 +748,7 @@ export class HarvestState {
     this.saplings.clear();
     this.saplingCounter = 0;
     this.clearedSpots = [];
+    this.cuttingsGiven.clear();
     this._version++;
   }
 }

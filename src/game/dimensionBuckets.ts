@@ -109,6 +109,7 @@ export function emptyHarvestSnapshot(): HarvestStateSnapshot {
     saplings: [],
     saplingCounter: 0,
     clearedSpots: [],
+    cuttingsGiven: [],
   };
 }
 
@@ -225,6 +226,7 @@ class DimensionBuckets {
         saplings: h.saplings.map((e) => ({ ...e })),
         saplingCounter: h.saplingCounter,
         clearedSpots: h.clearedSpots.map((e) => ({ ...e })),
+        cuttingsGiven: [...(h.cuttingsGiven ?? [])],
       },
     };
   }
