@@ -100,9 +100,18 @@ class FireState {
     bus.on('game:pause-changed', (p) => this.onPauseChanged(p.paused));
   }
 
-  placeFire(type: FireType, x: number, z: number, rotY = 0): PlacedFire {
+  placeFire(type: FireType, x: number, z: number, rotY = 0, lit = false): PlacedFire {
     const id = `fire:${type}:${++this.counter}`;
-    const fire: PlacedFire = { id, type, x, z, rotY, lit: false, lighting: null };
+    // The lit seat (the hearth's move, 2026-11-05): the
+    // shell places a carried lit hearth from Systems'
+    // hearthItemFireLit read of the consumed item, and
+    // the re-placed fire stands already burning — the
+    // fire rides the move in both directions. A fire
+    // born lit carries no lighting process (the
+    // machine's invariant: a lit fire never has one).
+    // Mid-lighting progress does NOT ride (Systems'
+    // ruling) — only lit crosses.
+    const fire: PlacedFire = { id, type, x, z, rotY, lit, lighting: null };
     this.fires.set(id, fire);
     bus.emit('fire:placed', { id, type, x, z, rotY });
     return fire;
@@ -110,6 +119,26 @@ class FireState {
 
   get(id: string): PlacedFire | undefined {
     return this.fires.get(id);
+  }
+
+  /**
+   * The pickup's entity half (Adam's furniture pattern,
+   * extended to the hearth 2026-11-05 — heavy but
+   * movable, and THE FIRE RIDES THE MOVE: never
+   * extinguished by being carried). Systems' pickup
+   * grant decides; the shell removes on its success.
+   * The removed record hands back AS IT STOOD — type,
+   * facing, LIT state, and any lighting process in
+   * flight — so the grant can carry the lit state into
+   * whatever the move becomes. Null on an unknown id;
+   * the renderer rebuilds from the event.
+   */
+  removeFire(id: string): PlacedFire | null {
+    const fire = this.fires.get(id);
+    if (!fire) return null;
+    this.fires.delete(id);
+    bus.emit('fire:removed', { id, type: fire.type, lit: fire.lit });
+    return { ...fire, lighting: fire.lighting ? { ...fire.lighting } : null };
   }
 
   snapshot(): PlacedFire[] {
