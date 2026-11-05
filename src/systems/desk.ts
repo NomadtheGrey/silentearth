@@ -29,9 +29,13 @@
 // build. Placing a desk is not crafting it (crafting
 // stays hunger-gated through executeCraft).
 //
-// NO PICKUP (altar precedent, flagged follow-up): only
-// the place direction is built. Whether she can ever
-// move / remove a placed desk is Adam's word later.
+// PICKUP (Adam's ruling, 2026-11-05 — the desk moves
+// too: "Haven't met the woman yet who doesn't like to
+// rearrange furniture"): pickupDesk below, the bench's
+// mirror — with one guard the bench doesn't need: a
+// desk holding the seated grimoire refuses until the
+// book is taken (removing the record would strand the
+// one grimoire; the seat section below owns that act).
 // MULTIPLE desks are legitimate (crafting.ts leaves
 // the desk unlisted: a second camp legitimately
 // wants a second desk).
@@ -82,6 +86,34 @@ export function placeDesk(
   }
   inventory.remove(ITEMS.writingDesk, 1);
   return { placed: true, desk: { item: ITEMS.writingDesk, x, z } };
+}
+
+/** Pickup outcome. `granted` is 1 on success. */
+export type PickupDeskOutcome =
+  | { taken: true; granted: 1 }
+  | { taken: false; reason: string };
+
+/**
+ * Pick a placed desk back up into the pack (Adam's
+ * ruling, 2026-11-05 — the desk moves too). The shell
+ * removes the placed record ONLY on success. Refuses,
+ * touching nothing, while the grimoire rests on it
+ * (take the book first — the seat's own act) and when
+ * the pack cannot hold the desk's 4 lb (the standing
+ * catch law: the desk stays standing).
+ */
+export function pickupDesk(
+  inventory: PersonalInventory,
+  desk: DeskSeat,
+): PickupDeskOutcome {
+  if (desk.grimoire === true) {
+    return { taken: false, reason: 'Take the grimoire from it first.' };
+  }
+  const grant = inventory.addPartial(ITEMS.writingDesk, 1);
+  if (grant.granted <= 0) {
+    return { taken: false, reason: 'No room in the pack for it.' };
+  }
+  return { taken: true, granted: 1 };
 }
 
 // ---------------------------------------------------------------------------
