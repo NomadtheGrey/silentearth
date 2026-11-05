@@ -32,11 +32,13 @@
 // build. Placing a bench is not crafting it (crafting
 // stays hunger-gated through executeCraft).
 //
-// NO PICKUP (desk precedent, flagged follow-up): only
-// the place direction is built. Whether she can move
-// a placed bench (the stump's bench rides the
-// Trundle-Tool; this free-standing one has no such
-// ruling yet) is Adam's word later — not assumed here.
+// PICKUP (Adam's ruling, 2026-11-05 — "the bench
+// moves"): the mirror act below (pickupWorkstation,
+// the tent's Take-down idiom). The shell removes the
+// placed record ONLY on a grant: the bench is 4 lb
+// carried, so a pack that cannot hold it grants 0
+// and the bench STAYS standing (the standing catch
+// law — the refusal is the door's voice for the 0).
 // MULTIPLE benches are legitimate (the desk's logic:
 // a second camp legitimately wants a second bench).
 //
@@ -91,4 +93,20 @@ export function placeWorkstation(
     placed: true,
     workstation: { item: ITEMS.craftedWorkstation, x, z },
   };
+}
+
+/**
+ * Grant for picking a placed bench back up: 1 = the
+ * bench is back in the pack as 'crafted-workstation'
+ * (the shell removes the placed record); 0 = the
+ * pack cannot hold its 4 lb, the placed bench stays
+ * standing where it is (pile-pickup rule: take
+ * granted only). The faced record is the shell's to
+ * identify — this grant only judges the taking.
+ */
+export function pickupWorkstation(inventory: PersonalInventory): {
+  granted: number;
+} {
+  const grant = inventory.addPartial(ITEMS.craftedWorkstation, 1);
+  return { granted: grant.granted };
 }
