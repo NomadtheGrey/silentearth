@@ -21,7 +21,7 @@
 
 import type { BiomeId, CameraMode } from '../types';
 import type { FireType, LightingMethod } from './fire';
-import type { HouseType } from './shelter';
+import type { HouseType, ShelterRoofClass } from './shelter';
 import type { SleepFailedReason } from './sleep';
 import type { TrapType } from './traps';
 import type { PermitTier } from './objects';
@@ -494,7 +494,7 @@ export interface EventMap {
    * or null. First recompute always emits (multiplier starts
    * null, so the initial state always differs).
    */
-  'shelter:changed': { multiplier: number; houseId: string | null };
+  'shelter:changed': { multiplier: number; houseId: string | null; roof: ShelterRoofClass };
   /**
    * Sleep until sunrise (Adam 2026-10-27 — see sleep.ts).
    * 'sleep:requested' is UI's sleep button → the sleep outcome
