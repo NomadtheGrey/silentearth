@@ -43,6 +43,14 @@ export interface BuildRecord {
 
 const ALL_RECORDS: BuildRecord[] = [
   {
+    merge: 'Merge #81',
+    pr: 124,
+    sha: 'b0511c7',
+    date: '2026-11-05',
+    what: 'FURNITURE AND FRAGMENTS — the Home marks keep their own tallies now: Returning, Hedge, and HearthHome climb at three, six, and ten of their own fragments, Naming stands whole at three, and the hearthstones deal them — the farmhouse great stone, every village hearthstone, the Burnt Village each showing one mark by its own hash, its legibility untouched. And the crafted bench comes home: it places where she stands, stands on its own legs, lends its station to the wheel and the loom, and picks back up when she wants the room different — the desk moves too, once whatever rests on it is lifted off first.',
+    why: "Adam's word: wire the Home pillar's marks and fix the bench he crafted — the journal keeping each new mark's tally from its first fragment, as the marks rows already stand ready to do.",
+  },
+  {
     merge: 'Merge #80',
     pr: 123,
     sha: '70bcfe0',
