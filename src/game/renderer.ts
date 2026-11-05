@@ -65,6 +65,7 @@ import { riverParamsFor, riverRibbonForChunk } from './river';
 import { barnSite, caveMouthSite, chapelSite, drownedMillSite, farmhouseSite, generalStoreSite, groveSite, pushOutOfWalls, railSidingSite, schoolhouseSite, siloSite, sunkenRoadSite, villageSite, wallsNearSites, type SiteFootprint } from './sites';
 import { caveFootprintFor, caveInstancesInRect, caveLayoutForKey, caveMouthsNear, caveSurfaceAim, type CaveSurfaceHit } from './caves';
 import { mossPaintState } from './mossPaintState';
+import { SURFACE_DIMENSION_KEY, type NamedPlace, type NamedPlacesState } from './namedPlaces';
 import { isUpstairsKey, UPSTAIRS_BACKGROUND, UPSTAIRS_FOG_DENSITY } from './attics';
 import { homesteadInstancesInRect } from './homesteads';
 import { farmhouseInstancesInRect } from './farmhouses';
@@ -247,6 +248,49 @@ export const PLACEMENT_TINT_NEUTRAL = 0xe8e0c8;
 export const PLACEMENT_TINT_VALID = 0x7dc242;
 export const PLACEMENT_TINT_INVALID = 0xd84a3a;
 export const PLACEMENT_PREVIEW_LIFT_M = 0.03;
+
+/**
+ * NAMING TAGS (Adam, 2026-11-05): how far a named place's
+ * tag reaches — a place within this distance of her, in
+ * her current dimension, stands its name over the spot
+ * she claimed. DRAFT for Adam's pin pass.
+ */
+export const TAG_RANGE_M = 100;
+
+/** One named place as the tag feed serves it. */
+export interface NamedPlaceTag {
+  id: string;
+  /** Her name for the spot, verbatim. */
+  name: string;
+  x: number;
+  /** Anchor height: the place's planted y where it
+   *  carries one, else the ground plane. */
+  y: number;
+  z: number;
+  distanceM: number;
+}
+
+/**
+ * The tag feed's shaping, pure: every place within
+ * rangeM of (px, pz), nearest first, anchors resolved.
+ * The class feed composes it over the register's
+ * current-dimension list.
+ */
+export function namedPlaceTagsInRange(
+  places: readonly NamedPlace[],
+  px: number,
+  pz: number,
+  rangeM: number,
+): NamedPlaceTag[] {
+  const out: NamedPlaceTag[] = [];
+  for (const p of places) {
+    const d = Math.hypot(p.x - px, p.z - pz);
+    if (!(d <= rangeM)) continue;
+    out.push({ id: p.id, name: p.name, x: p.x, y: p.y ?? 0, z: p.z, distanceM: d });
+  }
+  out.sort((a, b) => a.distanceM - b.distanceM);
+  return out;
+}
 
 /**
  * The unlit campfire mesh: stone ring + ash bed + crossed base
@@ -845,6 +889,17 @@ export class WorldRenderer {
    * whole story, byte-identical to before.
    */
   private feralFactsProvider: ((a: AnimalInstance) => { defenderPos: { x: number; z: number } | null; repelled?: boolean } | null) | null = null;
+  /**
+   * NAMING TAGS: the shell's seat for the named-places
+   * register (Systems' NamedPlacesState), in the
+   * feral-facts provider's shape. The renderer reads it
+   * read-only: the tag feed takes the CURRENT dimension's
+   * places from it — the dimension read off the gen being
+   * rendered, so a cave's names can never tag topside and
+   * travel needs no rewiring. Unregistered, the feed is
+   * empty and nothing tags.
+   */
+  private namedPlacesProvider: (() => NamedPlacesState | null) | null = null;
   /** Her injury movement factor (DEV's ruling: engine-
    *  side, composed at the terrain speed query's seat).
    *  The shell sets it from her stage; 1 = sound. */
@@ -1826,6 +1881,31 @@ export class WorldRenderer {
   /** Register the shell's feral-facts provider (2026-11-03): see the field's note. */
   setFeralFactsProvider(fn: ((a: AnimalInstance) => { defenderPos: { x: number; z: number } | null; repelled?: boolean } | null) | null): void {
     this.feralFactsProvider = fn;
+  }
+
+  /** Seat the named-places register for the tag feed: see the field's note. */
+  setNamedPlacesProvider(fn: (() => NamedPlacesState | null) | null): void {
+    this.namedPlacesProvider = fn;
+  }
+
+  /**
+   * The named places whose tags stand now: the current
+   * dimension's places within TAG_RANGE_M of her,
+   * nearest first, names verbatim — the tag feed for the
+   * shell's pill, in the creature tag's shape. Every
+   * in-range place tags (Adam: wherever she names it,
+   * whatever she names it), not nearest-only.
+   */
+  getNamedPlaceTags(): NamedPlaceTag[] {
+    const state = this.namedPlacesProvider?.() ?? null;
+    if (!state) return [];
+    const key = this.gen.dimensionKey ?? SURFACE_DIMENSION_KEY;
+    return namedPlaceTagsInRange(
+      state.inDimension(key),
+      this.player.x,
+      this.player.z,
+      TAG_RANGE_M,
+    );
   }
 
   /** Set her injury movement factor (1 = sound; the shell derives it from her stage's INJURY_EFFECTS). */
