@@ -189,6 +189,12 @@ export const ITEMS = {
   preyLure: 'prey-lure',
   predatorLure: 'predator-lure',
   wash: 'wash',
+  // The glass chain (2026-11-05 — Adam's chain: stone
+  // ground to sand, sand melted to glass, glass
+  // fashioned to the ball).
+  sand: 'sand',
+  glass: 'glass',
+  crystalBall: 'crystal-ball',
   // Camping (2026-10-28 — sleeping bag + tent; see camping.ts).
   sleepingBag: 'sleeping-bag',
   tent: 'tent',
@@ -1272,6 +1278,58 @@ const DRAFT_RECIPES: Recipe[] = [
     station: 'kiln',
     notes:
       'DRAFT. Fired in the kiln. Use: hearth / kiln building, TBD.',
+  },
+
+  // --- The glass chain (Adam, 2026-11-05): river stone ground to
+  // --- sand at the workstation, sand melted to glass in the kiln,
+  // --- glass fashioned into a crystal ball in the kiln. His
+  // --- simplified chain (sand alone melts — the ash flux of the
+  // --- morning draft is set aside). All quantities DRAFT.
+  {
+    id: 'sand',
+    name: 'Sand',
+    status: 'draft',
+    output: { item: ITEMS.sand, quantity: 2 },
+    station: 'workstation',
+    ingredients: [i(ITEMS.riverStone, 1)],
+    notes:
+      'DRAFT (2026-11-05, Adam\'s glass chain, step one — ' +
+      'defined by him this morning). At any stump or crafted ' +
+      'workstation (the stump counts, per the starter-' +
+      'workstation law) she grinds river stone into sand: ' +
+      'one stone makes two measures. The grit feeds the ' +
+      'kiln step below. Numbers draft.',
+  },
+  {
+    id: 'glass',
+    name: 'Glass',
+    status: 'draft',
+    output: { item: ITEMS.glass, quantity: 1 },
+    station: 'kiln',
+    ingredients: [i(ITEMS.sand, 1)],
+    notes:
+      'DRAFT (2026-11-05, the chain\'s middle link). Sand in ' +
+      'the kiln melts and cools to a lump of glass — sand ' +
+      'alone, per Adam\'s simplification. Its one fashioning ' +
+      'so far is the ball below. Numbers draft.',
+  },
+  {
+    id: 'crystal-ball',
+    name: 'Crystal Ball',
+    status: 'draft',
+    output: { item: ITEMS.crystalBall, quantity: 1 },
+    station: 'kiln',
+    ingredients: [i(ITEMS.glass, 1)],
+    notes:
+      'DRAFT (2026-11-05, the chain\'s end). One lump of her ' +
+      'glass, reheated in the kiln and coaxed round — a MADE ' +
+      'scrying medium: one of the two lawful media for ' +
+      'the Mark of Returning\'s farthest reach (T3) — the ' +
+      'ball, or a water source (Adam, 2026-11-05; the ' +
+      'magic map was retired the same morning, the ball ' +
+      'covering its seat). NO scry mechanics in this landing — ' +
+      'the item and its making only; what it shows is a ' +
+      'later build. Numbers draft.',
   },
 
   // --- Carrying containers. Bonuses are Adam's pinned numbers; the

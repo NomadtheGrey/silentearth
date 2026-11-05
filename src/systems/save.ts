@@ -468,6 +468,27 @@ export interface SavedMossPaintDimension {
 }
 
 /**
+ * One named place, as saved (the game/namedPlaces
+ * register's own shape, HOSTED: Systems seats the
+ * record, the register owns its meaning — the moss
+ * paint arrangement): her name VERBATIM, the spot she
+ * stood at (y null where height is not relevant), the
+ * dimension it stands in ('surface', 'cave:<id>',
+ * opaque), and the world-day she named it. The id is
+ * position-keyed by the register and stable across
+ * save/load.
+ */
+export interface SavedNamedPlace {
+  id: string;
+  name: string;
+  x: number;
+  y: number | null;
+  z: number;
+  dimensionKey: string;
+  day: number;
+}
+
+/**
  * The boot-at-the-mouth fact: the cave visit a save
  * was written in, as handed over by Background's
  * dimensionState.snapshot() (the shell passes its
@@ -732,6 +753,9 @@ export interface SaveData {
    * Systems seats the record, the register owns its
    * meaning); [] for old saves. */
   mossPaint: SavedMossPaintDimension[];
+  /** Places she has named (the game/namedPlaces
+   * register, HOSTED); [] for old saves. */
+  namedPlaces: SavedNamedPlace[];
   /** The cave visit this save was written in (boot-at-the-mouth
    * fact); null for surface saves and old saves. */
   dimensionVisit: SavedDimensionVisit | null;
@@ -967,6 +991,20 @@ export interface SaveDraft {
       nx: number;
       nz: number;
     }>;
+  }>;
+  /**
+   * Named places from the namedPlaces register's
+   * snapshot (the register's own shape). OPTIONAL,
+   * same trap-save pattern.
+   */
+  namedPlaces?: ReadonlyArray<{
+    id: string;
+    name: string;
+    x: number;
+    y: number | null;
+    z: number;
+    dimensionKey: string;
+    day: number;
   }>;
   /**
    * The cave visit, from dimensionState.snapshot() at
@@ -1427,6 +1465,19 @@ export function serializeSave(draft: SaveDraft): SaveData {
         nx: patch.nx,
         nz: patch.nz,
       })),
+    })),
+    // Named places: the register's snapshot written
+    // AS-IS (verbatim names, spots, dimensions, days —
+    // deep-copied). Validation is restore()'s problem,
+    // not the writer's (the moss paint discipline).
+    namedPlaces: (draft.namedPlaces ?? []).map((place) => ({
+      id: place.id,
+      name: place.name,
+      x: place.x,
+      y: place.y,
+      z: place.z,
+      dimensionKey: place.dimensionKey,
+      day: place.day,
     })),
     // The visit fact: written AS-IS (dimension key +
     // entry mouth verbatim). Absent/null in the draft
@@ -2146,6 +2197,36 @@ export function deserializeSave(value: unknown): SaveData | null {
         }
       }
     }
+    // Named places are optional on read: an old v1
+    // save without the field loads namedPlaces: [].
+    // Per-entry leniency (the SavedPatch idiom): a
+    // place rides WHOLE — non-empty string id, string
+    // name (verbatim, even odd — the register guards
+    // blanks at the act), finite x/z, non-empty
+    // dimension key, finite day; a bad y (the optional
+    // axis) reads as null rather than dropping the
+    // place. A bad entry drops alone; a non-array
+    // field loads [].
+    const namedPlaces: SavedNamedPlace[] = [];
+    if (value.namedPlaces !== undefined && Array.isArray(value.namedPlaces)) {
+      for (const entry of value.namedPlaces) {
+        if (!isRecord(entry)) continue;
+        if (typeof entry.id !== 'string' || entry.id === '') continue;
+        if (typeof entry.name !== 'string') continue;
+        if (!Number.isFinite(entry.x) || !Number.isFinite(entry.z)) continue;
+        if (typeof entry.dimensionKey !== 'string' || entry.dimensionKey === '') continue;
+        if (!Number.isFinite(entry.day)) continue;
+        namedPlaces.push({
+          id: entry.id,
+          name: entry.name,
+          x: entry.x as number,
+          y: Number.isFinite(entry.y) ? (entry.y as number) : null,
+          z: entry.z as number,
+          dimensionKey: entry.dimensionKey,
+          day: entry.day as number,
+        });
+      }
+    }
     // The visit fact is optional on read: an old v1
     // save without it loads with dimensionVisit: null.
     // A record passes with its key verbatim and its
@@ -2718,6 +2799,7 @@ export function deserializeSave(value: unknown): SaveData | null {
       cauldrons,
       patches,
       mossPaint,
+      namedPlaces,
       dimensionVisit,
       acquisitionOrder,
       companions,
