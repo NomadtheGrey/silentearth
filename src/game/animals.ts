@@ -235,6 +235,36 @@ export const FERAL_SAFE_HOUSE_M = 25;
  *  real threat. The snake's place-strike is a follow-up
  *  question, held — not silently included. */
 export const FERAL_DANGEROUS_KINDS: readonly AnimalKind[] = ['wolf', 'bear'];
+
+/** THE HEDGE'S FIELD (Adam's Hedge design; DEV dispatch
+ * 2026-11-05; Background's half, reading Systems'
+ * HedgeState through the renderer's facts): what a
+ * ROOTED ring does to the beasts inside it. All DRAFT
+ * for Adam's pin pass.
+ * - SLOW: an enemy inside a rooted ring moves at this
+ *   factor (T1) — stalk, lunge, and ambient alike.
+ * - TELEGRAPH: a strike wound up from inside (T1), or
+ *   against a target standing inside (T2), takes this
+ *   long instead of FERAL_TELEGRAPH_S — later, blunter.
+ * - GIVE-UP: a pursuit against a target standing inside
+ *   (T2) breaks after this long instead of
+ *   FERAL_PURSUIT_GIVE_UP_S — the beast won't press in.
+ * - THORN (T3): pressure builds 0 -> 1 over BUILD
+ *   seconds inside, weakens as it builds (speed x
+ *   (1 - WEAKEN x pressure)), and at 1 the beast wises
+ *   up: it breaks and leaves, and will not re-enter
+ *   (nor start a fight inside) while its pressure
+ *   stands above RE-ENTRY. Pressure bleeds off over
+ *   DECAY seconds outside. There is no creature health
+ *   pool for the thorn to wound — the weakening and
+ *   the forced exit ARE the damage, in the feral idiom. */
+export const HEDGE_SLOW_FACTOR = 0.7;
+export const HEDGE_TELEGRAPH_S = 1.2;
+export const HEDGE_GIVE_UP_S = 12;
+export const THORN_BUILD_S = 6;
+export const THORN_DECAY_S = 10;
+export const THORN_WEAKEN = 0.4;
+export const THORN_REENTRY = 0.3;
 /** Squirrel climb (2026-10-31, all DRAFT): refuge reach, rise speed, perch height, coast-clear range + delay. */
 export const SQUIRREL_TREE_REACH_M = 12;
 export const SQUIRREL_CLIMB_SPEED_MPS = 1.4;
@@ -349,6 +379,15 @@ export interface AnimalInstance {
    * its next step, whatever state it was in.
    */
   feralBreak: boolean;
+  /**
+   * The Hedge thorn's pressure on this beast, 0..1
+   * (2026-11-05): builds inside a rooted T3 ring,
+   * bleeds off outside; at 1 the beast wises up and
+   * leaves. Optional + lazily initialised in
+   * updateAnimal (the squirrel-climb pattern), so no
+   * instance literal carries it.
+   */
+  thornPressure?: number;
   /** Seconds she has stayed beyond coast-clear range of a perched squirrel. */
   clearT: number;
   /** Water points (water kinds) / perch points (flying kinds) in this chunk. */
@@ -590,6 +629,17 @@ export interface FeralFacts {
   /** A standing defender's seat, when one guards her:
    *  the encounter prices the defender's body instead. */
   defenderPos: { x: number; z: number } | null;
+  /** The rooted Hedge ring THIS animal stands in: its
+   *  tier (absent/0 = outside every rooted ring), its
+   *  centre, and its radius (the thorn's exit reads
+   *  them). Composed by the renderer from the shell's
+   *  hedge provider (2026-11-05). */
+  hedgeTier?: number;
+  hedgeCenter?: { x: number; z: number } | null;
+  hedgeRadiusM?: number;
+  /** The rooted ring tier the PRICED TARGET stands in
+   *  (absent/0 = outside) — T2's robust reads it. */
+  targetHedgeTier?: number;
 }
 
 export interface AnimalUpdateInput {
@@ -760,6 +810,18 @@ function feralMoveToward(a: AnimalInstance, tx: number, tz: number, speed: numbe
  *   by the renderer when the shell resolves 'warning')
  *   drops any state into the disengage bolt.
  */
+/** The Hedge's drag on a beast's movement (2026-11-05):
+ *  the rooted ring's slow, deepened by whatever thorn
+ *  pressure it carries. 1 outside the story entirely. */
+function hedgeSpeedFactor(a: AnimalInstance, facts: FeralFacts | null): number {
+  if (!facts || !FERAL_DANGEROUS_KINDS.includes(a.kind)) return 1;
+  let f = 1;
+  if ((facts.hedgeTier ?? 0) >= 1) f *= HEDGE_SLOW_FACTOR;
+  const p = a.thornPressure ?? 0;
+  if (p > 0) f *= 1 - THORN_WEAKEN * p;
+  return f;
+}
+
 function stepFeralEncounter(a: AnimalInstance, dt: number, input: AnimalUpdateInput, active: boolean): boolean {
   if (a.feralState === undefined) a.feralState = 'none';
   if (a.feralStalkT === undefined) a.feralStalkT = 0;
@@ -783,10 +845,36 @@ function stepFeralEncounter(a: AnimalInstance, dt: number, input: AnimalUpdateIn
     }
   }
 
+  // The thorn's lesson (T3): a beast that has taken a
+  // rooted ring's full measure breaks and LEAVES — the
+  // bolt aims out of the ring, not merely away from her.
+  if (
+    facts &&
+    (facts.hedgeTier ?? 0) >= 3 &&
+    facts.hedgeCenter &&
+    (a.thornPressure ?? 0) >= 1 &&
+    a.feralState !== 'none' &&
+    a.feralState !== 'disengage'
+  ) {
+    a.feralState = 'disengage';
+    a.feralT = FERAL_DISENGAGE_S;
+    const dx = a.x - facts.hedgeCenter.x;
+    const dz = a.z - facts.hedgeCenter.z;
+    const d = Math.hypot(dx, dz);
+    const ux = d > 0.001 ? dx / d : 1;
+    const uz = d > 0.001 ? dz / d : 0;
+    const out = (facts.hedgeRadiusM ?? 0) + 14;
+    a.targetX = facts.hedgeCenter.x + ux * out;
+    a.targetZ = facts.hedgeCenter.z + uz * out;
+  }
+
   if (a.feralState === 'none') {
     if (!facts || !active) return false;
     if (a.snapT > 0 || a.spookT > 0) return false;
     if (facts.suppressed || facts.playerInside) return false;
+    // A beast still stinging from a T3 ring does not
+    // start a fight inside it (the re-entry law).
+    if ((facts.hedgeTier ?? 0) >= 3 && (a.thornPressure ?? 0) > THORN_REENTRY) return false;
     const distP = Math.hypot(a.x - input.playerX, a.z - input.playerZ);
     if (distP > FERAL_AGGRO_RANGE_M) return false;
     // Initiation: the encounter anchors where it began.
@@ -819,16 +907,25 @@ function stepFeralEncounter(a: AnimalInstance, dt: number, input: AnimalUpdateIn
       a.feralStalkT += dt;
       if (facts?.playerInside) return exitEncounter();
       if (herDistFromAnchor > FERAL_LEASH_M) return exitEncounter();
-      if (a.feralStalkT > FERAL_PURSUIT_GIVE_UP_S) return exitEncounter();
+      // T2's robust: a target sheltered inside a rooted
+      // ring is pressed for less long.
+      const giveUpS = (facts?.targetHedgeTier ?? 0) >= 2 ? HEDGE_GIVE_UP_S : FERAL_PURSUIT_GIVE_UP_S;
+      if (a.feralStalkT > giveUpS) return exitEncounter();
       if (distToTarget <= FERAL_STRIKE_RANGE_M) {
         a.feralState = 'telegraph';
-        a.feralT = FERAL_TELEGRAPH_S;
+        // T1's weaker / T2's robust: a strike from
+        // inside a rooted ring, or against a target
+        // sheltered in one, winds up slower.
+        a.feralT =
+          (facts?.hedgeTier ?? 0) >= 1 || (facts?.targetHedgeTier ?? 0) >= 2
+            ? HEDGE_TELEGRAPH_S
+            : FERAL_TELEGRAPH_S;
         a.feralTelegraphPulse = true;
         a.mode = 'idle';
         a.flying = false;
         break;
       }
-      feralMoveToward(a, tp.x, tp.z, FLEE_SPEED_MPS, dt);
+      feralMoveToward(a, tp.x, tp.z, FLEE_SPEED_MPS * hedgeSpeedFactor(a, facts), dt);
       a.mode = 'flee';
       moving = true;
       break;
@@ -856,7 +953,7 @@ function stepFeralEncounter(a: AnimalInstance, dt: number, input: AnimalUpdateIn
       break;
     }
     case 'strike': {
-      feralMoveToward(a, a.feralStrikeX, a.feralStrikeZ, SNAP_LUNGE_SPEED_MPS, dt);
+      feralMoveToward(a, a.feralStrikeX, a.feralStrikeZ, SNAP_LUNGE_SPEED_MPS * hedgeSpeedFactor(a, facts), dt);
       a.mode = 'flee';
       moving = true;
       a.feralT -= dt;
@@ -904,10 +1001,46 @@ function stepFeralEncounter(a: AnimalInstance, dt: number, input: AnimalUpdateIn
 export function updateAnimal(a: AnimalInstance, dt: number, input: AnimalUpdateInput): void {
   const def = ANIMAL_DEFS[a.kind];
   const active = def.active === 'night' ? input.night : !input.night;
+  // The Hedge thorn's pressure (2026-11-05): upkeep for
+  // every beast the facts reach — builds inside a
+  // rooted T3 ring, bleeds off outside it. The
+  // encounter reads it (the wise-up break); the ambient
+  // body below reads it (the wise-up exit).
+  if (input.feral && FERAL_DANGEROUS_KINDS.includes(a.kind)) {
+    if (a.thornPressure === undefined) a.thornPressure = 0;
+    if ((input.feral.hedgeTier ?? 0) >= 3) {
+      a.thornPressure = Math.min(1, a.thornPressure + dt / THORN_BUILD_S);
+    } else if (a.thornPressure > 0) {
+      a.thornPressure = Math.max(0, a.thornPressure - dt / THORN_DECAY_S);
+    }
+  }
   // Feral encounters (2026-11-03): the encounter
   // machinery handles the whole step when it takes it.
   if (input.feral !== undefined) {
     if (stepFeralEncounter(a, dt, input, active)) return;
+  }
+  // The ambient wise-up (T3): not in a fight, but the
+  // thorn has its full measure — the beast leaves the
+  // ring, aimed out of it, and the ordinary flee below
+  // does not overwrite the exit while it stands.
+  const hedgeFacts = input.feral ?? null;
+  const wisedUp =
+    hedgeFacts !== null &&
+    (hedgeFacts.hedgeTier ?? 0) >= 3 &&
+    hedgeFacts.hedgeCenter != null &&
+    (a.thornPressure ?? 0) >= 1;
+  if (wisedUp && hedgeFacts.hedgeCenter) {
+    const dx = a.x - hedgeFacts.hedgeCenter.x;
+    const dz = a.z - hedgeFacts.hedgeCenter.z;
+    const d = Math.hypot(dx, dz);
+    const ux = d > 0.001 ? dx / d : 1;
+    const uz = d > 0.001 ? dz / d : 0;
+    const out = (hedgeFacts.hedgeRadiusM ?? 0) + 12;
+    a.targetX = hedgeFacts.hedgeCenter.x + ux * out;
+    a.targetZ = hedgeFacts.hedgeCenter.z + uz * out;
+    a.targetY = a.y;
+    a.mode = 'flee';
+    a.flying = false;
   }
   const fleeRadius = def.temperament === 'wary' ? WARY_FLEE_RADIUS_M : FLEE_RADIUS_M;
   const dxP = a.x - input.playerX;
@@ -934,7 +1067,7 @@ export function updateAnimal(a: AnimalInstance, dt: number, input: AnimalUpdateI
     a.snapT = Math.max(0, a.snapT - dt);
     if (a.snapT <= 0) spookFish(a, input.playerX, input.playerZ);
   }
-  if (!undetectedNow && distP < fleeRadius && !(a.spookT > 0) && !(a.snapT > 0)) {
+  if (!wisedUp && !undetectedNow && distP < fleeRadius && !(a.spookT > 0) && !(a.snapT > 0)) {
     // Per-kind flee style (DRAFT values — see ANIMAL_DEFS).
     // Temperament still sets WHEN (the radius above); style sets HOW.
     if (def.flee === 'freeze') {
@@ -998,10 +1131,12 @@ export function updateAnimal(a: AnimalInstance, dt: number, input: AnimalUpdateI
     }
   }
   if (a.mode === 'wander' || a.mode === 'fly' || a.mode === 'flee') {
-    const speed = a.snapT > 0
-      ? SNAP_LUNGE_SPEED_MPS
-      : (a.mode === 'flee' ? FLEE_SPEED_MPS : WANDER_SPEED_MPS)
-        * (a.spookT > 0 ? SPOOK_BURST_FACTOR : 1);
+    const speed =
+      (a.snapT > 0
+        ? SNAP_LUNGE_SPEED_MPS
+        : (a.mode === 'flee' ? FLEE_SPEED_MPS : WANDER_SPEED_MPS)
+          * (a.spookT > 0 ? SPOOK_BURST_FACTOR : 1)) *
+      hedgeSpeedFactor(a, input.feral ?? null);
     const dx = a.targetX - a.x;
     const dz = a.targetZ - a.z;
     const dist = Math.hypot(dx, dz);
