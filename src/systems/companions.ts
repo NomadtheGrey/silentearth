@@ -45,6 +45,7 @@
  */
 
 import { ITEMS, type ItemId } from './recipes';
+import { creatureKindForBoneKind } from './rituals';
 import { normalizeItemId, type PersonalInventory } from './inventory';
 import type { CraftingInventory } from './crafting';
 import type { HungerState } from './hunger';
@@ -337,7 +338,20 @@ export class CompanionState {
     if (saved) {
       for (const record of saved) {
         if (!this.records.has(record.creatureId)) {
-          this.records.set(record.creatureId, { ...record });
+          // RECORD HEALING (the hotfix, 2026-11-05):
+          // a record written while complete() returned
+          // the BONE design key carries it in `kind`
+          // ('owl-talon') where a CREATURE kind belongs
+          // ('owl') — the rite-born actor of such a
+          // kind has no def and wedges the frame loop.
+          // A kind that IS a bone design key maps to
+          // its creature kind at restore; every other
+          // kind stands as written.
+          const healed = creatureKindForBoneKind(record.kind);
+          this.records.set(record.creatureId, {
+            ...record,
+            kind: healed ?? record.kind,
+          });
         }
       }
     }
