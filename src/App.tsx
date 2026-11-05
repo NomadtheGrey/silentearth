@@ -1780,6 +1780,7 @@ import { TentChip } from './ui/TentChip';
 import { BagChip } from './ui/BagChip';
 import { FirstRunDialog } from './ui/FirstRunDialog';
 import { AnimalTag } from './ui/AnimalTag';
+import { PlaceTag } from './ui/PlaceTag';
 import { AltarChip } from './ui/AltarChip';
 import type { ContextAction } from './ui/types';
 import { TouchControls } from './ui/TouchControls';
@@ -18874,6 +18875,30 @@ export default function App() {
             const player = playerRef.current;
             return player ? { x: player.x, z: player.z } : { x: 0, z: 0 };
           }}
+          project={(x, z, worldY) =>
+            projectAnchor(x, z, 'scatter', worldY)
+          }
+        />
+      ) : null}
+      {/* NAMED-PLACE TAGS (the naming build, 2026-11-05):
+        her named places tag in the world, under the
+        creature tag's gate and hiding set — Background's
+        feed (getNamedPlaceTags) owns the range and the
+        dimension law; the component polls it and stands
+        a pill per place, the name verbatim. */}
+      {!inventoryOpen &&
+      !craftingOpen &&
+      !charmsOpen &&
+      !companionsOpen &&
+      !optionsOpen &&
+      !introOpen &&
+      !pendingTrapRecipe &&
+      pendingRemoveTarget === null &&
+      !paused ? (
+        <PlaceTag theme={lookThemes.world}
+          getPlaces={() =>
+            rendererRef.current?.getNamedPlaceTags() ?? []
+          }
           project={(x, z, worldY) =>
             projectAnchor(x, z, 'scatter', worldY)
           }
