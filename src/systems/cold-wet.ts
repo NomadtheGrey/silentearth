@@ -61,9 +61,26 @@ export interface ColdWetFacts {
   spell: WeatherSpell;
   immersion: Immersion;
   shelterMultiplier: number;
+  /**
+   * The rain's OWN read of her cover (the drying fix
+   * part 2, 2026-11-05): the fraction of rain that
+   * REACHES her — 1 under open sky, 0 under an
+   * enclosed roof (a placed house, a tent), a named
+   * fraction at an open-sided lean-to (RAIN_SHELTER_
+   * LEAN_TO, DRAFT). A roof is not a discount: the
+   * shelterMultiplier stays the cold/wind factor it
+   * was designed as, and rain gets the binary the
+   * player can see. OPTIONAL while the composer
+   * stages over: absent, the tick reads the
+   * shelterMultiplier for rain exactly as before.
+   */
+  rainShelter?: number;
   fireWarmth: number;
   worn: readonly ItemId[];
 }
+
+/** Rain reaching her under a lean-to (open-sided; DRAFT). */
+export const RAIN_SHELTER_LEAN_TO = 0.5;
 
 // --- Draft rates (per minute, gauges 0–100) -------------
 
@@ -211,23 +228,31 @@ export class ColdWetState {
     warmth = Math.min(0.5, warmth);
     rainShed = Math.min(0.5, rainShed);
 
-    // WET: rain lands through shelter and clothing;
-    // immersion soaks directly. DRYING answers in two
-    // parts (the drying fix, 2026-11-05 — the pin
-    // violation was the whole term sitting inside the
-    // rain gate, so no fire could dry her while it
-    // rained):
-    // - THE FIRE TERM answers whenever she is not
-    //   immersed, IN RAIN TOO, netted against the
-    //   soak — the pinned shelter law: a lit fire
-    //   dries her outright within its radius, so at
-    //   full fire warmth she dries even while it
-    //   rains (fire beats rain inside its radius).
-    // - AMBIENT + SHELTERED drying keeps the
-    //   negligible-rain gate: without a fire, rain
-    //   that reaches her still wins.
+    // WET: rain lands through shelter (the rain's own
+    // read — rainShelter, the roof fact) and clothing;
+    // immersion soaks directly. DRYING follows Adam's
+    // law (2026-11-05, his sentence: 'I would
+    // understand staying wet even near a fire if it's
+    // raining' — the objection was never the wet, it
+    // was the RISE while sheltered / fireside):
+    // - Rain REACHES her (rainReaching > 0): the fire
+    //   CANCELS the soak — netted to zero, never below.
+    //   At full fire warmth she HOLDS; a weaker fire
+    //   holds what it can. No other drying answers.
+    // - NO rain reaches her, but it IS raining (she
+    //   is roofed in a storm): the fire alone dries;
+    //   without a fire she HOLDS — no ambient term
+    //   answers in a storm, even indoors.
+    // - NO rain at all: drying as it always was —
+    //   ambient + sheltered + fire.
+    // Net law: she never gains wetness while
+    // sheltered or fireside; drying always has a
+    // road (roof + fire in a storm, anything once
+    // the rain stops), but a fire in the open rain
+    // only holds the line.
+    const rainIntensity = unit(facts.rainIntensity);
     const rainReaching =
-      unit(facts.rainIntensity) * shelter * (1 - rainShed);
+      rainIntensity * unit(facts.rainShelter ?? shelter) * (1 - rainShed);
     let wetDelta = RAIN_SOAK_PER_MIN * rainReaching;
     if (facts.immersion === 'wading') {
       wetDelta += WADING_SOAK_PER_MIN;
@@ -235,9 +260,14 @@ export class ColdWetState {
       wetDelta += SWIMMING_SOAK_PER_MIN;
     }
     if (facts.immersion === 'none') {
-      wetDelta -= DRY_FIRE_PER_MIN * fire;
-      if (rainReaching < 0.05) {
+      const fireDry = DRY_FIRE_PER_MIN * fire;
+      if (rainReaching > 0) {
+        wetDelta = Math.max(wetDelta - fireDry, 0);
+      } else if (rainIntensity > 0) {
+        wetDelta = -fireDry;
+      } else {
         wetDelta -=
+          fireDry +
           DRY_AMBIENT_PER_MIN +
           (shelter < 1 ? DRY_SHELTERED_PER_MIN : 0);
       }
