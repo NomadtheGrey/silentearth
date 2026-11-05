@@ -4281,15 +4281,24 @@ export default function App() {
   // the ONLY list-change paths — boot (after restore +
   // grant) and ritual completion (after awaken) — no
   // timer: hook booleans change only on awakening.
+  // Pigeon always-on: the renderer ORs scry + pigeon
+  // (arrowsVisible), so the arrival-dismiss path clears
+  // only the scry flag — pigeon arrows stay while the
+  // charm is listed, by design (effects are always on).
+  // Adam's refinement (2026-11-05) keeps it that way:
+  // the pigeon is the early-game road home while
+  // Returning fragments are hard to acquire, so its
+  // pointing is NOT gated on the mark — only the
+  // scry-raised arrows are (syncScryRevealGate below).
   // Fox reaches the player controller (nullable ref);
   // mole is a module-level setter; the three vision
-  // hooks reach the renderer (nullable ref). The
-  // pigeon's way-home is NOT set here — it routes
-  // through syncWayHomeGate below (Adam's gate ruling,
-  // 2026-11-05).
+  // hooks reach the renderer (nullable ref).
   const syncCharmHooks = () => {
     const charms = charmStateRef.current;
-    syncWayHomeGate();
+    rendererRef.current?.setPigeonWayHome(
+      charms.isAwakened('pigeon-wing-bone'),
+    );
+    syncScryRevealGate();
     rendererRef.current?.setOwlNightSight(charms.isAwakened('owl-talon'));
     rendererRef.current?.setBatNightWayfinding(
       charms.isAwakened('bat-wing-bone'),
@@ -4298,47 +4307,40 @@ export default function App() {
     setMoleEarthSense(charms.isAwakened('mole-paw'));
   };
 
-  // THE WAY-HOME GATE (Adam's ruling, 2026-11-05 —
-  // his live #83 playtest): he stood at water, the
-  // Scry gate refused in words ('You have not learned
-  // the Returning mark'), and the big yellow home
-  // arrow still stood over his house. His word: the
-  // way-home pointing is the Returning mark's feature
-  // now — BOTH arrow drives gate on canScry:
+  // THE SCRY-REVEAL GATE (Adam's ruling + refinement,
+  // 2026-11-05 — his live #83 playtest): he stood at
+  // water, the Scry gate refused in words ('You have
+  // not learned the Returning mark'), and the home
+  // arrow still stood over his house. His word, as
+  // refined minutes later: the SCRY-raised camp
+  // arrows gate on Returning T1 — and ONLY those.
+  // The pigeon-wing charm stays an independent
+  // early-game road home, ungated (its seat above).
   //
-  // - the scry-raised camp arrows: their only TRUE
-  //   seat (handleScry's reveal) already stands
-  //   behind the gate; this sync adds the structural
-  //   half — a standing reveal is dismissed and the
-  //   arrows cleared the moment the gate reads closed
-  //   (a restored reveal, a tier lost), so the display
-  //   can never outlive the right to it;
-  // - the pigeon-wing charm's way-home: formerly a
-  //   deliberate ungated duplicate (the early-game
-  //   road home); the ruling retires that — the charm
-  //   stays awakened and listed, but it raises no
-  //   arrow below T1.
-  //
-  // The renderer ORs the two drives; gating both
-  // writers gates the read. Mirror-guarded: the
-  // writers run on the gate's TRANSITIONS (boot,
-  // charm syncs, and every player:moved, where a
-  // gleam that completes T1 lands). The exit-arrow
-  // suppression composes untouched — it reads the
-  // exit seat, not these drives.
-  const wayHomeGateRef = useRef<boolean | null>(null);
-  const syncWayHomeGate = () => {
+  // The camp arrows' only TRUE seat (handleScry's
+  // reveal) already stands behind the gate at its
+  // head; this sync is the structural half — a
+  // standing reveal is dismissed and the arrows
+  // cleared the moment the gate reads closed, so
+  // the display can never outlive the right to it.
+  // (The reveal is session-only state and fragments
+  // are never lost, so in play this fires only as
+  // the invariant's guard.) Mirror-guarded: it runs
+  // on the gate's transitions (boot via
+  // syncCharmHooks, and every player:moved). The
+  // exit-arrow suppression composes untouched — it
+  // reads the exit seat, not these drives.
+  const scryGateRef = useRef<boolean | null>(null);
+  const syncScryRevealGate = () => {
     const allowed = canScry(fragmentStateRef.current);
-    if (wayHomeGateRef.current === allowed) return;
-    wayHomeGateRef.current = allowed;
-    rendererRef.current?.setPigeonWayHome(
-      allowed && charmStateRef.current.isAwakened('pigeon-wing-bone'),
-    );
+    if (scryGateRef.current === allowed) return;
+    scryGateRef.current = allowed;
     if (!allowed && divinationRef.current.isRevealed) {
       divinationRef.current.dismiss();
       rendererRef.current?.setCampArrowsVisible(false);
     }
   };
+
   // Crow tier (glow landing, 2026-10-28): shell wiring
   // setCrowTier ← crowGlowTier, beside syncCharmHooks (boot
   // + ritual completion, same two call sites). Carried =
@@ -7062,10 +7064,9 @@ export default function App() {
           div.reveal(findCamps(houses));
         }
       }
-      // THE WAY-HOME GATE on the movement cadence: a
-      // gleam that completes (or a state that loses)
-      // Returning T1 re-reads here first.
-      syncWayHomeGate();
+      // THE SCRY-REVEAL GATE on the movement cadence:
+      // the gate's transitions re-read here first.
+      syncScryRevealGate();
       setScryVisible(
         !div.isRevealed &&
           houses.length > 0 &&
