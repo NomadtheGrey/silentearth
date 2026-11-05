@@ -15,25 +15,41 @@
  * already standing, each instance a pure function of
  * (seed, cell) with no save state.
  *
- * THE FORM (DEV's shape, 2026-11-05): a lesser grove is
- * The Grove's form WITHOUT its signatures — a clearing,
- * a ring of standing stones, grove oaks in the band,
- * and ONE carved stone carrying a CIRCLE fragment. NO
- * maze (the maze is The Grove's alone), no hoard mound,
- * no heart tree. The ring and oak derivations mirror
- * sites.ts' own (same numbers, same stream shapes)
- * under the instance's own label, so a lesser grove
- * reads as the same kind of place at a glance. The
- * carved stone stands inside the ring at the clearing's
- * heart, where the maze's heart would be (lane-decided
- * siting, DRAFT).
+ * THE FORM (Adam's correction, 2026-11-05 — supersedes
+ * the same day's no-maze pricing, which DEV's dispatch
+ * and this lane both read wrong): EVERY grove has its
+ * hedge maze — "that's half the fun of getting to the
+ * grove." A lesser grove is The Grove's form at family
+ * scale: a clearing, a ring of standing stones, grove
+ * oaks in the band, a randomized hedge maze from the
+ * instance's OWN stream (sites.ts' deriveMazeLayout
+ * under the instance's label — one machinery, every
+ * grove), and ONE carved stone carrying a CIRCLE
+ * fragment at the maze's farthest dead end — the
+ * fragment cell, The Grove's own rule for its stone.
+ * The maze's size IS dealt per instance, on Adam's
+ * exploding ladder (see dealGroveGrid): 11 at base —
+ * The Grove's own size is the family's MINIMUM — with
+ * 1/3 climbs of +4 through 15, 19, 23, on without cap,
+ * so country mazes run from The Grove's scale up to
+ * rare giants. The whole footprint scales with the grid
+ * (sites.ts' per-grid helpers): ring, oak band, and
+ * clearing all stand their grid-11 distance outside
+ * the maze square, and spacing reads the instance's
+ * own clearing. The entrance side is dealt four ways
+ * (The Grove faces spawn because it is the authored
+ * first; a distributed grove is approached from
+ * anywhere).
+ * What stays singular: the HEART — no hoard mound, no
+ * great tree in a lesser grove (the layout's heart cell
+ * stands open), and The Grove's authored seat.
  *
- * NO PROTECTION (priced with the claim; DEV leans the
- * same): The Grove's tree protection is its signature,
- * like the maze — lesser groves' oaks are ordinary
- * country trees, fellable and harvestable. harvest.ts'
- * refusal stays scoped to the singular's footprint and
- * never learns these instances.
+ * NO PROTECTION (Adam did not revisit it in the
+ * correction): The Grove's tree protection stays its
+ * own — lesser groves' oaks are ordinary country trees,
+ * fellable and harvestable. harvest.ts' refusal stays
+ * scoped to the singular's footprint and never learns
+ * these instances.
  *
  * THE CARRIER: every lesser grove's carved stone
  * carries a Circle fragment (structural, like the
@@ -55,14 +71,15 @@
  * surface source should not be common country); taste =
  * The Grove's own siting set dominant (forest /
  * tanglewood / oldfieldRise, sites.ts' GROVE_BIOMES,
- * mirrored here as that set is private there); clearing
- * 28 m and ring 22 m at the GroveSite numbers; 9 ring
- * stones; 7 band oaks at 23.5–26 m (sites.ts' private
- * band, mirrored); the carved stone at ring/2.
+ * mirrored here as that set is private there); the
+ * grid ladder and the entrance side dealt off the
+ * candidate stream after the taste test (fixed draw
+ * order — see groveCandidate); the clearing at grid
+ * 11 is 28 m and grows 1.3 m per grid step past it.
  */
 
-import type { BiomeId, BiomeWeights, ScatterKind, ScatterObject } from '../types';
-import type { SiteWallBox } from './sites';
+import type { BiomeId, BiomeWeights, ScatterObject } from '../types';
+import type { MazeCell, SiteWallBox } from './sites';
 import { deriveSeed, mulberry32 } from './seed';
 import {
   DISTRIBUTION_CELL_M,
@@ -84,11 +101,12 @@ import {
   sunkenRoadSite,
   villageSite,
   waterTowerSite,
+  deriveMazeLayout,
+  groveClearRadiusForGrid,
+  groveOakBandForGrid,
+  groveRingRadiusForGrid,
   CAVE_MOUTH_CLEAR_RADIUS_M,
-  GROVE_CLEAR_RADIUS_M,
-  GROVE_OAK_COUNT,
-  GROVE_RING_RADIUS_M,
-  GROVE_STONE_COUNT,
+  GROVE_GRID_CELLS,
   ROAD_RIBBON_HALF_WIDTH_M,
   SIDING_HALF_WIDTH_M,
   SITE_SPACING_MARGIN_M,
@@ -103,9 +121,30 @@ import type { FragmentCarrier } from './carriers';
 export const GROVE_CELL_PRESENCE = 0.3;
 /** The carved stone's completeness band. DRAFT. */
 export const LESSER_GROVE_CARRIER_BAND: readonly [number, number] = [0.4, 0.8];
-/** Oak band (sites.ts' private GROVE_OAK_MIN_R/MAX_R, mirrored). */
-const LESSER_OAK_MIN_R = 23.5;
-const LESSER_OAK_MAX_R = 26;
+/**
+ * ADAM'S GROVE SIZE LAW (2026-11-05, as corrected by
+ * Adam minutes after the first speaking — 'I meant to
+ * skip some. Should be 11 -> 15 -> 19'): the maze grid
+ * starts at 11 and every 1/3 roll climbs +4 — 15, 19,
+ * 23, 27, on without cap, every roll on the instance's
+ * own stream. P(11) = 2/3, P(15) = 2/9, P(19) = 2/27,
+ * P(23) = 2/81 — giants are rare and genuinely giant
+ * (a 23 spans 60 m of maze; a 27 spans 70 m). The
+ * Grove stays authored at 11: the family's minimum,
+ * not a roll.
+ */
+function dealGroveGrid(rand: () => number): number {
+  let grid = GROVE_GRID_CELLS;
+  while (rand() < 1 / 3) grid += 4;
+  return grid;
+}
+/** Entrance sides, dealt by index off the candidate stream. */
+const LESSER_GROVE_SIDES: readonly ('north' | 'east' | 'south' | 'west')[] = [
+  'north',
+  'east',
+  'south',
+  'west',
+];
 /** Rect queries expand by a full cell before enumerating. */
 const GROVE_QUERY_MARGIN_M = DISTRIBUTION_CELL_M;
 /** The Grove's siting set (sites.ts' GROVE_BIOMES, mirrored). */
@@ -122,8 +161,12 @@ export interface LesserGroveInstance {
   fragmentCarrier: FragmentCarrier;
   /** Where the fragment machinery reads: the carved stone. */
   fragmentSpot: { x: number; z: number };
+  /** The dealt maze grid (cells per side) and its mouth. */
+  grid: number;
+  entranceSide: 'north' | 'south' | 'east' | 'west';
+  entranceCell: MazeCell;
   features: ScatterObject[];
-  /** Always empty — a lesser grove has no walls (no maze). */
+  /** The maze's hedge collision boxes (the layout's own). */
   walls: SiteWallBox[];
   clearRadius: number;
   bounds: { minX: number; maxX: number; minZ: number; maxZ: number };
@@ -132,72 +175,29 @@ export interface LesserGroveInstance {
 const instanceCache = new Map<string, LesserGroveInstance | null>();
 
 /** A cell's RAW candidate — fixed draw order: presence,
- *  seat jitter x, seat jitter z, the taste test. */
+ *  seat jitter x, seat jitter z, the taste test, then
+ *  (accepted candidates only) the maze grid and the
+ *  entrance side. */
 function groveCandidate(
   worldSeed: string,
   weightsAtPos: (x: number, z: number) => BiomeWeights,
   cx: number,
   cz: number,
-): { center: { x: number; z: number }; biome: BiomeId } | null {
+): {
+  center: { x: number; z: number };
+  biome: BiomeId;
+  grid: number;
+  entranceSide: 'north' | 'east' | 'south' | 'west';
+} | null {
   const rand = distributionCellStream(worldSeed, 'distribution:grove', cx, cz);
   if (rand() >= GROVE_CELL_PRESENCE) return null;
   const x = (cx + 0.2 + 0.6 * rand()) * DISTRIBUTION_CELL_M;
   const z = (cz + 0.2 + 0.6 * rand()) * DISTRIBUTION_CELL_M;
   const w = weightsAtPos(x, z);
   if (!GROVE_TASTE.has(w.dominant)) return null;
-  return { center: { x, z }, biome: w.dominant };
-}
-
-/** The instance's own layout: ring, oaks, carved stone —
- *  sites.ts' grove derivations under this grove's label. */
-function buildLesserGroveFeatures(
-  worldSeed: string,
-  key: string,
-  center: { x: number; z: number },
-): { features: ScatterObject[]; carvedSpot: { x: number; z: number } } {
-  const features: ScatterObject[] = [];
-  const feat = (kind: ScatterKind, x: number, z: number, scale: number, rotY: number): void => {
-    features.push({ kind, x, z, y: 0, scale, rotY });
-  };
-  // The ring (sites.ts' stones block, verbatim shape).
-  {
-    const rand = mulberry32(deriveSeed(worldSeed, `${key}:stones`));
-    for (let i = 0; i < GROVE_STONE_COUNT; i++) {
-      const a = (i / GROVE_STONE_COUNT) * Math.PI * 2 + (rand() - 0.5) * 0.3;
-      const r = GROVE_RING_RADIUS_M + (rand() - 0.5) * 1.0;
-      feat(
-        'standingStone',
-        center.x + Math.cos(a) * r,
-        center.z + Math.sin(a) * r,
-        0.9 + rand() * 0.45,
-        a + Math.PI / 2 + (rand() - 0.5) * 0.4,
-      );
-    }
-  }
-  // The band oaks (sites.ts' oaks block, verbatim shape).
-  {
-    const rand = mulberry32(deriveSeed(worldSeed, `${key}:oaks`));
-    for (let i = 0; i < GROVE_OAK_COUNT; i++) {
-      const a = (i / GROVE_OAK_COUNT) * Math.PI * 2 + rand() * 0.5;
-      const r = LESSER_OAK_MIN_R + rand() * (LESSER_OAK_MAX_R - LESSER_OAK_MIN_R);
-      feat(
-        'groveOak',
-        center.x + Math.cos(a) * r,
-        center.z + Math.sin(a) * r,
-        1.15 + rand() * 0.5,
-        rand() * Math.PI * 2,
-      );
-    }
-  }
-  // The carved stone at the clearing's heart, facing out
-  // along its own offset (The Grove's carved stone faces
-  // its approach the same way).
-  const rand = mulberry32(deriveSeed(worldSeed, `${key}:carved`));
-  const a = rand() * Math.PI * 2;
-  const r = GROVE_RING_RADIUS_M / 2;
-  const carvedSpot = { x: center.x + Math.cos(a) * r, z: center.z + Math.sin(a) * r };
-  feat('carvedStone', carvedSpot.x, carvedSpot.z, 1, Math.atan2(Math.cos(a), Math.sin(a)));
-  return { features, carvedSpot };
+  const grid = dealGroveGrid(rand);
+  const entranceSide = LESSER_GROVE_SIDES[Math.floor(rand() * LESSER_GROVE_SIDES.length)];
+  return { center: { x, z }, biome: w.dominant, grid, entranceSide };
 }
 
 export function lesserGroveInstanceAt(
@@ -213,7 +213,11 @@ export function lesserGroveInstanceAt(
   const cand = groveCandidate(worldSeed, weightsAtPos, cx, cz);
   if (cand) {
     const { x, z } = cand.center;
-    const R = GROVE_CLEAR_RADIUS_M;
+    // The footprint derives from the dealt grid (Adam's
+    // size law): the clearing — and every spacing read
+    // below — takes THIS instance's own extent, so a
+    // giant is never clipped by a fixed 28 m.
+    const R = groveClearRadiusForGrid(cand.grid);
     const biomeAt = (px: number, pz: number) => weightsAtPos(px, pz).dominant;
     const singulars = [
       groveSite(worldSeed, spawn, biomeAt),
@@ -281,7 +285,7 @@ export function lesserGroveInstanceAt(
           const sib = groveCandidate(worldSeed, weightsAtPos, ncx, ncz);
           if (!sib) continue;
           const d = Math.hypot(x - sib.center.x, z - sib.center.z);
-          if (d < R * 2 + SITE_SPACING_MARGIN_M && (ncz < cz || (ncz === cz && ncx < cx))) {
+          if (d < R + groveClearRadiusForGrid(sib.grid) + SITE_SPACING_MARGIN_M && (ncz < cz || (ncz === cz && ncx < cx))) {
             legal = false;
             break outer;
           }
@@ -290,7 +294,20 @@ export function lesserGroveInstanceAt(
     }
     if (legal) {
       const key = `grove:lesser:${cx},${cz}`;
-      const { features, carvedSpot } = buildLesserGroveFeatures(worldSeed, key, cand.center);
+      // The form comes from the ONE maze machinery
+      // (Adam's correction): this grove's dealt grid and
+      // entrance side, its own streams under its key,
+      // and no heart contents. The carved stone stands
+      // at the layout's fragment cell; the fragment
+      // reads at the stone's exact seat.
+      const layout = deriveMazeLayout(worldSeed, key, cand.center, cand.entranceSide, {
+        grid: cand.grid,
+        heart: false,
+        ringRadius: groveRingRadiusForGrid(cand.grid),
+        oakBand: groveOakBandForGrid(cand.grid),
+      });
+      const carved = layout.features.find((f) => f.kind === 'carvedStone');
+      const carvedSpot = carved ? { x: carved.x, z: carved.z } : cand.center;
       // The carrier facts (minted here to keep the
       // derivation self-contained; the band is this
       // family's own, priced in the header).
@@ -308,8 +325,11 @@ export function lesserGroveInstanceAt(
         biome: cand.biome,
         fragmentCarrier,
         fragmentSpot: carvedSpot,
-        features,
-        walls: [],
+        grid: cand.grid,
+        entranceSide: cand.entranceSide,
+        entranceCell: layout.entranceCell,
+        features: layout.features,
+        walls: layout.walls,
         clearRadius: R,
         bounds: { minX: x - R, maxX: x + R, minZ: z - R, maxZ: z + R },
       };

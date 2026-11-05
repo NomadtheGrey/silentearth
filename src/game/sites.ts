@@ -144,6 +144,34 @@ export const GROVE_GRID_CELLS = 11;
 export const GROVE_CELL_M = 2.6;
 export const GROVE_RING_RADIUS_M = 22;
 export const GROVE_CLEAR_RADIUS_M = 28;
+
+/**
+ * GROVE SIZE AT ANY GRID (Adam's size law, 2026-11-05):
+ * a grove's furniture scales with its maze — the ring,
+ * the oak band, and the clearing all stand the same
+ * distance OUTSIDE the maze square whatever its size,
+ * so each reads the grid-11 constant plus the maze's
+ * growth past 11 (half a cell per grid step, per side).
+ * At grid 11 every helper returns the constant EXACTLY
+ * (the growth term is zero) — The Grove is byte-stable
+ * by construction, and a 19-grid's ring stands at
+ * 22 + 8 × 1.3 = 32.4 m, outside its 24.7 m maze half.
+ */
+export function groveRingRadiusForGrid(grid: number): number {
+  return GROVE_RING_RADIUS_M + (grid - GROVE_GRID_CELLS) * (GROVE_CELL_M / 2);
+}
+
+/** The oak band at a grid (see groveRingRadiusForGrid). */
+export function groveOakBandForGrid(grid: number): { min: number; max: number } {
+  const growth = (grid - GROVE_GRID_CELLS) * (GROVE_CELL_M / 2);
+  return { min: GROVE_OAK_MIN_R + growth, max: GROVE_OAK_MAX_R + growth };
+}
+
+/** The clearing (scatter suppression + spacing) at a grid. */
+export function groveClearRadiusForGrid(grid: number): number {
+  return GROVE_CLEAR_RADIUS_M + (grid - GROVE_GRID_CELLS) * (GROVE_CELL_M / 2);
+}
+
 export const GROVE_STONE_COUNT = 9;
 export const GROVE_OAK_COUNT = 7;
 const GROVE_OAK_MIN_R = 23.5;
@@ -235,9 +263,43 @@ export function groveSite(
   return site;
 }
 
+/**
+ * The Grove's entrance gap as a world position — the
+ * entrance cell's centre by the maze layout's own cell
+ * math. The seat Returning's way-out pointing aims at
+ * (Background, 2026-11-05): the one gap in the hedge,
+ * on the side that faced her approach.
+ */
+export function groveEntranceSeat(site: GroveSite): { x: number; z: number } {
+  return mazeEntranceSeat(site.center, site.entranceCell, GROVE_GRID_CELLS);
+}
+
+/**
+ * Any maze's entrance seat from its centre, entrance
+ * cell, and grid — the general form groveEntranceSeat
+ * specialises for The Grove (lesser groves deal their
+ * own grids, groves.ts). Same cell math as the layout.
+ */
+export function mazeEntranceSeat(
+  center: { x: number; z: number },
+  entranceCell: MazeCell,
+  grid: number,
+): { x: number; z: number } {
+  const mid = (grid - 1) / 2;
+  return {
+    x: center.x + (entranceCell.col - mid) * GROVE_CELL_M,
+    z: center.z + (entranceCell.row - mid) * GROVE_CELL_M,
+  };
+}
+
 /** One maze-grove instance's layout: everything about the place
  *  that derives from (seed, label, centre, entrance side). */
 export interface MazeLayout {
+  /** The maze's grid (cells per side, odd). The Grove
+   *  stands at GROVE_GRID_CELLS; lesser groves deal
+   *  smaller grids from their own streams (Adam's
+   *  correction, 2026-11-05 — every grove has its maze). */
+  grid: number;
   entranceCell: MazeCell;
   heartCell: MazeCell;
   fragmentCell: MazeCell;
@@ -251,17 +313,39 @@ export interface MazeLayout {
  * Grove; a lesser grove passes its own label and gets its own
  * maze, stones, and trees from the same code — instance-friendly
  * by construction, nothing here assumes it is the only place).
- * Ring radius, oak band, and clearing come from the shared
- * constants today; an instance that needs its own scale can
- * grow parameters here when its claim lands.
+ * Scale rides opts (Adam's correction, 2026-11-05): lesser
+ * groves deal their grid per instance; the heart contents
+ * stay The Grove's. Ring radius, oak band, and cell size
+ * remain the shared constants at every scale.
  */
 export function deriveMazeLayout(
   seed: string,
   label: string,
   center: { x: number; z: number },
   entranceSide: GroveSite['entranceSide'],
+  opts?: {
+    /** Maze grid (default GROVE_GRID_CELLS — The Grove). */
+    grid?: number;
+    /**
+     * The heart contents (default true — The Grove: the
+     * hoard + its great oak). Lesser groves pass false:
+     * the hoard and the great tree are The Grove's
+     * signatures, not the family's (Adam's correction,
+     * 2026-11-05 — the MAZE is the family's; the heart
+     * stays singular).
+     */
+    heart?: boolean;
+    /**
+     * The ring's radius and the oak band at this grid
+     * (Adam's size law: the furniture scales with the
+     * maze — groveRingRadiusForGrid / groveOakBandForGrid).
+     * Defaults are the grid-11 constants (The Grove).
+     */
+    ringRadius?: number;
+    oakBand?: { min: number; max: number };
+  },
 ): MazeLayout {
-  const grid = GROVE_GRID_CELLS;
+  const grid = opts?.grid ?? GROVE_GRID_CELLS;
   const mid = (grid - 1) / 2;
   const cellM = GROVE_CELL_M;
   const cellCenter = (col: number, row: number): { x: number; z: number } => ({
@@ -405,7 +489,7 @@ export function deriveMazeLayout(
     const rand = mulberry32(deriveSeed(seed, `${label}:stones`));
     for (let i = 0; i < GROVE_STONE_COUNT; i++) {
       const a = (i / GROVE_STONE_COUNT) * Math.PI * 2 + (rand() - 0.5) * 0.3;
-      const r = GROVE_RING_RADIUS_M + (rand() - 0.5) * 1.0;
+      const r = (opts?.ringRadius ?? GROVE_RING_RADIUS_M) + (rand() - 0.5) * 1.0;
       feat(
         'standingStone',
         center.x + Math.cos(a) * r,
@@ -423,7 +507,9 @@ export function deriveMazeLayout(
     const rand = mulberry32(deriveSeed(seed, `${label}:oaks`));
     for (let i = 0; i < GROVE_OAK_COUNT; i++) {
       const a = (i / GROVE_OAK_COUNT) * Math.PI * 2 + rand() * 0.5;
-      const r = GROVE_OAK_MIN_R + rand() * (GROVE_OAK_MAX_R - GROVE_OAK_MIN_R);
+      const oakMin = opts?.oakBand?.min ?? GROVE_OAK_MIN_R;
+      const oakMax = opts?.oakBand?.max ?? GROVE_OAK_MAX_R;
+      const r = oakMin + rand() * (oakMax - oakMin);
       feat(
         'groveOak',
         center.x + Math.cos(a) * r,
@@ -480,8 +566,9 @@ export function deriveMazeLayout(
   // The heart: the hoard mound at the centre cell's middle, the
   // grove's oldest tree at its edge, canopy over the hoard. The
   // hoard's CONTENTS stage with their own systems — the mound is
-  // the place they will live.
-  {
+  // the place they will live. The Grove only (see opts.heart):
+  // a lesser grove's heart cell stands open.
+  if (opts?.heart ?? true) {
     const rand = mulberry32(deriveSeed(seed, `${label}:heart`));
     const heart = cellCenter(heartCell.col, heartCell.row);
     feat('hoardMound', heart.x + 0.3, heart.z + 0.35, 1, rand() * Math.PI * 2);
@@ -503,7 +590,7 @@ export function deriveMazeLayout(
     feat('carvedStone', fc.x - openX * 0.7, fc.z - openZ * 0.7, 1, Math.atan2(openX, openZ));
   }
 
-  return { entranceCell, heartCell, fragmentCell, features, walls };
+  return { grid, entranceCell, heartCell, fragmentCell, features, walls };
 }
 // === The Schoolhouse (site #2) ============================================
 //

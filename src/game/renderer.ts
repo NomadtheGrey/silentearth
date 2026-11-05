@@ -47,7 +47,7 @@ import {
   stepActors,
 } from './companionRuntime';
 import { catActor, catGlowOn, clearCat, ensureCat, installCatPreyAccess, stepCat } from './catRuntime';
-import { clearGuide, guideActor, guideVisible, seatYFor, stageGuide, stepGuide } from './guideRuntime';
+import { clearGuide, clearRetarget, guideActor, guideVisible, isLesserGroveGleamed, retargetGuide, seatYFor, stageGuide, stepGuide, GUIDE_LEAD_RING_M, GUIDE_LESSER_RANGE_M } from './guideRuntime';
 import { currentWeatherFacts, seatWeatherState, stepWeather, weatherStateSnapshot, RAIN_VISIBLE_INTENSITY, type WeatherSpellRecord } from './weatherSpells';
 import { exodusBats, stepExodus } from './exodusRuntime';
 import { crowGlowIntensity, CROW_GLOW_EMISSIVE } from './crow';
@@ -62,12 +62,14 @@ import {
 } from './harvestState';
 import { standingInWater, terrainSpeedAt, WADING_FACTOR, type WaterDisc } from './movement';
 import { riverParamsFor, riverRibbonForChunk } from './river';
-import { barnSite, caveMouthSite, chapelSite, drownedMillSite, farmhouseSite, generalStoreSite, groveSite, pushOutOfWalls, railSidingSite, schoolhouseSite, siloSite, sunkenRoadSite, villageSite, wallsNearSites, type SiteFootprint } from './sites';
+import { barnSite, caveMouthSite, chapelSite, drownedMillSite, farmhouseSite, generalStoreSite, groveEntranceSeat, groveSite, mazeEntranceSeat, pushOutOfWalls, railSidingSite, schoolhouseSite, siloSite, sunkenRoadSite, villageSite, wallsNearSites, GROVE_CELL_M, GROVE_GRID_CELLS, type SiteFootprint } from './sites';
 import { caveFootprintFor, caveInstancesInRect, caveLayoutForKey, caveMouthsNear, caveSurfaceAim, type CaveSurfaceHit } from './caves';
 import { mossPaintState } from './mossPaintState';
-import { SURFACE_DIMENSION_KEY, type NamedPlace, type NamedPlacesState } from './namedPlaces';
+import { bearingDegrees, SURFACE_DIMENSION_KEY, type NamedPlace, type NamedPlacesState } from './namedPlaces';
+import { dimensionState } from './dimensionState';
 import { isUpstairsKey, UPSTAIRS_BACKGROUND, UPSTAIRS_FOG_DENSITY } from './attics';
 import { homesteadInstancesInRect } from './homesteads';
+import { groveInstancesInRect } from './groves';
 import { farmhouseInstancesInRect } from './farmhouses';
 import { villageInstancesInRect } from './villages';
 import type { RiverParams } from './river';
@@ -257,6 +259,33 @@ export const PLACEMENT_PREVIEW_LIFT_M = 0.03;
  * she claimed. DRAFT for Adam's pin pass.
  */
 export const TAG_RANGE_M = 100;
+
+/**
+ * RETURNING'S WAY-OUT POINTING (Adam's Returning T1,
+ * Background 2026-11-05): how far past the Grove's hedge
+ * square the grove case still arms — inside the square
+ * she is in the maze; a step or two beyond the gap she
+ * is effectively out. DRAFT for Adam's pin pass.
+ */
+export const GROVE_POINT_MARGIN_M = 2;
+
+/**
+ * Where OUT is, when an interior has one: the exit seat
+ * of the cave layer she stands in, or a grove maze's
+ * entrance gap (The Grove's or a lesser grove's) — with
+ * the compass bearing and distance from her. The engine
+ * fact behind Returning T1's pointing; the gate
+ * (Systems' canScry) and the presentation (UI's Scry
+ * surface) are theirs.
+ */
+export interface ExitTarget {
+  kind: 'cave-exit' | 'grove-entrance';
+  x: number;
+  z: number;
+  distanceM: number;
+  /** Compass bearing from her to the seat, degrees. */
+  bearingDeg: number;
+}
 
 /** One named place as the tag feed serves it. */
 export interface NamedPlaceTag {
@@ -867,6 +896,9 @@ export class WorldRenderer {
   private coverMemo = new Map<string, { x: number; z: number }[]>();
   /** The guide's layer (a single crow mesh) + its tree-point memo. */
   private guideGroup: THREE.Group | null = null;
+  /** Lesser groves the raven has already led her to (the
+   *  arrival latch — see updateGuideRetarget). */
+  private guideLedKeys = new Set<string>();
   /** Precipitation rig (W1): built lazily on first rain. */
   private rainGroup: THREE.Group | null = null;
   private rainStreaks: THREE.Points | null = null;
@@ -1097,6 +1129,7 @@ export class WorldRenderer {
     this.unsubPlaced.push(
       bus.on('fire:placed', rebuild),
       bus.on('fire:lit', rebuild),
+      bus.on('fire:removed', rebuild),
       bus.on('shelter:placed', rebuild),
       bus.on('shelter:upgraded', rebuild),
       bus.on('loom:placed', rebuild),
@@ -1656,6 +1689,69 @@ export class WorldRenderer {
     return sky.cycleT <= 2 / 24;
   }
 
+  /**
+   * The raven's lesser-grove retarget (Adam's correction,
+   * 2026-11-05): inside a guide window, on the surface,
+   * the nearest UNGLEAMED lesser grove within
+   * GUIDE_LESSER_RANGE_M of her lends the bird its
+   * entrance seat as the lead's target — the gap is the
+   * door she needs, so 'arrived' reads there. Arrival
+   * (she closes within the lead ring of the seat) ends
+   * the lead and latches the grove as led until she has
+   * walked well away from it, so the bird does not
+   * re-lead her to a doorstep she is standing on. When
+   * nothing qualifies, The Grove's lead reclaims the
+   * bird. Discovery still retires the bird inside
+   * stepGuide — this decision only ever lends a target.
+   */
+  private updateGuideRetarget(): void {
+    if (this.gen.dimensionKey || !this.guideWindowOpen()) {
+      clearRetarget();
+      return;
+    }
+    const px = this.player.x;
+    const pz = this.player.z;
+    const seed = String(this.gen.seed);
+    const insts = groveInstancesInRect(
+      seed,
+      this.gen.findSpawn(),
+      (x, z) => this.gen.weightsAt(x, z),
+      { minX: px - 320, maxX: px + 320, minZ: pz - 320, maxZ: pz + 320 },
+    );
+    for (const k of [...this.guideLedKeys]) {
+      const inst = insts.find((i) => i.key === k);
+      if (
+        !inst ||
+        Math.hypot(inst.center.x - px, inst.center.z - pz) >
+          GUIDE_LESSER_RANGE_M + 50
+      ) {
+        this.guideLedKeys.delete(k);
+      }
+    }
+    let best: { key: string; seat: { x: number; z: number }; d: number } | null =
+      null;
+    for (const inst of insts) {
+      if (this.guideLedKeys.has(inst.key)) continue;
+      if (isLesserGroveGleamed(inst.fragmentCarrier.fragmentId)) continue;
+      const d = Math.hypot(inst.center.x - px, inst.center.z - pz);
+      if (d > GUIDE_LESSER_RANGE_M) continue;
+      const seat = mazeEntranceSeat(inst.center, inst.entranceCell, inst.grid);
+      if (!best || d < best.d) best = { key: inst.key, seat, d };
+    }
+    if (!best) {
+      clearRetarget();
+      return;
+    }
+    if (
+      Math.hypot(best.seat.x - px, best.seat.z - pz) <= GUIDE_LEAD_RING_M
+    ) {
+      this.guideLedKeys.add(best.key);
+      clearRetarget();
+      return;
+    }
+    retargetGuide(best.seat.x, best.seat.z);
+  }
+
   /** The kinds a perch may stand on (sparse-country
    *  staging, 2026-11-03): a raven can sit on any tall
    *  tree — the generic tree, the tall scenery tree, the
@@ -1852,8 +1948,20 @@ export class WorldRenderer {
         minZ: z - 192,
         maxZ: z + 192,
       });
-      if (near.length > 0 || nearHomes.length > 0 || nearFarms.length > 0 || nearVillages.length > 0)
-        sites = [...sites, ...near, ...nearHomes, ...nearFarms, ...nearVillages];
+      // The lesser groves likewise (Adam's correction,
+      // 2026-11-05): every grove has its maze, and the
+      // maze's hedge walls collide as The Grove's do.
+      // The query runs wide — a giant on Adam's size
+      // ladder can span 65 m+, so its walls can stand
+      // near her while its centre is well past 64 m.
+      const nearGroves = groveInstancesInRect(seed, this.wallsSpawnMemo.spawn, (wx, wz) => this.gen.weightsAt(wx, wz), {
+        minX: x - 160,
+        maxX: x + 160,
+        minZ: z - 160,
+        maxZ: z + 160,
+      });
+      if (near.length > 0 || nearHomes.length > 0 || nearFarms.length > 0 || nearVillages.length > 0 || nearGroves.length > 0)
+        sites = [...sites, ...near, ...nearHomes, ...nearFarms, ...nearVillages, ...nearGroves];
     }
     return wallsNearSites(sites, x, z, 2);
   }
@@ -1910,6 +2018,102 @@ export class WorldRenderer {
       this.player.z,
       TAG_RANGE_M,
     );
+  }
+
+  /**
+   * Returning T1's way-out pointing, the engine half
+   * (2026-11-05): where OUT is from where she stands, or
+   * null when the place she stands in has no out to point
+   * to — the open surface, an attic, a lesser grove's
+   * open clearing. Two interiors carry the fact:
+   *   IN A CAVE: the ACTIVE LAYER's entry anchor — one
+   *   rule at every depth: layer 1's entry is the way out
+   *   to the mouth she entered by; a deeper layer's entry
+   *   is the climb point back up.
+   *   IN A GROVE (inside a maze's hedge square +
+   *   GROVE_POINT_MARGIN_M — The Grove's, or any lesser
+   *   grove's since Adam's correction gave every grove
+   *   its maze): that maze's entrance gap seat.
+   * Ungated, like the tag feed: Systems' canScry decides
+   * whether the door shows; this read only answers.
+   */
+  getExitTarget(): ExitTarget | null {
+    const key = this.gen.dimensionKey;
+    const seed = String(this.gen.seed);
+    if (key !== undefined && key.startsWith('cave:')) {
+      const layout = caveLayoutForKey(seed, key);
+      const layer =
+        layout.layers[dimensionState.currentLayer() - 1] ??
+        layout.layers[0];
+      if (!layer) return null;
+      const a = layer.entryAnchor;
+      return {
+        kind: 'cave-exit',
+        x: a.x,
+        z: a.z,
+        distanceM: Math.hypot(a.x - this.player.x, a.z - this.player.z),
+        bearingDeg: bearingDegrees(this.player.x, this.player.z, a),
+      };
+    }
+    if (key === undefined) {
+      const grove = groveSite(
+        seed,
+        this.gen.findSpawn(),
+        (x, z) => this.gen.weightsAt(x, z).dominant,
+      );
+      const half =
+        (GROVE_GRID_CELLS * GROVE_CELL_M) / 2 + GROVE_POINT_MARGIN_M;
+      if (
+        Math.abs(this.player.x - grove.center.x) <= half &&
+        Math.abs(this.player.z - grove.center.z) <= half
+      ) {
+        const seat = groveEntranceSeat(grove);
+        return {
+          kind: 'grove-entrance',
+          x: seat.x,
+          z: seat.z,
+          distanceM: Math.hypot(
+            seat.x - this.player.x,
+            seat.z - this.player.z,
+          ),
+          bearingDeg: bearingDegrees(this.player.x, this.player.z, seat),
+        };
+      }
+      // The lesser groves (Adam's correction, 2026-11-05):
+      // inside a lesser maze's square, its own gap is out.
+      const lessers = groveInstancesInRect(
+        seed,
+        this.gen.findSpawn(),
+        (x, z) => this.gen.weightsAt(x, z),
+        {
+          minX: this.player.x - 160,
+          maxX: this.player.x + 160,
+          minZ: this.player.z - 160,
+          maxZ: this.player.z + 160,
+        },
+      );
+      for (const inst of lessers) {
+        const instHalf =
+          (inst.grid * GROVE_CELL_M) / 2 + GROVE_POINT_MARGIN_M;
+        if (
+          Math.abs(this.player.x - inst.center.x) <= instHalf &&
+          Math.abs(this.player.z - inst.center.z) <= instHalf
+        ) {
+          const seat = mazeEntranceSeat(inst.center, inst.entranceCell, inst.grid);
+          return {
+            kind: 'grove-entrance',
+            x: seat.x,
+            z: seat.z,
+            distanceM: Math.hypot(
+              seat.x - this.player.x,
+              seat.z - this.player.z,
+            ),
+            bearingDeg: bearingDegrees(this.player.x, this.player.z, seat),
+          };
+        }
+      }
+    }
+    return null;
   }
 
   /** Set her injury movement factor (1 = sound; the shell derives it from her stage's INJURY_EFFECTS). */
@@ -4211,6 +4415,7 @@ export class WorldRenderer {
     {
       const g = guideActor();
       if (g) {
+        this.updateGuideRetarget();
         stepGuide(dt, {
           playerX: this.player.x,
           playerZ: this.player.z,
