@@ -2173,6 +2173,15 @@ interface FeedbackItem {
   tone: FeedbackTone;
   /** True in the line's last ~0.6 s: the row fades out. */
   fading: boolean;
+  /**
+   * When the line was seated (or last refreshed), wall
+   * clock — the aging tick reads AGES from this stamp,
+   * never from timer bookkeeping (the feed-HUD build:
+   * a throttled timer queue in a backgrounded tab left
+   * minutes-old lines hanging across the gauges; a
+   * clock read cannot be throttled into a lie).
+   */
+  bornAt: number;
 }
 
 /**
@@ -4504,9 +4513,6 @@ export default function App() {
   const useWinnerRef = useRef<UseWinner | null>(null);
   const transitionTimerRef = useRef<number | undefined>(undefined);
   const feedbackCounterRef = useRef(0);
-  const feedbackTimersRef = useRef<
-    Map<string, { fade: number; remove: number }>
-  >(new Map());
 
   // PAUSE (Adam, 2026-10-26 — core 54e525c): the engine pause
   // flag, mirrored for the shell. The ref is what the timers
@@ -6219,8 +6225,21 @@ export default function App() {
   // and re-seats as newest instead of stacking a twin
   // (multi-press struggle narration). Life is the tuned
   // 4 s, the last ~0.6 s fading.
+  //
+  // AGING IS READ OFF THE CLOCK (the feed-HUD build,
+  // 2026-11-05): every line carries its bornAt stamp,
+  // and the aging tick below derives fading + expiry
+  // from ages. The per-line setTimeout pair this
+  // replaces could be throttled into uselessness by a
+  // backgrounded tab — Adam's screenshot showed
+  // minutes-old lines still hanging across his gauges
+  // after he came back to the game. A clock read
+  // cannot be throttled into a lie: the first tick
+  // after the tab wakes retires every overdue line.
   const FEED_MAX = 4;
   const FEED_MAX_TOUCH = 3;
+  const FEED_FADE_MS = 3400;
+  const FEED_LIFE_MS = 4000;
   const showFeedback = (text: string, tone: FeedbackTone) => {
     const cap = isTouch ? FEED_MAX_TOUCH : FEED_MAX;
     setFeedbacks((current) => {
@@ -6228,39 +6247,47 @@ export default function App() {
         (item) => item.text === text && item.tone === tone,
       );
       const id = twin ? twin.id : `fb-${feedbackCounterRef.current++}`;
-      const existing = feedbackTimersRef.current.get(id);
-      if (existing) {
-        window.clearTimeout(existing.fade);
-        window.clearTimeout(existing.remove);
-      }
-      const fade = window.setTimeout(() => {
-        setFeedbacks((list) =>
-          list.map((item) =>
-            item.id === id ? { ...item, fading: true } : item,
-          ),
-        );
-      }, 3400);
-      const remove = window.setTimeout(() => {
-        setFeedbacks((list) => list.filter((item) => item.id !== id));
-        feedbackTimersRef.current.delete(id);
-      }, 4000);
-      feedbackTimersRef.current.set(id, { fade, remove });
       const rest = current.filter((item) => item.id !== id);
-      const next = [...rest, { id, text, tone, fading: false }];
-      while (next.length > cap) {
-        const dropped = next.shift();
-        if (dropped && dropped.id !== id) {
-          const timers = feedbackTimersRef.current.get(dropped.id);
-          if (timers) {
-            window.clearTimeout(timers.fade);
-            window.clearTimeout(timers.remove);
-            feedbackTimersRef.current.delete(dropped.id);
-          }
-        }
-      }
+      const next = [
+        ...rest,
+        { id, text, tone, fading: false, bornAt: Date.now() },
+      ];
+      while (next.length > cap) next.shift();
       return next;
     });
   };
+
+  // THE AGING TICK: while any line stands, a short
+  // interval ages the stack off the clock — a line
+  // fades once its age passes FEED_FADE_MS and leaves
+  // past FEED_LIFE_MS. Returning the same list when
+  // nothing changed keeps the tick render-free.
+  const feedStanding = feedbacks.length > 0;
+  useEffect(() => {
+    if (!feedStanding) return;
+    const timer = window.setInterval(() => {
+      const now = Date.now();
+      setFeedbacks((list) => {
+        let changed = false;
+        const next: FeedbackItem[] = [];
+        for (const item of list) {
+          const age = now - item.bornAt;
+          if (age > FEED_LIFE_MS) {
+            changed = true;
+            continue;
+          }
+          if (age > FEED_FADE_MS && !item.fading) {
+            changed = true;
+            next.push({ ...item, fading: true });
+          } else {
+            next.push(item);
+          }
+        }
+        return changed ? next : list;
+      });
+    }, 250);
+    return () => window.clearInterval(timer);
+  }, [feedStanding]);
 
   // Boot the world once. StrictMode double-mounts in dev only; the
   // cleanup below disposes the first instance, and the production build
@@ -7701,11 +7728,6 @@ export default function App() {
       window.clearInterval(hungerTimer);
       window.clearTimeout(warningFlashTimerRef.current);
       window.clearTimeout(transitionTimerRef.current);
-      for (const timers of feedbackTimersRef.current.values()) {
-        window.clearTimeout(timers.fade);
-        window.clearTimeout(timers.remove);
-      }
-      feedbackTimersRef.current.clear();
       window.removeEventListener('resize', onResize);
       window.removeEventListener('pagehide', onPageHide);
       offCamera();
@@ -17802,36 +17824,56 @@ export default function App() {
               : `Pick up ${displayNameFor(desktopPilePickup.item)} × ${desktopPilePickup.quantity}`}
           </button>
         ) : null}
-        {/* THE MESSAGE FEED (Adam, 2026-10-31): the spoken
-          lines' ONE seat — a reserved stack in the same
-          z-40 overlay (above the world buttons, below z-50
-          modals), bottom-center, clear of the pill column
-          (upper-center), the HUD (left), the seed bar
-          (bottom-left) and the controls hint (bottom-right).
-          The stack is bottom-anchored, so it grows UPWARD:
-          the newest line (last in the list) sits at the
-          fixed bottom seat and older lines ride up, fading
-          in their last ~0.6 s before they expire from the
-          top. Pointer-events-none: speech never takes a
-          tap. */}
-        <div
-          aria-live="polite"
-          className="pointer-events-none absolute inset-x-0 bottom-28 flex flex-col items-center justify-end gap-1.5 px-2"
-        >
-          {feedbacks.map((feedback) => (
-            <Fragment key={feedback.id}>
-              <ObjectFeedback
-                text={feedback.text}
-                tone={feedback.tone}
-                className={
-                  feedback.fading
-                    ? 'opacity-0 transition-opacity duration-500'
-                    : 'transition-opacity duration-500'
-                }
-              />
-            </Fragment>
-          ))}
-        </div>
+        {/* THE MESSAGE FEED (Adam, 2026-10-31; a REAL HUD
+          ELEMENT since the feed-HUD build, 2026-11-05):
+          the spoken lines' ONE seat — and now a citizen
+          of the #69 HUD system whole: the stack lives in
+          a HudElement ('feed'), so it is DRAGGABLE and
+          CLOSABLE like every other piece, its offset and
+          hidden flag persisting per pointer class in
+          localStorage (never the save; the Options HUD
+          tab lists it and brings it back). The seat stays
+          in the same z-40 overlay (above the world
+          buttons, below z-50 modals), bottom-center,
+          clear of the pill column (upper-center), the
+          HUD columns, the seed bar (bottom-left) and the
+          controls hint (bottom-right) in the DEFAULT
+          layout — and Adam can move it off whatever his
+          own layout puts beneath. The stack is
+          bottom-anchored, so it grows UPWARD: the newest
+          line (last in the list) sits at the fixed bottom
+          seat and older lines ride up, fading in their
+          last ~0.6 s before they expire from the top.
+          The element mounts only while lines stand (an
+          empty feed is no furniture; the hidden flag in
+          the layout store still governs it whenever it
+          mounts). Speech never takes a tap: the stack is
+          pointer-events-none; only the element's own
+          grip / hide chrome takes pointer input. */}
+        {feedbacks.length > 0 ? (
+          <div className="pointer-events-none absolute inset-x-0 bottom-28 flex justify-center px-2">
+            <HudElement hud={hudLayout} id="feed">
+              <div
+                aria-live="polite"
+                className="flex flex-col items-center justify-end gap-1.5"
+              >
+                {feedbacks.map((feedback) => (
+                  <Fragment key={feedback.id}>
+                    <ObjectFeedback
+                      text={feedback.text}
+                      tone={feedback.tone}
+                      className={
+                        feedback.fading
+                          ? 'opacity-0 transition-opacity duration-500'
+                          : 'transition-opacity duration-500'
+                      }
+                    />
+                  </Fragment>
+                ))}
+              </div>
+            </HudElement>
+          </div>
+        ) : null}
       </div>
 
       {/* HUD shell: needs row + HUD block. The needs row

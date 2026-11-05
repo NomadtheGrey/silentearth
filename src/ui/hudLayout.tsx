@@ -35,7 +35,8 @@ export type HudElementId =
   | 'quest'
   | 'meta'
   | 'controls'
-  | 'wardrobe';
+  | 'wardrobe'
+  | 'feed';
 
 export const HUD_ELEMENT_LABELS: Record<HudElementId, string> = {
   chip: 'Location chip',
@@ -45,6 +46,7 @@ export const HUD_ELEMENT_LABELS: Record<HudElementId, string> = {
   meta: 'Debug (SILENT EARTH)',
   controls: 'Controls',
   wardrobe: 'Wardrobe',
+  feed: 'Message feed',
 };
 
 export interface HudSlot {
