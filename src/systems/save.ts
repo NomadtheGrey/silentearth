@@ -561,6 +561,23 @@ export interface SavedBag {
 }
 
 /**
+ * One laid hedge, as saved (the Hedge build,
+ * 2026-11-05). Mirrors hedge.ts's HedgeRecord
+ * field-for-field (snapshot = stored = restore, zero
+ * conversion — the named-place discipline). `homeId`
+ * is the placed shelter's id, opaque + verbatim;
+ * laidDay/rootedDay are world days (rootedDay =
+ * laidDay + ROOT_DAYS; the effects wake at rooting).
+ */
+export interface SavedHedge {
+  homeId: string;
+  x: number;
+  z: number;
+  laidDay: number;
+  rootedDay: number;
+}
+
+/**
  * World harvest state, as saved. Structural mirror of the game
  * layer's HarvestStateSnapshot (harvestState.ts) by literal —
  * systems does not import game modules. The engine's restore()
@@ -604,6 +621,20 @@ export interface SavedHarvestState {
   }>;
   saplingCounter: number;
   clearedSpots: Array<{ x: number; z: number }>;
+  /**
+   * Bush scatter ids that have GIVEN their cuttings
+   * (the Hedge build, 2026-11-05): a bush gives its
+   * cuttings ONCE, on its first harvest, and never
+   * again — this set is the one-off fact, riding the
+   * harvest state it belongs to. OPTIONAL on the save
+   * side until Background's HarvestStateSnapshot
+   * carries the field (the seat-first staging the
+   * desk's grimoire flag used): absent reads as []
+   * everywhere — the empty state provides it, the
+   * copy helper fills it, and the engine's restore
+   * treats absence as none-given.
+   */
+  cuttingsGiven?: string[];
 }
 
 /**
@@ -623,6 +654,7 @@ export function emptySavedHarvestState(): SavedHarvestState {
     saplings: [],
     saplingCounter: 0,
     clearedSpots: [],
+    cuttingsGiven: [],
   };
 }
 
@@ -659,6 +691,7 @@ function copySavedHarvestState(h: SavedHarvestState): SavedHarvestState {
     saplings: h.saplings.map((e) => ({ ...e })),
     saplingCounter: h.saplingCounter,
     clearedSpots: h.clearedSpots.map((e) => ({ ...e })),
+    cuttingsGiven: [...(h.cuttingsGiven ?? [])],
   };
 }
 
@@ -778,6 +811,8 @@ export interface SaveData {
   /** Places she has named (the game/namedPlaces
    * register, HOSTED); [] for old saves. */
   namedPlaces: SavedNamedPlace[];
+  /** Laid hedges, one per ringed home; [] for old saves. */
+  hedges: SavedHedge[];
   /** The cave visit this save was written in (boot-at-the-mouth
    * fact); null for surface saves and old saves. */
   dimensionVisit: SavedDimensionVisit | null;
@@ -1038,6 +1073,17 @@ export interface SaveDraft {
     z: number;
     dimensionKey: string;
     day: number;
+  }>;
+  /**
+   * Laid hedges from the hedge state's snapshot.
+   * OPTIONAL, same trap-save pattern as namedPlaces.
+   */
+  hedges?: ReadonlyArray<{
+    homeId: string;
+    x: number;
+    z: number;
+    laidDay: number;
+    rootedDay: number;
   }>;
   /**
    * The cave visit, from dimensionState.snapshot() at
@@ -1522,6 +1568,16 @@ export function serializeSave(draft: SaveDraft): SaveData {
       z: place.z,
       dimensionKey: place.dimensionKey,
       day: place.day,
+    })),
+    // Hedges: the state's snapshot written AS-IS
+    // (home ids verbatim, centres, days). Validation
+    // is restore's problem, not the writer's.
+    hedges: (draft.hedges ?? []).map((hedge) => ({
+      homeId: hedge.homeId,
+      x: hedge.x,
+      z: hedge.z,
+      laidDay: hedge.laidDay,
+      rootedDay: hedge.rootedDay,
     })),
     // The visit fact: written AS-IS (dimension key +
     // entry mouth verbatim). Absent/null in the draft
@@ -2294,6 +2350,28 @@ export function deserializeSave(value: unknown): SaveData | null {
         });
       }
     }
+    // Hedges are optional on read, same leniency as
+    // named places: an old v1 save without the field
+    // loads hedges: []. Per-entry: a hedge rides WHOLE
+    // — non-empty string home id, finite centre, finite
+    // days — a bad entry drops alone; a non-array
+    // field loads [].
+    const hedges: SavedHedge[] = [];
+    if (value.hedges !== undefined && Array.isArray(value.hedges)) {
+      for (const entry of value.hedges) {
+        if (!isRecord(entry)) continue;
+        if (typeof entry.homeId !== 'string' || entry.homeId === '') continue;
+        if (!Number.isFinite(entry.x) || !Number.isFinite(entry.z)) continue;
+        if (!Number.isFinite(entry.laidDay) || !Number.isFinite(entry.rootedDay)) continue;
+        hedges.push({
+          homeId: entry.homeId,
+          x: entry.x as number,
+          z: entry.z as number,
+          laidDay: entry.laidDay as number,
+          rootedDay: entry.rootedDay as number,
+        });
+      }
+    }
     // The visit fact is optional on read: an old v1
     // save without it loads with dimensionVisit: null.
     // A record passes with its key verbatim and its
@@ -2868,6 +2946,7 @@ export function deserializeSave(value: unknown): SaveData | null {
       patches,
       mossPaint,
       namedPlaces,
+      hedges,
       dimensionVisit,
       acquisitionOrder,
       companions,

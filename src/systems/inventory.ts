@@ -90,7 +90,7 @@
  *   mossy-mittens, plant-pulp, pressed-sheets, journal, sand,
  *   glass.
  * - 1 lb: snap-wood, river-silt, clay, dirt, mud, garden-trowel,
- *   sharp-trowel, shawl, umbrella, clay-pot, clay-jar, grimoire,
+ *   sharp-trowel, shawl, umbrella, clay-pot, clay-jar,
  *   crystal-ball.
  * - 2 lb: river-stone, downed-oak, water-jar, spade, axe-trowel,
  *   hooded-cloak, bog-boots.
@@ -98,8 +98,15 @@
  *   while carried between craft and place (short interval —
  *   flagged: primitive-lean-to, thatch-hut, wattle-and-daub-hut,
  *   woven-cottage, small-wooden-hut, moss-cradle, campfire,
- *   hearth, kiln, cauldron, writing-desk, stumpy-workstation,
+ *   kiln, cauldron, writing-desk, stumpy-workstation,
  *   crafted-workstation, potters-wheel, loom).
+ * - 20 lb: hearth, lit-hearth (Adam, 2026-11-05 — the
+ *   hearth is furniture, and HEAVY: pockets can't stage
+ *   it, a basket carries it; below the grimoire's class).
+ * - 40 lb: grimoire (Adam, 2026-11-05 — heavy on
+ *   purpose: the book lives on its desk; moving it is
+ *   a deliberate haul. Settled from his 50 anchor so
+ *   the small-basket kit can craft and carry it).
  * - Unknown ids default to 1 lb (never block the game on a
  *   missing row — flagged). LANE JUDGMENTS inside that rule,
  *   for the pin pass: cooked-acorns 0.1 lb (same as acorns —
@@ -235,6 +242,9 @@ export const ITEM_WEIGHT_LB: Readonly<Record<string, number>> = {
   [ITEMS.meadowFlower]: 0.1,
   // 0.25 lb
   [ITEMS.dryKindling]: 0.25,
+  // Cuttings (the Hedge build, 2026-11-05): a bundle
+  // of live bush twigs — kindling weight, DRAFT.
+  [ITEMS.cuttings]: 0.25,
   [ITEMS.charcoalStick]: 0.25,
   [ITEMS.candle]: 0.25,
   [ITEMS.beeswax]: 0.25,
@@ -329,7 +339,19 @@ export const ITEM_WEIGHT_LB: Readonly<Record<string, number>> = {
   [ITEMS.potTrap]: 1,
   [ITEMS.clayJar]: 1,
   [ITEMS.waterJar]: 2,
-  [ITEMS.grimoire]: 1,
+  // 40 lb — THE GRIMOIRE IS HEAVY ON PURPOSE (Adam,
+  // 2026-11-05: "it should live on the desk. Make the
+  // grimoire weigh like 50# or something. If she wants
+  // to move it, she needs to be serious."): the book's
+  // home is its desk. Settled at 40 (Adam + DEV's
+  // figuring, same day): craft output is all-or-
+  // nothing by fit, and at 50 the small-basket kit
+  // (45 lb) fell 5 short — the book's BIRTH would have
+  // sat behind the large basket. At 40: pockets+apron
+  // (20 lb) can never stage it; the small kit hauls it
+  // with 5 lb to spare — still a deliberate, nearly-
+  // whole-carry act. DRAFT for Adam's pin pass.
+  [ITEMS.grimoire]: 40,
   [ITEMS.journal]: 0.5,
   // 2 lb
   [ITEMS.fishWeirTrap]: 2,
@@ -351,7 +373,6 @@ export const ITEM_WEIGHT_LB: Readonly<Record<string, number>> = {
   [ITEMS.smallWoodenHut]: 4,
   [ITEMS.mossCradle]: 4,
   [ITEMS.campfire]: 4,
-  [ITEMS.hearth]: 4,
   [ITEMS.kiln]: 4,
   [ITEMS.cauldron]: 4,
   [ITEMS.writingDesk]: 4,
@@ -364,6 +385,10 @@ export const ITEM_WEIGHT_LB: Readonly<Record<string, number>> = {
   // between craft and place).
   [ITEMS.altar]: 4,
   [ITEMS.tent]: 4, // camping: carried-structure precedent, flagged
+  // 20 lb — the heavy furniture (Adam, 2026-11-05:
+  // the hearth is moveable, and heavy; see hearth.ts).
+  [ITEMS.hearth]: 20,
+  [ITEMS.litHearth]: 20,
 };
 
 /**
@@ -487,6 +512,7 @@ export const ITEM_DISPLAY_NAMES: Readonly<Record<string, string>> = {
   'river-stone': 'River Stone',
   'luminous-spores': 'Luminous Spores',
   'dry-kindling': 'Dry Kindling',
+  cuttings: 'Cuttings',
   'charcoal-stick': 'Charred Stick',
   candle: 'Candle',
   beeswax: 'Beeswax',
@@ -555,6 +581,7 @@ export const ITEM_DISPLAY_NAMES: Readonly<Record<string, string>> = {
   umbrella: 'Umbrella',
   torch: 'Torch',
   'lit-torch': 'Lit Torch',
+  'lit-hearth': 'Lit Hearth',
   'plant-pulp': 'Plant Pulp',
   'pressed-sheets': 'Pressed Sheets',
   paper: 'Paper',
@@ -689,6 +716,7 @@ export const ITEM_DESCRIPTIONS: Readonly<Record<string, string>> = {
   'river-stone': 'The whetstone — sharpens the trowel, kept, not consumed — and building stone besides.',
   'luminous-spores': 'Pale glowing spores. An ingredient for the moss cradle.',
   'dry-kindling': 'Split snap-wood, dry and ready. One piece lights a fire by friction.',
+  cuttings: 'Live cuttings from a bush, for laying a hedge. A bush gives its cuttings once, the first time it is worked.',
   'charcoal-stick': 'A stick with one end burned to charcoal, for drawing. Char one at a lit fire, or at the fire\'s own panel.',
   candle: 'Made by dipping a twined-cordage wick in wax melted in a cauldron at a lit hearth — one melt makes three. One of the three things a Stumpy Altar asks for: stone, glyph, and flame.',
   beeswax: 'Wax gathered from a wild hive, alongside the honey. Melts in the cauldron at a lit hearth.',
@@ -755,6 +783,7 @@ export const ITEM_DESCRIPTIONS: Readonly<Record<string, string>> = {
   'clay-brick': 'A kiln-fired brick. No use for it yet.',
   torch: 'A torch, unlit. Light it from a fire, or with flint and stone.',
   'lit-torch': 'A lit torch. Bright light, and it never burns out.',
+  'lit-hearth': 'A hearth, still lit — stone and clay with its fire alive in it. Set it down and it burns where it stands.',
   'plant-pulp': 'Mashed plant fibre. Press it into sheets, on the way to paper.',
   'pressed-sheets': 'Pressed fibre sheets. Bind them into paper.',
   paper: 'Handmade paper. Bind it into a grimoire.',
@@ -918,6 +947,7 @@ export const ITEM_CATEGORIES: Readonly<Record<string, ItemCategory>> = {
   sand: 'Materials',
   glass: 'Materials',
   'crystal-ball': 'Ritual',
+  cuttings: 'Materials',
   repellent: 'Materials',
   'prey-lure': 'Materials',
   'predator-lure': 'Materials',
@@ -981,6 +1011,7 @@ export const ITEM_CATEGORIES: Readonly<Record<string, ItemCategory>> = {
   tent: 'Structures & Stations',
   torch: 'Structures & Stations',
   'lit-torch': 'Structures & Stations',
+  'lit-hearth': 'Structures & Stations',
   'old-stump': 'Structures & Stations',
   snare: 'Structures & Stations',
   'fish-weir-trap': 'Structures & Stations',

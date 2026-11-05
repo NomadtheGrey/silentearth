@@ -78,6 +78,11 @@ export const ITEMS = {
   // Fire ladder.
   campfire: 'campfire',
   hearth: 'hearth',
+  // A lit hearth, carried (2026-11-05 — Adam's
+  // fire-rides law: a lit hearth picked up keeps its
+  // fire in the item id, the lit-torch precedent;
+  // see systems/hearth.ts). Never crafted.
+  litHearth: 'lit-hearth',
   kiln: 'kiln',
   // Stations.
   stumpyWorkstation: 'stumpy-workstation',
@@ -195,6 +200,9 @@ export const ITEMS = {
   sand: 'sand',
   glass: 'glass',
   crystalBall: 'crystal-ball',
+  // The Hedge build (2026-11-05 — bush cuttings for
+  // laying a hedge; see systems/hedge.ts).
+  cuttings: 'cuttings',
   // Camping (2026-10-28 — sleeping bag + tent; see camping.ts).
   sleepingBag: 'sleeping-bag',
   tent: 'tent',
@@ -1024,8 +1032,9 @@ const DRAFT_RECIPES: Recipe[] = [
     ],
     notes:
       'DRAFT. Stone ring, clay lining, wood fuel. Better / more food ' +
-      'from cooking. Whether a hearth is moveable by the Trundle-Tool ' +
-      'is MAYBE, not pinned.',
+      'from cooking. A hearth is furniture (Adam, 2026-11-05): heavy ' +
+      '(20 lb) but moveable by hand like anything else — and a lit ' +
+      'hearth picked up stays lit, coming back as a lit hearth.',
   },
   {
     id: 'kiln',

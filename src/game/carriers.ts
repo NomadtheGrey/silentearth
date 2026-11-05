@@ -15,8 +15,9 @@
  *                the carrier's own stable key, never
  *                rolled, so the same stone is the same
  *                fragment in every telling.
- *   mark         Systems' mark id. The grove stone and
- *                the cave circles teach CIRCLE; the
+ *   mark         Systems' mark id. The grove stone, the
+ *                lesser groves' carved stones, and the
+ *                cave circles teach CIRCLE; the
  *                homestead great stones teach TRAVEL.
  *                THE HOME CARRIERS DEAL (Adam, 2026-11-05):
  *                the farmhouse great stone, every village
@@ -64,6 +65,7 @@ import { farmhouseSite, groveSite, villageSite } from './sites';
 import { caveInstancesInRect, caveLayoutForKey } from './caves';
 import { homesteadInstancesInRect } from './homesteads';
 import { villageInstancesInRect } from './villages';
+import { groveInstancesInRect } from './groves';
 import { dealHomeMark } from './homeDeal';
 
 /** The three facts a faced carrier hands the shell. */
@@ -178,6 +180,11 @@ export function fragmentCarriersHere(
   // a dealt fragment no door can reach is not a deal).
   // Every instance mints its carrier, so no guard.
   for (const inst of villageInstancesInRect(worldSeed, spawn, weightsAtPos, rect)) {
+    near({ ...inst.fragmentCarrier, x: inst.fragmentSpot.x, z: inst.fragmentSpot.z });
+  }
+  // The lesser groves' carved stones (the family's own
+  // carriers — every instance mints, so no guard).
+  for (const inst of groveInstancesInRect(worldSeed, spawn, weightsAtPos, rect)) {
     near({ ...inst.fragmentCarrier, x: inst.fragmentSpot.x, z: inst.fragmentSpot.z });
   }
   out.sort((a, b) => Math.hypot(a.x - x, a.z - z) - Math.hypot(b.x - x, b.z - z));

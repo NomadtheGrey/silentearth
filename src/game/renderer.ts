@@ -38,7 +38,7 @@ import {
   TRUST_MARKER_RANGE_M,
   type MarkerState,
 } from './trustMarkers';
-import { spawnAnimalsForChunk, updateAnimal, FERAL_SAFE_HOUSE_M, FERAL_SAFE_SPAWN_M } from './animals';
+import { spawnAnimalsForChunk, updateAnimal, FERAL_DANGEROUS_KINDS, FERAL_SAFE_HOUSE_M, FERAL_SAFE_SPAWN_M } from './animals';
 import type { AnimalInstance, AnimalKind, FeralFacts } from './animals';
 import {
   actorById,
@@ -47,7 +47,7 @@ import {
   stepActors,
 } from './companionRuntime';
 import { catActor, catGlowOn, clearCat, ensureCat, installCatPreyAccess, stepCat } from './catRuntime';
-import { clearGuide, guideActor, guideVisible, seatYFor, stageGuide, stepGuide } from './guideRuntime';
+import { clearGuide, clearRetarget, guideActor, guideVisible, isLesserGroveGleamed, retargetGuide, seatYFor, stageGuide, stepGuide, GUIDE_LEAD_RING_M, GUIDE_LESSER_RANGE_M } from './guideRuntime';
 import { currentWeatherFacts, seatWeatherState, stepWeather, weatherStateSnapshot, RAIN_VISIBLE_INTENSITY, type WeatherSpellRecord } from './weatherSpells';
 import { exodusBats, stepExodus } from './exodusRuntime';
 import { crowGlowIntensity, CROW_GLOW_EMISSIVE } from './crow';
@@ -62,12 +62,14 @@ import {
 } from './harvestState';
 import { standingInWater, terrainSpeedAt, WADING_FACTOR, type WaterDisc } from './movement';
 import { riverParamsFor, riverRibbonForChunk } from './river';
-import { barnSite, caveMouthSite, chapelSite, drownedMillSite, farmhouseSite, generalStoreSite, groveSite, pushOutOfWalls, railSidingSite, schoolhouseSite, siloSite, sunkenRoadSite, villageSite, wallsNearSites, type SiteFootprint } from './sites';
+import { barnSite, caveMouthSite, chapelSite, drownedMillSite, farmhouseSite, generalStoreSite, groveEntranceSeat, groveSite, mazeEntranceSeat, pushOutOfWalls, railSidingSite, schoolhouseSite, siloSite, sunkenRoadSite, villageSite, wallsNearSites, GROVE_CELL_M, GROVE_GRID_CELLS, type SiteFootprint } from './sites';
 import { caveFootprintFor, caveInstancesInRect, caveLayoutForKey, caveMouthsNear, caveSurfaceAim, type CaveSurfaceHit } from './caves';
 import { mossPaintState } from './mossPaintState';
-import { SURFACE_DIMENSION_KEY, type NamedPlace, type NamedPlacesState } from './namedPlaces';
+import { bearingDegrees, SURFACE_DIMENSION_KEY, type NamedPlace, type NamedPlacesState } from './namedPlaces';
+import { dimensionState } from './dimensionState';
 import { isUpstairsKey, UPSTAIRS_BACKGROUND, UPSTAIRS_FOG_DENSITY } from './attics';
 import { homesteadInstancesInRect } from './homesteads';
+import { groveInstancesInRect } from './groves';
 import { farmhouseInstancesInRect } from './farmhouses';
 import { villageInstancesInRect } from './villages';
 import type { RiverParams } from './river';
@@ -258,7 +260,62 @@ export const PLACEMENT_PREVIEW_LIFT_M = 0.03;
  */
 export const TAG_RANGE_M = 100;
 
+/**
+ * RETURNING'S WAY-OUT POINTING (Adam's Returning T1,
+ * Background 2026-11-05): how far past the Grove's hedge
+ * square the grove case still arms — inside the square
+ * she is in the maze; a step or two beyond the gap she
+ * is effectively out. DRAFT for Adam's pin pass.
+ */
+export const GROVE_POINT_MARGIN_M = 2;
+
+/**
+ * Where OUT is, when an interior has one: the exit seat
+ * of the cave layer she stands in, or a grove maze's
+ * entrance gap (The Grove's or a lesser grove's) — with
+ * the compass bearing and distance from her. The engine
+ * fact behind Returning T1's pointing; the gate
+ * (Systems' canScry) and the presentation (UI's Scry
+ * surface) are theirs.
+ */
+export interface ExitTarget {
+  kind: 'cave-exit' | 'grove-entrance';
+  x: number;
+  z: number;
+  distanceM: number;
+  /** Compass bearing from her to the seat, degrees. */
+  bearingDeg: number;
+}
+
 /** One named place as the tag feed serves it. */
+/**
+ * One Hedge ring as the shell derives it from Systems'
+ * HedgeState (2026-11-05): the ring's centre (the home's
+ * anchor), the radius and tier her CURRENT knowledge of
+ * the mark gives it, and whether it has rooted (only a
+ * rooted ring works its field effects; an unrooted ring
+ * renders as sparse plantings). The renderer consumes
+ * views through setHedgeFactsProvider — it never sees
+ * the state itself.
+ */
+export interface HedgeRingView {
+  x: number;
+  z: number;
+  /** The ring's radius at her current tier (0 = no ring). */
+  radiusM: number;
+  /** Her current Hedge tier (1..3). */
+  tier: number;
+  /** Rooted by the shell's current world day. */
+  rooted: boolean;
+}
+
+/** Shrub spacing along a hedge ring, metres (DRAFT). */
+const HEDGE_SHRUB_SPACING_M = 1.3;
+/** An unrooted ring plants every Nth seat (DRAFT). */
+const HEDGE_PLANTING_EVERY = 3;
+/** An unrooted planting's scale (DRAFT). */
+const HEDGE_PLANTING_SCALE = 0.55;
+
 export interface NamedPlaceTag {
   id: string;
   /** Her name for the spot, verbatim. */
@@ -867,6 +924,9 @@ export class WorldRenderer {
   private coverMemo = new Map<string, { x: number; z: number }[]>();
   /** The guide's layer (a single crow mesh) + its tree-point memo. */
   private guideGroup: THREE.Group | null = null;
+  /** Lesser groves the raven has already led her to (the
+   *  arrival latch — see updateGuideRetarget). */
+  private guideLedKeys = new Set<string>();
   /** Precipitation rig (W1): built lazily on first rain. */
   private rainGroup: THREE.Group | null = null;
   private rainStreaks: THREE.Points | null = null;
@@ -890,6 +950,23 @@ export class WorldRenderer {
    * whole story, byte-identical to before.
    */
   private feralFactsProvider: ((a: AnimalInstance) => { defenderPos: { x: number; z: number } | null; repelled?: boolean } | null) | null = null;
+  /**
+   * THE HEDGE'S FIELD (2026-11-05): the shell's seat for
+   * the HedgeState's ring views, in the feral-facts
+   * provider's shape — Systems' state, derived shell-side
+   * (radius + tier from her fragment knowledge, rooted
+   * from the world day), read here for the ring's
+   * rendering and the field facts animals step on. This
+   * module never imports the systems layer. Unregistered,
+   * no rings stand and no beast is hedged: byte-identical
+   * to before. The views are re-read every frame; a
+   * signature change (a laying, the rooting day, a
+   * tier-up) rebuilds the rings on the next frame.
+   */
+  private hedgeFactsProvider: (() => HedgeRingView[]) | null = null;
+  private hedgeGroup: THREE.Group | null = null;
+  private hedgeSignature = '';
+  private currentHedgeViews: HedgeRingView[] = [];
   /**
    * NAMING TAGS: the shell's seat for the named-places
    * register (Systems' NamedPlacesState), in the
@@ -1097,9 +1174,11 @@ export class WorldRenderer {
     this.unsubPlaced.push(
       bus.on('fire:placed', rebuild),
       bus.on('fire:lit', rebuild),
+      bus.on('fire:removed', rebuild),
       bus.on('shelter:placed', rebuild),
       bus.on('shelter:upgraded', rebuild),
       bus.on('loom:placed', rebuild),
+      bus.on('loom:removed', rebuild),
       bus.on('torch:placed', rebuild),
       bus.on('torch:removed', rebuild),
       bus.on('altar:placed', rebuild),
@@ -1655,6 +1734,69 @@ export class WorldRenderer {
     return sky.cycleT <= 2 / 24;
   }
 
+  /**
+   * The raven's lesser-grove retarget (Adam's correction,
+   * 2026-11-05): inside a guide window, on the surface,
+   * the nearest UNGLEAMED lesser grove within
+   * GUIDE_LESSER_RANGE_M of her lends the bird its
+   * entrance seat as the lead's target — the gap is the
+   * door she needs, so 'arrived' reads there. Arrival
+   * (she closes within the lead ring of the seat) ends
+   * the lead and latches the grove as led until she has
+   * walked well away from it, so the bird does not
+   * re-lead her to a doorstep she is standing on. When
+   * nothing qualifies, The Grove's lead reclaims the
+   * bird. Discovery still retires the bird inside
+   * stepGuide — this decision only ever lends a target.
+   */
+  private updateGuideRetarget(): void {
+    if (this.gen.dimensionKey || !this.guideWindowOpen()) {
+      clearRetarget();
+      return;
+    }
+    const px = this.player.x;
+    const pz = this.player.z;
+    const seed = String(this.gen.seed);
+    const insts = groveInstancesInRect(
+      seed,
+      this.gen.findSpawn(),
+      (x, z) => this.gen.weightsAt(x, z),
+      { minX: px - 320, maxX: px + 320, minZ: pz - 320, maxZ: pz + 320 },
+    );
+    for (const k of [...this.guideLedKeys]) {
+      const inst = insts.find((i) => i.key === k);
+      if (
+        !inst ||
+        Math.hypot(inst.center.x - px, inst.center.z - pz) >
+          GUIDE_LESSER_RANGE_M + 50
+      ) {
+        this.guideLedKeys.delete(k);
+      }
+    }
+    let best: { key: string; seat: { x: number; z: number }; d: number } | null =
+      null;
+    for (const inst of insts) {
+      if (this.guideLedKeys.has(inst.key)) continue;
+      if (isLesserGroveGleamed(inst.fragmentCarrier.fragmentId)) continue;
+      const d = Math.hypot(inst.center.x - px, inst.center.z - pz);
+      if (d > GUIDE_LESSER_RANGE_M) continue;
+      const seat = mazeEntranceSeat(inst.center, inst.entranceCell, inst.grid);
+      if (!best || d < best.d) best = { key: inst.key, seat, d };
+    }
+    if (!best) {
+      clearRetarget();
+      return;
+    }
+    if (
+      Math.hypot(best.seat.x - px, best.seat.z - pz) <= GUIDE_LEAD_RING_M
+    ) {
+      this.guideLedKeys.add(best.key);
+      clearRetarget();
+      return;
+    }
+    retargetGuide(best.seat.x, best.seat.z);
+  }
+
   /** The kinds a perch may stand on (sparse-country
    *  staging, 2026-11-03): a raven can sit on any tall
    *  tree — the generic tree, the tall scenery tree, the
@@ -1851,8 +1993,20 @@ export class WorldRenderer {
         minZ: z - 192,
         maxZ: z + 192,
       });
-      if (near.length > 0 || nearHomes.length > 0 || nearFarms.length > 0 || nearVillages.length > 0)
-        sites = [...sites, ...near, ...nearHomes, ...nearFarms, ...nearVillages];
+      // The lesser groves likewise (Adam's correction,
+      // 2026-11-05): every grove has its maze, and the
+      // maze's hedge walls collide as The Grove's do.
+      // The query runs wide — a giant on Adam's size
+      // ladder can span 65 m+, so its walls can stand
+      // near her while its centre is well past 64 m.
+      const nearGroves = groveInstancesInRect(seed, this.wallsSpawnMemo.spawn, (wx, wz) => this.gen.weightsAt(wx, wz), {
+        minX: x - 160,
+        maxX: x + 160,
+        minZ: z - 160,
+        maxZ: z + 160,
+      });
+      if (near.length > 0 || nearHomes.length > 0 || nearFarms.length > 0 || nearVillages.length > 0 || nearGroves.length > 0)
+        sites = [...sites, ...near, ...nearHomes, ...nearFarms, ...nearVillages, ...nearGroves];
     }
     return wallsNearSites(sites, x, z, 2);
   }
@@ -1886,6 +2040,76 @@ export class WorldRenderer {
     this.feralFactsProvider = fn;
   }
 
+  /** Register the shell's hedge-facts provider (2026-11-05): see the field's note. */
+  setHedgeFactsProvider(fn: (() => HedgeRingView[]) | null): void {
+    this.hedgeFactsProvider = fn;
+    this.hedgeSignature = '';
+    this.currentHedgeViews = [];
+  }
+
+  /** The rooted ring standing at a point, if any (nearest centre wins). */
+  private hedgeRingAt(x: number, z: number): HedgeRingView | null {
+    let best: HedgeRingView | null = null;
+    let bestD = Infinity;
+    for (const v of this.currentHedgeViews) {
+      if (!v.rooted || v.radiusM <= 0) continue;
+      const d = Math.hypot(x - v.x, z - v.z);
+      if (d <= v.radiusM && d < bestD) {
+        best = v;
+        bestD = d;
+      }
+    }
+    return best;
+  }
+
+  /**
+   * Rebuild the hedge rings' meshes from the current
+   * views (2026-11-05): shrubs from the scatter-bush
+   * idiom (the shared KIND_RENDER geometry + material,
+   * one InstancedMesh per ring) stand evenly around
+   * each ring's circle, seated on the ground plane as
+   * scatter seats. Positions and scales hash from the
+   * ring's centre + the seat index — deterministic,
+   * nothing stored. A ROOTED ring plants every seat at
+   * full scale; an UNROOTED ring reads as plantings:
+   * every Nth seat, small — the grow-in. Pure scenery:
+   * no instances, no collision, nothing to harvest.
+   */
+  private rebuildHedgeRings(): void {
+    if (!this.hedgeGroup) {
+      this.hedgeGroup = new THREE.Group();
+      this.scene.add(this.hedgeGroup);
+    }
+    const group = this.hedgeGroup;
+    while (group.children.length > 0) group.remove(group.children[0]);
+    group.visible = !this.gen.dimensionKey;
+    const render = KIND_RENDER.bush;
+    const dummy = new THREE.Object3D();
+    for (const v of this.currentHedgeViews) {
+      if (v.radiusM <= 0) continue;
+      const seats = Math.max(6, Math.round((2 * Math.PI * v.radiusM) / HEDGE_SHRUB_SPACING_M));
+      const planted: number[] = [];
+      for (let i = 0; i < seats; i++) {
+        if (v.rooted || i % HEDGE_PLANTING_EVERY === 0) planted.push(i);
+      }
+      const mesh = new THREE.InstancedMesh(render.geometry, render.material, planted.length);
+      planted.forEach((seat, k) => {
+        // A small deterministic hash (visual jitter only).
+        const h = Math.abs(Math.sin(v.x * 12.9898 + v.z * 78.233 + seat * 37.719) * 43758.5453) % 1;
+        const angle = (seat / seats) * Math.PI * 2 + (h - 0.5) * 0.1;
+        const r = v.radiusM + (h - 0.5) * 0.7;
+        const s = v.rooted ? 0.85 + h * 0.3 : HEDGE_PLANTING_SCALE;
+        dummy.position.set(v.x + Math.cos(angle) * r, render.baseY * s, v.z + Math.sin(angle) * r);
+        dummy.rotation.set(0, h * Math.PI * 2, 0);
+        dummy.scale.setScalar(s);
+        dummy.updateMatrix();
+        mesh.setMatrixAt(k, dummy.matrix);
+      });
+      mesh.instanceMatrix.needsUpdate = true;
+      group.add(mesh);
+    }
+  }
+
   /** Seat the named-places register for the tag feed: see the field's note. */
   setNamedPlacesProvider(fn: (() => NamedPlacesState | null) | null): void {
     this.namedPlacesProvider = fn;
@@ -1909,6 +2133,102 @@ export class WorldRenderer {
       this.player.z,
       TAG_RANGE_M,
     );
+  }
+
+  /**
+   * Returning T1's way-out pointing, the engine half
+   * (2026-11-05): where OUT is from where she stands, or
+   * null when the place she stands in has no out to point
+   * to — the open surface, an attic, a lesser grove's
+   * open clearing. Two interiors carry the fact:
+   *   IN A CAVE: the ACTIVE LAYER's entry anchor — one
+   *   rule at every depth: layer 1's entry is the way out
+   *   to the mouth she entered by; a deeper layer's entry
+   *   is the climb point back up.
+   *   IN A GROVE (inside a maze's hedge square +
+   *   GROVE_POINT_MARGIN_M — The Grove's, or any lesser
+   *   grove's since Adam's correction gave every grove
+   *   its maze): that maze's entrance gap seat.
+   * Ungated, like the tag feed: Systems' canScry decides
+   * whether the door shows; this read only answers.
+   */
+  getExitTarget(): ExitTarget | null {
+    const key = this.gen.dimensionKey;
+    const seed = String(this.gen.seed);
+    if (key !== undefined && key.startsWith('cave:')) {
+      const layout = caveLayoutForKey(seed, key);
+      const layer =
+        layout.layers[dimensionState.currentLayer() - 1] ??
+        layout.layers[0];
+      if (!layer) return null;
+      const a = layer.entryAnchor;
+      return {
+        kind: 'cave-exit',
+        x: a.x,
+        z: a.z,
+        distanceM: Math.hypot(a.x - this.player.x, a.z - this.player.z),
+        bearingDeg: bearingDegrees(this.player.x, this.player.z, a),
+      };
+    }
+    if (key === undefined) {
+      const grove = groveSite(
+        seed,
+        this.gen.findSpawn(),
+        (x, z) => this.gen.weightsAt(x, z).dominant,
+      );
+      const half =
+        (GROVE_GRID_CELLS * GROVE_CELL_M) / 2 + GROVE_POINT_MARGIN_M;
+      if (
+        Math.abs(this.player.x - grove.center.x) <= half &&
+        Math.abs(this.player.z - grove.center.z) <= half
+      ) {
+        const seat = groveEntranceSeat(grove);
+        return {
+          kind: 'grove-entrance',
+          x: seat.x,
+          z: seat.z,
+          distanceM: Math.hypot(
+            seat.x - this.player.x,
+            seat.z - this.player.z,
+          ),
+          bearingDeg: bearingDegrees(this.player.x, this.player.z, seat),
+        };
+      }
+      // The lesser groves (Adam's correction, 2026-11-05):
+      // inside a lesser maze's square, its own gap is out.
+      const lessers = groveInstancesInRect(
+        seed,
+        this.gen.findSpawn(),
+        (x, z) => this.gen.weightsAt(x, z),
+        {
+          minX: this.player.x - 160,
+          maxX: this.player.x + 160,
+          minZ: this.player.z - 160,
+          maxZ: this.player.z + 160,
+        },
+      );
+      for (const inst of lessers) {
+        const instHalf =
+          (inst.grid * GROVE_CELL_M) / 2 + GROVE_POINT_MARGIN_M;
+        if (
+          Math.abs(this.player.x - inst.center.x) <= instHalf &&
+          Math.abs(this.player.z - inst.center.z) <= instHalf
+        ) {
+          const seat = mazeEntranceSeat(inst.center, inst.entranceCell, inst.grid);
+          return {
+            kind: 'grove-entrance',
+            x: seat.x,
+            z: seat.z,
+            distanceM: Math.hypot(
+              seat.x - this.player.x,
+              seat.z - this.player.z,
+            ),
+            bearingDeg: bearingDegrees(this.player.x, this.player.z, seat),
+          };
+        }
+      }
+    }
+    return null;
   }
 
   /** Set her injury movement factor (1 = sound; the shell derives it from her stage's INJURY_EFFECTS). */
@@ -4053,6 +4373,23 @@ export class WorldRenderer {
       }
       feralSpawn = this.feralSpawnMemo.spawn;
     }
+    // The Hedge's frame (2026-11-05): the shell's ring
+    // views, re-read every step; a signature change (a
+    // laying, the rooting day, a tier-up) rebuilds the
+    // rings on this frame. Unregistered, the views stay
+    // empty and nothing stands.
+    this.currentHedgeViews = this.hedgeFactsProvider ? this.hedgeFactsProvider() : [];
+    {
+      const sig = this.currentHedgeViews
+        .map((v) => `${v.x},${v.z},${v.radiusM},${v.tier},${v.rooted ? 1 : 0}`)
+        .join('|');
+      if (sig !== this.hedgeSignature) {
+        this.hedgeSignature = sig;
+        this.rebuildHedgeRings();
+      } else if (this.hedgeGroup) {
+        this.hedgeGroup.visible = !this.gen.dimensionKey;
+      }
+    }
     for (const loaded of this.chunks.values()) {
       for (const pair of loaded.animals) {
         let feral: FeralFacts | null = null;
@@ -4077,6 +4414,29 @@ export class WorldRenderer {
               defenderPos: shellFacts.defenderPos,
             };
           }
+        }
+        // The Hedge's field facts (2026-11-05): composed
+        // from the ring views alone — which rooted ring
+        // this beast stands in, and which shelters the
+        // priced target. Dangerous kinds only: the hedge
+        // works on enemies. Without the shell's feral
+        // provider the facts ride a suppressed shell —
+        // no encounter can form on them, but the thorn
+        // still teaches its lesson.
+        if (this.currentHedgeViews.length > 0 && FERAL_DANGEROUS_KINDS.includes(pair.instance.kind)) {
+          const a = pair.instance;
+          const ring = this.hedgeRingAt(a.x, a.z);
+          const tpPos = feral?.defenderPos ?? { x: this.player.x, z: this.player.z };
+          const targetRing = this.hedgeRingAt(tpPos.x, tpPos.z);
+          const hedgeFields = {
+            hedgeTier: ring?.tier ?? 0,
+            hedgeCenter: ring ? { x: ring.x, z: ring.z } : null,
+            hedgeRadiusM: ring?.radiusM ?? 0,
+            targetHedgeTier: targetRing?.tier ?? 0,
+          };
+          feral = feral
+            ? { ...feral, ...hedgeFields }
+            : { suppressed: true, playerInside: false, defenderPos: null, ...hedgeFields };
         }
         updateAnimal(pair.instance, dt, {
           playerX: this.player.x,
@@ -4210,6 +4570,7 @@ export class WorldRenderer {
     {
       const g = guideActor();
       if (g) {
+        this.updateGuideRetarget();
         stepGuide(dt, {
           playerX: this.player.x,
           playerZ: this.player.z,
