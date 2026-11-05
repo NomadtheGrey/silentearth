@@ -1988,6 +1988,14 @@ import { lightTorches, placeTorch as grantPlaceTorch, pickupTorch as grantPickup
 import { altarState, type PlacedAltar as PlacedAltarEntity } from './game/altarState';
 import { jarPatchState } from './game/jarPatchState';
 import { mossPaintState } from './game/mossPaintState';
+import {
+  NamedPlacesState,
+  bearingDegrees,
+  distanceM,
+  NAME_MAX_CHARS,
+  RENAME_RADIUS_M,
+  type NamedPlace,
+} from './game/namedPlaces';
 import { placeAltar as grantPlaceAltar } from './systems/altar';
 import {
   altarProgressFrom,
@@ -2115,7 +2123,11 @@ import { RitualPanel } from './ui/RitualPanel';
 import { walkAwayShouldClose } from './ui/walkAway';
 import { CharmsPanel } from './ui/CharmsPanel';
 import { CompanionsPanel } from './ui/CompanionsPanel';
-import { JournalPanel, type JournalMarkRow } from './ui/JournalPanel';
+import {
+  JournalPanel,
+  type JournalMarkRow,
+  type JournalPlaceRow,
+} from './ui/JournalPanel';
 import { QuestCard } from './ui/QuestCard';
 import { StructureTag, STRUCTURE_TAG_NAMES, STRUCTURE_TAG_RANGE_M } from './ui/StructureTag';
 import { StormWarning } from './ui/StormWarning';
@@ -3930,6 +3942,35 @@ export default function App() {
   if (fragmentStateRef.current === null) {
     fragmentStateRef.current = new FragmentState(bootSave?.fragments);
   }
+  // NAMED PLACES (the naming build, 2026-11-05): the
+  // shell owns the one NamedPlacesState (the register
+  // is a leaf in game/namedPlaces) — the same ref-lazy
+  // pattern, restored from the boot save's record;
+  // snapshot() rides every saveNow. The journal's
+  // Places page reads it; the naming acts write it.
+  const namedPlacesRef = useRef<NamedPlacesState | null>(null);
+  if (namedPlacesRef.current === null) {
+    const seated = new NamedPlacesState();
+    seated.restore(bootSave?.namedPlaces ?? []);
+    namedPlacesRef.current = seated;
+  }
+  // THE SELECTED PLACE: her chosen named place — the
+  // seat the future Returning scry door will read
+  // (v1 seats the selection only; no scry act reads
+  // it yet). State mirrors the ref for the journal's
+  // highlight; the ref is the door's future read.
+  const [selectedPlaceId, setSelectedPlaceId] =
+    useState<string | null>(null);
+  const selectedPlaceRef = useRef<string | null>(null);
+  const selectPlace = (id: string | null) => {
+    selectedPlaceRef.current = id;
+    setSelectedPlaceId(id);
+  };
+  // A tick the naming acts bump so the render-composed
+  // journal rows re-read the register after a write.
+  const [, setPlacesVersion] = useState(0);
+  const refreshPlaces = () =>
+    setPlacesVersion((version) => version + 1);
   // The ritual site whose panel is open, by SITE ID
   // ('altar:<n>' or 'stump:x,z' — one selection for
   // both site kinds since the bone build; the panel +
@@ -4893,6 +4934,12 @@ export default function App() {
           // (SaveData.mossPaint, Systems' seat — the
           // snapshot shape passes through unconverted).
           mossPaint: mossPaintState.snapshot(),
+          // Named places (the naming build): the
+          // register's snapshot rides every save beside
+          // its sibling states, whole and opaque
+          // (SaveData.namedPlaces, Systems' seat — the
+          // snapshot shape passes through unconverted).
+          namedPlaces: namedPlacesRef.current.snapshot(),
           // RITUAL SAVE WIRING: stagings + awakenings ride
           // every save as-is (StagingBook / CharmState
           // snapshots; serialize writes them verbatim,
@@ -6402,6 +6449,12 @@ export default function App() {
     // — unregistered, no encounter can form) and her
     // injury speed factor at her boot stage.
     renderer.setFeralFactsProvider(feralFactsProvider);
+    // NAMED PLACES (the naming build): the renderer's
+    // tag feed reads the shell's register through this
+    // provider (Background's seat, the feral-facts
+    // shape) — unregistered, the feed is empty. The
+    // register itself is the shell's one instance.
+    renderer.setNamedPlacesProvider(() => namedPlacesRef.current);
     renderer.setInjurySpeedFactor(injury.effects().movementMultiplier);
     // LOOK owl hook (hook only): the owl charm is a later
     // charm (fashioned/enchanted, id not decided), so the
@@ -7528,6 +7581,12 @@ export default function App() {
     // the stores (the store swap's shell seat): the
     // parked mirror empties with the world.
     dimensionBuckets.clearBuckets();
+    // A new world clears the named places with the
+    // world (the naming build): her names were given
+    // to the old world's spots; the register's clear
+    // is its fresh-world door. The selection goes too.
+    namedPlacesRef.current?.clear();
+    selectPlace(null);
     // A new world clears the scry reveal (new camps, new water).
     divinationRef.current.dismiss();
     renderer.setCampArrowsVisible(false);
@@ -7868,6 +7927,11 @@ export default function App() {
   // Shift+E armed for the confirm dialog; null = no dialog.
   // The dialog owns its Enter/Esc; the App Esc listener
   // yields while it is open (single Esc path).
+  // The place whose name she is asked to lift (the
+  // naming build): the un-name confirm's target, by
+  // the register's record.
+  const [pendingUnnamePlace, setPendingUnnamePlace] =
+    useState<NamedPlace | null>(null);
   const [pendingRemoveTarget, setPendingRemoveTarget] =
     useState<HarvestTarget | null>(null);
   // THE FAMILIAR'S RITE (Build 2, Piece 1): a rite act
@@ -9931,6 +9995,65 @@ export default function App() {
     } else if (giftId === 'undetected') {
       setUndetected(on);
     }
+  };
+
+  // THE NAMING ACTS (the naming build, 2026-11-05):
+  // the journal Places page's doors. The register owns
+  // the rules (verbatim names, the 2 m rename-in-place,
+  // per-dimension spots); the shell supplies where she
+  // stands, the dimension she stands in, and the
+  // world-day — and saves after every act. Copy DRAFT.
+  const worldDayNow = (): number => {
+    const sky = rendererRef.current?.snapshotSky();
+    return sky ? Math.floor(sky.daysElapsed + sky.cycleT) + 1 : 1;
+  };
+  const handleNamePlace = (name: string) => {
+    const player = playerRef.current;
+    if (!player) return;
+    const dimensionKey = dimensionState.activeKey();
+    const near = namedPlacesRef.current.nearest(
+      player.x,
+      player.z,
+      dimensionKey,
+    );
+    const renamed =
+      near !== null && near.distanceM <= RENAME_RADIUS_M;
+    const place = namedPlacesRef.current.nameHere({
+      name,
+      x: player.x,
+      z: player.z,
+      dimensionKey,
+      day: worldDayNow(),
+    });
+    if (!place) return;
+    selectPlace(place.id);
+    showFeedback(
+      renamed
+        ? `This place is "${place.name}" now.`
+        : `Named — "${place.name}".`,
+      'gain',
+    );
+    refreshPlaces();
+    saveNow();
+  };
+  const handleRenamePlace = (id: string, name: string) => {
+    if (!namedPlacesRef.current.rename(id, name, worldDayNow())) {
+      return;
+    }
+    const place = namedPlacesRef.current.get(id);
+    showFeedback(`This place is "${place?.name ?? name}" now.`, 'gain');
+    refreshPlaces();
+    saveNow();
+  };
+  const handleUnnamePlace = () => {
+    const target = pendingUnnamePlace;
+    setPendingUnnamePlace(null);
+    if (!target) return;
+    if (!namedPlacesRef.current.unname(target.id)) return;
+    if (selectedPlaceRef.current === target.id) selectPlace(null);
+    showFeedback(`The name "${target.name}" is lifted.`, 'info');
+    refreshPlaces();
+    saveNow();
   };
 
   const handleRecite = (kind: string) => {
@@ -15522,6 +15645,73 @@ export default function App() {
       };
     });
 
+  // The journal's PLACES page (the naming build,
+  // 2026-11-05): one row per named place — her current
+  // dimension's places first with distance + bearing
+  // words read from where she stands, then the other
+  // dimensions' places with their dimension label and
+  // no distance. The register owns the records; this
+  // only reads them at render.
+  const COMPASS_WINDS = [
+    'N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW',
+  ] as const;
+  const dimensionLabelFor = (key: string): string =>
+    key === 'surface'
+      ? 'The surface'
+      : key.startsWith('cave:')
+        ? 'The Cave'
+        : key.startsWith('attic:')
+          ? 'The Attic'
+          : key;
+  const journalPlaceRows: JournalPlaceRow[] = (() => {
+    const activeKey = dimensionState.activeKey();
+    const all = namedPlacesRef.current.list();
+    const toRow = (place: NamedPlace): JournalPlaceRow => {
+      if (place.dimensionKey !== activeKey) {
+        return {
+          id: place.id,
+          name: place.name,
+          here: false,
+          detail: null,
+          dimensionLabel: dimensionLabelFor(place.dimensionKey),
+          day: place.day,
+        };
+      }
+      const d = distanceM(position, place);
+      const wind =
+        COMPASS_WINDS[
+          Math.round(
+            bearingDegrees(position.x, position.z, place) / 45,
+          ) % 8
+        ];
+      return {
+        id: place.id,
+        name: place.name,
+        here: true,
+        detail: d < 1.5 ? 'Here' : `${Math.round(d)} m ${wind}`,
+        dimensionLabel: null,
+        day: place.day,
+      };
+    };
+    return [
+      ...all.filter((pl) => pl.dimensionKey === activeKey).map(toRow),
+      ...all.filter((pl) => pl.dimensionKey !== activeKey).map(toRow),
+    ];
+  })();
+  // Standing at an already-named spot, the naming
+  // entry says so — naming here re-names that spot
+  // (the register's radius rule).
+  const nameHereHint = (() => {
+    const near = namedPlacesRef.current.nearest(
+      position.x,
+      position.z,
+      dimensionState.activeKey(),
+    );
+    return near !== null && near.distanceM <= RENAME_RADIUS_M
+      ? `You stand at "${near.place.name}" — naming here renames it.`
+      : null;
+  })();
+
   // DESKTOP PILE PICKUP (see the header): the mouse twin
   // of R's pile second — shown only when the faced
   // winner IS a pile, so the button never contradicts
@@ -17377,6 +17567,18 @@ export default function App() {
             marks={journalRows}
             names={journalNameRows}
             onRecite={handleRecite}
+            places={journalPlaceRows}
+            selectedPlaceId={selectedPlaceId}
+            onSelectPlace={selectPlace}
+            nameHereHint={nameHereHint}
+            onNamePlace={handleNamePlace}
+            onRenamePlace={handleRenamePlace}
+            onUnnamePlace={(id) =>
+              setPendingUnnamePlace(
+                namedPlacesRef.current.get(id) ?? null,
+              )
+            }
+            nameMaxChars={NAME_MAX_CHARS}
             quests={questDisplay}
             onMarkQuest={toggleActiveQuestMark}
             onClose={() => setJournalOpen(false)}
@@ -17561,6 +17763,45 @@ export default function App() {
         </div>
       </Popup>
 
+      {/* THE UN-NAME CONFIRM (the naming build): lifting
+        a name is the Places page's one destructive act, so
+        it rides Popup (the ONE confirm shell) like the
+        remove confirm above. Enter confirms (the shell's
+        onConfirm), Esc/backdrop/Cancel aborts with the
+        name standing. */}
+      <Popup theme={lookThemes.world}
+        open={pendingUnnamePlace !== null}
+        title={`Remove the name "${pendingUnnamePlace?.name ?? ''}"?`}
+        onClose={() => setPendingUnnamePlace(null)}
+        onConfirm={handleUnnamePlace}
+        comfortable={isTouch}
+      >
+        <div className="flex flex-col gap-3 text-sm">
+          <p>The place stays — only her name for it is lifted.</p>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              className={
+                'rounded bg-moss-deep hover:bg-moss px-3 py-1 text-sm text-stone-100 ' +
+                (isTouch ? 'min-h-[44px] px-3 py-2' : '')
+              }
+              onClick={handleUnnamePlace}
+            >
+              Remove name
+            </button>
+            <button
+              type="button"
+              className={
+                'rounded bg-moss-deep hover:bg-moss px-3 py-1 text-sm text-stone-100 ' +
+                (isTouch ? 'min-h-[44px] px-3 py-2' : '')
+              }
+              onClick={() => setPendingUnnamePlace(null)}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      </Popup>
       {/* THE CRAWL-BACK BEAT (the feral build): the
         down's staging — a full black cover (input
         waits), the line held in the dark, then the

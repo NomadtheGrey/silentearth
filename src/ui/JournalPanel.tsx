@@ -25,6 +25,20 @@
  * passes the same mapped quest rows it gives Options;
  * Options keeps its own copy — the audit's complaint
  * was hiding, not duplication.
+ *
+ * The book also carries her PLACES (the naming build,
+ * 2026-11-05): the names she has GIVEN, beside the
+ * Names page's names she was taught. Rows are the
+ * caller's — current dimension first with distance +
+ * bearing words, other dimensions' places after with
+ * their dimension label and no distance (a cave name
+ * does not surface topside). The section carries the
+ * naming door itself: "Name this place" plants a name
+ * at the spot she stands at (the caller supplies the
+ * position; the entry here is free verbatim text),
+ * and the selected row carries Rename / Remove name.
+ * Selection is the caller's state — this panel only
+ * reports the tap.
  */
 
 import { Fragment, useState } from 'react';
@@ -79,6 +93,30 @@ export interface JournalNameRow {
   borrowState?: 'ready' | 'borrowed' | 'resting';
 }
 
+/**
+ * One place she has named (the naming build): her
+ * name verbatim, and the caller's read of where it
+ * stands from where she stands. `here` = her current
+ * dimension — those rows carry a distance + bearing
+ * `detail`; other dimensions' rows carry a
+ * `dimensionLabel` instead (distance across dimensions
+ * means nothing).
+ */
+export interface JournalPlaceRow {
+  /** The place's id (the register's key). */
+  id: string;
+  /** Her name for the place, verbatim. */
+  name: string;
+  /** Stands in the dimension she is in now. */
+  here: boolean;
+  /** Distance + bearing words (here rows). */
+  detail: string | null;
+  /** Dimension label (elsewhere rows). */
+  dimensionLabel: string | null;
+  /** The world-day she named it. */
+  day: number;
+}
+
 export interface JournalPanelProps {
   /** One row per begun mark, caller's order. */
   marks: JournalMarkRow[];
@@ -91,6 +129,30 @@ export interface JournalPanelProps {
   names?: JournalNameRow[];
   /** Recite a name — borrow the familiar's gift. */
   onRecite?: (kind: string) => void;
+  /**
+   * The places she has named (the naming build), the
+   * caller's order — current dimension first.
+   * Omitted = no Places section. An empty list still
+   * renders the section (the naming door must stand).
+   */
+  places?: JournalPlaceRow[];
+  /** The selected place's id, if any (caller's). */
+  selectedPlaceId?: string | null;
+  /** Select a place (the scry seat's selection). */
+  onSelectPlace?: (id: string) => void;
+  /**
+   * Set when she stands at an already-named spot:
+   * naming here renames it. The caller's words.
+   */
+  nameHereHint?: string | null;
+  /** Name the spot she stands at (verbatim text). */
+  onNamePlace?: (name: string) => void;
+  /** Rename one place by id (verbatim text). */
+  onRenamePlace?: (id: string, name: string) => void;
+  /** Ask to remove one place's name (caller confirms). */
+  onUnnamePlace?: (id: string) => void;
+  /** Name length cap (the register's, caller's). */
+  nameMaxChars?: number;
   /**
    * The quest log the book carries (dialog audit #4):
    * the caller's mapped rows, rendered below the marks
@@ -118,6 +180,14 @@ export function JournalPanel({
   marks,
   names,
   onRecite,
+  places,
+  selectedPlaceId,
+  onSelectPlace,
+  nameHereHint,
+  onNamePlace,
+  onRenamePlace,
+  onUnnamePlace,
+  nameMaxChars = 40,
   quests,
   onMarkQuest,
   onClose,
@@ -186,6 +256,28 @@ export function JournalPanel({
       else next.add(key);
       return next;
     });
+  // THE NAMING ENTRIES (the naming build): the panel's
+  // own presentation state — which entry stands open
+  // and its draft text. The acts themselves are the
+  // caller's; a submitted entry closes here, the
+  // register's blank-refusal is the backstop (the
+  // buttons stand disabled on a blank draft besides).
+  const [namingOpen, setNamingOpen] = useState(false);
+  const [nameDraft, setNameDraft] = useState('');
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [renameDraft, setRenameDraft] = useState('');
+  const submitName = () => {
+    const name = nameDraft;
+    setNamingOpen(false);
+    setNameDraft('');
+    if (name.trim() !== '' && onNamePlace) onNamePlace(name);
+  };
+  const submitRename = (id: string) => {
+    const name = renameDraft;
+    setRenamingId(null);
+    setRenameDraft('');
+    if (name.trim() !== '' && onRenamePlace) onRenamePlace(id, name);
+  };
   const btn = comfortable
     ? 'rounded px-3 py-2 text-sm min-h-[44px] '
     : 'rounded px-2 py-1 text-sm ';
@@ -281,6 +373,171 @@ export function JournalPanel({
               </li>
             ))}
           </ul>
+        </div>
+      ) : null}
+      {places ? (
+        <div className="mt-3">
+          <h3 className={'mb-2 text-sm font-semibold ' + t.heading}>
+            Places
+          </h3>
+          {onNamePlace ? (
+            namingOpen ? (
+              <form
+                className="mb-2 flex flex-wrap items-center gap-2"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  submitName();
+                }}
+              >
+                <input
+                  type="text"
+                  value={nameDraft}
+                  onChange={(event) => setNameDraft(event.target.value)}
+                  maxLength={nameMaxChars}
+                  placeholder="Name this place"
+                  aria-label="Name for this place"
+                  autoFocus
+                  className="min-w-0 flex-1 rounded bg-black/30 px-2 py-1 text-sm text-stone-100"
+                />
+                <button
+                  type="submit"
+                  disabled={nameDraft.trim() === ''}
+                  className={btn + t.button}
+                >
+                  Name it
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setNamingOpen(false);
+                    setNameDraft('');
+                  }}
+                  className={btn + t.button}
+                >
+                  Cancel
+                </button>
+              </form>
+            ) : (
+              <div className="mb-2">
+                <button
+                  type="button"
+                  onClick={() => setNamingOpen(true)}
+                  className={btn + t.button}
+                >
+                  Name this place
+                </button>
+                {nameHereHint ? (
+                  <p className="mt-1 text-xs text-stone-400">
+                    {nameHereHint}
+                  </p>
+                ) : null}
+              </div>
+            )
+          ) : null}
+          {places.length === 0 ? (
+            <p className="text-sm text-stone-300">
+              No places named yet. The names you give will be kept
+              here.
+            </p>
+          ) : (
+            <ul className="flex flex-col gap-2">
+              {places.map((row) => {
+                const selected = row.id === selectedPlaceId;
+                return (
+                  <li
+                    key={row.id}
+                    className={
+                      'flex flex-col gap-y-0.5 rounded-xl px-3 py-2 ' +
+                      (selected ? 'bg-white/10' : 'bg-black/20')
+                    }
+                  >
+                    <button
+                      type="button"
+                      aria-pressed={selected}
+                      onClick={() =>
+                        onSelectPlace ? onSelectPlace(row.id) : undefined
+                      }
+                      className="flex flex-wrap items-baseline gap-x-2 text-left"
+                    >
+                      <span className="font-medium">{row.name}</span>
+                      <span className="text-xs text-stone-400">
+                        {row.here
+                          ? (row.detail ?? '')
+                          : (row.dimensionLabel ?? '')}
+                        {selected ? ' · Selected' : ''}
+                      </span>
+                    </button>
+                    <span className="text-xs text-stone-400">
+                      Named on day {row.day}
+                    </span>
+                    {selected && renamingId === row.id ? (
+                      <form
+                        className="mt-1 flex flex-wrap items-center gap-2"
+                        onSubmit={(event) => {
+                          event.preventDefault();
+                          submitRename(row.id);
+                        }}
+                      >
+                        <input
+                          type="text"
+                          value={renameDraft}
+                          onChange={(event) =>
+                            setRenameDraft(event.target.value)
+                          }
+                          maxLength={nameMaxChars}
+                          aria-label={`New name for ${row.name}`}
+                          autoFocus
+                          className="min-w-0 flex-1 rounded bg-black/30 px-2 py-1 text-sm text-stone-100"
+                        />
+                        <button
+                          type="submit"
+                          disabled={renameDraft.trim() === ''}
+                          className={btn + t.button}
+                        >
+                          Save name
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setRenamingId(null);
+                            setRenameDraft('');
+                          }}
+                          className={btn + t.button}
+                        >
+                          Cancel
+                        </button>
+                      </form>
+                    ) : selected &&
+                      (onRenamePlace || onUnnamePlace) ? (
+                      <span className="mt-1 flex flex-wrap gap-2">
+                        {onRenamePlace ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setRenamingId(row.id);
+                              setRenameDraft(row.name);
+                            }}
+                            className={btn + t.button}
+                          >
+                            Rename
+                          </button>
+                        ) : null}
+                        {onUnnamePlace ? (
+                          <button
+                            type="button"
+                            onClick={() => onUnnamePlace(row.id)}
+                            className={btn + t.button}
+                          >
+                            Remove name
+                          </button>
+                        ) : null}
+                      </span>
+                    ) : null}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
         </div>
       ) : null}
       {quests ? (
