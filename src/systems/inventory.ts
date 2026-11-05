@@ -87,9 +87,11 @@
  * - 0.25 lb: dry-kindling, charcoal-stick, beeswax, tallow, candle, twined-cordage, grass, salt-crystal,
  *   edible-mushroom, poison-mushroom, apple, paper.
  * - 0.5 lb: tender-vines, peat-moss, bone, flint, pointy-hat,
- *   mossy-mittens, plant-pulp, pressed-sheets, journal.
+ *   mossy-mittens, plant-pulp, pressed-sheets, journal, sand,
+ *   glass.
  * - 1 lb: snap-wood, river-silt, clay, dirt, mud, garden-trowel,
- *   sharp-trowel, shawl, umbrella, clay-pot, clay-jar, grimoire.
+ *   sharp-trowel, shawl, umbrella, clay-pot, clay-jar, grimoire,
+ *   crystal-ball.
  * - 2 lb: river-stone, downed-oak, water-jar, spade, axe-trowel,
  *   hooded-cloak, bog-boots.
  * - 4 lb: spade-axe, clay-brick, and homes / fires / stations
@@ -240,6 +242,12 @@ export const ITEM_WEIGHT_LB: Readonly<Record<string, number>> = {
   [ITEMS.tallow]: 0.25,
   [ITEMS.twilightFungus]: 0.25,
   [ITEMS.glowDose]: 0.1,
+  // The glass chain (2026-11-05): sand from the morning
+  // definition; glass priced at the sand it came from;
+  // the ball at DEV's ~1 lb. All DRAFT.
+  [ITEMS.sand]: 0.5,
+  [ITEMS.glass]: 0.5,
+  [ITEMS.crystalBall]: 1,
   [ITEMS.repellent]: 0.25,
   [ITEMS.preyLure]: 0.25,
   [ITEMS.predatorLure]: 0.25,
@@ -486,6 +494,9 @@ export const ITEM_DISPLAY_NAMES: Readonly<Record<string, string>> = {
   tallow: 'Tallow',
   'twilight-fungus': 'Twilight Fungus',
   'glow-dose': 'Glow Dose',
+  sand: 'Sand',
+  glass: 'Glass',
+  'crystal-ball': 'Crystal Ball',
   repellent: 'Repellent',
   'prey-lure': 'Prey Lure',
   'predator-lure': 'Predator Lure',
@@ -685,6 +696,9 @@ export const ITEM_DESCRIPTIONS: Readonly<Record<string, string>> = {
   tallow: 'Fat rendered from a trap carcass, in the cauldron at a lit hearth. Melts into a candle.',
   'twilight-fungus': 'A fungus clump from the cave mouths, where the twilight layer grows. It glows faintly, all on its own.',
   'glow-dose': 'Twilight fungus rendered down to one dose of glowing paint — enough to mark a stretch of cave wall.',
+  sand: 'Ground river stone — grit for the kiln, and whatever else asks for sand.',
+  glass: 'Sand melted in the kiln and cooled into a lump — the old world drank from it and saw through it.',
+  'crystal-ball': 'A ball of her own glass, cooled round — made to be looked into. A scrying medium: one of the three lawful media for the Mark of Returning\'s farthest reach, with the magic map and a water source.',
   repellent: 'Tallow and poison mushroom, rendered foul in the cauldron. Doused on, she smells wrong to a hunting nose — ferals keep away while it lasts.',
   'prey-lure': 'Acorns and honey, brewed sweet in the cauldron. Doused on, she smells of an easy meal — prey kinds drift closer while it lasts.',
   'predator-lure': 'Fish carcass and tallow, brewed heavy in the cauldron. Doused on, she carries a kill\'s smell — predators drift closer while it lasts.',
@@ -901,6 +915,9 @@ export const ITEM_CATEGORIES: Readonly<Record<string, ItemCategory>> = {
   tallow: 'Materials',
   'twilight-fungus': 'Materials',
   'glow-dose': 'Materials',
+  sand: 'Materials',
+  glass: 'Materials',
+  'crystal-ball': 'Ritual',
   repellent: 'Materials',
   'prey-lure': 'Materials',
   'predator-lure': 'Materials',
