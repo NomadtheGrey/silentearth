@@ -43,6 +43,14 @@ export interface BuildRecord {
 
 const ALL_RECORDS: BuildRecord[] = [
   {
+    merge: 'Merge #84',
+    pr: 127,
+    sha: 'd4cf0d6',
+    date: '2026-11-05',
+    what: 'THE VERIFIED BUNDLE — the way out of caves and groves points for her when the first tier of Returning stands, the camp arrows yielding while it does; birds refuse to settle on pond water; the Hedge Mark can be laid at a home of hers, its cuttings priced on the door; the workstation stands dressed as the photograph showed; village hearth houses gain their stones — charred at the Burnt Village, plain in the country; the cat wears its trust like every other animal, fed and unfed reading apart; no companion stands twice beside itself any more; a finished staging stops refusing its own panel; and the drying law stands in its final shape — a fire in the rain holds her where she is, a roof in the rain holds her too, and roof and fire together dry her.',
+    why: 'Adam’s playtest bundle, closed only when every find in it was verified shut: his pond pigeons standing in the water, his doubled companions (the stacks were their twins, born of a boot-order race), his cat without its dot, his wet-through walk in the rain past a lit fire. The fixes ride together so his testing window spends itself on playing, not on re-finding — and the roof the drying law reads is a real one now: what shelters her is what the world built over her head.',
+  },
+  {
     merge: 'Merge #83',
     pr: 126,
     sha: '809f8dd',
