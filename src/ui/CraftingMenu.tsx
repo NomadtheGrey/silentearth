@@ -409,7 +409,12 @@ export function CraftingMenu({
               placeholder="Search recipes"
               aria-label="Search recipes"
               className={
-                'min-w-[10rem] flex-1 rounded bg-stone-800/60 px-2 py-1 text-sm text-stone-100 placeholder:text-stone-400 ' +
+                // The search-field visibility step
+                // (Adam, 2026-11-05) — the same class
+                // step as the inventory surface's
+                // field: border + contrast so it
+                // reads as an input.
+                'min-w-[10rem] flex-1 rounded border border-stone-500/80 bg-stone-800 px-2 py-1 text-sm text-stone-100 placeholder:text-stone-300 focus:border-stone-200 focus:outline-none ' +
                 (comfortable ? 'min-h-[44px]' : '')
               }
             />

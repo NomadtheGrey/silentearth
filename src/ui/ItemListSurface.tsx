@@ -621,7 +621,14 @@ export function ItemListSurface({
           placeholder={searchLabel}
           aria-label={searchLabel}
           className={
-            'mb-2 w-full rounded bg-stone-800/60 px-2 py-1 text-sm text-stone-100 placeholder:text-stone-400 ' +
+            // SEARCH FIELD VISIBILITY (Adam, 2026-11-05:
+            // the field read as panel background — a
+            // border and a contrast step so it reads as
+            // an input at arm's length: full stone-800
+            // ground, a stone-500 edge, a brighter
+            // placeholder, and a focus edge that
+            // brightens further while she types.
+            'mb-2 w-full rounded border border-stone-500/80 bg-stone-800 px-2 py-1 text-sm text-stone-100 placeholder:text-stone-300 focus:border-stone-200 focus:outline-none ' +
             (comfortable ? 'min-h-[44px]' : '')
           }
         />
