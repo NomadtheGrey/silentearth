@@ -27,7 +27,7 @@ import type { WorldGen } from './worldgen';
 import { PlayerController } from './player';
 import { marshWeight } from './biomes';
 import { SOURCE_FOR_KIND } from './objects';
-import { buildAltarGroup, buildAnimal, buildCampArrow, buildCandle, buildCatchProp, buildCauldronGroup, buildDeskGroup, buildEdgeArrow, buildKindGeometry, buildStagedBone, buildStumpDressing, buildSunflowerHeadGeometry, buildTorch, buildUmbrella, buildWitch, ALTAR_CANDLE_X, ALTAR_CANDLE_Z, ALTAR_SLAB_TOP_Y, ALTAR_TABLE_CANDLE_X, ALTAR_TABLE_CANDLE_Z, CANDLE_FLAME_Y, DISC_GROUND_LIFT_M, DISC_RADIUS, STUMP_TOP_Y, sunflowerHeadMatrix, sunflowerHeadOrientation, TORCH_FLAME_Y, vertexLambert } from './models';
+import { buildAltarGroup, buildAnimal, buildCampArrow, buildCandle, buildCatchProp, buildCauldronGroup, buildDeskGroup, buildEdgeArrow, buildKindGeometry, buildStagedBone, buildStumpDressing, buildSunflowerHeadGeometry, buildTorch, buildUmbrella, buildWitch, buildWorkstationGroup, ALTAR_CANDLE_X, ALTAR_CANDLE_Z, ALTAR_SLAB_TOP_Y, ALTAR_TABLE_CANDLE_X, ALTAR_TABLE_CANDLE_Z, CANDLE_FLAME_Y, DISC_GROUND_LIFT_M, DISC_RADIUS, STUMP_TOP_Y, sunflowerHeadMatrix, sunflowerHeadOrientation, TORCH_FLAME_Y, vertexLambert } from './models';
 import { footprintDoorExtent, placementFootprintFor, placementIsHouse, placementTakesYaw, type PlacementPreview, type PlacementTint } from './placementFootprints';
 import {
   markerStateFor,
@@ -3822,28 +3822,22 @@ export class WorldRenderer {
       // Placed crafted workstation (the fix, 2026-11-05 —
       // Adam crafted a bench and found no Place in his
       // pack): the stump's workbench overlay RE-SEATED
-      // free-standing. The overlay's own geometry stands
-      // verbatim — slab (1.1 × 0.08 × 0.8 at y 0.66) +
-      // vise block, same dims, same tones — and four legs
-      // in the same box idiom carry it, their tops meeting
-      // the slab's underside at 0.62 exactly. No new
-      // model: the overlay completed, DRAFT dress in the
-      // desk-book precedent (Models may re-cut the prop
-      // whole later; the seat won't notice). Scene-level
-      // like all placed entities — save restore rebuilds
-      // it via the constructor's initial rebuildPlacedGroup
-      // (workstationState.restore first). Facing rides the
-      // record's rotY, as desks stand. No light: a bench
-      // is not a light source.
+      // free-standing. The prop is Models' buildWorkstation
+      // Group (2026-11-05, the dressing pass toward Adam's
+      // workbench photo — thick overhung top, square legs,
+      // aprons, low shelf, the vise kept): the seat facts
+      // this seat relies on are frozen in the builder (leg
+      // seats ±0.47/±0.32, top surface at y 0.70, vise at
+      // its seat), so the seat does not notice the re-cut.
+      // Scene-level like all placed entities — save restore
+      // rebuilds it via the constructor's initial
+      // rebuildPlacedGroup (workstationState.restore
+      // first). Facing rides the record's rotY, as desks
+      // stand. No light: a bench is not a light source.
       const bg = new THREE.Group();
       bg.position.set(bench.x, 0, bench.z);
       bg.rotation.y = bench.rotY ?? 0;
-      bg.add(box(0.08, 0.62, 0.08, 0x6b4e30, -0.47, 0.31, -0.32));
-      bg.add(box(0.08, 0.62, 0.08, 0x6b4e30, 0.47, 0.31, -0.32));
-      bg.add(box(0.08, 0.62, 0.08, 0x6b4e30, -0.47, 0.31, 0.32));
-      bg.add(box(0.08, 0.62, 0.08, 0x6b4e30, 0.47, 0.31, 0.32));
-      bg.add(box(1.1, 0.08, 0.8, 0x7a5a38, 0, 0.66, 0));
-      bg.add(box(0.25, 0.15, 0.2, 0x3a2818, 0.35, 0.775, 0));
+      bg.add(buildWorkstationGroup());
       group.add(bg);
     }
     for (const record of stumpState.snapshot()) {
