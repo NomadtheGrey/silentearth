@@ -9866,6 +9866,10 @@ export default function App() {
   // sets it as the ritual note.
   const RITUAL_ALTAR_REFUSAL =
     "A ritual wants an altar, and this stump isn't one yet. The making — stones, glyph, candle — is under Upgrade.";
+  // The same refusal at a placed altar (the altar fix,
+  // 2026-11-05): the words name the thing she stands at.
+  const RITUAL_ALTAR_REFUSAL_AT_ALTAR =
+    "A ritual wants an altar, and this altar isn't one yet. The making — stones, glyph, candle — is under Upgrade.";
 
   // RITUAL STAGING, ALTAR + STUMP SITES (bone build):
   // made altars carry ids + chips + positions; stumps
@@ -9893,15 +9897,25 @@ export default function App() {
     // grade 1; additions never come off) can still be
     // completed, and the state-based completion check
     // fires regardless.
+    // Each base reads its OWN record (the altar fix,
+    // 2026-11-05, on the familiar rite's pattern at its
+    // obtainByRite call): a placed altar's additions
+    // live in altarState — reading [] for one graded a
+    // fully-made altar as unconsecrated and refused
+    // every staging there.
     const gateAdditions =
       site.kind === 'stump'
         ? (stumpState
             .snapshot()
             .find((r) => r.x === site.x && r.z === site.z)
             ?.additions ?? [])
-        : [];
+        : site.kind === 'altar'
+          ? (altarState.get(siteId)?.additions ?? [])
+          : [];
     if (siteGrade(site.kind, gateAdditions) < 2) {
-      setRitualNote(RITUAL_ALTAR_REFUSAL);
+      setRitualNote(
+        site.kind === 'altar' ? RITUAL_ALTAR_REFUSAL_AT_ALTAR : RITUAL_ALTAR_REFUSAL,
+      );
       return;
     }
     // Composition contract (DEV): the shell checks the
