@@ -2023,6 +2023,8 @@ import {
   pickupWorkstation,
   placeWorkstation as grantPlaceWorkstation,
 } from './systems/workstation';
+import { pickupLoom } from './systems/loom';
+import { hearthItemFireLit, pickupHearth } from './systems/hearth';
 import {
   cauldronState,
   type PlacedCauldron as PlacedCauldronEntity,
@@ -2232,6 +2234,11 @@ function clampPercent(value: number): number {
 const FIRE_ITEM_TO_TYPE: Record<string, FireType> = {
   [ITEMS.campfire]: 'campfire',
   [ITEMS.hearth]: 'hearth',
+  // The lit hearth (the hearth pick-up's return trip):
+  // a picked-up lit hearth carries its fire in the
+  // item id; it places as a hearth and stands lit
+  // (the confirm reads hearthItemFireLit).
+  [ITEMS.litHearth]: 'hearth',
   [ITEMS.kiln]: 'kiln',
 };
 
@@ -3763,6 +3770,12 @@ export default function App() {
     { fire: PlacedFire; x: number; y: number }[]
   >([]);
   const [selectedFireId, setSelectedFireId] = useState<string | null>(null);
+  // Furniture menus (the furniture-verbs build): the
+  // faced piece whose ContextMenu stands open.
+  const [selectedWorkstationId, setSelectedWorkstationId] =
+    useState<string | null>(null);
+  const [selectedDeskId, setSelectedDeskId] = useState<string | null>(null);
+  const [selectedLoomId, setSelectedLoomId] = useState<string | null>(null);
   // The cauldron whose menu is open, keyed by its hearth's
   // id — the cauldron's whole identity (Background's
   // binding model).
@@ -8912,7 +8925,7 @@ export default function App() {
   // station feed's faced-bench branch (render) and
   // the pick-up pill (render + the press re-derives).
   const facedFurniture = (): {
-    kind: 'bench' | 'desk';
+    kind: 'bench' | 'desk' | 'loom';
     id: string;
     pieceName: string;
   } | null => {
@@ -8921,13 +8934,13 @@ export default function App() {
     const forwardX = Math.sin(player.facing);
     const forwardZ = Math.cos(player.facing);
     let best: {
-      kind: 'bench' | 'desk';
+      kind: 'bench' | 'desk' | 'loom';
       id: string;
       pieceName: string;
     } | null = null;
     let bestDistance = Infinity;
     const consider = (
-      kind: 'bench' | 'desk',
+      kind: 'bench' | 'desk' | 'loom',
       id: string,
       pieceName: string,
       x: number,
@@ -8950,6 +8963,9 @@ export default function App() {
     for (const desk of deskState.snapshot()) {
       consider('desk', desk.id, 'Writing Desk', desk.x, desk.z);
     }
+    for (const loom of loomState.snapshot()) {
+      consider('loom', loom.id, 'Loom', loom.x, loom.z);
+    }
     return best;
   };
 
@@ -8964,33 +8980,66 @@ export default function App() {
   // its refusals (the grimoire guard, the catch law)
   // arrive as words and show verbatim. A world act —
   // the feedback line voices it, no panel is open.
-  const handlePickupFurniture = () => {
-    const target = facedFurniture();
-    if (!target) return;
+  // THE ONE PICK-UP ACT (the furniture-verbs build,
+  // 2026-11-05 — Adam's rule: a placed thing's verbs
+  // live on the thing itself): every door — the
+  // piece's E menu, the crafting panel at its station
+  // (K parity), the bottom-center quick pill — runs
+  // THIS act against a named piece. The grants
+  // decide; the shell removes the placed record ONLY
+  // on success; refusals voice identically at every
+  // door (the desk guard, the catch laws). True =
+  // picked up (menus close); false = refused in
+  // words (menus stay — she can clear the blocker
+  // from the same surface, e.g. take the grimoire,
+  // then pick the desk up).
+  const pickupFurniturePiece = (target: {
+    kind: 'bench' | 'desk' | 'loom';
+    id: string;
+  }): boolean => {
     if (target.kind === 'bench') {
       const outcome = pickupWorkstation(inventory);
       if (outcome.granted !== 1) {
         showFeedback('No room in the pack for it.', 'blocked');
-        return;
+        return false;
       }
       workstationState.removeWorkstation(target.id);
       refreshInventory();
       saveNow();
       showFeedback('Picked up the crafted workstation.', 'gain');
-      return;
+      return true;
+    }
+    if (target.kind === 'loom') {
+      const outcome = pickupLoom(inventory);
+      if (outcome.granted !== 1) {
+        showFeedback('No room in the pack for it.', 'blocked');
+        return false;
+      }
+      loomState.removeLoom(target.id);
+      refreshInventory();
+      saveNow();
+      showFeedback('Picked up the loom.', 'gain');
+      return true;
     }
     const desk = deskState.get(target.id);
-    if (!desk) return;
+    if (!desk) return false;
     const outcome = pickupDesk(inventory, desk);
     // Equality check, not truthiness (the desk note).
     if (outcome.taken === false) {
       showFeedback(outcome.reason, 'blocked');
-      return;
+      return false;
     }
     deskState.removeDesk(target.id);
     refreshInventory();
     saveNow();
     showFeedback('Picked up the writing desk.', 'gain');
+    return true;
+  };
+
+  const handlePickupFurniture = () => {
+    const target = facedFurniture();
+    if (!target) return;
+    pickupFurniturePiece(target);
   };
 
   // Cauldron placement (placed-cauldron build, 2026-10-30):
@@ -10547,7 +10596,15 @@ export default function App() {
     }
     try {
       if (mode.fireType) {
-        fireState.placeFire(mode.fireType, target.x, target.z, playerRef.current?.yaw ?? 0);
+        fireState.placeFire(
+          mode.fireType,
+          target.x,
+          target.z,
+          playerRef.current?.yaw ?? 0,
+          mode.fireType === 'hearth'
+            ? hearthItemFireLit(mode.itemId as ItemId)
+            : false,
+        );
       } else if (mode.houseType) {
         shelterState.placeHouse(mode.houseType, target.x, target.z, playerRef.current?.yaw ?? 0);
       } else if (mode.loom) {
@@ -11044,6 +11101,18 @@ export default function App() {
       cauldronState.cauldronForHearth(fire.id) === undefined
         ? [{ id: 'place-cauldron', label: 'Place cauldron' }]
         : [];
+    // THE HEARTH'S PICK-UP (the furniture pattern,
+    // 2026-11-05 — Adam: the hearth is furniture,
+    // heavy but movable): a hearth's own menu carries
+    // its Pick up in EVERY list a hearth can show
+    // (lit, lighting, unlit) — Systems' pickupHearth
+    // guards (the cauldron speaks first) and catches
+    // (20 lb) under it. Campfire + kiln stay
+    // place-once: no row for them.
+    const hearthActions: ContextAction[] =
+      fire.type === 'hearth'
+        ? [{ id: 'pick-up-hearth', label: 'Pick up Hearth' }]
+        : [];
     if (fire.lit) {
       const hasAcorns = inventory.count(FOOD_ACORNS) > 0;
       const hasSnapWood = inventory.count(CHAR_INPUT_ITEM) > 0;
@@ -11079,6 +11148,7 @@ export default function App() {
             ? undefined
             : 'Needs carried snap wood',
         },
+        ...hearthActions,
         { id: 'close', label: 'Close [X]' },
       ];
     }
@@ -11089,6 +11159,7 @@ export default function App() {
           id: 'click-flint',
           label: `Click flint (${fire.lighting.clicks} of 3)`,
         },
+        ...hearthActions,
         { id: 'close', label: 'Close [X]' },
       ];
     }
@@ -11104,6 +11175,7 @@ export default function App() {
               ? undefined
               : 'Wait for the wait to end, then rub',
         },
+        ...hearthActions,
         { id: 'close', label: 'Close [X]' },
       ];
     }
@@ -11111,7 +11183,8 @@ export default function App() {
       // The candle's process needs no second press —
       // the wait IS the lighting (the header bar
       // carries its progress). Rows: Close only.
-      return [...cauldronActions, { id: 'close', label: 'Close [X]' }];
+      return [...cauldronActions, ...hearthActions,
+        { id: 'close', label: 'Close [X]' }];
     }
     const hasFlint = inventory.count(ITEMS.flint) > 0;
     return [
@@ -11145,7 +11218,8 @@ export default function App() {
         label: 'Light with friction (slow)',
         hint: 'Rub, wait, rub',
       },
-      { id: 'close', label: 'Close [X]' },
+      ...hearthActions,
+        { id: 'close', label: 'Close [X]' },
     ];
   };
 
@@ -11164,6 +11238,35 @@ export default function App() {
       // the grant reads the faced winner, which is this
       // hearth while its menu stands open.
       handlePlaceCauldron();
+      return;
+    }
+    if (actionId === 'pick-up-hearth') {
+      // THE HEARTH PICK-UP (the furniture pattern):
+      // Systems' grant judges the seat (a cauldron on
+      // it refuses first, in its words; then the catch
+      // law at 20 lb) — a refusal voices the reason and
+      // the menu STAYS (she can lift the cauldron from
+      // this same menu); success removes the fire
+      // record through Background's seat and the
+      // lit-ness rides the granted item id. A lighting
+      // process in flight is not a lit fire and does
+      // not ride (Systems' rule) — fire.lit is the
+      // seat's fact, so it reads false mid-lighting.
+      const outcome = pickupHearth(inventory, {
+        cauldron: cauldronState.cauldronForHearth(fire.id) !== undefined,
+        lit: fire.lit,
+      });
+      // Equality check, not truthiness (the desk note).
+      if (outcome.taken === false) {
+        say(outcome.reason, 'blocked');
+        return;
+      }
+      fireState.removeFire(fire.id);
+      setSelectedFireId(null);
+      refreshInventory();
+      saveNow();
+      say('Picked up the hearth.', 'gain');
+      recomputeAnchors();
       return;
     }
     if (actionId === 'light-candle') {
@@ -11485,6 +11588,97 @@ export default function App() {
       saveNow();
     }
     recomputeAnchors();
+  };
+
+  // FURNITURE MENUS (the furniture-verbs build,
+  // 2026-11-05 — Adam's rule: a placed thing's verbs
+  // live on the thing itself): each placed bench,
+  // desk, and loom carries its WORK and its PICK UP
+  // on its own ContextMenu (the fire/cauldron
+  // pattern), and the same pick-up rides the crafting
+  // panel at its station (K parity, below). One act
+  // under every door (pickupFurniturePiece); a
+  // refused pick-up leaves the menu standing (the
+  // cauldron rule), a completed one closes it.
+  const workstationMenuActions = (): ContextAction[] => [
+    { id: 'craft', label: 'Craft' },
+    { id: 'pick-up', label: 'Pick up Crafted Workstation' },
+    { id: 'close', label: 'Close [X]' },
+  ];
+
+  const handleWorkstationAction = (benchId: string, actionId: string) => {
+    if (actionId === 'close') {
+      setSelectedWorkstationId(null);
+      return;
+    }
+    if (actionId === 'craft') {
+      setSelectedWorkstationId(null);
+      openCraftingPanel();
+      return;
+    }
+    if (actionId === 'pick-up') {
+      if (pickupFurniturePiece({ kind: 'bench', id: benchId })) {
+        setSelectedWorkstationId(null);
+      }
+    }
+  };
+
+  const deskMenuActions = (desk: PlacedDeskEntity): ContextAction[] => {
+    const actions: ContextAction[] =
+      desk.grimoire === true
+        ? [
+            { id: 'act', label: 'Take grimoire' },
+            { id: 'read', label: 'Read the grimoire' },
+          ]
+        : [{ id: 'act', label: 'Place grimoire' }];
+    actions.push({ id: 'pick-up', label: 'Pick up Writing Desk' });
+    actions.push({ id: 'close', label: 'Close [X]' });
+    return actions;
+  };
+
+  const handleDeskMenuAction = (deskId: string, actionId: string) => {
+    if (actionId === 'close') {
+      setSelectedDeskId(null);
+      return;
+    }
+    if (actionId === 'act') {
+      setSelectedDeskId(null);
+      handleDeskAct(deskId);
+      return;
+    }
+    if (actionId === 'read') {
+      setSelectedDeskId(null);
+      handleDeskRead(deskId);
+      return;
+    }
+    if (actionId === 'pick-up') {
+      if (pickupFurniturePiece({ kind: 'desk', id: deskId })) {
+        setSelectedDeskId(null);
+      }
+    }
+  };
+
+  const loomMenuActions = (): ContextAction[] => [
+    { id: 'weave', label: 'Weave' },
+    { id: 'pick-up', label: 'Pick up Loom' },
+    { id: 'close', label: 'Close [X]' },
+  ];
+
+  const handleLoomAction = (loomId: string, actionId: string) => {
+    if (actionId === 'close') {
+      setSelectedLoomId(null);
+      return;
+    }
+    if (actionId === 'weave') {
+      setSelectedLoomId(null);
+      openCraftingPanel();
+      return;
+    }
+    if (actionId === 'pick-up') {
+      if (pickupFurniturePiece({ kind: 'loom', id: loomId })) {
+        setSelectedLoomId(null);
+      }
+    }
   };
 
   // Scry press (DEV split): the press IS the reveal — call
@@ -12550,6 +12744,42 @@ export default function App() {
           ) ?? null,
         );
 
+  // The furniture menus' selected pieces + anchors
+  // (the furniture-verbs build — the fire pattern):
+  // a picked-up piece resolves to undefined and its
+  // menu leaves with it.
+  const selectedWorkstation =
+    selectedWorkstationId === null
+      ? undefined
+      : workstationState.get(selectedWorkstationId);
+  const selectedWorkstationAnchor =
+    selectedWorkstation === undefined
+      ? null
+      : retainAnchor(
+          `workstation:${selectedWorkstation.id}`,
+          workstationAnchors.find(
+            (a) => a.bench.id === selectedWorkstation.id,
+          ) ?? null,
+        );
+  const selectedDesk =
+    selectedDeskId === null ? undefined : deskState.get(selectedDeskId);
+  const selectedDeskAnchor =
+    selectedDesk === undefined
+      ? null
+      : retainAnchor(
+          `desk:${selectedDesk.id}`,
+          deskAnchors.find((a) => a.desk.id === selectedDesk.id) ?? null,
+        );
+  const selectedLoom =
+    selectedLoomId === null ? undefined : loomState.get(selectedLoomId);
+  const selectedLoomAnchor =
+    selectedLoom === undefined
+      ? null
+      : retainAnchor(
+          `loom:${selectedLoom.id}`,
+          projectAnchor(selectedLoom.x, selectedLoom.z, 'scatter'),
+        );
+
   // The selected tent + its anchor — the torch pattern,
   // over the shell store (no entity yet).
   const selectedTent =
@@ -13290,6 +13520,18 @@ export default function App() {
         setSelectedFireId(null);
         return;
       }
+      if (selectedWorkstationId !== null) {
+        setSelectedWorkstationId(null);
+        return;
+      }
+      if (selectedDeskId !== null) {
+        setSelectedDeskId(null);
+        return;
+      }
+      if (selectedLoomId !== null) {
+        setSelectedLoomId(null);
+        return;
+      }
       if (selectedSiteId !== null) {
         setSelectedSiteId(null);
         setRitualNote(null);
@@ -13426,6 +13668,18 @@ export default function App() {
       setSelectedFireId(null);
       return true;
     }
+    if (selectedWorkstationId !== null) {
+      setSelectedWorkstationId(null);
+      return true;
+    }
+    if (selectedDeskId !== null) {
+      setSelectedDeskId(null);
+      return true;
+    }
+    if (selectedLoomId !== null) {
+      setSelectedLoomId(null);
+      return true;
+    }
     if (selectedSiteId !== null) {
       setSelectedSiteId(null);
       setRitualNote(null);
@@ -13542,6 +13796,24 @@ export default function App() {
           placedTents.find((t) => t.id === selectedTentId) ?? null;
         if (walkAwayShouldClose(tent, p, WALK_AWAY_LEASH)) {
           setSelectedTentId(null);
+        }
+      }
+      if (selectedWorkstationId !== null) {
+        const bench = workstationState.get(selectedWorkstationId) ?? null;
+        if (walkAwayShouldClose(bench, p, WALK_AWAY_LEASH)) {
+          setSelectedWorkstationId(null);
+        }
+      }
+      if (selectedDeskId !== null) {
+        const desk = deskState.get(selectedDeskId) ?? null;
+        if (walkAwayShouldClose(desk, p, WALK_AWAY_LEASH)) {
+          setSelectedDeskId(null);
+        }
+      }
+      if (selectedLoomId !== null) {
+        const loom = loomState.get(selectedLoomId) ?? null;
+        if (walkAwayShouldClose(loom, p, WALK_AWAY_LEASH)) {
+          setSelectedLoomId(null);
         }
       }
       if (selectedBagId !== null) {
@@ -13825,6 +14097,7 @@ export default function App() {
     | { kind: 'fire' | 'tent' | 'bag' | 'torch' | 'loom'; id: string; distance: number }
     | { kind: 'cauldron'; id: string; distance: number }
     | { kind: 'desk'; id: string; distance: number }
+    | { kind: 'workstation'; id: string; distance: number }
     | {
         kind: 'cave-enter' | 'cave-exit' | 'cave-descend' | 'cave-climb';
         id: string;
@@ -14055,7 +14328,14 @@ export default function App() {
     }
     if (siteBest !== null) challengers.push(siteBest);
     const considerPlaced = (
-      kind: 'fire' | 'tent' | 'bag' | 'torch' | 'loom' | 'cauldron',
+      kind:
+      | 'fire'
+      | 'tent'
+      | 'bag'
+      | 'torch'
+      | 'loom'
+      | 'cauldron'
+      | 'workstation',
       id: string,
       x: number,
       z: number,
@@ -14088,29 +14368,31 @@ export default function App() {
     for (const loom of loomState.snapshot()) {
       considerPlaced('loom', loom.id, loom.x, loom.z);
     }
+    // Placed workstations (the furniture-verbs build):
+    // the bench joins the race — its verbs (Craft +
+    // Pick up, on its own menu) are always live, so
+    // candidacy is the loom's plain shape.
+    for (const bench of workstationState.snapshot()) {
+      considerPlaced('workstation', bench.id, bench.x, bench.z);
+    }
     // Placed cauldrons (placed-cauldron build): the pot
     // is its own target, keyed by its hearth's id — read
     // from Background's singleton like the looms.
     for (const cauldron of cauldronState.snapshot()) {
       considerPlaced('cauldron', cauldron.hearthId, cauldron.x, cauldron.z);
     }
-    // PLACED DESKS (the grimoire's seat, 2026-11-01):
-    // a desk joins the race ONLY when a verb is live —
-    // seated (Take / Read) or bare with the book in her
-    // pack (Place). A bare desk and empty hands is
-    // silence by the design's own sentence (a second
-    // desk offers nothing to empty hands — the book is
-    // where it is), so it is not even a range candidate
-    // for the ground gate: narrow candidacy, the
-    // creature pattern. Read live from the singleton
-    // (the loom idiom — no shell mirror).
+    // PLACED DESKS (the grimoire's seat, 2026-11-01;
+    // candidacy widened by the furniture-verbs build,
+    // 2026-11-05): a desk used to join the race ONLY
+    // when a book verb was live (seated, or bare with
+    // the book in her pack) — a bare desk and empty
+    // hands was silence. Adam's rule (a placed thing's
+    // verbs live on the thing itself) gives every desk
+    // a standing verb — Pick up, on its own menu — so
+    // candidacy is now the plain faced shape, the loom
+    // pattern. Read live from the singleton (no shell
+    // mirror).
     for (const desk of deskState.snapshot()) {
-      if (
-        desk.grimoire !== true &&
-        inventory.count(ITEMS.grimoire) <= 0
-      ) {
-        continue;
-      }
       const f = facingOf(desk.x, desk.z);
       if (f.distance <= HARVEST_RANGE) anyCandidateInRange = true;
       if (f.isFaced && f.distance <= HARVEST_RANGE) {
@@ -14563,26 +14845,37 @@ export default function App() {
         handlePickupTorch(winner.id);
         break;
       case 'loom':
-        // The loom's door is its pill: facing it and
-        // pressing USE opens the Crafting panel, and the
-        // station feed (same winner) counts the loom, so
-        // its recipes read craftable here — since the
-        // station-rows landing nothing is filtered away;
-        // every recipe shows and the loom's stop saying
-        // 'Needs a loom.'. No selected-loom state — the
-        // panel is the whole interaction. The WEAVE row
-        // in the column fires this same act.
-        openCraftingPanel();
+        // The loom's E (the furniture-verbs build,
+        // 2026-11-05 — Adam's rule: a placed thing's
+        // verbs live on the thing itself): E selects
+        // the loom and its own menu stands — Weave (the
+        // Crafting panel, as before, one row deeper)
+        // and Pick up. The panel opened at the loom
+        // carries the pick-up too (K parity). Before
+        // this build E opened the panel directly and
+        // the loom had no pick-up anywhere.
+        setSelectedLoomId(winner.id);
+        break;
+      case 'workstation':
+        // The bench's E (the furniture-verbs build):
+        // the bench joins the menu family — Craft (the
+        // panel) and Pick up, on the piece itself.
+        // Before this build the bench had no winner and
+        // E at a bench did nothing at all.
+        setSelectedWorkstationId(winner.id);
         break;
       case 'cauldron':
         setSelectedCauldronHearthId(winner.id);
         break;
       case 'desk':
-        // The desk's E (the grimoire's seat): seat the
-        // carried book on a bare desk, take it back
-        // from a seated one — the same act the desk
-        // pill runs.
-        handleDeskAct(winner.id);
+        // The desk's E (the furniture-verbs build):
+        // E selects the desk and its own menu stands —
+        // the book acts (Place / Take / Read, as the
+        // state allows) and Pick up. Before this build
+        // E ran the seat/take act in one press; the act
+        // itself is unchanged, one row deeper, and R
+        // still reads a seated book directly.
+        setSelectedDeskId(winner.id);
         break;
       case 'cave-enter':
       case 'cave-exit':
@@ -14745,6 +15038,29 @@ export default function App() {
       const target = flattenMenuTargets(cauldronMenuActions())[digit - 1];
       if (target && !target.disabled) {
         handleCauldronAction(selectedCauldron.hearthId, target.id);
+      }
+      return;
+    }
+    if (selectedWorkstation !== undefined) {
+      const target = flattenMenuTargets(workstationMenuActions())[digit - 1];
+      if (target && !target.disabled) {
+        handleWorkstationAction(selectedWorkstation.id, target.id);
+      }
+      return;
+    }
+    if (selectedDesk !== undefined) {
+      const target = flattenMenuTargets(deskMenuActions(selectedDesk))[
+        digit - 1
+      ];
+      if (target && !target.disabled) {
+        handleDeskMenuAction(selectedDesk.id, target.id);
+      }
+      return;
+    }
+    if (selectedLoom !== undefined) {
+      const target = flattenMenuTargets(loomMenuActions())[digit - 1];
+      if (target && !target.disabled) {
+        handleLoomAction(selectedLoom.id, target.id);
       }
       return;
     }
@@ -15554,6 +15870,24 @@ export default function App() {
   // derives from this full set, so the sink partitions
   // all rows: a superseded recipe at an absent station
   // sinks visibly instead of hiding with its station.
+  // THE PANEL'S PICK-UP DOOR (the furniture-verbs
+  // build — K PARITY: the crafting panel opened at a
+  // faced station IS that station's interface, so
+  // the faced piece's pick-up rides in the panel
+  // too: a player mid-crafting can move the bench
+  // without closing, re-facing, and hunting a pill).
+  // The faced fact is facedFurniture()'s — the same
+  // derivation the quick pill reads (the winner is
+  // the wrong seat: a scatter at her feet can outrank
+  // the bench in the race while she plainly faces
+  // the bench). The act is the one act.
+  const craftingPickupDoor =
+    craftingOpen && furnitureFacedNow !== null
+      ? {
+          label: `Pick up ${furnitureFacedNow.pieceName}`,
+          onPickup: () => pickupFurniturePiece(furnitureFacedNow),
+        }
+      : null;
   const craftingRecipes: CraftingRecipe[] = RECIPES.map((recipe) => {
     // OR over every present station: a recipe is craftable
     // when ANY present station satisfies it. When none does,
@@ -15836,10 +16170,15 @@ export default function App() {
   // label and the path was folklore). The label is the
   // verb alone; the column seats above the loom itself
   // (stationAnchor), so the object is named by place.
-  const presentedLoom =
-    useWinner?.kind === 'loom'
-      ? { id: useWinner.id, label: 'Weave' }
-      : null;
+  // THE LOOM'S PILL RETIRED (the furniture-verbs
+  // build, 2026-11-05): the loom is a menu kind now —
+  // its menu is its presentation (the fire/tent
+  // pattern: menu kinds contribute nothing to this
+  // column). Before this build a faced loom presented
+  // a WEAVE row here (Adam, 2026-10-31) whose press
+  // opened the panel; the menu's Weave row is that
+  // same act, one level in.
+  const presentedLoom = null;
   // THE CREATURE'S PILL (Piece B, 2026-10-31): the
   // creature winner presents its row — the loom shape —
   // with the live verb as its label (OFFER names its
@@ -15872,16 +16211,13 @@ export default function App() {
   // read gate's camp act). Labels DRAFT. The press runs
   // the stored pick's acts, the very acts E and R
   // perform (the contract).
-  const presentedDesk =
-    useWinner?.kind === 'desk'
-      ? deskState.get(useWinner.id)?.grimoire === true
-        ? {
-            id: useWinner.id,
-            label: 'Take grimoire',
-            secondLabel: 'Read the grimoire',
-          }
-        : { id: useWinner.id, label: 'Place grimoire' }
-      : null;
+  // THE DESK'S PILLS RETIRED (the furniture-verbs
+  // build): the desk is a menu kind — Place / Take /
+  // Read and Pick up live on its own menu now (the
+  // fire pattern). The R quick door still reads a
+  // seated book through the second-interact handler;
+  // this column presents nothing for a desk.
+  const presentedDesk = null;
   // THE STRUCTURE TAG (2026-10-31): the nearest FACED
   // singular within the tag range, derived per render
   // (structures are static; her position state rides
@@ -16289,7 +16625,7 @@ export default function App() {
           : useWinner.kind === 'hive'
             ? 'HARVEST'
             : useWinner.kind === 'loom'
-              ? 'WEAVE'
+              ? 'OPEN'
               : useWinner.kind === 'creature'
                 ? useWinner.verb === 'offer'
                   ? 'OFFER'
@@ -16304,9 +16640,9 @@ export default function App() {
                 : useWinner.kind === 'cauldron'
                   ? 'RENDER'
                   : useWinner.kind === 'desk'
-                    ? deskState.get(useWinner.id)?.grimoire === true
-                      ? 'TAKE'
-                      : 'PLACE'
+                    ? 'OPEN'
+                    : useWinner.kind === 'workstation'
+                      ? 'OPEN'
                   : useWinner.kind === 'fire'
                     ? fireWinnerLabel
                   : useWinner.kind === 'torch'
@@ -16750,14 +17086,20 @@ export default function App() {
         {deskAnchors.map(({ desk, x, y }) => (
           <Fragment key={desk.id}>
             <WorldAnchor x={x} y={y} interactive>
-              <AltarChip label="Writing Desk" />
+              <AltarChip
+                label="Writing Desk"
+                onSelect={() => setSelectedDeskId(desk.id)}
+              />
             </WorldAnchor>
           </Fragment>
         ))}
         {workstationAnchors.map(({ bench, x, y }) => (
           <Fragment key={bench.id}>
             <WorldAnchor x={x} y={y} interactive>
-              <AltarChip label="Crafted Workstation" />
+              <AltarChip
+                label="Crafted Workstation"
+                onSelect={() => setSelectedWorkstationId(bench.id)}
+              />
             </WorldAnchor>
           </Fragment>
         ))}
@@ -16891,6 +17233,53 @@ export default function App() {
                 handleCauldronAction(selectedCauldron.hearthId, id)
               }
               onClose={() => setSelectedCauldronHearthId(null)}
+            />
+          </WorldAnchor>
+        ) : null}
+        {selectedWorkstation && selectedWorkstationAnchor ? (
+          <WorldAnchor
+            x={selectedWorkstationAnchor.x}
+            y={selectedWorkstationAnchor.y}
+            interactive
+          >
+            <ContextMenu theme={lookThemes.world}
+              objectName="Crafted Workstation"
+              actions={workstationMenuActions()}
+              showKeyHints={!isTouch}
+              onSelect={(id) =>
+                handleWorkstationAction(selectedWorkstation.id, id)
+              }
+              onClose={() => setSelectedWorkstationId(null)}
+            />
+          </WorldAnchor>
+        ) : null}
+        {selectedDesk && selectedDeskAnchor ? (
+          <WorldAnchor
+            x={selectedDeskAnchor.x}
+            y={selectedDeskAnchor.y}
+            interactive
+          >
+            <ContextMenu theme={lookThemes.world}
+              objectName="Writing Desk"
+              actions={deskMenuActions(selectedDesk)}
+              showKeyHints={!isTouch}
+              onSelect={(id) => handleDeskMenuAction(selectedDesk.id, id)}
+              onClose={() => setSelectedDeskId(null)}
+            />
+          </WorldAnchor>
+        ) : null}
+        {selectedLoom && selectedLoomAnchor ? (
+          <WorldAnchor
+            x={selectedLoomAnchor.x}
+            y={selectedLoomAnchor.y}
+            interactive
+          >
+            <ContextMenu theme={lookThemes.world}
+              objectName="Loom"
+              actions={loomMenuActions()}
+              showKeyHints={!isTouch}
+              onSelect={(id) => handleLoomAction(selectedLoom.id, id)}
+              onClose={() => setSelectedLoomId(null)}
             />
           </WorldAnchor>
         ) : null}
@@ -17913,6 +18302,7 @@ export default function App() {
                   recipes={orderedCraftingRecipes}
                   sections={craftingSections}
                   stationNote={stationNote}
+                  pickupDoor={craftingPickupDoor}
                   comfortable={isTouch}
                   selectedRecipeId={selectedRecipeId}
                   onSelectRecipe={setSelectedRecipeId}
@@ -18056,6 +18446,7 @@ export default function App() {
               recipes={orderedCraftingRecipes}
               sections={craftingSections}
               stationNote={stationNote}
+              pickupDoor={craftingPickupDoor}
               comfortable={isTouch}
               selectedRecipeId={selectedRecipeId}
               onSelectRecipe={setSelectedRecipeId}

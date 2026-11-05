@@ -248,6 +248,59 @@ export function ritualRecipeFor(boneKind: string): RitualRecipe | undefined {
   return RITUAL_RECIPES.find((r) => r.boneKind === boneKind);
 }
 
+/**
+ * THE BONE -> CREATURE MAPPING (the hotfix, 2026-11-05):
+ * a bone kind is a DESIGN key ('owl-talon'), NOT a
+ * creature kind — the familiar a Waking raises is a
+ * creature ('owl'), and everything downstream of a
+ * completion (the companion record, the actor, the
+ * true name) speaks CREATURE kind. This table is the
+ * ONE sanctioned translation. Every recipe bone kind
+ * is listed; the creature is the bone kind's first
+ * token in all but one case — 'vole-skull' raises the
+ * VOLES (no singular 'vole' kind exists; the voles
+ * def governs), the exception that is exactly why
+ * this is a table and not a string rule. 'shrew-skull'
+ * stands here too (no recipe — the shrew wakes
+ * outright) so the translation is total: the
+ * companion restore heals by it.
+ */
+export const CREATURE_KIND_BY_BONE_KIND: Readonly<Record<string, string>> = {
+  'pigeon-wing-bone': 'pigeon',
+  'snake-vertebra': 'snake',
+  'turtle-shell-fragment': 'turtle',
+  'crow-beak': 'crow',
+  'squirrel-tail-bone': 'squirrel',
+  'owl-talon': 'owl',
+  'bat-wing-bone': 'bat',
+  'mouse-spine': 'mouse',
+  'raccoon-tooth': 'raccoon',
+  'groundhog-tooth': 'groundhog',
+  'opossum-crest': 'opossum',
+  'fox-femur': 'fox',
+  'deer-antler-tip': 'deer',
+  'muskrat-tail': 'muskrat',
+  'wolf-tooth': 'wolf',
+  'frog-pelvis': 'frog',
+  'mole-paw': 'mole',
+  'bear-claw': 'bear',
+  'rabbit-jaw': 'rabbit',
+  'beaver-incisor': 'beaver',
+  'vole-skull': 'voles',
+  'shrew-skull': 'shrew',
+};
+
+/**
+ * The creature kind a bone kind raises, or undefined
+ * when the key is not a bone design key at all (an
+ * ordinary creature kind passes the caller's check
+ * by NOT being found here — see the companion
+ * restore's healing).
+ */
+export function creatureKindForBoneKind(boneKind: string): string | undefined {
+  return CREATURE_KIND_BY_BONE_KIND[boneKind];
+}
+
 /** One staging's saved shape (see StagingBook.snapshot). */
 export interface SavedRitualStaging {
   siteKey: string;
@@ -357,6 +410,16 @@ export class RitualStaging {
    * awakening for the shell to record (charms.awaken).
    * Null when not completable (unstaged, window closed,
    * or already completed — idempotent, no double-awaken).
+   *
+   * THE RETURNED kind IS THE CREATURE KIND — the
+   * familiar's kind, mapped from the recipe's bone
+   * design key through CREATURE_KIND_BY_BONE_KIND
+   * (the hotfix, 2026-11-05: this seam once returned
+   * the bone key itself, and the shell — correctly
+   * treating the value as a creature kind everywhere
+   * — spawned an actor of a kind no def carries).
+   * Every recipe kind is in the table; the fallback
+   * to the bone key is unreachable for a recipe.
    */
   complete(
     recipe: RitualRecipe,
@@ -365,7 +428,10 @@ export class RitualStaging {
     if (this.completed) return null;
     if (!this.checkCompletion(recipe, facts)) return null;
     this.completed = true;
-    return { kind: recipe.boneKind, tier: recipe.tier };
+    return {
+      kind: creatureKindForBoneKind(recipe.boneKind) ?? recipe.boneKind,
+      tier: recipe.tier,
+    };
   }
 
   /** Snapshot for save (copies). */
