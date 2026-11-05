@@ -2749,21 +2749,29 @@ export const ALTAR_TABLE_CANDLE_Z = 0;
 export const ALTAR_SLAB_TOP_Y = 0.84;
 /** The glyph ring's radius on the slab: drawn AROUND
  *  the bowl (its centerpiece stands where the stump's
- *  center mark sits), inside the slab's narrow edge. */
+ *  center mark sits), inside the inscribed frame ring. */
 export const ALTAR_GLYPH_RING_R = 0.42;
 
 /**
  * A made ritual altar (Adam 2026-10-27 — placeable + visible
  * ONLY, no ritual actions). The read-at-a-glance shape, my
- * design on the draft suggestion (flagged): a flat stone
- * TABLE on four wooden legs, with a clay bowl atop the
- * centre. Deliberately NOT a house (no walls, no roof) and
+ * design on the draft suggestion (flagged): a stone TABLE
+ * on four wooden legs, with a clay bowl atop the centre.
+ * Deliberately NOT a house (no walls, no roof) and
  * NOT a fire (no logs, no flame, no light — an altar is
  * not a light source until a ritual says so). Symmetric, so
- * it needs no facing. Overall ~1.4 m wide, ~1.0 m tall:
- * person-scale, unmistakable at a glance, smaller than any
- * house. Lambert materials throughout (lit by sun/moon
- * like the houses — dark at night, like everything unlit).
+ * it needs no facing. Person-scale, unmistakable at a
+ * glance, smaller than any house. Lambert materials
+ * throughout (lit by sun/moon like the houses — dark at
+ * night, like everything unlit).
+ *
+ * DRESSED ROUND (2026-11-05, toward Adam's altar photo):
+ * the top is now a ROUND stone disc (r 0.66) on stout,
+ * slightly turned legs, with a groove ring inscribed in
+ * the top as the glyph's permanent frame. The working
+ * facts did NOT move: slab top still 0.84, candle seat,
+ * glyph ring radius, bowl and bone seats all as composed
+ * (probe-measured in the dressing landing).
  *
  * PARITY DRESSING (Adam, 2026-11-01: both altar flavors
  * work the same and BOTH require the consecration): the
@@ -2780,20 +2788,59 @@ export const ALTAR_GLYPH_RING_R = 0.42;
  */
 export function buildAltarGroup(additions: readonly string[] = []): THREE.Group {
   const g = new THREE.Group();
-  // Four wooden legs (frame) at the slab corners, inset.
-  const legGeo = new THREE.BoxGeometry(0.1, 0.72, 0.1);
+  // Four STOUT, slightly TURNED legs (dressed 2026-11-05
+  // toward Adam's altar photo): stacked blocks — a wide
+  // foot, a narrower shaft, a collar, a crown — on
+  // diagonal bearings at r 0.44 under the round top.
   const legMat = meshMat(0x6b4a2f);
+  const footGeo = new THREE.BoxGeometry(0.15, 0.18, 0.15);
+  const shaftGeo = new THREE.BoxGeometry(0.115, 0.36, 0.115);
+  const collarGeo = new THREE.BoxGeometry(0.15, 0.12, 0.15);
+  const crownGeo = new THREE.BoxGeometry(0.13, 0.06, 0.13);
   for (const sx of [-1, 1]) {
     for (const sz of [-1, 1]) {
-      const leg = new THREE.Mesh(legGeo, legMat);
-      leg.position.set(sx * 0.55, 0.36, sz * 0.3);
-      g.add(leg);
+      const lx = sx * 0.311;
+      const lz = sz * 0.311;
+      const foot = new THREE.Mesh(footGeo, legMat);
+      foot.position.set(lx, 0.09, lz);
+      g.add(foot);
+      const shaft = new THREE.Mesh(shaftGeo, legMat);
+      shaft.position.set(lx, 0.36, lz);
+      g.add(shaft);
+      const collar = new THREE.Mesh(collarGeo, legMat);
+      collar.position.set(lx, 0.6, lz);
+      g.add(collar);
+      const crown = new THREE.Mesh(crownGeo, legMat);
+      crown.position.set(lx, 0.69, lz);
+      g.add(crown);
     }
   }
-  // Flat stone slab (base/table): 1.4 x 0.12 x 0.9, top at 0.84.
-  const slab = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.12, 0.9), meshMat(0x8a8a86));
+  // The ROUND stone top (2026-11-05): r 0.66, its surface
+  // still EXACTLY at ALTAR_SLAB_TOP_Y (0.84) — the working
+  // facts do not move: the candle seat (-0.52, 0) keeps
+  // rim beyond its holder, the glyph ring (r 0.42) and
+  // the bowl sit as they did, the staged bone's corner
+  // (r ~0.46) stays well inside. A stepped under-disc
+  // carries the top's thickness down to the legs.
+  const slab = new THREE.Mesh(new THREE.CylinderGeometry(0.66, 0.66, 0.12, 24), meshMat(0x8a8a86));
   slab.position.set(0, 0.78, 0);
   g.add(slab);
+  const underDisc = new THREE.Mesh(new THREE.CylinderGeometry(0.58, 0.58, 0.05, 24), meshMat(0x7a7a76));
+  underDisc.position.set(0, 0.695, 0);
+  g.add(underDisc);
+  // The INSCRIBED RING: a dark groove circle cut into the
+  // top at r ~0.47, permanent in the stone — the FRAME
+  // the consecration's drawn glyph (r 0.42) lands inside
+  // when its act completes. Not a mechanic: an incised
+  // line, present from the making, like the photo's
+  // burned circle.
+  const groove = new THREE.Mesh(
+    new THREE.RingGeometry(0.46, 0.485, 40),
+    meshMat(0x4c4c48),
+  );
+  groove.rotation.x = -Math.PI / 2;
+  groove.position.set(0, ALTAR_SLAB_TOP_Y + 0.0015, 0);
+  g.add(groove);
   // Clay bowl atop the centre: a lathe bowl (profile from
   // foot to rim), terracotta, double-sided so the hollow
   // reads from above instead of capping shut.
@@ -2852,6 +2899,87 @@ export function buildAltarGroup(additions: readonly string[] = []): THREE.Group 
     holder.add(candle);
     g.add(holder);
   }
+  return g;
+}
+
+/**
+ * A placed crafted workstation (the free-standing bench;
+ * dressed 2026-11-05 toward Adam's reference photo — the
+ * basic DIY workbench: a THICK SLAB TOP with a real
+ * overhang, four SQUARE corner legs, deep aprons under
+ * the top, and a LOW SHELF slung between the legs, which
+ * is what makes it read workbench and not table). This
+ * builder replaces the six inline boxes the renderer
+ * used to draw (its comment anticipated the re-cut: "the
+ * seat won't notice") — and the seat facts are FROZEN:
+ * legs at the old seats (±0.47, ±0.32), the top surface
+ * at the old working height y 0.70, the vise at its old
+ * seat on the top (0.35) with a jaw + screw handle added
+ * at the new scale. Only the top grew (1.1 x 0.8 ->
+ * 1.26 x 0.94: the overhang is visual). Facing rides the
+ * placed record's rotY on the parent group, as before.
+ * No light: a bench is not a light source.
+ */
+export function buildWorkstationGroup(): THREE.Group {
+  const g = new THREE.Group();
+  const legMat = meshMat(0x6b4e30);
+  const topMat = meshMat(0x7a5a38);
+  // Four square corner legs at the frozen seats.
+  const legGeo = new THREE.BoxGeometry(0.11, 0.62, 0.11);
+  for (const sx of [-1, 1]) {
+    for (const sz of [-1, 1]) {
+      const leg = new THREE.Mesh(legGeo, legMat);
+      leg.position.set(sx * 0.47, 0.31, sz * 0.32);
+      g.add(leg);
+    }
+  }
+  // Aprons under the top, all four sides — the deep band
+  // the photo's frame shows between legs and top.
+  const apronFB = new THREE.BoxGeometry(0.83, 0.15, 0.045);
+  for (const sz of [-1, 1]) {
+    const apron = new THREE.Mesh(apronFB, legMat);
+    apron.position.set(0, 0.545, sz * 0.32);
+    g.add(apron);
+  }
+  const apronSide = new THREE.BoxGeometry(0.045, 0.15, 0.53);
+  for (const sx of [-1, 1]) {
+    const apron = new THREE.Mesh(apronSide, legMat);
+    apron.position.set(sx * 0.47, 0.545, 0);
+    g.add(apron);
+  }
+  // The low shelf: a board slung between the legs on its
+  // stretchers, low down — the workbench read.
+  const stretcherFB = new THREE.BoxGeometry(0.98, 0.1, 0.04);
+  for (const sz of [-1, 1]) {
+    const st = new THREE.Mesh(stretcherFB, legMat);
+    st.position.set(0, 0.12, sz * 0.32);
+    g.add(st);
+  }
+  const stretcherSide = new THREE.BoxGeometry(0.04, 0.1, 0.6);
+  for (const sx of [-1, 1]) {
+    const st = new THREE.Mesh(stretcherSide, legMat);
+    st.position.set(sx * 0.47, 0.12, 0);
+    g.add(st);
+  }
+  const shelf = new THREE.Mesh(new THREE.BoxGeometry(0.98, 0.04, 0.68), meshMat(0x715430));
+  shelf.position.set(0, 0.17, 0);
+  g.add(shelf);
+  // The thick top: surface at the frozen 0.70.
+  const top = new THREE.Mesh(new THREE.BoxGeometry(1.26, 0.1, 0.94), topMat);
+  top.position.set(0, 0.65, 0);
+  g.add(top);
+  // The vise at its frozen seat, with a jaw and a screw
+  // handle now that the top gives it room to read.
+  const vise = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.15, 0.2), meshMat(0x3a2818));
+  vise.position.set(0.35, 0.775, 0);
+  g.add(vise);
+  const jaw = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.11, 0.2), meshMat(0x4a3423));
+  jaw.position.set(0.51, 0.755, 0);
+  g.add(jaw);
+  const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.36, 6), meshMat(0x2a1c10));
+  handle.rotation.x = Math.PI / 2;
+  handle.position.set(0.44, 0.73, 0);
+  g.add(handle);
   return g;
 }
 

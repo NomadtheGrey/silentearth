@@ -378,6 +378,13 @@ function buildVillagePlan(
         hearthSpot: spot,
         smokeAnchor: { x: chimney.x, z: chimney.z, y: 5.2 },
       };
+      // THE HEARTHSTONE SEAT (2026-11-05, DEV filing):
+      // the carrier resolves at this spot, so a dressed
+      // stone stands at it — plain, as the hearth house
+      // always stands in this family — sized to read at
+      // a glance. No wall box (the farmhouse great
+      // stone's precedent). No carrier fact moves.
+      feat('hearthStone', spot.x, spot.z, 0, 1.1, theta);
     }
   };
 

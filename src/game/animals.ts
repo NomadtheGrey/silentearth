@@ -191,6 +191,13 @@ export const MAX_PER_CHUNK = 3;
 export const BIOME_WEIGHT_MIN = 0.15;
 export const PERCH_HEIGHT_M = 2.0;
 export const WATER_Y = 0.05;
+/**
+ * Redraws a ground-level seat gets to find dry ground
+ * (Adam's pond pigeon, 2026-11-05: ambient birds refuse
+ * water seats — a perch over a still-water disc or the
+ * river is not a seat; in-flight crossing is fine).
+ */
+export const WATER_SEAT_TRIES = 8;
 /** Hand-snatch (Adam 2026-10-31: no rod ever, the weir is law — this is her hand). All DRAFT. The chance itself is Systems' SNATCH_CHANCE in companions.ts — the one dial. */
 export const SNATCH_RANGE_M = 2.5;
 /** A missed snatch spooks the target and every fish within this radius of it. */
@@ -402,11 +409,21 @@ export interface SpawnAnimalsInput {
   riverPoints: AnimalPoint[];
   pondPoints: AnimalPoint[];
   treePoints: AnimalPoint[];
+  /**
+   * Open-water seat test (2026-11-05): true = the point
+   * is over open water, so a ground-level perch there is
+   * not a seat. The renderer supplies it from
+   * waterProximity's distanceToWater; absent = no test
+   * (the pre-fix behavior, kept for probes and callers
+   * without a world).
+   */
+  isWaterSeat?: (x: number, z: number) => boolean;
 }
 
 function pickWanderTarget(
   a: AnimalInstance,
   def: AnimalDef,
+  isWaterSeat?: (x: number, z: number) => boolean,
 ): { x: number; z: number; y: number } {
   if (def.movement === 'water' && a.anchors.length > 0) {
     const near = a.anchors.filter(
@@ -448,11 +465,33 @@ function pickWanderTarget(
     const p = pool[Math.floor(Math.random() * pool.length)];
     return { x: p.x, z: p.z, y: a.perchY };
   }
-  const angle = Math.random() * Math.PI * 2;
-  const dist = Math.random() * def.wanderRange;
+  let angle = Math.random() * Math.PI * 2;
+  let dist = Math.random() * def.wanderRange;
+  let tx = a.homeX + Math.cos(angle) * dist;
+  let tz = a.homeZ + Math.sin(angle) * dist;
+  if (def.movement === 'fly' && isWaterSeat) {
+    // A flyer with no tree anchors wanders perch to
+    // perch at ground level — the same water refusal as
+    // the spawn seat (2026-11-05): redraw for dry
+    // ground, keep the first draw if none offers.
+    const firstX = tx;
+    const firstZ = tz;
+    let seated = !isWaterSeat(tx, tz);
+    for (let t = 0; !seated && t < WATER_SEAT_TRIES; t++) {
+      angle = Math.random() * Math.PI * 2;
+      dist = Math.random() * def.wanderRange;
+      tx = a.homeX + Math.cos(angle) * dist;
+      tz = a.homeZ + Math.sin(angle) * dist;
+      seated = !isWaterSeat(tx, tz);
+    }
+    if (!seated) {
+      tx = firstX;
+      tz = firstZ;
+    }
+  }
   return {
-    x: a.homeX + Math.cos(angle) * dist,
-    z: a.homeZ + Math.sin(angle) * dist,
+    x: tx,
+    z: tz,
     y: def.movement === 'fly' ? a.perchY : a.y,
   };
 }
@@ -554,8 +593,31 @@ export function spawnAnimalsForChunk(input: SpawnAnimalsInput): AnimalInstance[]
         base.perchY = PERCH_HEIGHT_M;
       } else {
         // No trees in this chunk — low perch (ground point), still perched.
-        base.x = x0 + rng() * 32;
-        base.z = z0 + rng() * 32;
+        // A ground perch over open water is not a seat
+        // (Adam's pond pigeon, 2026-11-05): redraw for dry
+        // ground; a chunk that offers none keeps the first
+        // draw — nowhere better in-chunk. Seeded draws, so
+        // the chunk's spawn stays deterministic (a dry
+        // first draw consumes exactly the draws it always
+        // did — only wet seats change).
+        let px = x0 + rng() * 32;
+        let pz = z0 + rng() * 32;
+        if (input.isWaterSeat) {
+          const firstX = px;
+          const firstZ = pz;
+          let seated = !input.isWaterSeat(px, pz);
+          for (let t = 0; !seated && t < WATER_SEAT_TRIES; t++) {
+            px = x0 + rng() * 32;
+            pz = z0 + rng() * 32;
+            seated = !input.isWaterSeat(px, pz);
+          }
+          if (!seated) {
+            px = firstX;
+            pz = firstZ;
+          }
+        }
+        base.x = px;
+        base.z = pz;
         base.perchY = 0.4;
       }
       base.y = base.perchY;
@@ -649,6 +711,10 @@ export interface AnimalUpdateInput {
   /** Feral encounter facts (see FeralFacts); absent or
    *  null for every animal outside the danger story. */
   feral?: FeralFacts | null;
+  /** Open-water seat test, as on SpawnAnimalsInput —
+   *  consulted when a flyer without tree anchors picks
+   *  a ground-level wander target (2026-11-05). */
+  isWaterSeat?: (x: number, z: number) => boolean;
 }
 
 /**
@@ -1121,7 +1187,7 @@ export function updateAnimal(a: AnimalInstance, dt: number, input: AnimalUpdateI
     } else {
       a.timer -= dt;
       if (a.timer <= 0) {
-        const t = pickWanderTarget(a, def);
+        const t = pickWanderTarget(a, def, input.isWaterSeat);
         a.targetX = t.x;
         a.targetZ = t.z;
         a.targetY = t.y;

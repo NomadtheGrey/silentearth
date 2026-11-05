@@ -191,6 +191,23 @@ export function shelterMultiplierAt(
 }
 
 /**
+ * The roof over her, as a class (2026-11-05, the
+ * rain-shelter seam for Systems' ColdWetFacts): WHAT
+ * shelters her, for the rain's own read — the fraction
+ * of rain reaching her is the composer's mapping of
+ * this class (enclosed + tent -> 0, leanTo -> 0.5,
+ * none -> 1, all DRAFT with Systems). The lean-to is
+ * the only leaky house class; every other house type
+ * is enclosed.
+ */
+export type ShelterRoofClass = 'enclosed' | 'leanTo' | 'tent' | 'none';
+
+/** A house type's roof class (the lean-to leaks; the rest enclose). */
+export function roofClassForHouseType(type: HouseType): ShelterRoofClass {
+  return type === 'leanTo' ? 'leanTo' : 'enclosed';
+}
+
+/**
  * Sheltering entity at (x, z): the multiplier from
  * shelterMultiplierAt plus the id of the house that provides it
  * (nearest within radius on ties — first found wins). Null id
@@ -199,14 +216,17 @@ export function shelterMultiplierAt(
  * top of the house result: a tent within radius that beats
  * the house multiplier wins with houseId null; otherwise the
  * house result stands unchanged. The tracker's
- * 'shelter:changed' payload.
+ * 'shelter:changed' payload. The roof class rides the
+ * same branches: the class is the WINNER's — a tent that
+ * does not beat the house leaves the house's class
+ * standing, exactly as its multiplier stands.
  */
 export function shelterAt(
   x: number,
   z: number,
   houses: PlacedHouse[],
   tents: TentPosition[] = [],
-): { multiplier: number; houseId: string | null } {
+): { multiplier: number; houseId: string | null; roof: ShelterRoofClass } {
   let best: PlacedHouse | null = null;
   let bestDist = Infinity;
   for (const house of houses) {
@@ -219,6 +239,7 @@ export function shelterAt(
   const houseResult = {
     multiplier: best ? HOUSE_DEFS[best.type].shelterMultiplier : 1,
     houseId: best ? best.id : null,
+    roof: best ? roofClassForHouseType(best.type) : ('none' as ShelterRoofClass),
   };
   let tentNear = false;
   for (const tent of tents) {
@@ -228,7 +249,7 @@ export function shelterAt(
     }
   }
   if (tentNear && TENT_SHELTER_MULTIPLIER < houseResult.multiplier) {
-    return { multiplier: TENT_SHELTER_MULTIPLIER, houseId: null };
+    return { multiplier: TENT_SHELTER_MULTIPLIER, houseId: null, roof: 'tent' };
   }
   return houseResult;
 }

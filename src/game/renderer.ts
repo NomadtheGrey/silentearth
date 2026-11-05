@@ -27,7 +27,7 @@ import type { WorldGen } from './worldgen';
 import { PlayerController } from './player';
 import { marshWeight } from './biomes';
 import { SOURCE_FOR_KIND } from './objects';
-import { buildAltarGroup, buildAnimal, buildCampArrow, buildCandle, buildCatchProp, buildCauldronGroup, buildDeskGroup, buildEdgeArrow, buildKindGeometry, buildStagedBone, buildStumpDressing, buildSunflowerHeadGeometry, buildTorch, buildUmbrella, buildWitch, ALTAR_CANDLE_X, ALTAR_CANDLE_Z, ALTAR_SLAB_TOP_Y, ALTAR_TABLE_CANDLE_X, ALTAR_TABLE_CANDLE_Z, CANDLE_FLAME_Y, DISC_GROUND_LIFT_M, DISC_RADIUS, STUMP_TOP_Y, sunflowerHeadMatrix, sunflowerHeadOrientation, TORCH_FLAME_Y, vertexLambert } from './models';
+import { buildAltarGroup, buildAnimal, buildCampArrow, buildCandle, buildCatchProp, buildCauldronGroup, buildDeskGroup, buildEdgeArrow, buildKindGeometry, buildStagedBone, buildStumpDressing, buildSunflowerHeadGeometry, buildTorch, buildUmbrella, buildWitch, buildWorkstationGroup, ALTAR_CANDLE_X, ALTAR_CANDLE_Z, ALTAR_SLAB_TOP_Y, ALTAR_TABLE_CANDLE_X, ALTAR_TABLE_CANDLE_Z, CANDLE_FLAME_Y, DISC_GROUND_LIFT_M, DISC_RADIUS, STUMP_TOP_Y, sunflowerHeadMatrix, sunflowerHeadOrientation, TORCH_FLAME_Y, vertexLambert } from './models';
 import { footprintDoorExtent, placementFootprintFor, placementIsHouse, placementTakesYaw, type PlacementPreview, type PlacementTint } from './placementFootprints';
 import {
   markerStateFor,
@@ -61,6 +61,7 @@ import {
   wrapGenWithState,
 } from './harvestState';
 import { standingInWater, terrainSpeedAt, WADING_FACTOR, type WaterDisc } from './movement';
+import { distanceToWater } from './waterProximity';
 import { riverParamsFor, riverRibbonForChunk } from './river';
 import { barnSite, caveMouthSite, chapelSite, drownedMillSite, farmhouseSite, generalStoreSite, groveEntranceSeat, groveSite, mazeEntranceSeat, pushOutOfWalls, railSidingSite, schoolhouseSite, siloSite, sunkenRoadSite, villageSite, wallsNearSites, GROVE_CELL_M, GROVE_GRID_CELLS, type SiteFootprint } from './sites';
 import { caveFootprintFor, caveInstancesInRect, caveLayoutForKey, caveMouthsNear, caveSurfaceAim, type CaveSurfaceHit } from './caves';
@@ -833,6 +834,20 @@ export class WorldRenderer {
   private campArrowGroup: THREE.Group | null = null;
   /** Camp-arrow screen-edge arrows (camera children, one per placed house). */
   private campEdgeArrows: { mesh: THREE.Group; house: PlacedHouse }[] = [];
+  /**
+   * THE EXIT ARROW (Returning T1 pointing, 2026-11-05):
+   * the shell's seat via setExitArrow — ONE world arrow
+   * + ONE edge arrow standing at the supplied seat in
+   * the ACTIVE dimension (a cave's way out, a grove
+   * maze's gap), in the camp arrows' idiom. While a
+   * target stands, the camp arrows SUPPRESS (DEV's
+   * ruling: from inside a cave, edge arrows tracking
+   * surface houses are noise — the exit is the way that
+   * matters); clearing the target restores them.
+   */
+  private exitArrowTarget: { x: number; z: number } | null = null;
+  private exitArrowGroup: THREE.Group | null = null;
+  private exitEdgeArrow: THREE.Group | null = null;
   /** True while a water scry has revealed the camp arrows (shell-driven setter). */
   private campArrowsVisible = false;
   /** Tent positions for the placed group (shell-driven via setTents — no game tent state exists; camping state is systems-side). */
@@ -1566,9 +1581,65 @@ export class WorldRenderer {
 
   /** Refresh world + edge arrow visibility from the OR condition above. */
   private refreshArrowVisibility(): void {
-    const show = this.arrowsVisible();
+    // The exit arrow suppresses the camp arrows while
+    // it stands (see the seat's field note).
+    const show = this.arrowsVisible() && !this.exitArrowTarget;
     if (this.campArrowGroup) this.campArrowGroup.visible = show;
     if (!show) for (const edge of this.campEdgeArrows) edge.mesh.visible = false;
+    if (this.exitArrowGroup) this.exitArrowGroup.visible = !!this.exitArrowTarget;
+    if (!this.exitArrowTarget && this.exitEdgeArrow) this.exitEdgeArrow.visible = false;
+  }
+
+  /**
+   * Seat the exit arrow (Returning T1, 2026-11-05):
+   * the shell calls this on its anchor cadence with
+   * getExitTarget()'s seat (or null) — cave layer 1 ->
+   * the entry anchor, a deeper layer -> the climb
+   * point, inside a grove maze -> its entrance gap,
+   * nowhere -> null and the arrow is gone. Like the
+   * camp setters, this seat only follows the shell: it
+   * holds whatever it was last told until called again.
+   * The seat is in the ACTIVE dimension's frame; a
+   * world swap clears it with the old world's arrows.
+   */
+  setExitArrow(target: { x: number; z: number } | null): void {
+    this.exitArrowTarget = target ? { x: target.x, z: target.z } : null;
+    this.rebuildExitArrow();
+    this.refreshArrowVisibility();
+  }
+
+  /** Build (or tear down) the exit arrow pair for the standing target. */
+  private rebuildExitArrow(): void {
+    if (this.exitArrowGroup) {
+      this.scene.remove(this.exitArrowGroup);
+      this.exitArrowGroup.traverse((obj) => {
+        if (obj instanceof THREE.Mesh) {
+          obj.geometry.dispose();
+          const mat = obj.material;
+          if (Array.isArray(mat)) mat.forEach((m) => m.dispose());
+          else mat.dispose();
+        }
+      });
+      this.exitArrowGroup = null;
+    }
+    if (this.exitEdgeArrow) {
+      this.camera.remove(this.exitEdgeArrow);
+      this.exitEdgeArrow = null;
+    }
+    if (!this.exitArrowTarget) return;
+    const group = new THREE.Group();
+    const arrow = buildCampArrow();
+    arrow.position.set(this.exitArrowTarget.x, CAMP_ARROW_CENTER_Y, this.exitArrowTarget.z);
+    arrow.userData.phase = flamePhase(this.exitArrowTarget.x, this.exitArrowTarget.z);
+    arrow.userData.baseY = CAMP_ARROW_CENTER_Y;
+    group.add(arrow);
+    group.visible = true;
+    this.scene.add(group);
+    this.exitArrowGroup = group;
+    const edge = buildEdgeArrow();
+    edge.visible = false;
+    this.camera.add(edge);
+    this.exitEdgeArrow = edge;
   }
 
   /**
@@ -2363,6 +2434,34 @@ export class WorldRenderer {
     return this.adoptChunkAnimal(id) !== null;
   }
 
+  /**
+   * ONE INDIVIDUAL, ONE BODY (2026-11-05, Adam's doubled
+   * diamonds): a companion restored at boot can twin
+   * with its own chunk spawn — chunks stream in before
+   * the shell restores the registry, so the chunk-build
+   * filter (actorById) reads an empty registry and the
+   * twin stands all session beside the actor: two
+   * bodies, two markers, stacked. This sweep runs ahead
+   * of the animal step each frame: a chunk pair whose id
+   * the registry now holds leaves the world (the adopt
+   * removal, its marker cache entry dropped with it),
+   * so the actor's body — and its one marker — is the
+   * only one that stands. Mid-session promotions never
+   * reach it (adopt already removed their pair); it
+   * exists for orderings no single call site can see.
+   */
+  private sweepChunkTwins(): void {
+    for (const loaded of this.chunks.values()) {
+      for (let i = loaded.animals.length - 1; i >= 0; i--) {
+        const pair = loaded.animals[i];
+        if (!actorById(pair.instance.id)) continue;
+        loaded.animals.splice(i, 1);
+        pair.group.parent?.remove(pair.group);
+        this.trustMarkerByGroup.delete(pair.group);
+      }
+    }
+  }
+
   restoreSky(snap: SkySnapshot | null | undefined): void {
     if (!snap) return;
     this.sky?.restore(snap);
@@ -2587,6 +2686,10 @@ export class WorldRenderer {
     this.rebuildStagedBones();
     // Camp arrows belong to the old world's houses too.
     this.rebuildCampArrows();
+    // The exit arrow's seat belongs to the old world
+    // too (its frame was that world's dimension).
+    this.exitArrowTarget = null;
+    this.rebuildExitArrow();
     // Dropped piles belong to the old world's map too.
     pileState.clear();
     this.rebuildPileGroup();
@@ -2659,7 +2762,10 @@ export class WorldRenderer {
     if (this.pileGroup) this.pileGroup.visible = true;
     if (this.trapGroup) this.trapGroup.visible = showPlaced;
     if (this.stagedBoneGroup) this.stagedBoneGroup.visible = showPlaced;
-    if (this.campArrowGroup) this.campArrowGroup.visible = showPlaced;
+    if (this.campArrowGroup) this.campArrowGroup.visible = showPlaced && !this.exitArrowTarget;
+    // The exit arrow stands in ANY dimension while its
+    // target stands — the way out matters most below.
+    if (this.exitArrowGroup) this.exitArrowGroup.visible = !!this.exitArrowTarget;
     if (this.smokeGroup) this.smokeGroup.visible = showPlaced;
     for (const light of [...this.fireLights, ...this.torchLights, ...this.altarCandleLights]) {
       light.visible = showPlaced;
@@ -3079,6 +3185,10 @@ export class WorldRenderer {
       riverPoints,
       pondPoints,
       treePoints,
+      // Birds refuse water seats (2026-11-05): the seat
+      // test is waterProximity's edge distance — inside
+      // a body (<= 0) is open water, not a perch.
+      isWaterSeat: (x, z) => distanceToWater(this.gen, x, z) <= 0,
     })) {
       // A promoted companion's ambient slot stays consumed
       // (Companions Build 1): the deterministic spawn would
@@ -3740,28 +3850,22 @@ export class WorldRenderer {
       // Placed crafted workstation (the fix, 2026-11-05 —
       // Adam crafted a bench and found no Place in his
       // pack): the stump's workbench overlay RE-SEATED
-      // free-standing. The overlay's own geometry stands
-      // verbatim — slab (1.1 × 0.08 × 0.8 at y 0.66) +
-      // vise block, same dims, same tones — and four legs
-      // in the same box idiom carry it, their tops meeting
-      // the slab's underside at 0.62 exactly. No new
-      // model: the overlay completed, DRAFT dress in the
-      // desk-book precedent (Models may re-cut the prop
-      // whole later; the seat won't notice). Scene-level
-      // like all placed entities — save restore rebuilds
-      // it via the constructor's initial rebuildPlacedGroup
-      // (workstationState.restore first). Facing rides the
-      // record's rotY, as desks stand. No light: a bench
-      // is not a light source.
+      // free-standing. The prop is Models' buildWorkstation
+      // Group (2026-11-05, the dressing pass toward Adam's
+      // workbench photo — thick overhung top, square legs,
+      // aprons, low shelf, the vise kept): the seat facts
+      // this seat relies on are frozen in the builder (leg
+      // seats ±0.47/±0.32, top surface at y 0.70, vise at
+      // its seat), so the seat does not notice the re-cut.
+      // Scene-level like all placed entities — save restore
+      // rebuilds it via the constructor's initial
+      // rebuildPlacedGroup (workstationState.restore
+      // first). Facing rides the record's rotY, as desks
+      // stand. No light: a bench is not a light source.
       const bg = new THREE.Group();
       bg.position.set(bench.x, 0, bench.z);
       bg.rotation.y = bench.rotY ?? 0;
-      bg.add(box(0.08, 0.62, 0.08, 0x6b4e30, -0.47, 0.31, -0.32));
-      bg.add(box(0.08, 0.62, 0.08, 0x6b4e30, 0.47, 0.31, -0.32));
-      bg.add(box(0.08, 0.62, 0.08, 0x6b4e30, -0.47, 0.31, 0.32));
-      bg.add(box(0.08, 0.62, 0.08, 0x6b4e30, 0.47, 0.31, 0.32));
-      bg.add(box(1.1, 0.08, 0.8, 0x7a5a38, 0, 0.66, 0));
-      bg.add(box(0.25, 0.15, 0.2, 0x3a2818, 0.35, 0.775, 0));
+      bg.add(buildWorkstationGroup());
       group.add(bg);
     }
     for (const record of stumpState.snapshot()) {
@@ -3923,7 +4027,7 @@ export class WorldRenderer {
       this.camera.add(edge);
       this.campEdgeArrows.push({ mesh: edge, house });
     }
-    group.visible = this.arrowsVisible();
+    group.visible = this.arrowsVisible() && !this.exitArrowTarget;
     this.scene.add(group);
     this.campArrowGroup = group;
   }
@@ -4305,6 +4409,11 @@ export class WorldRenderer {
       (sprite.material as THREE.SpriteMaterial).needsUpdate = true;
       entry.key = key;
     }
+    // A group that rebuilds its children detaches the
+    // sprite without touching this cache (the cat's pose
+    // change clears its group): re-seat it, or the
+    // marker would hide forever on a detached sprite.
+    if (sprite.parent !== group) group.add(sprite);
     const fade =
       dist <= TRUST_MARKER_FADE_START_M
         ? 1
@@ -4390,6 +4499,9 @@ export class WorldRenderer {
         this.hedgeGroup.visible = !this.gen.dimensionKey;
       }
     }
+    // One individual, one body: twins of registry actors
+    // leave before the step (see sweepChunkTwins).
+    this.sweepChunkTwins();
     for (const loaded of this.chunks.values()) {
       for (const pair of loaded.animals) {
         let feral: FeralFacts | null = null;
@@ -4443,6 +4555,7 @@ export class WorldRenderer {
           playerZ: this.player.z,
           night,
           feral,
+          isWaterSeat: (x, z) => distanceToWater(this.gen, x, z) <= 0,
         });
         // The encounter's outward reports, consumed the
         // step they arm: the telegraph's cue and the
@@ -4562,6 +4675,13 @@ export class WorldRenderer {
           this.catGlowLight = null;
         }
         this.poseAnimal(c.instance, this.catGroup);
+        // The cat's trust marker (2026-11-05, Adam's live
+        // report: fed the cat, no dot): the cat rides
+        // neither the chunk loop nor the companion loop,
+        // so its marker reconciles here, beside its pose —
+        // its facts resolve through the same seam (its
+        // record is 'cat:hearth').
+        this.updateTrustMarker(c.instance, this.catGroup);
       }
     }
     // The raven guide (2026-10-31): stepped after the cat,
@@ -4881,7 +5001,7 @@ export class WorldRenderer {
     // (camera children, so they ride every view). updateMatrix
     // World first — project() needs this frame's matrices, not
     // last frame's (render would refresh them too late).
-    if (this.arrowsVisible() && this.campArrowGroup) {
+    if (this.arrowsVisible() && !this.exitArrowTarget && this.campArrowGroup) {
       for (const arrow of this.campArrowGroup.children) {
         arrow.position.y =
           (arrow.userData.baseY as number) +
@@ -4901,6 +5021,35 @@ export class WorldRenderer {
         edge.mesh.visible = true;
         edge.mesh.position.set(t.x * halfW, t.y * halfH, -CAMP_EDGE_DEPTH);
         edge.mesh.rotation.set(0, 0, t.angle);
+      }
+    }
+
+    // The exit arrow, in the same idiom (2026-11-05):
+    // the world arrow bobs over the way out; the edge
+    // arrow tracks it while it stands off-screen.
+    if (this.exitArrowTarget && this.exitArrowGroup) {
+      for (const arrow of this.exitArrowGroup.children) {
+        arrow.position.y =
+          (arrow.userData.baseY as number) +
+          CAMP_ARROW_BOB * Math.sin(this.flameTime * 2 + (arrow.userData.phase as number));
+      }
+      if (this.exitEdgeArrow) {
+        this.camera.updateMatrixWorld();
+        const halfH = Math.tan(THREE.MathUtils.degToRad(this.camera.fov / 2)) * CAMP_EDGE_DEPTH;
+        const halfW = halfH * this.camera.aspect;
+        this.camera.getWorldDirection(this.edgeForward);
+        this.edgeAnchor.set(this.exitArrowTarget.x, CAMP_ARROW_CENTER_Y, this.exitArrowTarget.z);
+        this.edgeToCamp.copy(this.edgeAnchor).sub(this.camera.position);
+        const behind = this.edgeToCamp.dot(this.edgeForward) < 0;
+        this.edgeAnchor.project(this.camera);
+        const t = edgeArrowTransform(this.edgeAnchor.x, this.edgeAnchor.y, behind);
+        if (!t.offScreen) {
+          this.exitEdgeArrow.visible = false;
+        } else {
+          this.exitEdgeArrow.visible = true;
+          this.exitEdgeArrow.position.set(t.x * halfW, t.y * halfH, -CAMP_EDGE_DEPTH);
+          this.exitEdgeArrow.rotation.set(0, 0, t.angle);
+        }
       }
     }
 

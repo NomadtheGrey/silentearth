@@ -469,7 +469,19 @@ export function stageBoneFromInventory(
   if (!recipe) {
     return { staged: false, reason: 'No Waking for this bone.' };
   }
-  const staging = book.getOrCreate(siteKey, boneKind);
+  let staging = book.getOrCreate(siteKey, boneKind);
+  if (staging.completed) {
+    // A COMPLETED staging is SPENT (the rite-panel
+    // fix, 2026-11-05): its bone awakened and left the
+    // site, and the physical store already cleared —
+    // a book entry that outlives its completion splits
+    // the staged-bone fact in two (the panel reads the
+    // site empty, the grant refuses 'Bone already
+    // placed.'). Clear it and start the new rite
+    // fresh: one fact, in both stores, on every path.
+    book.clear(siteKey, boneKind);
+    staging = book.getOrCreate(siteKey, boneKind);
+  }
   if (staging.bonePlaced) {
     return { staged: false, reason: 'Bone already placed.' };
   }
@@ -515,6 +527,18 @@ export class StagingBook {
     return this.stagings.get(StagingBook.key(siteKey, boneKind));
   }
 
+  /**
+   * Remove one staging outright (true when one was
+   * there). THE COMPLETION'S BOOK-SIDE CLEARING: the
+   * shell calls this beside ritualSiteState's
+   * unstageBone when a rite completes, so both stores
+   * clear together and the save stops carrying the
+   * spent entry (the rite-panel fix, 2026-11-05).
+   */
+  clear(siteKey: string, boneKind: string): boolean {
+    return this.stagings.delete(StagingBook.key(siteKey, boneKind));
+  }
+
   /** Snapshot for save (insertion order, copies). */
   snapshot(): SavedRitualStaging[] {
     return [...this.stagings.values()].map((s) => s.snapshot());
@@ -546,6 +570,16 @@ export class StagingBook {
       ) {
         continue;
       }
+      // A COMPLETED entry is SPENT and drops here
+      // (the rite-panel fix, 2026-11-05): its bone
+      // awakened and left; the durable record of the
+      // rite is the awakening in charms, not the
+      // staging. Keeping it would resurrect the split
+      // fact — the physical derivation already skips
+      // completed entries, so the book dropping them
+      // makes the two stores agree, and a save written
+      // by the wedged build heals on load.
+      if (entry.completed) continue;
       const staging = new RitualStaging(entry.siteKey, entry.boneKind);
       staging.bonePlaced = entry.bonePlaced;
       staging.offeringGiven = entry.offeringGiven;

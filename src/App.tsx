@@ -2120,6 +2120,13 @@ import {
 import { DiscoveryState } from './systems/discovery';
 import { FragmentState, markDisplayName } from './systems/fragments';
 import {
+  CUTTINGS_TO_LAY,
+  HedgeState,
+  hedgeRadiusM,
+  hedgeTier,
+  isRooted,
+} from './systems/hedge';
+import {
   CharmState,
   GroundhogRest,
   WeatherWarning,
@@ -3998,6 +4005,35 @@ export default function App() {
     seated.restore(bootSave?.namedPlaces ?? []);
     namedPlacesRef.current = seated;
   }
+  // THE HEDGES (the Hedge door build, 2026-11-05):
+  // the shell owns the one HedgeState (Systems'
+  // register) — the same ref-lazy pattern, restored
+  // from the boot save's record; snapshot() rides
+  // every saveNow. The renderer's ring views read it
+  // through the facts provider seated at renderer
+  // construction; the home menu's laying door writes
+  // it through Systems' layHedge grant.
+  const hedgeStateRef = useRef<HedgeState | null>(null);
+  if (hedgeStateRef.current === null) {
+    hedgeStateRef.current = new HedgeState(bootSave?.hedges ?? []);
+  }
+  // THE LAYING WORKING: a held working of a few
+  // seconds at the faced home (the candle idiom) —
+  // while it stands, the home menu shows its bar and
+  // its one waiting row; completion calls the grant,
+  // interruption (menu closed, home left) spends and
+  // lays NOTHING. Progress accumulates per unpaused
+  // tick, so a pause freezes the working like the
+  // lighting bar. All DRAFT numbers for Adam's pass.
+  const HEDGE_WORK_MS = 4000;
+  const [hedgeWorking, setHedgeWorking] = useState<{
+    homeId: string;
+    progressMs: number;
+  } | null>(null);
+  const hedgeWorkingRef = useRef<{
+    homeId: string;
+    progressMs: number;
+  } | null>(null);
   // THE SELECTED PLACE: her chosen named place — the
   // seat the future Returning scry door will read
   // (v1 seats the selection only; no scry act reads
@@ -4305,6 +4341,12 @@ export default function App() {
   // from Background's adapter (game/waterProximity); arrows
   // show/hide through renderer.setCampArrowsVisible.
   const divinationRef = useRef(new CampDivination());
+  // THE T1 EXIT POINTING's seat mirror: the last
+  // target the shell handed Background's exit arrow
+  // (null = none standing). The renderer rebuilds
+  // the arrow on every setExitArrow call, so the
+  // feed below calls it only when the seat CHANGES.
+  const exitArrowSeatRef = useRef<{ x: number; z: number } | null>(null);
   const [scryVisible, setScryVisible] = useState(false);
   // JAR VERBS (the jar build's shell half): the FILL
   // offer — she stands in water by the composed facts
@@ -4985,6 +5027,11 @@ export default function App() {
           // (SaveData.namedPlaces, Systems' seat — the
           // snapshot shape passes through unconverted).
           namedPlaces: namedPlacesRef.current.snapshot(),
+          // Hedges (the Hedge door build): the
+          // register's snapshot rides every save
+          // beside its sibling states (SaveData.
+          // hedges, Systems' seat).
+          hedges: hedgeStateRef.current.snapshot(),
           // RITUAL SAVE WIRING: stagings + awakenings ride
           // every save as-is (StagingBook / CharmState
           // snapshots; serialize writes them verbatim,
@@ -6525,6 +6572,28 @@ export default function App() {
     // shape) — unregistered, the feed is empty. The
     // register itself is the shell's one instance.
     renderer.setNamedPlacesProvider(() => namedPlacesRef.current);
+    // THE HEDGE RING VIEWS (the Hedge door build):
+    // Background's seat, in the feral-facts shape —
+    // the views derive shell-side from the state:
+    // centre from the record, radius + tier from her
+    // CURRENT fragment knowledge (a hedge laid at T1
+    // grows when she learns T2), rooted from the
+    // world day. Unregistered would mean no rings;
+    // an unlearned mark yields no views.
+    renderer.setHedgeFactsProvider(() => {
+      const fragments = fragmentStateRef.current;
+      const tier = hedgeTier(fragments);
+      if (tier < 1) return [];
+      const radiusM = hedgeRadiusM(fragments);
+      const day = worldDayNow();
+      return hedgeStateRef.current.list().map((hedge) => ({
+        x: hedge.x,
+        z: hedge.z,
+        radiusM,
+        tier,
+        rooted: isRooted(hedge, day),
+      }));
+    });
     renderer.setInjurySpeedFactor(injury.effects().movementMultiplier);
     // LOOK owl hook (hook only): the owl charm is a later
     // charm (fashioned/enchanted, id not decided), so the
@@ -6919,6 +6988,42 @@ export default function App() {
           houses.length > 0 &&
           isNearStillWater(x, z, waters),
       );
+      // THE T1 EXIT POINTING (DEV's shape, 2026-11-05;
+      // Background's seat 0252d41): while she stands
+      // in a cave (either layer) or a grove maze's
+      // square AND she knows Returning T1 (Systems'
+      // canScry is THE gate, never the read), the
+      // arrows point OUT — the renderer's exit read
+      // names the seat (the layer's entry anchor; the
+      // maze's entrance gap) and the camp arrows
+      // suppress under it by the seat's own ruling.
+      // The read returning null dismisses the state
+      // itself (she stepped out; an attic, the open
+      // surface) — no toggle, no new control. Called
+      // only on a seat change: the seat rebuilds per
+      // call. The surface 'way home' rides the camp
+      // arrows under the same gate via the Scry above
+      // — one pointing language for T1 on every
+      // ground.
+      {
+        const renderer = rendererRef.current;
+        if (renderer) {
+          const exit = canScry(fragmentStateRef.current)
+            ? renderer.getExitTarget()
+            : null;
+          const seat = exit ? { x: exit.x, z: exit.z } : null;
+          const prev = exitArrowSeatRef.current;
+          if (
+            (seat === null) !== (prev === null) ||
+            (seat !== null &&
+              prev !== null &&
+              (seat.x !== prev.x || seat.z !== prev.z))
+          ) {
+            exitArrowSeatRef.current = seat;
+            renderer.setExitArrow(seat);
+          }
+        }
+      }
       // The jar's FILL offer rides the same tick (its
       // own facts — the composed siteWaterFacts, not
       // the scry still-water reading).
@@ -12332,6 +12437,73 @@ export default function App() {
   // destination throws, and partial results stand. One
   // refresh + one save at the end of each press, never
   // per loop unit.
+  // THE LAYING WORKING'S TICK: while a working
+  // stands, a short interval accumulates its
+  // progress (unpaused only), watches its
+  // interruptions, and completes it into Systems'
+  // grant. Interruption = the menu closed or the
+  // faced home changed — the working clears and
+  // voices its undoing ONCE; nothing was consumed,
+  // nothing laid (the cost-at-completion law).
+  useEffect(() => {
+    if (hedgeWorking === null) return;
+    const timer = setInterval(() => {
+      const working = hedgeWorkingRef.current;
+      if (working === null) return;
+      const house = shelterState
+        .snapshot()
+        .find((h) => h.id === working.homeId);
+      if (!homeMenuOpen || house === undefined) {
+        hedgeWorkingRef.current = null;
+        setHedgeWorking(null);
+        showFeedback('The laying is undone — nothing was spent.', 'blocked');
+        return;
+      }
+      if (!pausedRef.current) {
+        working.progressMs += 250;
+        setHedgeWorking({ ...working });
+      }
+      if (working.progressMs < HEDGE_WORK_MS) return;
+      // COMPLETION — the grant judges everything
+      // again (a state that changed under the
+      // working refuses honestly, in its own code).
+      hedgeWorkingRef.current = null;
+      setHedgeWorking(null);
+      const outcome = hedgeStateRef.current.layHedge(
+        fragmentStateRef.current,
+        inventory,
+        { homeId: house.id, x: house.x, z: house.z },
+        worldDayNow(),
+      );
+      if (outcome.ok === false) {
+        showFeedback(
+          outcome.code === 'already-hedged'
+            ? 'This home already wears its hedge.'
+            : outcome.code === 'no-cuttings'
+              ? `The laying wants ${CUTTINGS_TO_LAY} cuttings — you carry ${inventory.count(ITEMS.cuttings)}.`
+              : outcome.code === 'tier'
+                ? 'You have not learned the Hedge mark.'
+                : 'There is no home here to ring.',
+          'blocked',
+        );
+        return;
+      }
+      refreshInventory();
+      saveNow();
+      showFeedback(
+        'The hedge is laid around this home. It roots by tomorrow, and then it works.',
+        'gain',
+      );
+    }, 250);
+    return () => clearInterval(timer);
+    // The deps re-arm the interval when the menu
+    // opens/closes (the interruption read must see a
+    // fresh homeMenuOpen; the progress itself lives
+    // in the ref, so re-arming loses nothing).
+    // HEDGE_WORK_MS is a component constant.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hedgeWorking === null, homeMenuOpen]);
+
   const handleHomeMenuAction = (actionId: string) => {
     if (actionId === 'close') {
       setHomeMenuOpen(false);
@@ -12349,6 +12521,18 @@ export default function App() {
       handleSleep();
       refreshInventory();
       saveNow();
+      return;
+    }
+    if (actionId === 'lay-hedge') {
+      // THE HEDGE'S DOOR: the press STARTS the held
+      // working — it does not lay. The menu stays
+      // standing on its waiting row + bar; the tick
+      // above completes or interrupts it. The grant
+      // is never called from here (cost at
+      // completion, never at the press).
+      if (!shelterHouseId) return;
+      hedgeWorkingRef.current = { homeId: shelterHouseId, progressMs: 0 };
+      setHedgeWorking({ homeId: shelterHouseId, progressMs: 0 });
       return;
     }
     if (!shelterHouseId) return;
@@ -12585,6 +12769,48 @@ export default function App() {
     // the same house by construction. The rows read
     // [1] Sleep, [2] Upgrade, [3] Storage, [4] Close.
     actions.push({ id: 'storage', label: 'Storage' });
+    // THE HEDGE'S DOOR (Adam's Hedge design,
+    // 2026-11-05): at a faced home of hers, knowing
+    // the Hedge mark seats the laying — one hedge
+    // per home, so a ringed home shows no row (menus
+    // don't carry tombstones, the upgrade law). The
+    // row prices itself in the counts idiom: the
+    // cuttings ride the row's hint (the regular
+    // ContextMenu row renders hint at its right —
+    // countsText renders only in the arrows branch,
+    // so it would be dead here), and a Missing note
+    // names the want when she is short, before any
+    // working starts. While the held
+    // working stands, the menu's rows are its
+    // waiting row + Close — the working is the
+    // menu's whole business until it completes or
+    // comes undone.
+    if (hedgeWorking !== null && hedgeWorking.homeId === shelterHouseId) {
+      return [
+        {
+          id: 'lay-hedge-working',
+          label: 'Laying the hedge…',
+          disabled: true,
+        },
+        { id: 'close', label: 'Close [X]' },
+      ];
+    }
+    if (
+      hedgeTier(fragmentStateRef.current) >= 1 &&
+      !hedgeStateRef.current.hasHedge(shelterHouseId)
+    ) {
+      const held = inventory.count(ITEMS.cuttings);
+      actions.push({
+        id: 'lay-hedge',
+        label: 'Lay the Hedge Mark',
+        hint: `Cuttings ${held}/${CUTTINGS_TO_LAY}`,
+        disabled: held < CUTTINGS_TO_LAY,
+        disabledNote:
+          held < CUTTINGS_TO_LAY
+            ? `Missing: Cuttings (${held}/${CUTTINGS_TO_LAY})`
+            : undefined,
+      });
+    }
     actions.push({ id: 'close', label: 'Close [X]' });
     return actions;
   };
@@ -17313,6 +17539,33 @@ export default function App() {
                         // screen where she weighs them.
                         `Stored ${formatLb(openHomeStore.used())} of ${formatLb(openHomeStore.capacity())} lb · Carrying ${formatLb(inventory.usedLb())} lb`}
                   </p>
+                  {hedgeWorking !== null &&
+                  hedgeWorking.homeId === homeHouse.id ? (
+                    // THE LAYING'S BAR: the lighting
+                    // bar's markup, on the working's
+                    // own progress — the menu header
+                    // carries the wait, the rows below
+                    // are the waiting row.
+                    <div className="mt-2">
+                      <div className="h-2 w-full overflow-hidden rounded bg-black/40">
+                        <div
+                          className="h-full rounded bg-amber-400"
+                          style={{
+                            width: `${Math.round(
+                              Math.min(
+                                1,
+                                hedgeWorking.progressMs / HEDGE_WORK_MS,
+                              ) * 100,
+                            )}%`,
+                          }}
+                        />
+                      </div>
+                      <p className="mt-1 text-xs text-stone-300">
+                        Laying the hedge — the first cutting at her feet is
+                        the mother shrub.
+                      </p>
+                    </div>
+                  ) : null}
                 </>
               }
               actions={homeMenuActions()}
