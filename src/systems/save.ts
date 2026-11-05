@@ -398,6 +398,26 @@ export interface SavedDesk {
 }
 
 /**
+ * A placed CRAFTED WORKSTATION, as saved (the fix,
+ * 2026-11-05 — the bench's placement half; the stump's
+ * workstation is an ADDITION on a stump and saves with
+ * the stumps, never here). No station state is stored
+ * — the bench is the SITE; 'workstation' presence
+ * derives from the placed record. `id` is optional:
+ * Background's placed-workstation entity owns the id
+ * scheme (desk precedent); the save carries position
+ * always and the id when the entity provides one.
+ * Order preserved; duplicate positions allowed.
+ */
+export interface SavedCraftedWorkstation {
+  x: number;
+  z: number;
+  /** Placement facing (the yaw path, as desks). */
+  rotY?: number;
+  id?: string;
+}
+
+/**
  * A placed cauldron, as saved. KEYED TO ITS HEARTH:
  * `hearthId` (Background's fire-entity id, verbatim)
  * is the binding, and the position is carried always
@@ -744,6 +764,8 @@ export interface SaveData {
   altars: SavedAltar[];
   /** Placed desks (sites; grimoire = the seated book); [] for old saves. */
   desks: SavedDesk[];
+  /** Placed crafted workstations (sites); [] for old saves. */
+  craftedWorkstations: SavedCraftedWorkstation[];
   /** Placed cauldrons (keyed to their hearths); [] for old saves. */
   cauldrons: SavedCauldron[];
   /** Jar-made ground patches (mud/water); [] for old saves. */
@@ -951,6 +973,17 @@ export interface SaveDraft {
     rotY?: number;
     id?: string;
     grimoire?: boolean;
+  }>;
+  /**
+   * Placed crafted workstations from the placed-bench
+   * source (Background's entity snapshot). OPTIONAL,
+   * same trap-save pattern as desks.
+   */
+  craftedWorkstations?: ReadonlyArray<{
+    x: number;
+    z: number;
+    rotY?: number;
+    id?: string;
   }>;
   /**
    * Placed cauldrons from the placed-cauldron source
@@ -1424,6 +1457,17 @@ export function serializeSave(draft: SaveDraft): SaveData {
       ...(typeof desk.rotY === 'number' && Number.isFinite(desk.rotY) ? { rotY: desk.rotY } : {}),
       ...(desk.id !== undefined ? { id: desk.id } : {}),
       ...(desk.grimoire === true ? { grimoire: true } : {}),
+    })),
+    // Crafted workstations: written AS-IS, same as
+    // desks (positions verbatim, facing/id when the
+    // entity provides them — no filtering, no
+    // normalization). No station state is written —
+    // the bench is the SITE.
+    craftedWorkstations: (draft.craftedWorkstations ?? []).map((bench) => ({
+      x: bench.x,
+      z: bench.z,
+      ...(typeof bench.rotY === 'number' && Number.isFinite(bench.rotY) ? { rotY: bench.rotY } : {}),
+      ...(bench.id !== undefined ? { id: bench.id } : {}),
     })),
     // Cauldrons: written AS-IS, same as desks (hearth
     // id + positions verbatim, entity id when provided
@@ -2107,6 +2151,29 @@ export function deserializeSave(value: unknown): SaveData | null {
             ? { id: entry.id as string }
             : {}),
           ...(entry.grimoire === true ? { grimoire: true } : {}),
+        });
+      }
+    }
+    // Crafted workstations are optional on read, same
+    // leniency as desks: an old v1 save without them
+    // loads with craftedWorkstations: []. Entries pass
+    // through UNVALIDATED — the placed-bench restore
+    // validates (finite coords) and drops what it
+    // cannot use, so a bad entry can never corrupt the
+    // whole document. A non-array field loads as [].
+    const craftedWorkstations: SavedCraftedWorkstation[] = [];
+    if (value.craftedWorkstations !== undefined && Array.isArray(value.craftedWorkstations)) {
+      for (const entry of value.craftedWorkstations) {
+        if (!isRecord(entry)) continue;
+        craftedWorkstations.push({
+          x: entry.x as number,
+          z: entry.z as number,
+          ...(typeof entry.rotY === 'number' && Number.isFinite(entry.rotY)
+            ? { rotY: entry.rotY as number }
+            : {}),
+          ...(typeof entry.id === 'string'
+            ? { id: entry.id as string }
+            : {}),
         });
       }
     }
@@ -2796,6 +2863,7 @@ export function deserializeSave(value: unknown): SaveData | null {
       torches,
       altars,
       desks,
+      craftedWorkstations,
       cauldrons,
       patches,
       mossPaint,
