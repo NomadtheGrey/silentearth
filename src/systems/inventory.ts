@@ -90,7 +90,7 @@
  *   mossy-mittens, plant-pulp, pressed-sheets, journal, sand,
  *   glass.
  * - 1 lb: snap-wood, river-silt, clay, dirt, mud, garden-trowel,
- *   sharp-trowel, shawl, umbrella, clay-pot, clay-jar, grimoire,
+ *   sharp-trowel, shawl, umbrella, clay-pot, clay-jar,
  *   crystal-ball.
  * - 2 lb: river-stone, downed-oak, water-jar, spade, axe-trowel,
  *   hooded-cloak, bog-boots.
@@ -100,6 +100,10 @@
  *   woven-cottage, small-wooden-hut, moss-cradle, campfire,
  *   hearth, kiln, cauldron, writing-desk, stumpy-workstation,
  *   crafted-workstation, potters-wheel, loom).
+ * - 40 lb: grimoire (Adam, 2026-11-05 — heavy on
+ *   purpose: the book lives on its desk; moving it is
+ *   a deliberate haul. Settled from his 50 anchor so
+ *   the small-basket kit can craft and carry it).
  * - Unknown ids default to 1 lb (never block the game on a
  *   missing row — flagged). LANE JUDGMENTS inside that rule,
  *   for the pin pass: cooked-acorns 0.1 lb (same as acorns —
@@ -329,7 +333,19 @@ export const ITEM_WEIGHT_LB: Readonly<Record<string, number>> = {
   [ITEMS.potTrap]: 1,
   [ITEMS.clayJar]: 1,
   [ITEMS.waterJar]: 2,
-  [ITEMS.grimoire]: 1,
+  // 40 lb — THE GRIMOIRE IS HEAVY ON PURPOSE (Adam,
+  // 2026-11-05: "it should live on the desk. Make the
+  // grimoire weigh like 50# or something. If she wants
+  // to move it, she needs to be serious."): the book's
+  // home is its desk. Settled at 40 (Adam + DEV's
+  // figuring, same day): craft output is all-or-
+  // nothing by fit, and at 50 the small-basket kit
+  // (45 lb) fell 5 short — the book's BIRTH would have
+  // sat behind the large basket. At 40: pockets+apron
+  // (20 lb) can never stage it; the small kit hauls it
+  // with 5 lb to spare — still a deliberate, nearly-
+  // whole-carry act. DRAFT for Adam's pin pass.
+  [ITEMS.grimoire]: 40,
   [ITEMS.journal]: 0.5,
   // 2 lb
   [ITEMS.fishWeirTrap]: 2,
