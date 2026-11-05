@@ -195,6 +195,9 @@ export const ITEMS = {
   sand: 'sand',
   glass: 'glass',
   crystalBall: 'crystal-ball',
+  // The Hedge build (2026-11-05 — bush cuttings for
+  // laying a hedge; see systems/hedge.ts).
+  cuttings: 'cuttings',
   // Camping (2026-10-28 — sleeping bag + tent; see camping.ts).
   sleepingBag: 'sleeping-bag',
   tent: 'tent',

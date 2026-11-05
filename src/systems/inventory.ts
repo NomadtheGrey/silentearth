@@ -239,6 +239,9 @@ export const ITEM_WEIGHT_LB: Readonly<Record<string, number>> = {
   [ITEMS.meadowFlower]: 0.1,
   // 0.25 lb
   [ITEMS.dryKindling]: 0.25,
+  // Cuttings (the Hedge build, 2026-11-05): a bundle
+  // of live bush twigs — kindling weight, DRAFT.
+  [ITEMS.cuttings]: 0.25,
   [ITEMS.charcoalStick]: 0.25,
   [ITEMS.candle]: 0.25,
   [ITEMS.beeswax]: 0.25,
@@ -503,6 +506,7 @@ export const ITEM_DISPLAY_NAMES: Readonly<Record<string, string>> = {
   'river-stone': 'River Stone',
   'luminous-spores': 'Luminous Spores',
   'dry-kindling': 'Dry Kindling',
+  cuttings: 'Cuttings',
   'charcoal-stick': 'Charred Stick',
   candle: 'Candle',
   beeswax: 'Beeswax',
@@ -705,6 +709,7 @@ export const ITEM_DESCRIPTIONS: Readonly<Record<string, string>> = {
   'river-stone': 'The whetstone — sharpens the trowel, kept, not consumed — and building stone besides.',
   'luminous-spores': 'Pale glowing spores. An ingredient for the moss cradle.',
   'dry-kindling': 'Split snap-wood, dry and ready. One piece lights a fire by friction.',
+  cuttings: 'Live cuttings from a bush, for laying a hedge. A bush gives its cuttings once, the first time it is worked.',
   'charcoal-stick': 'A stick with one end burned to charcoal, for drawing. Char one at a lit fire, or at the fire\'s own panel.',
   candle: 'Made by dipping a twined-cordage wick in wax melted in a cauldron at a lit hearth — one melt makes three. One of the three things a Stumpy Altar asks for: stone, glyph, and flame.',
   beeswax: 'Wax gathered from a wild hive, alongside the honey. Melts in the cauldron at a lit hearth.',
@@ -934,6 +939,7 @@ export const ITEM_CATEGORIES: Readonly<Record<string, ItemCategory>> = {
   sand: 'Materials',
   glass: 'Materials',
   'crystal-ball': 'Ritual',
+  cuttings: 'Materials',
   repellent: 'Materials',
   'prey-lure': 'Materials',
   'predator-lure': 'Materials',
