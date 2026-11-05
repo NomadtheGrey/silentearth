@@ -698,7 +698,7 @@ export const ITEM_DESCRIPTIONS: Readonly<Record<string, string>> = {
   'glow-dose': 'Twilight fungus rendered down to one dose of glowing paint — enough to mark a stretch of cave wall.',
   sand: 'Ground river stone — grit for the kiln, and whatever else asks for sand.',
   glass: 'Sand melted in the kiln and cooled into a lump — the old world drank from it and saw through it.',
-  'crystal-ball': 'A ball of her own glass, cooled round — made to be looked into. A scrying medium: one of the three lawful media for the Mark of Returning\'s farthest reach, with the magic map and a water source.',
+  'crystal-ball': 'A ball of her own glass, cooled round — made to be looked into. A scrying medium: one of the two lawful media for the Mark of Returning\'s farthest reach, the other being a water source.',
   repellent: 'Tallow and poison mushroom, rendered foul in the cauldron. Doused on, she smells wrong to a hunting nose — ferals keep away while it lasts.',
   'prey-lure': 'Acorns and honey, brewed sweet in the cauldron. Doused on, she smells of an easy meal — prey kinds drift closer while it lasts.',
   'predator-lure': 'Fish carcass and tallow, brewed heavy in the cauldron. Doused on, she carries a kill\'s smell — predators drift closer while it lasts.',

@@ -1323,10 +1323,11 @@ const DRAFT_RECIPES: Recipe[] = [
     notes:
       'DRAFT (2026-11-05, the chain\'s end). One lump of her ' +
       'glass, reheated in the kiln and coaxed round — a MADE ' +
-      'scrying medium: one of the three lawful media for ' +
-      'the Mark of Returning\'s farthest reach (T3), ' +
-      'alongside the magic map and a water source (Adam, ' +
-      '2026-11-05). NO scry mechanics in this landing — ' +
+      'scrying medium: one of the two lawful media for ' +
+      'the Mark of Returning\'s farthest reach (T3) — the ' +
+      'ball, or a water source (Adam, 2026-11-05; the ' +
+      'magic map was retired the same morning, the ball ' +
+      'covering its seat). NO scry mechanics in this landing — ' +
       'the item and its making only; what it shows is a ' +
       'later build. Numbers draft.',
   },
