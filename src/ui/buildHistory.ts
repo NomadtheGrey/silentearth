@@ -43,6 +43,14 @@ export interface BuildRecord {
 
 const ALL_RECORDS: BuildRecord[] = [
   {
+    merge: 'Merge #80',
+    pr: 123,
+    sha: '70bcfe0',
+    date: '2026-11-05',
+    what: 'GLASS AND NAMING — stone becomes glass, and the world takes her names. The glass chain closes: a river stone grinds to two sand at any stump or workstation, sand fires to glass at the kiln, and glass fires to a crystal ball — a made scrying medium, one of the two lawful media that remain (the ball, or open water). And Naming stands whole: she can name any spot she stands on, her words verbatim, and the name stays — kept in the journal’s new Places page beside the names she has learned, each with its distance and bearing from where she stands, renamable and removable there; and out in the world, every place she has named within a hundred paces wears its name over the ground for her to steer by. A name belongs to the world it was given in: what she names down in a cave stays below, and never shows its face topside.',
+    why: 'Adam’s word: build out the Naming, and close the glass chain beside it. The ball is a medium the Home pillar’s farther reaches will ask for, and a world she can name is a world she can find her way back through — her names, in her words, kept exactly where she left them.',
+  },
+  {
     merge: 'Merge #79',
     pr: 95,
     sha: '79aa457',
