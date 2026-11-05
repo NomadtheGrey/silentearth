@@ -1696,6 +1696,23 @@ export const SOURCES: HarvestSourceDef[] = [
     biomes: ['oldfieldRise'],
     mesh: { shape: 'stone', color: 0x8a8578, extraColor: 0x6e6a5e, baseY: 0.42 },
   },
+  {
+    id: 'hearthStoneCharred',
+    kind: 'hearthStoneCharred',
+    name: 'Charred Hearth Stone',
+    description:
+      'The hearth stone of a burnt village house, fire-' +
+      'blackened where it stands (2026-11-05 — the village ' +
+      'hearthstone seats: a carrier she can act on is a ' +
+      'thing she can see). Home fragments are carried on ' +
+      'stones like this one.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['oldfieldRise'],
+    mesh: { shape: 'stone', color: 0x35302b, extraColor: 0x211e1a, baseY: 0.42 },
+  },
   // The Chapel set (Adam, 2026-10-30 — Circle ground;
   // site-pass only, same rule as the sets above).
   {

@@ -22,10 +22,13 @@
  * the road. The absence is STRUCTURAL, not a filter:
  * feed() refuses a feral before any trust is earned, so
  * a feral never holds a record and factsFor answers null
- * for it exactly as for the untouched. THE CAT is not queried by the
- * renderer layer in v1: it stands outside the feeding
- * road (its bond is the rite, its familiar read is its
- * glow) — named, not forgotten.
+ * for it exactly as for the untouched. THE CAT stood
+ * outside the query in v1 (its bond the rite, its
+ * familiar read its glow); since the cat joined the
+ * feeding road — its record keyed 'cat:hearth' in the
+ * same store — the renderer queries it like any other
+ * individual (2026-11-05, Adam's live report: fed the
+ * cat, no dot).
  *
  * THE DERIVATION (pure; the probe asserts the table):
  * - bond 'familiar' -> the familiar's mark.
