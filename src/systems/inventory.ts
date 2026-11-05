@@ -98,8 +98,11 @@
  *   while carried between craft and place (short interval —
  *   flagged: primitive-lean-to, thatch-hut, wattle-and-daub-hut,
  *   woven-cottage, small-wooden-hut, moss-cradle, campfire,
- *   hearth, kiln, cauldron, writing-desk, stumpy-workstation,
+ *   kiln, cauldron, writing-desk, stumpy-workstation,
  *   crafted-workstation, potters-wheel, loom).
+ * - 20 lb: hearth, lit-hearth (Adam, 2026-11-05 — the
+ *   hearth is furniture, and HEAVY: pockets can't stage
+ *   it, a basket carries it; below the grimoire's class).
  * - 40 lb: grimoire (Adam, 2026-11-05 — heavy on
  *   purpose: the book lives on its desk; moving it is
  *   a deliberate haul. Settled from his 50 anchor so
@@ -370,7 +373,6 @@ export const ITEM_WEIGHT_LB: Readonly<Record<string, number>> = {
   [ITEMS.smallWoodenHut]: 4,
   [ITEMS.mossCradle]: 4,
   [ITEMS.campfire]: 4,
-  [ITEMS.hearth]: 4,
   [ITEMS.kiln]: 4,
   [ITEMS.cauldron]: 4,
   [ITEMS.writingDesk]: 4,
@@ -383,6 +385,10 @@ export const ITEM_WEIGHT_LB: Readonly<Record<string, number>> = {
   // between craft and place).
   [ITEMS.altar]: 4,
   [ITEMS.tent]: 4, // camping: carried-structure precedent, flagged
+  // 20 lb — the heavy furniture (Adam, 2026-11-05:
+  // the hearth is moveable, and heavy; see hearth.ts).
+  [ITEMS.hearth]: 20,
+  [ITEMS.litHearth]: 20,
 };
 
 /**
@@ -575,6 +581,7 @@ export const ITEM_DISPLAY_NAMES: Readonly<Record<string, string>> = {
   umbrella: 'Umbrella',
   torch: 'Torch',
   'lit-torch': 'Lit Torch',
+  'lit-hearth': 'Lit Hearth',
   'plant-pulp': 'Plant Pulp',
   'pressed-sheets': 'Pressed Sheets',
   paper: 'Paper',
@@ -776,6 +783,7 @@ export const ITEM_DESCRIPTIONS: Readonly<Record<string, string>> = {
   'clay-brick': 'A kiln-fired brick. No use for it yet.',
   torch: 'A torch, unlit. Light it from a fire, or with flint and stone.',
   'lit-torch': 'A lit torch. Bright light, and it never burns out.',
+  'lit-hearth': 'A hearth, still lit — stone and clay with its fire alive in it. Set it down and it burns where it stands.',
   'plant-pulp': 'Mashed plant fibre. Press it into sheets, on the way to paper.',
   'pressed-sheets': 'Pressed fibre sheets. Bind them into paper.',
   paper: 'Handmade paper. Bind it into a grimoire.',
@@ -1003,6 +1011,7 @@ export const ITEM_CATEGORIES: Readonly<Record<string, ItemCategory>> = {
   tent: 'Structures & Stations',
   torch: 'Structures & Stations',
   'lit-torch': 'Structures & Stations',
+  'lit-hearth': 'Structures & Stations',
   'old-stump': 'Structures & Stations',
   snare: 'Structures & Stations',
   'fish-weir-trap': 'Structures & Stations',
