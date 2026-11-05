@@ -42,11 +42,13 @@
  * street (ratified with the claim).
  *
  * CARRIAGE IS STRUCTURAL (the population ruling's own
- * words): every instance's hearthstone is a HOME
+ * words): every instance's hearthstone is a HOME-pillar
  * carrier, minted per instance key in the burnt band on
  * the homestead pattern — no presence roll, because the
- * hearth house is forced, not rolled. Home completes
- * through the populated world.
+ * hearth house is forced, not rolled. Since the deal
+ * (Adam, 2026-11-05) each hearthstone deals ONE
+ * Home-pillar mark by its own hash (homeDeal.ts); the
+ * pillar completes through the populated world.
  *
  * Beats ride each instance in the first's shape: bone
  * spots at two built houses, the well, and the street;
@@ -90,6 +92,7 @@ import {
   distributionCellsOverlapping,
 } from './distribution';
 import { deriveSeed, mulberry32 } from './seed';
+import { dealHomeMark } from './homeDeal';
 import { caveInstancesInRect } from './caves';
 import { homesteadInstancesInRect, HOMESTEAD_CLEAR_RADIUS_M } from './homesteads';
 import { farmhouseInstancesInRect, FARMHOUSE_CLEAR_RADIUS_M } from './farmhouses';
@@ -627,10 +630,15 @@ function villageInstanceAt(
       // derivation self-contained; the band mirrors
       // carriers.ts CARRIER_BAND_BURNT). Structural: the
       // hearth house is forced, so every instance mints.
+      // THE DEAL (Adam, 2026-11-05): the mark is dealt by
+      // the instance's own hash (homeDeal.ts — its stream
+      // is a sibling of this mint stream, so the
+      // completeness roll below is byte-identical to the
+      // pre-deal mint).
       const crand = mulberry32(deriveSeed(worldSeed, `carrier:${key}`));
       const fragmentCarrier: FragmentCarrier = {
         fragmentId: `${key}:fragment`,
-        mark: 'home',
+        mark: dealHomeMark(worldSeed, key),
         completeness: 0.35 + crand() * 0.4,
       };
       result = {
