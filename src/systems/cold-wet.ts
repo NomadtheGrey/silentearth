@@ -212,9 +212,20 @@ export class ColdWetState {
     rainShed = Math.min(0.5, rainShed);
 
     // WET: rain lands through shelter and clothing;
-    // immersion soaks directly; drying answers whenever
-    // the rain reaching her is negligible and she is not
-    // immersed.
+    // immersion soaks directly. DRYING answers in two
+    // parts (the drying fix, 2026-11-05 — the pin
+    // violation was the whole term sitting inside the
+    // rain gate, so no fire could dry her while it
+    // rained):
+    // - THE FIRE TERM answers whenever she is not
+    //   immersed, IN RAIN TOO, netted against the
+    //   soak — the pinned shelter law: a lit fire
+    //   dries her outright within its radius, so at
+    //   full fire warmth she dries even while it
+    //   rains (fire beats rain inside its radius).
+    // - AMBIENT + SHELTERED drying keeps the
+    //   negligible-rain gate: without a fire, rain
+    //   that reaches her still wins.
     const rainReaching =
       unit(facts.rainIntensity) * shelter * (1 - rainShed);
     let wetDelta = RAIN_SOAK_PER_MIN * rainReaching;
@@ -223,11 +234,13 @@ export class ColdWetState {
     } else if (facts.immersion === 'swimming') {
       wetDelta += SWIMMING_SOAK_PER_MIN;
     }
-    if (facts.immersion === 'none' && rainReaching < 0.05) {
-      wetDelta -=
-        DRY_AMBIENT_PER_MIN +
-        (shelter < 1 ? DRY_SHELTERED_PER_MIN : 0) +
-        DRY_FIRE_PER_MIN * fire;
+    if (facts.immersion === 'none') {
+      wetDelta -= DRY_FIRE_PER_MIN * fire;
+      if (rainReaching < 0.05) {
+        wetDelta -=
+          DRY_AMBIENT_PER_MIN +
+          (shelter < 1 ? DRY_SHELTERED_PER_MIN : 0);
+      }
     }
     this.wet = clampGauge(this.wet + wetDelta * minutes);
 
