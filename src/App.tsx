@@ -2024,6 +2024,7 @@ import {
   placeWorkstation as grantPlaceWorkstation,
 } from './systems/workstation';
 import { pickupLoom } from './systems/loom';
+import { hearthItemFireLit, pickupHearth } from './systems/hearth';
 import {
   cauldronState,
   type PlacedCauldron as PlacedCauldronEntity,
@@ -2233,6 +2234,11 @@ function clampPercent(value: number): number {
 const FIRE_ITEM_TO_TYPE: Record<string, FireType> = {
   [ITEMS.campfire]: 'campfire',
   [ITEMS.hearth]: 'hearth',
+  // The lit hearth (the hearth pick-up's return trip):
+  // a picked-up lit hearth carries its fire in the
+  // item id; it places as a hearth and stands lit
+  // (the confirm reads hearthItemFireLit).
+  [ITEMS.litHearth]: 'hearth',
   [ITEMS.kiln]: 'kiln',
 };
 
@@ -10590,7 +10596,15 @@ export default function App() {
     }
     try {
       if (mode.fireType) {
-        fireState.placeFire(mode.fireType, target.x, target.z, playerRef.current?.yaw ?? 0);
+        fireState.placeFire(
+          mode.fireType,
+          target.x,
+          target.z,
+          playerRef.current?.yaw ?? 0,
+          mode.fireType === 'hearth'
+            ? hearthItemFireLit(mode.itemId as ItemId)
+            : false,
+        );
       } else if (mode.houseType) {
         shelterState.placeHouse(mode.houseType, target.x, target.z, playerRef.current?.yaw ?? 0);
       } else if (mode.loom) {
@@ -11087,6 +11101,18 @@ export default function App() {
       cauldronState.cauldronForHearth(fire.id) === undefined
         ? [{ id: 'place-cauldron', label: 'Place cauldron' }]
         : [];
+    // THE HEARTH'S PICK-UP (the furniture pattern,
+    // 2026-11-05 — Adam: the hearth is furniture,
+    // heavy but movable): a hearth's own menu carries
+    // its Pick up in EVERY list a hearth can show
+    // (lit, lighting, unlit) — Systems' pickupHearth
+    // guards (the cauldron speaks first) and catches
+    // (20 lb) under it. Campfire + kiln stay
+    // place-once: no row for them.
+    const hearthActions: ContextAction[] =
+      fire.type === 'hearth'
+        ? [{ id: 'pick-up-hearth', label: 'Pick up Hearth' }]
+        : [];
     if (fire.lit) {
       const hasAcorns = inventory.count(FOOD_ACORNS) > 0;
       const hasSnapWood = inventory.count(CHAR_INPUT_ITEM) > 0;
@@ -11122,6 +11148,7 @@ export default function App() {
             ? undefined
             : 'Needs carried snap wood',
         },
+        ...hearthActions,
         { id: 'close', label: 'Close [X]' },
       ];
     }
@@ -11132,6 +11159,7 @@ export default function App() {
           id: 'click-flint',
           label: `Click flint (${fire.lighting.clicks} of 3)`,
         },
+        ...hearthActions,
         { id: 'close', label: 'Close [X]' },
       ];
     }
@@ -11147,6 +11175,7 @@ export default function App() {
               ? undefined
               : 'Wait for the wait to end, then rub',
         },
+        ...hearthActions,
         { id: 'close', label: 'Close [X]' },
       ];
     }
@@ -11154,7 +11183,8 @@ export default function App() {
       // The candle's process needs no second press —
       // the wait IS the lighting (the header bar
       // carries its progress). Rows: Close only.
-      return [...cauldronActions, { id: 'close', label: 'Close [X]' }];
+      return [...cauldronActions, ...hearthActions,
+        { id: 'close', label: 'Close [X]' }];
     }
     const hasFlint = inventory.count(ITEMS.flint) > 0;
     return [
@@ -11188,7 +11218,8 @@ export default function App() {
         label: 'Light with friction (slow)',
         hint: 'Rub, wait, rub',
       },
-      { id: 'close', label: 'Close [X]' },
+      ...hearthActions,
+        { id: 'close', label: 'Close [X]' },
     ];
   };
 
@@ -11207,6 +11238,35 @@ export default function App() {
       // the grant reads the faced winner, which is this
       // hearth while its menu stands open.
       handlePlaceCauldron();
+      return;
+    }
+    if (actionId === 'pick-up-hearth') {
+      // THE HEARTH PICK-UP (the furniture pattern):
+      // Systems' grant judges the seat (a cauldron on
+      // it refuses first, in its words; then the catch
+      // law at 20 lb) — a refusal voices the reason and
+      // the menu STAYS (she can lift the cauldron from
+      // this same menu); success removes the fire
+      // record through Background's seat and the
+      // lit-ness rides the granted item id. A lighting
+      // process in flight is not a lit fire and does
+      // not ride (Systems' rule) — fire.lit is the
+      // seat's fact, so it reads false mid-lighting.
+      const outcome = pickupHearth(inventory, {
+        cauldron: cauldronState.cauldronForHearth(fire.id) !== undefined,
+        lit: fire.lit,
+      });
+      // Equality check, not truthiness (the desk note).
+      if (outcome.taken === false) {
+        say(outcome.reason, 'blocked');
+        return;
+      }
+      fireState.removeFire(fire.id);
+      setSelectedFireId(null);
+      refreshInventory();
+      saveNow();
+      say('Picked up the hearth.', 'gain');
+      recomputeAnchors();
       return;
     }
     if (actionId === 'light-candle') {
