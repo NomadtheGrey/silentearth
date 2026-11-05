@@ -2434,6 +2434,34 @@ export class WorldRenderer {
     return this.adoptChunkAnimal(id) !== null;
   }
 
+  /**
+   * ONE INDIVIDUAL, ONE BODY (2026-11-05, Adam's doubled
+   * diamonds): a companion restored at boot can twin
+   * with its own chunk spawn — chunks stream in before
+   * the shell restores the registry, so the chunk-build
+   * filter (actorById) reads an empty registry and the
+   * twin stands all session beside the actor: two
+   * bodies, two markers, stacked. This sweep runs ahead
+   * of the animal step each frame: a chunk pair whose id
+   * the registry now holds leaves the world (the adopt
+   * removal, its marker cache entry dropped with it),
+   * so the actor's body — and its one marker — is the
+   * only one that stands. Mid-session promotions never
+   * reach it (adopt already removed their pair); it
+   * exists for orderings no single call site can see.
+   */
+  private sweepChunkTwins(): void {
+    for (const loaded of this.chunks.values()) {
+      for (let i = loaded.animals.length - 1; i >= 0; i--) {
+        const pair = loaded.animals[i];
+        if (!actorById(pair.instance.id)) continue;
+        loaded.animals.splice(i, 1);
+        pair.group.parent?.remove(pair.group);
+        this.trustMarkerByGroup.delete(pair.group);
+      }
+    }
+  }
+
   restoreSky(snap: SkySnapshot | null | undefined): void {
     if (!snap) return;
     this.sky?.restore(snap);
@@ -4471,6 +4499,9 @@ export class WorldRenderer {
         this.hedgeGroup.visible = !this.gen.dimensionKey;
       }
     }
+    // One individual, one body: twins of registry actors
+    // leave before the step (see sweepChunkTwins).
+    this.sweepChunkTwins();
     for (const loaded of this.chunks.values()) {
       for (const pair of loaded.animals) {
         let feral: FeralFacts | null = null;
