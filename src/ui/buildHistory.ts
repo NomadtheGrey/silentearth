@@ -43,6 +43,38 @@ export interface BuildRecord {
 
 const ALL_RECORDS: BuildRecord[] = [
   {
+    merge: 'Merge #82',
+    pr: 125,
+    sha: '810d07c',
+    date: '2026-11-05',
+    what: 'RETURNING HOME — the Mark of Returning works whole: the still-water Scry asks its first tier, and the journal’s Places page carries her home, and with ball or water to any named place; a made altar takes a bone again (the staging gate read only stumps); lesser groves stand in the country with their hedge mazes, sized by the exploding ladder, and the raven leads to them when she is close; the journal refuses plainly without itself, and the grimoire weighs 40 lb; the Hedge’s roots, and the loom’s and the hearth’s pick-ups, stand seated for their doors.',
+    why: 'Adam’s sequence, kept: Returning before Hedge before HearthHome — the first Home mark standing whole, its way-out pointing and its doors, before the next mark’s turn. His playtest closed two finds beside it: the placed altar that called itself a stump and refused its own bone, and the country groves that stood bare of the mazes he had promised them — every grove has its maze now, and the bird that led her to the first leads her to the rest.',
+  },
+  {
+    merge: 'Merge #81',
+    pr: 124,
+    sha: 'b0511c7',
+    date: '2026-11-05',
+    what: 'FURNITURE AND FRAGMENTS — the Home marks keep their own tallies now: Returning, Hedge, and HearthHome climb at three, six, and ten of their own fragments, Naming stands whole at three, and the hearthstones deal them — the farmhouse great stone, every village hearthstone, the Burnt Village each showing one mark by its own hash, its legibility untouched. And the crafted bench comes home: it places where she stands, stands on its own legs, lends its station to the wheel and the loom, and picks back up when she wants the room different — the desk moves too, once whatever rests on it is lifted off first.',
+    why: "Adam's word: wire the Home pillar's marks and fix the bench he crafted — the journal keeping each new mark's tally from its first fragment, as the marks rows already stand ready to do.",
+  },
+  {
+    merge: 'Merge #80',
+    pr: 123,
+    sha: '70bcfe0',
+    date: '2026-11-05',
+    what: 'GLASS AND NAMING — stone becomes glass, and the world takes her names. The glass chain closes: a river stone grinds to two sand at any stump or workstation, sand fires to glass at the kiln, and glass fires to a crystal ball — a made scrying medium, one of the two lawful media that remain (the ball, or open water). And Naming stands whole: she can name any spot she stands on, her words verbatim, and the name stays — kept in the journal’s new Places page beside the names she has learned, each with its distance and bearing from where she stands, renamable and removable there; and out in the world, every place she has named within a hundred paces wears its name over the ground for her to steer by. A name belongs to the world it was given in: what she names down in a cave stays below, and never shows its face topside.',
+    why: 'Adam’s word: build out the Naming, and close the glass chain beside it. The ball is a medium the Home pillar’s farther reaches will ask for, and a world she can name is a world she can find her way back through — her names, in her words, kept exactly where she left them.',
+  },
+  {
+    merge: 'Merge #79',
+    pr: 95,
+    sha: '79aa457',
+    date: '2026-11-03',
+    what: 'ATTICS AND CANDLES — the houses keep things now, and her candle answers at every fire. Every fire menu offers ‘Light with candle’: the carried light starts any fire, two seconds in the hand, and is never used up — while torches ride unlit in the pack and light on demand, in her hand or set down where she stands. The workstation is craftable by hand: six downed logs and four twined cordage, no stump needed, so the bench can be raised in stump-less country. The New World screen carries a Cloud Saves door, and closing Options returns to the same dialog with her typed name and seed intact. Attics hold things: crates in the attic-form farmhouses carry stored goods and old-world junk — a stored candle, tallow, beeswax, and the leavings of the world before (an iron weight, a letter machine, a glass lamp among them) — each taken once and gone. Each dimension keeps its own book: the piles and harvests of a cave stay in that cave and the surface’s stay the surface’s, and saving underground can no longer write the cave’s stores over the surface’s — a pile of three comes back three. And graphics recover: a lost graphics context restores itself, with a standing note that the world is still running and progress is safe, and the deprecated clock under the frame loop is replaced.',
+    why: 'Adam’s playtest found her standing at her own campfire holding a lit candle with no way to use it — the door simply never offered the method — and the attic crates stood empty because no dimension had a book of its own to keep what she left there. This batch gives the carried light its due at every hearth, gives the houses their keeping, and makes each world’s stores its own, so what she leaves in a cave waits in that cave and nowhere else.',
+  },
+  {
     merge: 'Merge #78',
     pr: 95,
     sha: '6ae553e',
