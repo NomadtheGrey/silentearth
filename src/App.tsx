@@ -4341,6 +4341,12 @@ export default function App() {
   // from Background's adapter (game/waterProximity); arrows
   // show/hide through renderer.setCampArrowsVisible.
   const divinationRef = useRef(new CampDivination());
+  // THE T1 EXIT POINTING's seat mirror: the last
+  // target the shell handed Background's exit arrow
+  // (null = none standing). The renderer rebuilds
+  // the arrow on every setExitArrow call, so the
+  // feed below calls it only when the seat CHANGES.
+  const exitArrowSeatRef = useRef<{ x: number; z: number } | null>(null);
   const [scryVisible, setScryVisible] = useState(false);
   // JAR VERBS (the jar build's shell half): the FILL
   // offer — she stands in water by the composed facts
@@ -6982,6 +6988,42 @@ export default function App() {
           houses.length > 0 &&
           isNearStillWater(x, z, waters),
       );
+      // THE T1 EXIT POINTING (DEV's shape, 2026-11-05;
+      // Background's seat 0252d41): while she stands
+      // in a cave (either layer) or a grove maze's
+      // square AND she knows Returning T1 (Systems'
+      // canScry is THE gate, never the read), the
+      // arrows point OUT — the renderer's exit read
+      // names the seat (the layer's entry anchor; the
+      // maze's entrance gap) and the camp arrows
+      // suppress under it by the seat's own ruling.
+      // The read returning null dismisses the state
+      // itself (she stepped out; an attic, the open
+      // surface) — no toggle, no new control. Called
+      // only on a seat change: the seat rebuilds per
+      // call. The surface 'way home' rides the camp
+      // arrows under the same gate via the Scry above
+      // — one pointing language for T1 on every
+      // ground.
+      {
+        const renderer = rendererRef.current;
+        if (renderer) {
+          const exit = canScry(fragmentStateRef.current)
+            ? renderer.getExitTarget()
+            : null;
+          const seat = exit ? { x: exit.x, z: exit.z } : null;
+          const prev = exitArrowSeatRef.current;
+          if (
+            (seat === null) !== (prev === null) ||
+            (seat !== null &&
+              prev !== null &&
+              (seat.x !== prev.x || seat.z !== prev.z))
+          ) {
+            exitArrowSeatRef.current = seat;
+            renderer.setExitArrow(seat);
+          }
+        }
+      }
       // The jar's FILL offer rides the same tick (its
       // own facts — the composed siteWaterFacts, not
       // the scry still-water reading).
