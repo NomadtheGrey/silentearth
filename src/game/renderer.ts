@@ -61,6 +61,7 @@ import {
   wrapGenWithState,
 } from './harvestState';
 import { standingInWater, terrainSpeedAt, WADING_FACTOR, type WaterDisc } from './movement';
+import { distanceToWater } from './waterProximity';
 import { riverParamsFor, riverRibbonForChunk } from './river';
 import { barnSite, caveMouthSite, chapelSite, drownedMillSite, farmhouseSite, generalStoreSite, groveEntranceSeat, groveSite, mazeEntranceSeat, pushOutOfWalls, railSidingSite, schoolhouseSite, siloSite, sunkenRoadSite, villageSite, wallsNearSites, GROVE_CELL_M, GROVE_GRID_CELLS, type SiteFootprint } from './sites';
 import { caveFootprintFor, caveInstancesInRect, caveLayoutForKey, caveMouthsNear, caveSurfaceAim, type CaveSurfaceHit } from './caves';
@@ -3156,6 +3157,10 @@ export class WorldRenderer {
       riverPoints,
       pondPoints,
       treePoints,
+      // Birds refuse water seats (2026-11-05): the seat
+      // test is waterProximity's edge distance — inside
+      // a body (<= 0) is open water, not a perch.
+      isWaterSeat: (x, z) => distanceToWater(this.gen, x, z) <= 0,
     })) {
       // A promoted companion's ambient slot stays consumed
       // (Companions Build 1): the deterministic spawn would
@@ -4520,6 +4525,7 @@ export class WorldRenderer {
           playerZ: this.player.z,
           night,
           feral,
+          isWaterSeat: (x, z) => distanceToWater(this.gen, x, z) <= 0,
         });
         // The encounter's outward reports, consumed the
         // step they arm: the telegraph's cue and the
