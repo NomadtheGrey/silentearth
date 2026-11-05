@@ -43,6 +43,14 @@ export interface BuildRecord {
 
 const ALL_RECORDS: BuildRecord[] = [
   {
+    merge: 'Merge #82',
+    pr: 125,
+    sha: '810d07c',
+    date: '2026-11-05',
+    what: 'RETURNING HOME — the Mark of Returning works whole: the still-water Scry asks its first tier, and the journal’s Places page carries her home, and with ball or water to any named place; a made altar takes a bone again (the staging gate read only stumps); lesser groves stand in the country with their hedge mazes, sized by the exploding ladder, and the raven leads to them when she is close; the journal refuses plainly without itself, and the grimoire weighs 40 lb; the Hedge’s roots, and the loom’s and the hearth’s pick-ups, stand seated for their doors.',
+    why: 'Adam’s sequence, kept: Returning before Hedge before HearthHome — the first Home mark standing whole, its way-out pointing and its doors, before the next mark’s turn. His playtest closed two finds beside it: the placed altar that called itself a stump and refused its own bone, and the country groves that stood bare of the mazes he had promised them — every grove has its maze now, and the bird that led her to the first leads her to the rest.',
+  },
+  {
     merge: 'Merge #81',
     pr: 124,
     sha: 'b0511c7',
