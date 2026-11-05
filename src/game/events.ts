@@ -307,6 +307,14 @@ export interface EventMap {
    */
   'loom:placed': { id: string; x: number; z: number; rotY: number };
   /**
+   * A placed loom was removed (loomState.removeLoom —
+   * the entity half of Adam's furniture pattern,
+   * extended to the loom 2026-11-05; Systems' pickup
+   * grant decides, the shell removes on its success).
+   * Renderer rebuilds the placed group from this.
+   */
+  'loom:removed': { id: string };
+  /**
    * A torch was placed (torchState.placeTorch, Adam 2026-10-27
    * — a carried lit torch planted to light an area or path).
    * Free placement, cost-free engine primitive — the consume

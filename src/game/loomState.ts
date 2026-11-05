@@ -63,6 +63,20 @@ class LoomState {
     return loom;
   }
 
+  /**
+   * The pickup's entity half (Adam's furniture pattern,
+   * extended to the loom 2026-11-05): Systems' pickup
+   * grant decides, the shell removes on its success —
+   * the desk/workstation remove pattern. False on an
+   * unknown id; the renderer rebuilds from the event.
+   */
+  removeLoom(id: string): boolean {
+    if (!this.looms.has(id)) return false;
+    this.looms.delete(id);
+    bus.emit('loom:removed', { id });
+    return true;
+  }
+
   get(id: string): PlacedLoom | undefined {
     return this.looms.get(id);
   }

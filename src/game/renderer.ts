@@ -1100,6 +1100,7 @@ export class WorldRenderer {
       bus.on('shelter:placed', rebuild),
       bus.on('shelter:upgraded', rebuild),
       bus.on('loom:placed', rebuild),
+      bus.on('loom:removed', rebuild),
       bus.on('torch:placed', rebuild),
       bus.on('torch:removed', rebuild),
       bus.on('altar:placed', rebuild),
