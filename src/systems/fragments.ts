@@ -43,6 +43,21 @@
  *   copies, more benefit; past-3-doesn't-count) is a
  *   tally change over a true record, not a migration.
  *
+ * THE HOME WIRING (Adam, 2026-11-05): the Home
+ * pillar's own marks — Returning, Hedge, HearthHome,
+ * Naming — join the fragment world as marks in their
+ * own right, taught by their own fragments like the
+ * founding three (never pooled — a Returning fragment
+ * teaches Returning, nothing else). Their tier
+ * thresholds are CUMULATIVE [3, 6, 10] (Adam's pin:
+ * T1 at 3 of the mark, T2 at 6 total, T3 at 10 total;
+ * Naming is single-tier, whole at 3). THE FOUNDING
+ * THREE KEEP THEIR SHIPPED STANDING: their thresholds
+ * resolve to the flat [3] exactly as built in 2026-10
+ * (see MARK_TIER_THRESHOLDS) — if Adam later extends
+ * the pattern to them, it is a one-table change,
+ * never a silent rewrite of a shipped tally.
+ *
  * All numbers and the completeness scale are DRAFT
  * for Adam's pin pass.
  */
@@ -53,6 +68,66 @@
 
 /** Fragments of one mark a Tier I wants (Adam's threshold rule). */
 export const FRAGMENTS_FOR_TIER = 3;
+
+/**
+ * Per-mark CUMULATIVE tier thresholds (Adam's pin,
+ * 2026-11-05): a tiered mark knows T1 at the first
+ * number of ITS OWN fragments, T2 at the second, T3
+ * at the third — ten fragments make a whole sign.
+ * ONLY the Home wiring's marks are registered here.
+ * Every other mark — the founding three included —
+ * resolves to the flat [FRAGMENTS_FOR_TIER] that
+ * shipped in 2026-10: their tallies, completion, and
+ * journal surfaces are byte-for-byte the standing
+ * behavior, and this table is the ONE place a later
+ * pin extends the pattern to them. Naming is
+ * single-tier by Adam's ruling (a key, not a ladder):
+ * whole at 3, no higher tier to read.
+ */
+export const MARK_TIER_THRESHOLDS: Readonly<
+  Record<string, readonly number[]>
+> = {
+  returning: [3, 6, 10],
+  hedge: [3, 6, 10],
+  hearthhome: [3, 6, 10],
+  naming: [3],
+};
+
+/** The cumulative tier thresholds a mark is taught against. */
+export function tierThresholdsFor(mark: string): readonly number[] {
+  return MARK_TIER_THRESHOLDS[mark] ?? [FRAGMENTS_FOR_TIER];
+}
+
+// ---------------------------------------------------------------------------
+// Portions — which band of the sign a copy carries
+// ---------------------------------------------------------------------------
+
+/**
+ * The portion of its mark's sign a fragment copy
+ * represents, DERIVED from its completeness (the
+ * portion model, UI 2026-11-05: a fragment is a
+ * contiguous stretch of the whole sign; the sign
+ * reads in two bands — the RING and the CENTRE). The
+ * CENTRE portions are the high-completeness copies —
+ * the deep carriers deal them (cave circles, the
+ * Burnt Village); a shallow copy shows ring only.
+ * THE derivation lives in this ONE helper: the
+ * journal phase and the glyph surfaces read portions
+ * from here, never re-derive them. The boundary is
+ * the journal's standing kept-best line (a copy at
+ * 0.75+ already words as 'clear'). DRAFT.
+ */
+export type FragmentPortion = 'ring' | 'centre';
+
+/** Completeness at or above which a copy carries the centre band. */
+export const CENTRE_PORTION_MIN_COMPLETENESS = 0.75;
+
+/** The portion a copy of this completeness represents. */
+export function fragmentPortionFor(completeness: number): FragmentPortion {
+  return completeness >= CENTRE_PORTION_MIN_COMPLETENESS
+    ? 'centre'
+    : 'ring';
+}
 
 // ---------------------------------------------------------------------------
 // Mark names — the ONE naming home (UI's need, 2026-10-31)
@@ -72,6 +147,12 @@ export const MARK_DISPLAY_NAMES: Readonly<Record<string, string>> = {
   home: 'Home',
   circle: 'Circle',
   travel: 'Travel',
+  // The Home pillar's marks (2026-11-05 — the Home
+  // wiring): each taught by its own fragments.
+  returning: 'Returning',
+  hedge: 'Hedge',
+  hearthhome: 'HearthHome',
+  naming: 'Naming',
 };
 
 /** The canonical display name for a mark id (the id itself until registered). */
@@ -195,6 +276,42 @@ export class FragmentState {
       complete: count >= FRAGMENTS_FOR_TIER,
       best,
     };
+  }
+
+  /**
+   * The tier a mark stands KNOWN at: how many of its
+   * cumulative thresholds its copy count has reached
+   * (0 = not yet a mark she holds, however many copies
+   * she is short of the first threshold). The read the
+   * doors gate on — a tiered mark reads 0..3, a
+   * single-tier or founding mark 0..1.
+   */
+  knownTier(mark: string): number {
+    const count = this.marks.get(mark)?.copies.length ?? 0;
+    let tier = 0;
+    for (const threshold of tierThresholdsFor(mark)) {
+      if (count >= threshold) tier += 1;
+    }
+    return tier;
+  }
+
+  /**
+   * Parts toward the next tier, as (count, threshold):
+   * the mark's TOTAL copy count against the next
+   * cumulative threshold it has not reached — the
+   * journal's later ratio surface reads this pair.
+   * nextThreshold is null when the mark stands at its
+   * top tier (nothing left to count toward).
+   */
+  tierProgress(mark: string): {
+    count: number;
+    nextThreshold: number | null;
+  } {
+    const count = this.marks.get(mark)?.copies.length ?? 0;
+    const next =
+      tierThresholdsFor(mark).find((threshold) => count < threshold) ??
+      null;
+    return { count, nextThreshold: next };
   }
 
   /**

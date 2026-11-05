@@ -76,6 +76,7 @@ import { torchState } from './torchState';
 import { altarState } from './altarState';
 import { cauldronState } from './cauldronState';
 import { deskState } from './deskState';
+import { workstationState } from './workstationState';
 import { ritualSiteState } from './ritualSite';
 import type { BagPosition, PlacedHouse, TentPosition } from './shelter';
 import { FIRE_DEFS } from './fire';
@@ -1107,6 +1108,8 @@ export class WorldRenderer {
       bus.on('desk:placed', rebuild),
       bus.on('desk:removed', rebuild),
       bus.on('desk:grimoire', rebuild),
+      bus.on('workstation:placed', rebuild),
+      bus.on('workstation:removed', rebuild),
       bus.on('cauldron:placed', rebuild),
       bus.on('cauldron:removed', rebuild),
       bus.on('stump:upgraded', rebuild),
@@ -2248,6 +2251,8 @@ export class WorldRenderer {
     altarState.clear();
     // Placed desks belong to the old world's map too.
     deskState.clear();
+    // Placed workstations belong to the old world's map too.
+    workstationState.clear();
     // Placed cauldrons belong to the old world's map too
     // (their hearths are cleared with the fires above).
     cauldronState.clear();
@@ -3410,6 +3415,34 @@ export class WorldRenderer {
       // truth, never a promise.
       if (desk.grimoire) dg.add(this.seatedGrimoireGroup());
       group.add(dg);
+    }
+    for (const bench of workstationState.snapshot()) {
+      // Placed crafted workstation (the fix, 2026-11-05 —
+      // Adam crafted a bench and found no Place in his
+      // pack): the stump's workbench overlay RE-SEATED
+      // free-standing. The overlay's own geometry stands
+      // verbatim — slab (1.1 × 0.08 × 0.8 at y 0.66) +
+      // vise block, same dims, same tones — and four legs
+      // in the same box idiom carry it, their tops meeting
+      // the slab's underside at 0.62 exactly. No new
+      // model: the overlay completed, DRAFT dress in the
+      // desk-book precedent (Models may re-cut the prop
+      // whole later; the seat won't notice). Scene-level
+      // like all placed entities — save restore rebuilds
+      // it via the constructor's initial rebuildPlacedGroup
+      // (workstationState.restore first). Facing rides the
+      // record's rotY, as desks stand. No light: a bench
+      // is not a light source.
+      const bg = new THREE.Group();
+      bg.position.set(bench.x, 0, bench.z);
+      bg.rotation.y = bench.rotY ?? 0;
+      bg.add(box(0.08, 0.62, 0.08, 0x6b4e30, -0.47, 0.31, -0.32));
+      bg.add(box(0.08, 0.62, 0.08, 0x6b4e30, 0.47, 0.31, -0.32));
+      bg.add(box(0.08, 0.62, 0.08, 0x6b4e30, -0.47, 0.31, 0.32));
+      bg.add(box(0.08, 0.62, 0.08, 0x6b4e30, 0.47, 0.31, 0.32));
+      bg.add(box(1.1, 0.08, 0.8, 0x7a5a38, 0, 0.66, 0));
+      bg.add(box(0.25, 0.15, 0.2, 0x3a2818, 0.35, 0.775, 0));
+      group.add(bg);
     }
     for (const record of stumpState.snapshot()) {
       // Workbench overlay (Adam 2026-10-28 — stumpy
