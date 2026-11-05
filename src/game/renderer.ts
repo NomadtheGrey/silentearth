@@ -833,6 +833,20 @@ export class WorldRenderer {
   private campArrowGroup: THREE.Group | null = null;
   /** Camp-arrow screen-edge arrows (camera children, one per placed house). */
   private campEdgeArrows: { mesh: THREE.Group; house: PlacedHouse }[] = [];
+  /**
+   * THE EXIT ARROW (Returning T1 pointing, 2026-11-05):
+   * the shell's seat via setExitArrow — ONE world arrow
+   * + ONE edge arrow standing at the supplied seat in
+   * the ACTIVE dimension (a cave's way out, a grove
+   * maze's gap), in the camp arrows' idiom. While a
+   * target stands, the camp arrows SUPPRESS (DEV's
+   * ruling: from inside a cave, edge arrows tracking
+   * surface houses are noise — the exit is the way that
+   * matters); clearing the target restores them.
+   */
+  private exitArrowTarget: { x: number; z: number } | null = null;
+  private exitArrowGroup: THREE.Group | null = null;
+  private exitEdgeArrow: THREE.Group | null = null;
   /** True while a water scry has revealed the camp arrows (shell-driven setter). */
   private campArrowsVisible = false;
   /** Tent positions for the placed group (shell-driven via setTents — no game tent state exists; camping state is systems-side). */
@@ -1566,9 +1580,65 @@ export class WorldRenderer {
 
   /** Refresh world + edge arrow visibility from the OR condition above. */
   private refreshArrowVisibility(): void {
-    const show = this.arrowsVisible();
+    // The exit arrow suppresses the camp arrows while
+    // it stands (see the seat's field note).
+    const show = this.arrowsVisible() && !this.exitArrowTarget;
     if (this.campArrowGroup) this.campArrowGroup.visible = show;
     if (!show) for (const edge of this.campEdgeArrows) edge.mesh.visible = false;
+    if (this.exitArrowGroup) this.exitArrowGroup.visible = !!this.exitArrowTarget;
+    if (!this.exitArrowTarget && this.exitEdgeArrow) this.exitEdgeArrow.visible = false;
+  }
+
+  /**
+   * Seat the exit arrow (Returning T1, 2026-11-05):
+   * the shell calls this on its anchor cadence with
+   * getExitTarget()'s seat (or null) — cave layer 1 ->
+   * the entry anchor, a deeper layer -> the climb
+   * point, inside a grove maze -> its entrance gap,
+   * nowhere -> null and the arrow is gone. Like the
+   * camp setters, this seat only follows the shell: it
+   * holds whatever it was last told until called again.
+   * The seat is in the ACTIVE dimension's frame; a
+   * world swap clears it with the old world's arrows.
+   */
+  setExitArrow(target: { x: number; z: number } | null): void {
+    this.exitArrowTarget = target ? { x: target.x, z: target.z } : null;
+    this.rebuildExitArrow();
+    this.refreshArrowVisibility();
+  }
+
+  /** Build (or tear down) the exit arrow pair for the standing target. */
+  private rebuildExitArrow(): void {
+    if (this.exitArrowGroup) {
+      this.scene.remove(this.exitArrowGroup);
+      this.exitArrowGroup.traverse((obj) => {
+        if (obj instanceof THREE.Mesh) {
+          obj.geometry.dispose();
+          const mat = obj.material;
+          if (Array.isArray(mat)) mat.forEach((m) => m.dispose());
+          else mat.dispose();
+        }
+      });
+      this.exitArrowGroup = null;
+    }
+    if (this.exitEdgeArrow) {
+      this.camera.remove(this.exitEdgeArrow);
+      this.exitEdgeArrow = null;
+    }
+    if (!this.exitArrowTarget) return;
+    const group = new THREE.Group();
+    const arrow = buildCampArrow();
+    arrow.position.set(this.exitArrowTarget.x, CAMP_ARROW_CENTER_Y, this.exitArrowTarget.z);
+    arrow.userData.phase = flamePhase(this.exitArrowTarget.x, this.exitArrowTarget.z);
+    arrow.userData.baseY = CAMP_ARROW_CENTER_Y;
+    group.add(arrow);
+    group.visible = true;
+    this.scene.add(group);
+    this.exitArrowGroup = group;
+    const edge = buildEdgeArrow();
+    edge.visible = false;
+    this.camera.add(edge);
+    this.exitEdgeArrow = edge;
   }
 
   /**
@@ -2587,6 +2657,10 @@ export class WorldRenderer {
     this.rebuildStagedBones();
     // Camp arrows belong to the old world's houses too.
     this.rebuildCampArrows();
+    // The exit arrow's seat belongs to the old world
+    // too (its frame was that world's dimension).
+    this.exitArrowTarget = null;
+    this.rebuildExitArrow();
     // Dropped piles belong to the old world's map too.
     pileState.clear();
     this.rebuildPileGroup();
@@ -2659,7 +2733,10 @@ export class WorldRenderer {
     if (this.pileGroup) this.pileGroup.visible = true;
     if (this.trapGroup) this.trapGroup.visible = showPlaced;
     if (this.stagedBoneGroup) this.stagedBoneGroup.visible = showPlaced;
-    if (this.campArrowGroup) this.campArrowGroup.visible = showPlaced;
+    if (this.campArrowGroup) this.campArrowGroup.visible = showPlaced && !this.exitArrowTarget;
+    // The exit arrow stands in ANY dimension while its
+    // target stands — the way out matters most below.
+    if (this.exitArrowGroup) this.exitArrowGroup.visible = !!this.exitArrowTarget;
     if (this.smokeGroup) this.smokeGroup.visible = showPlaced;
     for (const light of [...this.fireLights, ...this.torchLights, ...this.altarCandleLights]) {
       light.visible = showPlaced;
@@ -3923,7 +4000,7 @@ export class WorldRenderer {
       this.camera.add(edge);
       this.campEdgeArrows.push({ mesh: edge, house });
     }
-    group.visible = this.arrowsVisible();
+    group.visible = this.arrowsVisible() && !this.exitArrowTarget;
     this.scene.add(group);
     this.campArrowGroup = group;
   }
@@ -4881,7 +4958,7 @@ export class WorldRenderer {
     // (camera children, so they ride every view). updateMatrix
     // World first — project() needs this frame's matrices, not
     // last frame's (render would refresh them too late).
-    if (this.arrowsVisible() && this.campArrowGroup) {
+    if (this.arrowsVisible() && !this.exitArrowTarget && this.campArrowGroup) {
       for (const arrow of this.campArrowGroup.children) {
         arrow.position.y =
           (arrow.userData.baseY as number) +
@@ -4901,6 +4978,35 @@ export class WorldRenderer {
         edge.mesh.visible = true;
         edge.mesh.position.set(t.x * halfW, t.y * halfH, -CAMP_EDGE_DEPTH);
         edge.mesh.rotation.set(0, 0, t.angle);
+      }
+    }
+
+    // The exit arrow, in the same idiom (2026-11-05):
+    // the world arrow bobs over the way out; the edge
+    // arrow tracks it while it stands off-screen.
+    if (this.exitArrowTarget && this.exitArrowGroup) {
+      for (const arrow of this.exitArrowGroup.children) {
+        arrow.position.y =
+          (arrow.userData.baseY as number) +
+          CAMP_ARROW_BOB * Math.sin(this.flameTime * 2 + (arrow.userData.phase as number));
+      }
+      if (this.exitEdgeArrow) {
+        this.camera.updateMatrixWorld();
+        const halfH = Math.tan(THREE.MathUtils.degToRad(this.camera.fov / 2)) * CAMP_EDGE_DEPTH;
+        const halfW = halfH * this.camera.aspect;
+        this.camera.getWorldDirection(this.edgeForward);
+        this.edgeAnchor.set(this.exitArrowTarget.x, CAMP_ARROW_CENTER_Y, this.exitArrowTarget.z);
+        this.edgeToCamp.copy(this.edgeAnchor).sub(this.camera.position);
+        const behind = this.edgeToCamp.dot(this.edgeForward) < 0;
+        this.edgeAnchor.project(this.camera);
+        const t = edgeArrowTransform(this.edgeAnchor.x, this.edgeAnchor.y, behind);
+        if (!t.offScreen) {
+          this.exitEdgeArrow.visible = false;
+        } else {
+          this.exitEdgeArrow.visible = true;
+          this.exitEdgeArrow.position.set(t.x * halfW, t.y * halfH, -CAMP_EDGE_DEPTH);
+          this.exitEdgeArrow.rotation.set(0, 0, t.angle);
+        }
       }
     }
 
