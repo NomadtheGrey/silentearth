@@ -284,6 +284,16 @@ export interface EventMap {
   /** A fire lit, by flint or friction. Renderer shows its flame. */
   'fire:lit': { id: string; type: FireType; x: number; z: number; method: LightingMethod };
   /**
+   * A placed fire was removed (fireState.removeFire —
+   * the entity half of the hearth's move, Adam
+   * 2026-11-05; Systems' pickup grant decides, the
+   * shell removes on its success). The payload carries
+   * the fire's lit state as it stood: the fire rides
+   * the move, never extinguished by being carried.
+   * Renderer rebuilds the placed group from this.
+   */
+  'fire:removed': { id: string; type: FireType; lit: boolean };
+  /**
    * A house was placed (shelterState.placeHouse). Free placement
    * — no zone/plot gate. Renderer rebuilds the placed group; the
    * shelter query reads live state, so no re-wiring is needed.
@@ -306,6 +316,14 @@ export interface EventMap {
    * state, so no re-wiring is needed.
    */
   'loom:placed': { id: string; x: number; z: number; rotY: number };
+  /**
+   * A placed loom was removed (loomState.removeLoom —
+   * the entity half of Adam's furniture pattern,
+   * extended to the loom 2026-11-05; Systems' pickup
+   * grant decides, the shell removes on its success).
+   * Renderer rebuilds the placed group from this.
+   */
+  'loom:removed': { id: string };
   /**
    * A torch was placed (torchState.placeTorch, Adam 2026-10-27
    * — a carried lit torch planted to light an area or path).

@@ -2060,6 +2060,7 @@ import {
 } from './game/caves';
 import { dimensionState } from './game/dimensionState';
 import {
+  anchorClear,
   ascend,
   descend,
   enterCave,
@@ -2068,6 +2069,15 @@ import {
   exitUpstairs,
   type TravelOutcome,
 } from './game/dimensionTravel';
+import {
+  baseById,
+  canScry,
+  listBases,
+  planReturnHome,
+  planReturnToPlace,
+  type ReturningBase,
+  type ReturningBaseFacts,
+} from './systems/returning';
 import {
   atticLayoutForKey,
   isUpstairsKey,
@@ -2137,7 +2147,8 @@ import { CompanionsPanel } from './ui/CompanionsPanel';
 import {
   JournalPanel,
   type JournalMarkRow,
-  type JournalPlaceRow,
+  type JournalBaseRow,
+  JournalPlaceRow,
 } from './ui/JournalPanel';
 import { QuestCard } from './ui/QuestCard';
 import { StructureTag, STRUCTURE_TAG_NAMES, STRUCTURE_TAG_RANGE_M } from './ui/StructureTag';
@@ -9855,6 +9866,10 @@ export default function App() {
   // sets it as the ritual note.
   const RITUAL_ALTAR_REFUSAL =
     "A ritual wants an altar, and this stump isn't one yet. The making — stones, glyph, candle — is under Upgrade.";
+  // The same refusal at a placed altar (the altar fix,
+  // 2026-11-05): the words name the thing she stands at.
+  const RITUAL_ALTAR_REFUSAL_AT_ALTAR =
+    "A ritual wants an altar, and this altar isn't one yet. The making — stones, glyph, candle — is under Upgrade.";
 
   // RITUAL STAGING, ALTAR + STUMP SITES (bone build):
   // made altars carry ids + chips + positions; stumps
@@ -9882,15 +9897,25 @@ export default function App() {
     // grade 1; additions never come off) can still be
     // completed, and the state-based completion check
     // fires regardless.
+    // Each base reads its OWN record (the altar fix,
+    // 2026-11-05, on the familiar rite's pattern at its
+    // obtainByRite call): a placed altar's additions
+    // live in altarState — reading [] for one graded a
+    // fully-made altar as unconsecrated and refused
+    // every staging there.
     const gateAdditions =
       site.kind === 'stump'
         ? (stumpState
             .snapshot()
             .find((r) => r.x === site.x && r.z === site.z)
             ?.additions ?? [])
-        : [];
+        : site.kind === 'altar'
+          ? (altarState.get(siteId)?.additions ?? [])
+          : [];
     if (siteGrade(site.kind, gateAdditions) < 2) {
-      setRitualNote(RITUAL_ALTAR_REFUSAL);
+      setRitualNote(
+        site.kind === 'altar' ? RITUAL_ALTAR_REFUSAL_AT_ALTAR : RITUAL_ALTAR_REFUSAL,
+      );
       return;
     }
     // Composition contract (DEV): the shell checks the
@@ -11475,6 +11500,19 @@ export default function App() {
   const handleScry = () => {
     const player = playerRef.current;
     if (!player) return;
+    // THE SCRY GATE (the Returning build, 2026-11-05 —
+    // Adam: the live water-Scry IS Returning T1's water
+    // form): scrying at water requires knowing
+    // Returning's first tier (Systems' canScry is the
+    // one gate read). The offer stands — scryVisible
+    // is untouched — and the press explains, in the
+    // standing refusal voice (the candle-door shape;
+    // the pill and the R/winner door run this same
+    // handler, so parity is structural). Line DRAFT.
+    if (!canScry(fragmentStateRef.current)) {
+      showFeedback('You have not learned the Returning mark.', 'blocked');
+      return;
+    }
     const gen = genRef.current;
     const waters = stillWatersNear(gen, player.x, player.z);
     const result = evaluateCampReveal(
@@ -11487,6 +11525,224 @@ export default function App() {
       rendererRef.current?.setCampArrowsVisible(true);
     }
     setScryVisible(false);
+  };
+
+  // RETURNING — THE SHELL HALF (the Returning build,
+  // 2026-11-05; Systems' acts in systems/returning.ts
+  // PLAN, this shell MOVES her): the facts are the
+  // shell's own stores — the save's lastSleepSite and
+  // the placed-house snapshot the camp arrows read.
+  const returningFacts = (): ReturningBaseFacts => ({
+    lastSleepSite: lastSleepSiteRef.current,
+    houses: shelterState
+      .snapshot()
+      .map((house) => ({ x: house.x, z: house.z })),
+  });
+
+  // The base rows' names (DRAFT): the enumeration's
+  // via, in plain words. One naming, used by the
+  // journal rows and the arrival lines alike.
+  const returningBaseName = (base: ReturningBase): string =>
+    base.via === 'last-sleep' ? 'Last sleep' : 'Placed house';
+
+  // THE MOVE: seat her at a Returning destination,
+  // under the standing law — a written position is
+  // validated against real collision BEFORE she
+  // stands there (the stuck-in-ruin lesson). The
+  // landing validates in the TARGET dimension first
+  // (the cave layout's walls, the attic layout's
+  // walls; a surface record stands as she left it —
+  // she slept / built / named it standing there).
+  // Cross-dimension travel rides the LAWFUL doors
+  // (enterCave by the mouth serving the key,
+  // enterUpstairs by its house key, the matching
+  // exits) and then seats at the destination inside
+  // the dimension — dimensionTravel's private return
+  // state stays honest, so the ordinary exit doors
+  // still work after a scry arrival. False = the way
+  // would not open; nothing has moved on a refusal
+  // the validation caught, and the travel doors
+  // refuse cleanly on their own.
+  const seatAtReturningDestination = (dest: {
+    x: number;
+    z: number;
+    dimensionKey: string;
+  }): boolean => {
+    const player = playerRef.current;
+    const renderer = rendererRef.current;
+    const gen = genRef.current;
+    if (!player || !renderer || !gen) return false;
+    const seed = String(gen.seed);
+    const spawn = gen.findSpawn();
+    const weightsAt = (x: number, z: number) => gen.weightsAt(x, z);
+    if (dest.dimensionKey.startsWith('cave:')) {
+      const layout = caveLayoutForKey(seed, dest.dimensionKey);
+      if (
+        !anchorClear({ x: dest.x, z: dest.z }, layout.footprint.walls)
+      ) {
+        return false;
+      }
+    } else if (dest.dimensionKey.startsWith('attic:')) {
+      const layout = atticLayoutForKey(
+        seed,
+        spawn,
+        weightsAt,
+        dest.dimensionKey,
+      );
+      if (!layout || !anchorClear({ x: dest.x, z: dest.z }, layout.walls)) {
+        return false;
+      }
+    }
+    const active = dimensionState.activeKey();
+    if (dest.dimensionKey !== active) {
+      // Leave a non-surface dimension by its own door.
+      if (dimensionState.isUnderground()) {
+        if (exitCave(renderer, player).ok === false) return false;
+      } else if (isUpstairsKey(active)) {
+        if (exitUpstairs(renderer, player).ok === false) return false;
+      }
+      if (dest.dimensionKey.startsWith('cave:')) {
+        const mouthId =
+          dest.dimensionKey === CAVE_DIMENSION_KEY
+            ? 'mouth'
+            : dest.dimensionKey;
+        if (enterCave(renderer, player, gen, mouthId).ok === false) {
+          return false;
+        }
+      } else if (dest.dimensionKey.startsWith('attic:')) {
+        const houseKey = dest.dimensionKey.slice('attic:'.length);
+        if (enterUpstairs(renderer, player, gen, houseKey).ok === false) {
+          return false;
+        }
+      } else if (dest.dimensionKey !== 'surface') {
+        return false;
+      }
+    }
+    // The placeAt pattern (dimensionTravel): a travel
+    // IS a move, so the emit rides along.
+    player.x = dest.x;
+    player.z = dest.z;
+    bus.emit('player:moved', {
+      x: player.x,
+      z: player.z,
+      chunkX: Math.floor(player.x / CHUNK_SIZE),
+      chunkZ: Math.floor(player.z / CHUNK_SIZE),
+    });
+    return true;
+  };
+
+  // A completed Returning travel's housekeeping: the
+  // book closes (she is somewhere else now), the camp
+  // arrows clear, the world saves as it stands.
+  const finishReturningTravel = (line: string) => {
+    setJournalOpen(false);
+    rendererRef.current?.setCampArrowsVisible(false);
+    setScryVisible(false);
+    showFeedback(line, 'gain');
+    saveNow();
+  };
+
+  // THE PLACES-PAGE SCRY (Returning v1, 2026-11-05):
+  // the seated selection is the door. The FIRST base
+  // row is the home destination — its Scry calls
+  // planReturnHome (T2: no medium, the tier is the
+  // price). Every other row — a later base, a named
+  // place — calls planReturnToPlace (T3, through a
+  // medium: the carried crystal ball, or the still
+  // water she stands at). The acts judge; the shell
+  // voices refusals in draft words and moves her on
+  // theirs. All lines DRAFT.
+  const handleScryTarget = () => {
+    const id = selectedPlaceRef.current;
+    if (!id) return;
+    const fragments = fragmentStateRef.current;
+    const facts = returningFacts();
+    if (id.startsWith('base:')) {
+      const bases = listBases(facts);
+      if (bases.length > 0 && bases[0].id === id) {
+        const outcome = planReturnHome(fragments, facts);
+        if (outcome.ok === false) {
+          showFeedback(
+            outcome.code === 'no-base'
+              ? 'You have no base to return to.'
+              : "Returning's second tier is not yours yet.",
+            'blocked',
+          );
+          return;
+        }
+        if (!seatAtReturningDestination(outcome.destination)) {
+          showFeedback('The way will not open.', 'blocked');
+          return;
+        }
+        finishReturningTravel(
+          outcome.via === 'last-sleep'
+            ? 'The mark brings you back to where you last slept.'
+            : 'The mark brings you back to your house.',
+        );
+        return;
+      }
+      const base = baseById(facts, id);
+      if (!base) return;
+      runPlaceScry(
+        { x: base.x, z: base.z, dimensionKey: base.dimensionKey },
+        returningBaseName(base),
+      );
+      return;
+    }
+    const place = namedPlacesRef.current.get(id);
+    if (!place) return;
+    runPlaceScry(
+      { x: place.x, z: place.z, dimensionKey: place.dimensionKey },
+      place.name,
+    );
+  };
+
+  const runPlaceScry = (
+    target: { x: number; z: number; dimensionKey: string },
+    label: string,
+  ) => {
+    const player = playerRef.current;
+    const gen = genRef.current;
+    if (!player || !gen) return;
+    // The water fact is the FILL-JAR idiom (Systems'
+    // published caller fact): standing AT a source —
+    // the still-water EDGE within scry range (2.5 m),
+    // the same fact the Scry offer reads. A body
+    // merely within the 50 m adapter sweep is NOT
+    // standing at water (the first drive's R5 caught
+    // exactly that overreach: it travelled from dry
+    // ground near a pond).
+    const atWater = isNearStillWater(
+      player.x,
+      player.z,
+      stillWatersNear(gen, player.x, player.z),
+    );
+    const outcome = planReturnToPlace(
+      fragmentStateRef.current,
+      inventory,
+      target,
+      { atWater },
+    );
+    if (outcome.ok === false) {
+      showFeedback(
+        outcome.code === 'tier'
+          ? "Returning's third tier is not yours yet."
+          : outcome.code === 'no-medium'
+            ? 'No medium to see through — carry a crystal ball, or stand at still water.'
+            : 'That place cannot be seen.',
+        'blocked',
+      );
+      return;
+    }
+    if (!seatAtReturningDestination(outcome.destination)) {
+      showFeedback('The way will not open.', 'blocked');
+      return;
+    }
+    finishReturningTravel(
+      outcome.medium === 'crystal-ball'
+        ? `Seen in the crystal ball — you stand at "${label}".`
+        : `Seen in the water — you stand at "${label}".`,
+    );
   };
 
   // LOOK press (DEV-approved target: nearest in-range
@@ -14165,11 +14421,15 @@ export default function App() {
   // teaching beat (a dialog, not a feed line — the
   // moment is the lesson); the threshold-reaching copy
   // adds its completion line to the feed. All lines
-  // DRAFT. hasJournal reads the journal ITSELF (the
-  // build's standing reading of Systems' gate, flagged
-  // for Adam's pin pass: the grimoire mirrors the
-  // journal by the linked-books law but is not the
-  // carried book).
+  // DRAFT. THE GATE IS THE JOURNAL ALONE (Adam,
+  // 2026-11-05 — settled after a same-day two-book
+  // ruling was countermanded on his reframing: the
+  // grimoire LIVES ON ITS DESK, too heavy to field-
+  // carry by design; the journal LINKS to it, so in
+  // the field the journal does — hasJournal reads the
+  // carried journal itself, and the no-journal refusal
+  // speaks the reason in Adam's draft voice: 'You
+  // have no journal to record it in.').
   const handleTranscribe = (winner: {
     fragmentId: string;
     mark: string;
@@ -14186,7 +14446,7 @@ export default function App() {
     );
     if (result.ok === false) {
       if (result.code === 'no-journal') {
-        showFeedback('Wish I had a journal...', 'blocked');
+        showFeedback('You have no journal to record it in.', 'blocked');
       } else {
         showFeedback('Already in your journal.', 'info');
       }
@@ -15926,6 +16186,34 @@ export default function App() {
       ...all.filter((pl) => pl.dimensionKey === activeKey).map(toRow),
       ...all.filter((pl) => pl.dimensionKey !== activeKey).map(toRow),
     ];
+  })();
+  // Her bases for the same page (the Returning
+  // build): Systems' enumeration in its own order —
+  // last sleep first (the home destination), then
+  // placed houses. Bases stand on the surface: from
+  // the surface they read as distance + bearing;
+  // from below, the surface's label.
+  const journalBaseRows: JournalBaseRow[] = (() => {
+    const activeKey = dimensionState.activeKey();
+    return listBases(returningFacts()).map((base) => {
+      if (activeKey !== 'surface') {
+        return {
+          id: base.id,
+          name: returningBaseName(base),
+          detail: dimensionLabelFor('surface'),
+        };
+      }
+      const d = distanceM(position, base);
+      const wind =
+        COMPASS_WINDS[
+          Math.round(bearingDegrees(position.x, position.z, base) / 45) % 8
+        ];
+      return {
+        id: base.id,
+        name: returningBaseName(base),
+        detail: d < 1.5 ? 'Here' : `${Math.round(d)} m ${wind}`,
+      };
+    });
   })();
   // Standing at an already-named spot, the naming
   // entry says so — naming here re-names that spot
@@ -17804,6 +18092,8 @@ export default function App() {
             names={journalNameRows}
             onRecite={handleRecite}
             places={journalPlaceRows}
+            bases={journalBaseRows}
+            onScryTarget={handleScryTarget}
             selectedPlaceId={selectedPlaceId}
             onSelectPlace={selectPlace}
             nameHereHint={nameHereHint}

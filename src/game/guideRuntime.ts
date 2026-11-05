@@ -92,6 +92,14 @@ export const GUIDE_FLY_MPS = 8;
 export const GUIDE_CRUISE_Y_M = 7;
 /** The final perch ring: this close (m) to the Grove's centre is 'arrived' (DRAFT — in from 35). */
 export const GUIDE_LEAD_RING_M = 20;
+/**
+ * The lesser-grove lead's reach (Adam's correction,
+ * 2026-11-05 — 'if we get close-ish, the raven should
+ * try to lead the player there also'): a lesser grove
+ * within this (m) of her can call the bird over. Priced
+ * at the bat exodus's clue scale. DRAFT.
+ */
+export const GUIDE_LESSER_RANGE_M = 250;
 /** The waiting call repeats on this cadence (s). */
 export const GUIDE_CALL_REPEAT_S = 14;
 /** A perch's minimum dwell before a hop can trigger — the
@@ -293,10 +301,51 @@ export interface GuideActor {
 let guide: GuideActor | null = null;
 let grovePoint: { x: number; z: number } | null = null;
 let discoveredProbe: () => boolean = () => false;
+let lesserGleamedProbe: (fragmentId: string) => boolean = () => false;
 
 /** Shell install: Systems' grove-discovery fact. */
-export function installGuideProbes(probes: { groveDiscovered: () => boolean }): void {
+export function installGuideProbes(probes: {
+  groveDiscovered: () => boolean;
+  /**
+   * Whether she has gleamed (copied) a lesser grove's
+   * fragment, by fragment id (Adam's correction,
+   * 2026-11-05 — the raven leads to UNGLEAMED groves).
+   * Optional: uninstalled reads ungleamed, the standing
+   * probe contract (the shell installs at boot).
+   */
+  lesserGroveGleamed?: (fragmentId: string) => boolean;
+}): void {
   discoveredProbe = probes.groveDiscovered;
+  if (probes.lesserGroveGleamed) lesserGleamedProbe = probes.lesserGroveGleamed;
+}
+
+/** The renderer's read of the lesser-gleam probe. */
+export function isLesserGroveGleamed(fragmentId: string): boolean {
+  return lesserGleamedProbe(fragmentId);
+}
+
+/**
+ * The lesser-grove retarget (Adam's correction,
+ * 2026-11-05): while a retarget stands, the lead
+ * machine runs against IT — a lesser grove's entrance
+ * seat — instead of The Grove's point. The bird's home
+ * (its actor home seat) never moves; clearing the
+ * retarget hands it back to its standing job. The
+ * renderer decides per frame (range, gleam, arrival).
+ */
+let retargetPoint: { x: number; z: number } | null = null;
+
+export function retargetGuide(x: number, z: number): void {
+  retargetPoint = { x, z };
+}
+
+export function clearRetarget(): void {
+  retargetPoint = null;
+}
+
+/** The point the lead machine currently serves. */
+export function guideTargetPoint(): { x: number; z: number } | null {
+  return retargetPoint ?? grovePoint;
 }
 
 /**
@@ -306,6 +355,7 @@ export function installGuideProbes(probes: { groveDiscovered: () => boolean }): 
  */
 export function stageGuide(x: number, z: number, seatY?: number): void {
   grovePoint = { x, z };
+  retargetPoint = null;
   if (guide) return;
   const instance = makeCompanionInstance(GUIDE_ID, 'crow', x, z);
   instance.y = seatY ?? GUIDE_PERCH_HEIGHT_M;
@@ -392,6 +442,7 @@ export function guideTagSeat(): GuideTagSeat | null {
 export function clearGuide(): void {
   guide = null;
   grovePoint = null;
+  retargetPoint = null;
   lastStepDimensionActive = false;
 }
 
@@ -535,6 +586,12 @@ export function stepGuide(dt: number, ctx: GuideStepContext): void {
   lastStepDimensionActive = ctx.dimensionActive;
   const g = guide;
   const inst = g.instance;
+  // The point this step serves: a standing lesser-grove
+  // retarget, else The Grove's own point. (Discovery
+  // still retires the bird outright below — the lesser
+  // lead lives inside the guide's active season, and a
+  // retarget standing over a retired bird is inert.)
+  const tp = retargetPoint ?? grovePoint;
 
   if (g.state === 'retired') return;
   if (discoveredProbe()) {
@@ -558,7 +615,7 @@ export function stepGuide(dt: number, ctx: GuideStepContext): void {
       // by a DEPARTURE FLIGHT home, never a blink. The
       // departure commits — re-engagement mid-flight
       // does not recall her; the next window re-stages.
-      beginFlight(g, grovePoint.x, grovePoint.z, ctx.playerX, ctx.playerZ, GUIDE_PERCH_HEIGHT_M);
+      beginFlight(g, tp.x, tp.z, ctx.playerX, ctx.playerZ, GUIDE_PERCH_HEIGHT_M);
       g.state = 'departing';
       g.attending = false;
       // Fall through to the flying step below.
@@ -569,8 +626,8 @@ export function stepGuide(dt: number, ctx: GuideStepContext): void {
     }
   }
 
-  const dxG = grovePoint.x - ctx.playerX;
-  const dzG = grovePoint.z - ctx.playerZ;
+  const dxG = tp.x - ctx.playerX;
+  const dzG = tp.z - ctx.playerZ;
   const distGrovePlayer = Math.hypot(dxG, dzG);
 
   if (g.state === 'absent') {
@@ -609,7 +666,7 @@ export function stepGuide(dt: number, ctx: GuideStepContext): void {
         GUIDE_FAR_RADIUS_M,
       );
     if (!perch) return; // no tree to haunt — tries again next frame
-    g.atFinalPerch = Math.hypot(perch.x - grovePoint.x, perch.z - grovePoint.z) <= GUIDE_LEAD_RING_M;
+    g.atFinalPerch = Math.hypot(perch.x - tp.x, perch.z - tp.z) <= GUIDE_LEAD_RING_M;
     // The visible arrival: she starts FLYING, a short
     // way off at cruise height on the line from her to
     // the perch, and the flight step lands + calls her.
@@ -641,7 +698,7 @@ export function stepGuide(dt: number, ctx: GuideStepContext): void {
     const faceHer = distP <= GUIDE_FOLLOW_RANGE_M || g.callT < GUIDE_GAZE_CALL_S;
     inst.heading = faceHer
       ? Math.atan2(ctx.playerX - inst.x, ctx.playerZ - inst.z)
-      : Math.atan2(grovePoint.x - inst.x, grovePoint.z - inst.z);
+      : Math.atan2(tp.x - inst.x, tp.z - inst.z);
     // Wing pose: a flap burst or fidget flick reads as
     // instance.flying to the pose, while the STATE stays
     // perched (she has not left).
@@ -748,8 +805,8 @@ export function stepGuide(dt: number, ctx: GuideStepContext): void {
     // The next hop: toward the Grove, onto a real tree —
     // clamped so the flight ends AT the lead ring, never
     // deep inside it: the final perch is the Grove's edge.
-    const dx = grovePoint.x - inst.x;
-    const dz = grovePoint.z - inst.z;
+    const dx = tp.x - inst.x;
+    const dz = tp.z - inst.z;
     const distG = Math.hypot(dx, dz);
     if (distG <= GUIDE_LEAD_RING_M + GUIDE_PERCH_SNAP_M) {
       g.atFinalPerch = true;
@@ -767,7 +824,7 @@ export function stepGuide(dt: number, ctx: GuideStepContext): void {
     // side of the grove line takes an off-line tree
     // rather than parking her for good.
     const progress = (p: { x: number; z: number } | null): boolean =>
-      p !== null && Math.hypot(p.x - grovePoint.x, p.z - grovePoint.z) < distG - 0.5;
+      p !== null && Math.hypot(p.x - tp.x, p.z - tp.z) < distG - 0.5;
     let perch = ctx.perchNear(hx, hz, GUIDE_PERCH_SNAP_M);
     if (!progress(perch)) perch = null;
     if (!perch) {
@@ -799,7 +856,7 @@ export function stepGuide(dt: number, ctx: GuideStepContext): void {
       }
     }
     if (!perch) return; // truly treeless stretch — waits and calls
-    g.atFinalPerch = Math.hypot(perch.x - grovePoint.x, perch.z - grovePoint.z) <= GUIDE_LEAD_RING_M;
+    g.atFinalPerch = Math.hypot(perch.x - tp.x, perch.z - tp.z) <= GUIDE_LEAD_RING_M;
     beginFlight(g, perch.x, perch.z, ctx.playerX, ctx.playerZ, seatYFor(perch));
     return;
   }

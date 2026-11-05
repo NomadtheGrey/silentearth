@@ -117,6 +117,23 @@ export interface JournalPlaceRow {
   day: number;
 }
 
+/**
+ * One base she can return to (the Returning build):
+ * her last completed sleep, or a house she placed —
+ * Systems' base enumeration, composed by the caller.
+ * Bases stand on the surface by definition, so a row
+ * carries distance + bearing words like a here place
+ * (or a dimension note when she is below).
+ */
+export interface JournalBaseRow {
+  /** The base's id ('base:last-sleep' / 'base:house:<n>'). */
+  id: string;
+  /** The row's name, caller's words ('Last sleep' / 'Placed house'). */
+  name: string;
+  /** Distance + bearing words, or the elsewhere note. */
+  detail: string | null;
+}
+
 export interface JournalPanelProps {
   /** One row per begun mark, caller's order. */
   marks: JournalMarkRow[];
@@ -154,6 +171,25 @@ export interface JournalPanelProps {
   /** Name length cap (the register's, caller's). */
   nameMaxChars?: number;
   /**
+   * Her bases (the Returning build), the caller's
+   * order — the enumeration's order: last sleep
+   * first, then placed houses. Rendered above the
+   * named places in the same Places section, under
+   * the SAME selection (base ids and place ids share
+   * the seat; the namespaces never collide).
+   * Omitted/empty = no base rows.
+   */
+  bases?: JournalBaseRow[];
+  /**
+   * Scry the selected row (a base or a named place)
+   * — the Returning travel door. The panel renders
+   * the door on whichever row is selected; the
+   * caller runs the act (the first base row is the
+   * home destination; every other row travels to
+   * its place) and voices the outcome.
+   */
+  onScryTarget?: () => void;
+  /**
    * The quest log the book carries (dialog audit #4):
    * the caller's mapped rows, rendered below the marks
    * as NESTED independent folds — by ACT, then by
@@ -188,6 +224,8 @@ export function JournalPanel({
   onRenamePlace,
   onUnnamePlace,
   nameMaxChars = 40,
+  bases,
+  onScryTarget,
   quests,
   onMarkQuest,
   onClose,
@@ -434,11 +472,55 @@ export function JournalPanel({
               </div>
             )
           ) : null}
+          {bases && bases.length > 0 ? (
+            <ul className="mb-2 flex flex-col gap-2">
+              {bases.map((row) => {
+                const selected = row.id === selectedPlaceId;
+                return (
+                  <li
+                    key={row.id}
+                    className={
+                      'flex flex-col gap-y-0.5 rounded-xl px-3 py-2 ' +
+                      (selected ? 'bg-white/10' : 'bg-black/20')
+                    }
+                  >
+                    <button
+                      type="button"
+                      aria-pressed={selected}
+                      onClick={() =>
+                        onSelectPlace ? onSelectPlace(row.id) : undefined
+                      }
+                      className="flex flex-wrap items-baseline gap-x-2 text-left"
+                    >
+                      <span className="font-medium">{row.name}</span>
+                      <span className="text-xs text-stone-400">
+                        {row.detail ?? ''}
+                        {selected ? ' · Selected' : ''}
+                      </span>
+                    </button>
+                    {selected && onScryTarget ? (
+                      <span className="mt-1 flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={() => onScryTarget()}
+                          className={btn + t.button}
+                        >
+                          Scry
+                        </button>
+                      </span>
+                    ) : null}
+                  </li>
+                );
+              })}
+            </ul>
+          ) : null}
           {places.length === 0 ? (
-            <p className="text-sm text-stone-300">
-              No places named yet. The names you give will be kept
-              here.
-            </p>
+            bases && bases.length > 0 ? null : (
+              <p className="text-sm text-stone-300">
+                No places named yet. The names you give will be kept
+                here.
+              </p>
+            )
           ) : (
             <ul className="flex flex-col gap-2">
               {places.map((row) => {
@@ -508,8 +590,17 @@ export function JournalPanel({
                         </button>
                       </form>
                     ) : selected &&
-                      (onRenamePlace || onUnnamePlace) ? (
+                      (onRenamePlace || onUnnamePlace || onScryTarget) ? (
                       <span className="mt-1 flex flex-wrap gap-2">
+                        {onScryTarget ? (
+                          <button
+                            type="button"
+                            onClick={() => onScryTarget()}
+                            className={btn + t.button}
+                          >
+                            Scry
+                          </button>
+                        ) : null}
                         {onRenamePlace ? (
                           <button
                             type="button"
