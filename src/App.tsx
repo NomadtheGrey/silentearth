@@ -1786,6 +1786,7 @@ import type { ContextAction } from './ui/types';
 import { TouchControls } from './ui/TouchControls';
 import { LocationChip } from './ui/LocationChip';
 import { ScryButton, FillJarButton } from './ui/ScryButton';
+import { PickupButton } from './ui/PickupButton';
 import { LookButton } from './ui/LookButton';
 import { PausedIndicator } from './ui/PausedIndicator';
 import { Popup } from './ui/Popup';
@@ -2009,10 +2010,19 @@ import {
 } from './systems/stumpy-altar';
 import { deskState, type PlacedDesk as PlacedDeskEntity } from './game/deskState';
 import {
+  pickupDesk,
   placeDesk as grantPlaceDesk,
   seatGrimoire,
   takeGrimoire,
 } from './systems/desk';
+import {
+  workstationState,
+  type PlacedWorkstationBench as PlacedWorkstationEntity,
+} from './game/workstationState';
+import {
+  pickupWorkstation,
+  placeWorkstation as grantPlaceWorkstation,
+} from './systems/workstation';
 import {
   cauldronState,
   type PlacedCauldron as PlacedCauldronEntity,
@@ -2244,6 +2254,7 @@ const PLACEABLE_IDS: ReadonlySet<string> = new Set([
   ITEMS.litTorch,
   ITEMS.altar,
   ITEMS.writingDesk,
+  ITEMS.craftedWorkstation,
   ITEMS.cauldron,
   ITEMS.tent,
   ITEMS.sleepingBag,
@@ -3538,6 +3549,7 @@ export default function App() {
   const [bagNote, setBagNote] = useState<string | null>(null);
   const [altarNote, setAltarNote] = useState<string | null>(null);
   const [deskNote, setDeskNote] = useState<string | null>(null);
+  const [workstationNote, setWorkstationNote] = useState<string | null>(null);
   const [cauldronNote, setCauldronNote] = useState<string | null>(null);
   const [fireNote, setFireNote] = useState<string | null>(null);
   const [dropNote, setDropNote] = useState<string | null>(null);
@@ -3877,12 +3889,19 @@ export default function App() {
   // Placed writing desks (Background singleton) and their
   // projected anchors — the altar pattern minus both the
   // menu and the placed-list state: the chip is label-only
-  // (no desk actions exist yet, no Pick-up invented), so
+  // (the desk's verbs ride its winner + the furniture
+  // pick-up pill, furniture-moves wiring 2026-11-05), so
   // there is no selected-desk state, and no consumer needs
   // a placedDesks list — the anchors loop reads the
   // singleton directly, like the altars loop does.
   const [deskAnchors, setDeskAnchors] = useState<
     { desk: PlacedDeskEntity; x: number; y: number }[]
+  >([]);
+  // Placed crafted workstations (Background singleton):
+  // the desk anchors pattern whole — label-only chip,
+  // the placed list read live from the singleton.
+  const [workstationAnchors, setWorkstationAnchors] = useState<
+    { bench: PlacedWorkstationEntity; x: number; y: number }[]
   >([]);
   const [cauldronAnchors, setCauldronAnchors] = useState<
     { cauldron: PlacedCauldronEntity; x: number; y: number }[]
@@ -4917,6 +4936,7 @@ export default function App() {
           // id-less entries and mints ids). Placed desks
           // survive refresh.
           desks: deskState.snapshot(),
+          craftedWorkstations: workstationState.snapshot(),
           // PLACED-CAULDRON SAVE WIRING: the entity
           // snapshot rides as-is ({hearthId, x, z} —
           // Systems' widened SavedCauldron passthrough);
@@ -5926,6 +5946,14 @@ export default function App() {
       desks.push({ desk, x: anchor.x, y: anchor.y });
     }
     setDeskAnchors(desks);
+    const benches: { bench: PlacedWorkstationEntity; x: number; y: number }[] =
+      [];
+    for (const bench of workstationState.snapshot()) {
+      const anchor = projectAnchor(bench.x, bench.z, 'scatter');
+      if (!anchor) continue;
+      benches.push({ bench, x: anchor.x, y: anchor.y });
+    }
+    setWorkstationAnchors(benches);
     const cauldrons: {
       cauldron: PlacedCauldronEntity;
       x: number;
@@ -6330,6 +6358,23 @@ export default function App() {
         // fires earlier in this block, so riding the
         // desk block's tail is safe. Silent.
         cauldronState.restore(bootSaved.cauldrons ?? []);
+        // PLACED-WORKSTATION SAVE WIRING (the fix's shell
+        // seat, 2026-11-05 — the desk pattern whole):
+        // restore BEFORE renderer construction, silent,
+        // the id-when-present shaping (SavedCraftedWork-
+        // station.id is optional, the entity's required —
+        // restore owns that gap, minting ids for id-less
+        // entries and keeping provided ones).
+        workstationState.restore(
+          (bootSaved.craftedWorkstations ?? []).map((bench) => ({
+            x: bench.x,
+            z: bench.z,
+            rotY: bench.rotY ?? 0,
+            ...(typeof bench.id === 'string' && bench.id !== ''
+              ? { id: bench.id }
+              : {}),
+          })),
+        );
         // Jar patches restore (the jar build's rider —
         // boot never called it; a poured patch died at
         // reload). Silent; unknown kinds drop inside.
@@ -7057,6 +7102,12 @@ export default function App() {
     const refreshDesks = () => {
       recomputeAnchors();
     };
+    // Placed-workstation subscriptions: the desk pattern
+    // (anchors re-project from the Background singleton
+    // on every bench event).
+    const refreshWorkstations = () => {
+      recomputeAnchors();
+    };
     // Placed-cauldron subscriptions: anchors re-project
     // from the Background singleton on every cauldron
     // event, desk pattern.
@@ -7242,6 +7293,14 @@ export default function App() {
     const offAltarRemoved = bus.on('altar:removed', refreshAltars);
     const offDeskPlaced = bus.on('desk:placed', refreshDesks);
     const offDeskRemoved = bus.on('desk:removed', refreshDesks);
+    const offWorkstationPlaced = bus.on(
+      'workstation:placed',
+      refreshWorkstations,
+    );
+    const offWorkstationRemoved = bus.on(
+      'workstation:removed',
+      refreshWorkstations,
+    );
     const offCauldronPlaced = bus.on('cauldron:placed', refreshCauldrons);
     const offCauldronRemoved = bus.on('cauldron:removed', refreshCauldrons);
     // Ritual subscriptions: the panel re-renders on every
@@ -7493,6 +7552,8 @@ export default function App() {
       offAltarRemoved();
       offDeskPlaced();
       offDeskRemoved();
+      offWorkstationPlaced();
+      offWorkstationRemoved();
       offCauldronPlaced();
       offCauldronRemoved();
       offRitualStaged();
@@ -8790,6 +8851,135 @@ export default function App() {
     refreshInventory();
     saveNow();
     setDeskNote('Placed a writing desk.');
+  };
+
+  // Crafted-workstation placement (the fix's door,
+  // 2026-11-05): the desk twin whole — Systems'
+  // placeWorkstation grant consumes one carried bench
+  // (failure touches nothing and the reason shows),
+  // then Background's workstationState.placeWorkstation
+  // seats the entity at the crosshair aim (the desk's
+  // crosshair law). No hunger gate (a move, like
+  // drop/pickup). Panel stays open, workstationNote
+  // carries the result.
+  const handlePlaceWorkstation = () => {
+    const player = playerRef.current;
+    if (!player) return;
+    const target = aimedPlacementPoint();
+    if (target === null && inventory.count(ITEMS.craftedWorkstation) >= 1) {
+      setWorkstationNote('Nowhere to set it down.');
+      return;
+    }
+    const outcome = grantPlaceWorkstation(
+      inventory,
+      target?.x ?? player.x,
+      target?.z ?? player.z,
+    );
+    // Equality check, not truthiness (the desk note).
+    if (outcome.placed === false) {
+      setWorkstationNote(outcome.reason);
+      return;
+    }
+    workstationState.placeWorkstation(
+      outcome.workstation.x,
+      outcome.workstation.z,
+      playerRef.current?.yaw ?? 0,
+    );
+    refreshInventory();
+    saveNow();
+    setWorkstationNote('Placed a crafted workstation.');
+  };
+
+  // THE FACED FURNITURE (furniture-moves wiring,
+  // 2026-11-05): the nearest placed bench or writing
+  // desk she faces within reach — the winner cone law
+  // (distance < 1 is faced outright; else the forward
+  // dot beats SQRT1_2), HARVEST_RANGE cap, nearest
+  // faced wins across both kinds. Read live from the
+  // two entity snapshots (the loom idiom — no shell
+  // mirror). One derivation, two consumers: the
+  // station feed's faced-bench branch (render) and
+  // the pick-up pill (render + the press re-derives).
+  const facedFurniture = (): {
+    kind: 'bench' | 'desk';
+    id: string;
+    pieceName: string;
+  } | null => {
+    const player = playerRef.current;
+    if (!player) return null;
+    const forwardX = Math.sin(player.facing);
+    const forwardZ = Math.cos(player.facing);
+    let best: {
+      kind: 'bench' | 'desk';
+      id: string;
+      pieceName: string;
+    } | null = null;
+    let bestDistance = Infinity;
+    const consider = (
+      kind: 'bench' | 'desk',
+      id: string,
+      pieceName: string,
+      x: number,
+      z: number,
+    ) => {
+      const dx = x - player.x;
+      const dz = z - player.z;
+      const distance = Math.hypot(dx, dz);
+      if (distance > HARVEST_RANGE || distance >= bestDistance) return;
+      const faced =
+        distance < 1 ||
+        (dx * forwardX + dz * forwardZ) / distance > Math.SQRT1_2;
+      if (!faced) return;
+      best = { kind, id, pieceName };
+      bestDistance = distance;
+    };
+    for (const bench of workstationState.snapshot()) {
+      consider('bench', bench.id, 'Crafted Workstation', bench.x, bench.z);
+    }
+    for (const desk of deskState.snapshot()) {
+      consider('desk', desk.id, 'Writing Desk', desk.x, desk.z);
+    }
+    return best;
+  };
+
+  // FURNITURE PICK-UP (Adam's ruling, 2026-11-05 —
+  // the rearrangement verb): the grants decide, the
+  // shell removes the placed record ONLY on success.
+  // Bench: Systems' pickupWorkstation (the tent
+  // Take-down idiom) grants 1 when the pack can hold
+  // the bench's 4 lb; a 0 is the catch law and the
+  // door voices it, the bench standing. Desk:
+  // pickupDesk against the faced desk's own record —
+  // its refusals (the grimoire guard, the catch law)
+  // arrive as words and show verbatim. A world act —
+  // the feedback line voices it, no panel is open.
+  const handlePickupFurniture = () => {
+    const target = facedFurniture();
+    if (!target) return;
+    if (target.kind === 'bench') {
+      const outcome = pickupWorkstation(inventory);
+      if (outcome.granted !== 1) {
+        showFeedback('No room in the pack for it.', 'blocked');
+        return;
+      }
+      workstationState.removeWorkstation(target.id);
+      refreshInventory();
+      saveNow();
+      showFeedback('Picked up the crafted workstation.', 'gain');
+      return;
+    }
+    const desk = deskState.get(target.id);
+    if (!desk) return;
+    const outcome = pickupDesk(inventory, desk);
+    // Equality check, not truthiness (the desk note).
+    if (outcome.taken === false) {
+      showFeedback(outcome.reason, 'blocked');
+      return;
+    }
+    deskState.removeDesk(target.id);
+    refreshInventory();
+    saveNow();
+    showFeedback('Picked up the writing desk.', 'gain');
   };
 
   // Cauldron placement (placed-cauldron build, 2026-10-30):
@@ -10163,6 +10353,13 @@ export default function App() {
     // at her feet via the grant + entity pair above.
     if (itemId === ITEMS.writingDesk) {
       handlePlaceDesk();
+      return;
+    }
+    // Placed crafted workstations never enter the
+    // preview flow either — the desk twin (the fix's
+    // door, 2026-11-05).
+    if (itemId === ITEMS.craftedWorkstation) {
+      handlePlaceWorkstation();
       return;
     }
     // Placed cauldrons never enter the preview flow
@@ -14967,6 +15164,10 @@ export default function App() {
   const useWinner = computeUseWinner();
   useWinnerRef.current = useWinner;
 
+  // The faced furniture, derived once per render for
+  // the feed branch below + the pick-up pill's seat
+  // (the press re-derives — see handlePickupFurniture).
+  const furnitureFacedNow = facedFurniture();
   const availableStations: CraftingStation[] = [];
   // FACED-TARGET STATION FEED (Adam, 2026-10-30, final
   // shape — radius presence is retired as the station
@@ -14981,6 +15182,12 @@ export default function App() {
   //   the winner as kind 'site' with a 'stump:<x>,<z>'
   //   siteId (altar sites share the kind and feed
   //   nothing — an altar is not a station).
+  // - a faced PLACED BENCH feeds 'workstation' too
+  //   (the fix, 2026-11-05 — the branch below): the
+  //   free-standing crafted workstation, derived off
+  //   workstationState.snapshot() by facedFurniture
+  //   (the feed keeps the ranges, the entity keeps
+  //   the facts — Background's published split).
   // - a faced placed fire feeds 'fire' when lit (any
   //   type — a faced lit kiln is still a lit fire for
   //   charcoal), and 'kiln' when that fire is a lit
@@ -15006,6 +15213,22 @@ export default function App() {
   if (
     useWinner?.kind === 'site' &&
     useWinner.siteId.startsWith('stump:')
+  ) {
+    availableStations.push('workstation');
+  }
+  // - a faced PLACED BENCH feeds 'workstation' too
+  //   (the fix, 2026-11-05): the free-standing crafted
+  //   workstation supplies the station where no stump
+  //   stands — Background's entity keeps the facts
+  //   (workstationState.snapshot), this branch keeps
+  //   the facing law (facedFurniture above). The note
+  //   mapping below names the kind that fed it.
+  const workstationFromBench =
+    furnitureFacedNow?.kind === 'bench' &&
+    !availableStations.includes('workstation');
+  if (
+    furnitureFacedNow?.kind === 'bench' &&
+    !availableStations.includes('workstation')
   ) {
     availableStations.push('workstation');
   }
@@ -15040,16 +15263,21 @@ export default function App() {
   // Header display names (stump-header fix, Adam-approved
   // 2026-10-28): ONLY the displayed string maps — the
   // 'workstation' context keeps its id in availableStations
-  // for the canCraft checks below. Workstation presence
-  // comes solely from stumps today, so "tree stump" is
-  // truthful now; when presence learns kinds later, this
-  // mapping follows the kind.
+  // for the canCraft checks below. Presence learned kinds
+  // with the placed bench (the fix, 2026-11-05): the
+  // mapping follows the kind that fed it — a stump reads
+  // "tree stump", the free-standing bench reads
+  // "crafted workstation".
   const stationNote =
     availableStations.length === 0
       ? 'No station nearby'
       : `Nearby station${availableStations.length > 1 ? 's' : ''}: ${availableStations
           .map((station) =>
-            station === 'workstation' ? 'tree stump' : station,
+            station === 'workstation'
+              ? workstationFromBench
+                ? 'crafted workstation'
+                : 'tree stump'
+              : station,
           )
           .join(', ')}`;
 
@@ -16235,6 +16463,13 @@ export default function App() {
           <Fragment key={desk.id}>
             <WorldAnchor x={x} y={y} interactive>
               <AltarChip label="Writing Desk" />
+            </WorldAnchor>
+          </Fragment>
+        ))}
+        {workstationAnchors.map(({ bench, x, y }) => (
+          <Fragment key={bench.id}>
+            <WorldAnchor x={x} y={y} interactive>
+              <AltarChip label="Crafted Workstation" />
             </WorldAnchor>
           </Fragment>
         ))}
@@ -17621,6 +17856,11 @@ export default function App() {
             {deskNote}
           </p>
         ) : null}
+        {workstationNote ? (
+          <p className="rounded bg-black/45 px-2 py-1 text-xs text-stone-200">
+            {workstationNote}
+          </p>
+        ) : null}
         {cauldronNote ? (
           <p className="rounded bg-black/45 px-2 py-1 text-xs text-stone-200">
             {cauldronNote}
@@ -18518,7 +18758,7 @@ export default function App() {
         While a placement is armed, the touch placement bar
         (next block) takes the bottom-center family and Scry
         hides — one actor in the seat at a time. */}
-      {(scryVisible || fillOffer) &&
+      {(scryVisible || fillOffer || furnitureFacedNow !== null) &&
       placement === null &&
       !dumpArmed &&
       !applyArmed &&
@@ -18536,6 +18776,12 @@ export default function App() {
           ) : null}
           {fillOffer ? (
             <FillJarButton onPress={runFillJar} showKeyHint={!isTouch} />
+          ) : null}
+          {furnitureFacedNow ? (
+            <PickupButton
+              pieceName={furnitureFacedNow.pieceName}
+              onPress={handlePickupFurniture}
+            />
           ) : null}
         </div>
       ) : null}

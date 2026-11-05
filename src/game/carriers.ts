@@ -15,15 +15,17 @@
  *                the carrier's own stable key, never
  *                rolled, so the same stone is the same
  *                fragment in every telling.
- *   mark         Systems' mark id. Class-bound here:
- *                the farmhouse great stone + the village
- *                hearth teach HOME; the grove stone and
+ *   mark         Systems' mark id. The grove stone and
  *                the cave circles teach CIRCLE; the
  *                homestead great stones teach TRAVEL.
- *                (The village binding is lane-decided —
- *                a home that was, beside the home that
- *                stands; the pin pass can re-bind it,
- *                it is one field.)
+ *                THE HOME CARRIERS DEAL (Adam, 2026-11-05):
+ *                the farmhouse great stone, every village
+ *                hearthstone, and the burnt village no
+ *                longer mint the family 'home' tally —
+ *                each deals ONE Home-pillar mark
+ *                (returning / hedge / hearthhome / naming)
+ *                by its own hash; see homeDeal.ts for the
+ *                table and the stream law.
  *   completeness the legible fraction, 0..1, seeded per
  *                carrier. Class bands (DRAFT): standing
  *                stones read high (0.7–1.0); the cave
@@ -46,8 +48,9 @@
  *
  * WHERE THE FACTS LIVE: plural instances carry the
  * field on their record beside fragmentSpot (homesteads
- * mint it in their derivation; cave instances resolve
- * it from their layout here). The singular sites ARE
+ * and villages mint it in their derivation; cave
+ * instances resolve it from their layout here). The
+ * singular sites ARE
  * their records — their carriers resolve here from the
  * standing site facts (the farmhouse's hearthStone, the
  * village's hearthSpot, the grove's carved stone), no
@@ -60,6 +63,8 @@ import type { BiomeWeights } from '../types';
 import { farmhouseSite, groveSite, villageSite } from './sites';
 import { caveInstancesInRect, caveLayoutForKey } from './caves';
 import { homesteadInstancesInRect } from './homesteads';
+import { villageInstancesInRect } from './villages';
+import { dealHomeMark } from './homeDeal';
 
 /** The three facts a faced carrier hands the shell. */
 export interface FragmentCarrier {
@@ -92,17 +97,17 @@ export function mintCarrier(worldSeed: string, carrierKey: string, mark: string,
   };
 }
 
-/** The farmhouse great stone — the Home fragment (sites' own naming). */
+/** The farmhouse great stone — a Home carrier; its mark is dealt (homeDeal.ts). */
 export function farmhouseCarrier(
   worldSeed: string,
   spawn: { x: number; z: number },
   weightsAtPos: (x: number, z: number) => BiomeWeights,
 ): CarrierHere {
   const farm = farmhouseSite(worldSeed, spawn, weightsAtPos);
-  return { ...mintCarrier(worldSeed, 'farmhouse', 'home', CARRIER_BAND_STONE), x: farm.hearthStone.x, z: farm.hearthStone.z };
+  return { ...mintCarrier(worldSeed, 'farmhouse', dealHomeMark(worldSeed, 'farmhouse'), CARRIER_BAND_STONE), x: farm.hearthStone.x, z: farm.hearthStone.z };
 }
 
-/** The burnt village's hearth stone — a home that was. */
+/** The burnt village's hearth stone — a home that was; its mark is dealt (homeDeal.ts). */
 export function villageCarrier(
   worldSeed: string,
   spawn: { x: number; z: number },
@@ -110,7 +115,7 @@ export function villageCarrier(
 ): CarrierHere {
   const village = villageSite(worldSeed, spawn, weightsAtPos);
   const spot = village.hearthHouse.hearthSpot;
-  return { ...mintCarrier(worldSeed, 'village', 'home', CARRIER_BAND_BURNT), x: spot.x, z: spot.z };
+  return { ...mintCarrier(worldSeed, 'village', dealHomeMark(worldSeed, 'village'), CARRIER_BAND_BURNT), x: spot.x, z: spot.z };
 }
 
 /** The Grove's carved stone — a Circle fragment, standing. */
@@ -167,6 +172,13 @@ export function fragmentCarriersHere(
     if (inst.fragmentCarrier && inst.fragmentSpot) {
       near({ ...inst.fragmentCarrier, x: inst.fragmentSpot.x, z: inst.fragmentSpot.z });
     }
+  }
+  // The village family's hearthstones (DEV ruling,
+  // 2026-11-05: the enumeration belongs with the deal —
+  // a dealt fragment no door can reach is not a deal).
+  // Every instance mints its carrier, so no guard.
+  for (const inst of villageInstancesInRect(worldSeed, spawn, weightsAtPos, rect)) {
+    near({ ...inst.fragmentCarrier, x: inst.fragmentSpot.x, z: inst.fragmentSpot.z });
   }
   out.sort((a, b) => Math.hypot(a.x - x, a.z - z) - Math.hypot(b.x - x, b.z - z));
   return out;

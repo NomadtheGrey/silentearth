@@ -364,6 +364,24 @@ export interface EventMap {
    */
   'desk:grimoire': { id: string; seated: boolean };
   /**
+   * A crafted workstation was placed
+   * (workstationState.placeWorkstation, the fix
+   * 2026-11-05 — the bench's entity half; Systems'
+   * placeWorkstation grant consumes the carried bench
+   * first). Free placement, cost-free engine primitive.
+   * Renderer rebuilds the placed group from this.
+   */
+  'workstation:placed': { id: string; x: number; z: number; rotY: number };
+  /**
+   * A placed workstation was removed
+   * (workstationState.removeWorkstation) — the entity
+   * half of Adam's furniture ruling (2026-11-05): a
+   * placed bench can be picked up and moved; Systems'
+   * pickup grant decides, the shell removes on its
+   * success. Renderer rebuilds the placed group.
+   */
+  'workstation:removed': { id: string };
+  /**
    * A cauldron was placed on a hearth
    * (cauldronState.placeCauldron, Adam 2026-10-30 — the
    * cauldron is its OWN target, distinct from the hearth

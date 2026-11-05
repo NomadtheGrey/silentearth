@@ -29,9 +29,15 @@
 // build. Placing a desk is not crafting it (crafting
 // stays hunger-gated through executeCraft).
 //
-// NO PICKUP (altar precedent, flagged follow-up): only
-// the place direction is built. Whether she can ever
-// move / remove a placed desk is Adam's word later.
+// PICKUP (Adam's ruling, 2026-11-05 — the desk moves
+// too: "Haven't met the woman yet who doesn't like to
+// rearrange furniture"): pickupDesk below, the bench's
+// mirror — with one guard the bench doesn't need: a
+// desk with ANYTHING resting on it refuses until it
+// is cleared (Adam, 2026-11-05: "let's require the
+// book and candle and etc. be removed from the desk
+// first") — removing the record would strand whatever
+// rests there, the one grimoire above all.
 // MULTIPLE desks are legitimate (crafting.ts leaves
 // the desk unlisted: a second camp legitimately
 // wants a second desk).
@@ -84,6 +90,45 @@ export function placeDesk(
   return { placed: true, desk: { item: ITEMS.writingDesk, x, z } };
 }
 
+/** Pickup outcome. `granted` is 1 on success. */
+export type PickupDeskOutcome =
+  | { taken: true; granted: 1 }
+  | { taken: false; reason: string };
+
+/**
+ * Pick a placed desk back up into the pack (Adam's
+ * ruling, 2026-11-05 — the desk moves too). The shell
+ * removes the placed record ONLY on success. Refuses,
+ * touching nothing, while ANYTHING rests on the desk
+ * (Adam's widening, same day: the book, the candle,
+ * whatever it can carry — the refusal names what is
+ * in the way, in plain words) and when the pack
+ * cannot hold the desk's 4 lb (the standing catch
+ * law: the desk stays standing). A new charge the
+ * desk learns to hold joins the guard with one line
+ * in the resting list below.
+ */
+export function pickupDesk(
+  inventory: PersonalInventory,
+  desk: DeskSeat,
+): PickupDeskOutcome {
+  const resting: string[] = [];
+  if (desk.grimoire === true) resting.push('the grimoire');
+  if (desk.candle === true) resting.push('the candle');
+  if (resting.length > 0) {
+    const what =
+      resting.length === 1
+        ? resting[0]
+        : `${resting.slice(0, -1).join(', ')} and ${resting[resting.length - 1]}`;
+    return { taken: false, reason: `Take ${what} from it first.` };
+  }
+  const grant = inventory.addPartial(ITEMS.writingDesk, 1);
+  if (grant.granted <= 0) {
+    return { taken: false, reason: 'No room in the pack for it.' };
+  }
+  return { taken: true, granted: 1 };
+}
+
 // ---------------------------------------------------------------------------
 // The seat (the grimoire-on-desk design, accepted
 // 2026-11-01: UI's E door — 'Place grimoire' on a bare
@@ -107,6 +152,15 @@ export function placeDesk(
 /** The minimal desk record the seat grants read + write. */
 export interface DeskSeat {
   grimoire?: boolean;
+  /**
+   * True while a candle rests on this desk (the desk's
+   * second charge, per its purpose pin). The candle
+   * seat itself is not built yet — until it lands the
+   * flag is simply absent (nothing resting); the
+   * pickup guard below already reads it, so the guard
+   * covers the candle from the day the seat exists.
+   */
+  candle?: boolean;
 }
 
 /** Seat outcome. Failure touches nothing. */
