@@ -4381,6 +4381,11 @@ export class WorldRenderer {
       (sprite.material as THREE.SpriteMaterial).needsUpdate = true;
       entry.key = key;
     }
+    // A group that rebuilds its children detaches the
+    // sprite without touching this cache (the cat's pose
+    // change clears its group): re-seat it, or the
+    // marker would hide forever on a detached sprite.
+    if (sprite.parent !== group) group.add(sprite);
     const fade =
       dist <= TRUST_MARKER_FADE_START_M
         ? 1
@@ -4639,6 +4644,13 @@ export class WorldRenderer {
           this.catGlowLight = null;
         }
         this.poseAnimal(c.instance, this.catGroup);
+        // The cat's trust marker (2026-11-05, Adam's live
+        // report: fed the cat, no dot): the cat rides
+        // neither the chunk loop nor the companion loop,
+        // so its marker reconciles here, beside its pose —
+        // its facts resolve through the same seam (its
+        // record is 'cat:hearth').
+        this.updateTrustMarker(c.instance, this.catGroup);
       }
     }
     // The raven guide (2026-10-31): stepped after the cat,
