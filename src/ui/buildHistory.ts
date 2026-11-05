@@ -43,6 +43,14 @@ export interface BuildRecord {
 
 const ALL_RECORDS: BuildRecord[] = [
   {
+    merge: 'Merge #83',
+    pr: 126,
+    sha: '809f8dd',
+    date: '2026-11-05',
+    what: 'THE HOTFIX BUNDLE — the Waking rite now completes into the creature it raises (a bone’s design key no longer stands in for the creature kind), and a save carrying the old poisoned record heals on load; with it, the furniture’s verbs move onto the furniture — bench, desk, loom, and hearth each carry their work and their Pick up on their own menus, the crafting panel offering the same at a faced piece — the traps take their own category, and the search field stands visible in the panels.',
+    why: 'Adam’s altar stood ready and the Waking still failed her: the rite was completing into the bone’s design key instead of the creature it names, and the record it poisoned travelled in the save. The hotfix leads; the bundle behind it is his furniture ruling finished — a placed thing’s verbs live on the thing itself, the hearth included, its fire riding the move — with the traps’ own category and the panels’ search field riding as they verified.',
+  },
+  {
     merge: 'Merge #82',
     pr: 125,
     sha: '810d07c',
