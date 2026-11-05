@@ -24,6 +24,7 @@ import { caveInstancesInRect } from './caves';
 import { homesteadInstancesInRect } from './homesteads';
 import { farmhouseInstancesInRect } from './farmhouses';
 import { villageInstancesInRect } from './villages';
+import { groveInstancesInRect } from './groves';
 import type { BiomeWeights, ChunkData, ScatterKind, ScatterObject } from '../types';
 
 export interface WorldGen {
@@ -467,6 +468,7 @@ export function createWorldGen(seed: string): WorldGen {
     ...homesteadInstancesInRect(seed, spawnOnce(), weightsAtPos, rect),
     ...farmhouseInstancesInRect(seed, spawnOnce(), weightsAtPos, rect),
     ...villageInstancesInRect(seed, spawnOnce(), weightsAtPos, rect),
+    ...groveInstancesInRect(seed, spawnOnce(), weightsAtPos, rect),
   ];
 
   const getSites = (): SiteFootprint[] => {
