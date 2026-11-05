@@ -886,6 +886,7 @@ export type ItemCategory =
   | 'Tools'
   | 'Gear'
   | 'Structures & Stations'
+  | 'Traps'
   | 'Paper & Books'
   | 'Bones'
   | 'Carcasses'
@@ -900,6 +901,7 @@ export const ITEM_CATEGORY_ORDER: readonly ItemCategory[] = [
   'Tools',
   'Gear',
   'Structures & Stations',
+  'Traps',
   'Paper & Books',
   'Bones',
   'Carcasses',
@@ -1013,11 +1015,11 @@ export const ITEM_CATEGORIES: Readonly<Record<string, ItemCategory>> = {
   'lit-torch': 'Structures & Stations',
   'lit-hearth': 'Structures & Stations',
   'old-stump': 'Structures & Stations',
-  snare: 'Structures & Stations',
-  'fish-weir-trap': 'Structures & Stations',
-  'pot-trap': 'Structures & Stations',
-  pitfall: 'Structures & Stations',
-  deadfall: 'Structures & Stations',
+  snare: 'Traps',
+  'fish-weir-trap': 'Traps',
+  'pot-trap': 'Traps',
+  pitfall: 'Traps',
+  deadfall: 'Traps',
   // Paper & Books — the paper chain and its books.
   'plant-pulp': 'Paper & Books',
   'pressed-sheets': 'Paper & Books',
