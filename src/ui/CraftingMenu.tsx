@@ -121,6 +121,16 @@ export interface CraftingMenuProps {
   sections?: CraftingMenuSection[];
   /** Caller-supplied nearby-stations line, e.g. "Nearby stations: workstation, loom". */
   stationNote?: string;
+  /**
+   * The faced station's Pick up door (the furniture-
+   * verbs build): when the panel stands open at a
+   * faced bench / desk / loom, that piece's pick-up
+   * rides in the panel too — the panel IS the
+   * station's interface (K parity with its E menu).
+   * The caller names the piece and runs the one act;
+   * omitted/null = no door.
+   */
+  pickupDoor?: { label: string; onPickup: () => void } | null;
   /** Id of the selected recipe, if any. Undefined = nothing selected. */
   selectedRecipeId?: string;
   /** Called when the player picks a recipe. Optional. */
@@ -154,6 +164,7 @@ export function CraftingMenu({
   recipes,
   sections,
   stationNote,
+  pickupDoor,
   selectedRecipeId,
   onSelectRecipe,
   onCraft,
@@ -369,6 +380,18 @@ export function CraftingMenu({
 
       {stationNote ? (
         <p className={'mb-2 text-sm ' + t.muted}>{stationNote}</p>
+      ) : null}
+
+      {pickupDoor ? (
+        <div className="mb-2">
+          <button
+            type="button"
+            onClick={pickupDoor.onPickup}
+            className={craftBtn}
+          >
+            {pickupDoor.label}
+          </button>
+        </div>
       ) : null}
 
       {/* Search field + the 'Craftable here' filter share
