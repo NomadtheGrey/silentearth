@@ -14165,11 +14165,15 @@ export default function App() {
   // teaching beat (a dialog, not a feed line — the
   // moment is the lesson); the threshold-reaching copy
   // adds its completion line to the feed. All lines
-  // DRAFT. hasJournal reads the journal ITSELF (the
-  // build's standing reading of Systems' gate, flagged
-  // for Adam's pin pass: the grimoire mirrors the
-  // journal by the linked-books law but is not the
-  // carried book).
+  // DRAFT. THE GATE IS THE JOURNAL ALONE (Adam,
+  // 2026-11-05 — settled after a same-day two-book
+  // ruling was countermanded on his reframing: the
+  // grimoire LIVES ON ITS DESK, too heavy to field-
+  // carry by design; the journal LINKS to it, so in
+  // the field the journal does — hasJournal reads the
+  // carried journal itself, and the no-journal refusal
+  // speaks the reason in Adam's draft voice: 'You
+  // have no journal to record it in.').
   const handleTranscribe = (winner: {
     fragmentId: string;
     mark: string;
@@ -14186,7 +14190,7 @@ export default function App() {
     );
     if (result.ok === false) {
       if (result.code === 'no-journal') {
-        showFeedback('Wish I had a journal...', 'blocked');
+        showFeedback('You have no journal to record it in.', 'blocked');
       } else {
         showFeedback('Already in your journal.', 'info');
       }
