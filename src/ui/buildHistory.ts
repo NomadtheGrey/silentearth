@@ -43,6 +43,14 @@ export interface BuildRecord {
 
 const ALL_RECORDS: BuildRecord[] = [
   {
+    merge: 'Merge #86',
+    pr: 129,
+    sha: '6ad3c3c',
+    date: '2026-11-06',
+    what: 'HEARTHHOME — the third Home mark can be laid: at a home of hers, or on a station’s ground, ‘Lay the HearthHome seal’ stands in the place’s own menu, and a sealed place grades her shelter a step better (perfect at the second tier) and reads a lit fire inside the seal as the place’s hearth, warming the whole footprint. Around it: the drying law’s fall now happens in the scene — the rain’s fraction is composed from placed roofs and found ones alike, so a hut or a farmhouse roof holds her dry as the law was written; every menu row prices itself in the open now (the upgrade row’s cost stands where she can read it); and the wild Speak’s refusal names the road — ‘You do not know its true name — a Waking speaks it.’ The seal’s teeth are plumbed in this merge — the renderer’s seat and the feral refusal — and go live when the shell seats its provider in the next: until then the seal binds no beast, by Adam’s call, told to him plainly.',
+    why: 'Adam’s sequence kept — Returning, Hedge, HearthHome: the pillar’s third mark stands as a door she can use, its shelter and warmth live from the first laying. The rain composition completes the amended drying law in play, not just in the facts. The refusal’s seating follows in #87 as its own small landing, so the teeth arrive proven at a sealed home rather than merely plumbed.',
+  },
+  {
     merge: 'Merge #85',
     pr: 128,
     sha: '95153c7',
