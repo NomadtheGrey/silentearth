@@ -43,6 +43,14 @@ export interface BuildRecord {
 
 const ALL_RECORDS: BuildRecord[] = [
   {
+    merge: 'Merge #91',
+    pr: 134,
+    sha: '8149b33',
+    date: '2026-11-06',
+    what: 'HER EYES AIM HER HANDS — in first person, looking now turns the facing the interaction law tests, as the behind camera already did. The faced law had exactly three writers for her direction, and looking was not one of them in first person: her facing was wherever her feet last travelled. Standing still and turning onto a target — a plant, a stone, a door — now reads the way walking toward it always did; overhead view is untouched, and her feet still rule while she moves.',
+    why: 'Adam’s cave centre test convicted it: he stood in the middle of the entry shaft’s light on a live build and turned a full circle, and no exit ever stood — the game was testing the direction of his last step, not the direction of his eyes. His doors were freed from aim entirely in #90; this merge is the same honesty for everything else she faces. Fourteen suites of the faced law and a turn-in-place drive on a Fallen Log (step past it, turn back with the camera alone, and Harvest stands) stand behind it.',
+  },
+  {
     merge: 'Merge #90',
     pr: 133,
     sha: '61483d8',
