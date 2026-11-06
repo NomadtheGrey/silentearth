@@ -43,6 +43,14 @@ export interface BuildRecord {
 
 const ALL_RECORDS: BuildRecord[] = [
   {
+    merge: 'Merge #90',
+    pr: 133,
+    sha: '61483d8',
+    date: '2026-11-06',
+    what: 'THE DOORS, COMPLETED (#90 completes #89) — #89 gave the way back its reach; this merge frees it from aim. The cave’s three doors — EXIT at the entry shaft, CLIMB on the layer below, GO DEEPER at the shaft mouth — are zone acts now: inside a door’s circle the offer stands at any facing and outranks whatever else her hands were considering, and where two doors share a room the nearer holds (the way out keeps ties against the way down). A door is not aimed at; she stands in it, and it stands for her.',
+    why: 'Adam’s ruling, in his words: the direction shouldn’t have anything to do with the exit — the pill should appear wherever she is in that circle — and the same goes for Go deeper, and every door of that species. #89’s cone had still been reading the direction of her last step, so a player who walked into the light and turned in place was refused by a door she was standing in. The doors now ask one question only: is she here?',
+  },
+  {
     merge: 'Merge #89',
     pr: 132,
     sha: '375899b',
