@@ -332,11 +332,18 @@ export function hearthhomeFireWarmth(
 }
 
 /**
- * THE RECOVERY RATE (T2): inside a seal, sleep and
- * companion recovery run at HEARTHHOME_RECOVERY_
- * MULTIPLIER (DRAFT); anywhere else, 1. The sleep
- * tick and the companion healing consult this read;
- * who counts as inside is the point's seal.
+ * THE RECOVERY RATE (T2): inside a seal, recovery
+ * runs at HEARTHHOME_RECOVERY_MULTIPLIER (DRAFT);
+ * anywhere else, 1. SEATED + UNCONSUMED, flagged
+ * (DEV's consumer question, 2026-11-06): no rate
+ * seat exists today to multiply — the witch's
+ * recovery is injury.ts's DISCRETE ease() (a stage
+ * per full sleep, not a rate), and companion
+ * mending lives creature-side. This read is the
+ * priced fact in the SALVE_MEND_MULTIPLIER shape:
+ * it stands ready for the creature-side healing
+ * work to consult; nothing consumes it yet, and no
+ * copy anywhere should claim otherwise.
  */
 export function hearthhomeRecoveryMultiplier(
   state: HearthHomeState,
