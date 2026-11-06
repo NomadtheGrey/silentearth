@@ -176,7 +176,11 @@ export function ContextMenu({
                         </span>
                       ) : null}
                     </span>
-                    {action.hint ? (
+                    {action.countsText ? (
+                      <span className={'text-xs ' + t.muted}>
+                        {action.countsText}
+                      </span>
+                    ) : action.hint ? (
                       <span className={t.muted}>{action.hint}</span>
                     ) : null}
                   </span>
