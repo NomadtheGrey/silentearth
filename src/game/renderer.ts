@@ -91,7 +91,7 @@ import { jarPatchState, MUD_PATCH_COLOR, PATCH_R_M, WATER_PATCH_COLOR } from './
 import { stumpState } from './stumpState';
 import type { TrapType } from './traps';
 import { pauseState } from './pause';
-import { SkyRig } from './sky';
+import { SkyRig, cyclePhase } from './sky';
 import type { SkySnapshot } from './sky';
 import { SEASON_START_MONTH, dayFraction, seasonalWeatherAt } from './weather';
 import { createBiomeTexture, TEXTURE_REPEAT } from './terrain';
@@ -1824,21 +1824,30 @@ export class WorldRenderer {
     return t >= f - w && t <= f;
   }
 
-  /** The dusk band alone (the guide's second window; the bat exodus's pour). */
+  /**
+   * The dusk band (the bat exodus's pour). THE EXODUS
+   * READS THE SKY'S OWN TWILIGHT (Adam's ruling,
+   * 2026-11-06): the same cyclePhase dawn/dusk band the
+   * rites use — TWILIGHT_DEG 16, one real minute at the
+   * September default — not a private cycleT window.
+   * The band is elevation-defined, so the SEASONAL
+   * BREATH IS INHERITED DELIBERATELY: June's dusk pour
+   * runs shorter, December's longer, exactly as the
+   * rites' windows breathe. (The guide's window above
+   * keeps its own read — Adam has not ruled it onto the
+   * band, and its re-cut carries its windows over.)
+   */
   private duskOpen(): boolean {
     const sky = this.sky;
     if (!sky) return false;
-    const t = sky.cycleT;
-    const w = 2 / 24;
-    const f = dayFraction(this.liveMonth());
-    return t >= f - w && t <= f;
+    return cyclePhase(sky.cycleT, this.liveMonth()) === 'dusk';
   }
 
-  /** The dawn band (the guide's first window; the exodus's return). */
+  /** The dawn band (the exodus's return) — the same twilight read as duskOpen. */
   private dawnOpen(): boolean {
     const sky = this.sky;
     if (!sky) return false;
-    return sky.cycleT <= 2 / 24;
+    return cyclePhase(sky.cycleT, this.liveMonth()) === 'dawn';
   }
 
   /**
