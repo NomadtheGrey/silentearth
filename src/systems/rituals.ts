@@ -101,12 +101,15 @@
 //   the stump's key — Background's call); staging keys on
 //   (siteKey, boneKind).
 // - Dawn/dusk windows LANDED in the sky model (Fill-in
-//   d7196c7: TWILIGHT_DEG 8° band, CyclePhase, cyclePhase
+//   d7196c7: TWILIGHT_DEG band, CyclePhase, cyclePhase
 //   / cycleSplit) — the consult's twilight follow-up is
-//   CLOSED. Twilight windows are BRIEF (~half a real
-//   minute per window at the 10-minute day): staging
-//   should be done BEFORE the window — the altar
-//   display's time line exists so she can prepare.
+//   CLOSED. Twilight windows run 30 IN-GAME MINUTES
+//   either side of the crossing (Adam's pin,
+//   2026-11-06, in his units; TWILIGHT_DEG 6.5°
+//   measures 59.4 in-game minutes at the September
+//   default): staging should still be done BEFORE
+//   the window — the altar display's time line
+//   exists so she can prepare.
 // - Completion's effect (the awakening record) is the
 //   shell's to apply: complete() returns { kind, tier }
 //   and the shell records it via charms.ts (awaken).

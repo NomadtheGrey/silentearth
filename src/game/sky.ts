@@ -233,12 +233,24 @@ export function sunElevationAtCycle(cycleT: number, month: number): number {
  * for the rest, 'full-moon' from the moon phase, 'none'
  * needing no check) reads straight off cyclePhase /
  * cycleSplit — no ritual code lives here, only the windows.
- * BAND WIDTH (lane-decided, flagged for Adam's pin pass):
- * TWILIGHT_DEG = 8° (civil twilight is 6°; 8° is slightly
- * generous). At the 10-minute day that is roughly half a
- * real minute per window (both sides of the horizon
- * crossing together) — honest astronomy at this day
- * length, and widening it later is a one-constant change.
+ * BAND WIDTH (PINNED by Adam, 2026-11-06, re-priced
+ * the same day in HIS units): the window is 30
+ * IN-GAME MINUTES either side of the crossing — 60
+ * in-game minutes total. (An earlier same-day reading
+ * priced it in real seconds; Adam corrected the unit.)
+ * At the 600 s cycle (1440 in-game minutes), 60
+ * in-game minutes = 25.0 real seconds. TWILIGHT_DEG =
+ * 6.5, derived by probe against this module's own
+ * elevation math at the default (September, equal
+ * 300 s arcs): it measures 24.7 real seconds = 59.4
+ * in-game minutes, 29.7 on each side of the crossing,
+ * dawn and dusk alike — his half hour each way to
+ * within an in-game minute. (Civil twilight is 6°.)
+ * The band is defined in ELEVATION, so the window
+ * breathes with the year, in his units: at the same
+ * 6.5° a June dusk measures ~42 in-game minutes and
+ * a December dusk ~122 — the pin prices the default
+ * season the game starts in.
  * VISUAL: the rig's existing horizon sunset tint already
  * ramps over ~20° of elevation; inside the checkable band
  * it now strengthens to full at the horizon crossing, so
@@ -248,7 +260,8 @@ export function sunElevationAtCycle(cycleT: number, month: number): number {
  * half is day) — the sleep gate and the shell's isNight
  * read exactly as before.
  */
-export const TWILIGHT_DEG = 8;
+/** The twilight band (PINNED: 30 in-game minutes either side — see the dawn/dusk note). */
+export const TWILIGHT_DEG = 6.5;
 /** Extra horizon tint inside the checkable band (lane-decided, flagged). */
 export const TWILIGHT_TINT_BOOST = 0.3;
 
