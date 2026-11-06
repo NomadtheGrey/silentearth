@@ -310,6 +310,27 @@ export interface HedgeRingView {
   rooted: boolean;
 }
 
+/**
+ * One HearthHome seal as the shell derives it from
+ * Systems' HearthHomeState (2026-11-06): the seal's
+ * centre + radius (the SealRecord's facts of place)
+ * and her CURRENT HearthHome tier (the same value on
+ * every view — Systems' sealAdmits binds at tier >= 1;
+ * a tier-0 seal binds nothing). The renderer consumes
+ * views through setHearthHomeFactsProvider — it never
+ * sees the state itself. Seals have no rooted/day
+ * concept and no mesh in this landing: the view feeds
+ * the feral refusal only.
+ */
+export interface HearthHomeSealView {
+  x: number;
+  z: number;
+  /** The seal footprint's radius in metres. */
+  radiusM: number;
+  /** Her current HearthHome tier (0..3). */
+  tier: number;
+}
+
 /** Shrub spacing along a hedge ring, metres (DRAFT). */
 const HEDGE_SHRUB_SPACING_M = 1.3;
 /** An unrooted ring plants every Nth seat (DRAFT). */
@@ -982,6 +1003,21 @@ export class WorldRenderer {
   private hedgeGroup: THREE.Group | null = null;
   private hedgeSignature = '';
   private currentHedgeViews: HedgeRingView[] = [];
+  /**
+   * THE HEARTHHOME SEAL'S FIELD READ (2026-11-06): the
+   * shell's seat for the HearthHomeState's seal views,
+   * in the hedge provider's shape — Systems' state,
+   * derived shell-side (the records' centres + radii,
+   * the tier from her fragment knowledge), read here
+   * for the feral facts animals step on (the seal's
+   * NO admittance for hostiles). This module never
+   * imports the systems layer. Unregistered, no seal
+   * binds any beast: byte-identical to before. The
+   * views are re-read every frame beside the hedge
+   * views; seals render no mesh in this landing.
+   */
+  private hearthHomeFactsProvider: (() => HearthHomeSealView[]) | null = null;
+  private currentHearthHomeViews: HearthHomeSealView[] = [];
   /**
    * NAMING TAGS: the shell's seat for the named-places
    * register (Systems' NamedPlacesState), in the
@@ -2116,6 +2152,27 @@ export class WorldRenderer {
     this.hedgeFactsProvider = fn;
     this.hedgeSignature = '';
     this.currentHedgeViews = [];
+  }
+
+  /** Register the shell's hearthhome-facts provider (2026-11-06): see the field's note. */
+  setHearthHomeFactsProvider(fn: (() => HearthHomeSealView[]) | null): void {
+    this.hearthHomeFactsProvider = fn;
+    this.currentHearthHomeViews = [];
+  }
+
+  /** The binding seal standing at a point, if any (nearest centre wins). */
+  private hearthHomeSealAt(x: number, z: number): HearthHomeSealView | null {
+    let best: HearthHomeSealView | null = null;
+    let bestD = Infinity;
+    for (const v of this.currentHearthHomeViews) {
+      if (v.tier < 1 || v.radiusM <= 0) continue;
+      const d = Math.hypot(x - v.x, z - v.z);
+      if (d <= v.radiusM && d < bestD) {
+        best = v;
+        bestD = d;
+      }
+    }
+    return best;
   }
 
   /** The rooted ring standing at a point, if any (nearest centre wins). */
@@ -4488,6 +4545,7 @@ export class WorldRenderer {
     // rings on this frame. Unregistered, the views stay
     // empty and nothing stands.
     this.currentHedgeViews = this.hedgeFactsProvider ? this.hedgeFactsProvider() : [];
+    this.currentHearthHomeViews = this.hearthHomeFactsProvider ? this.hearthHomeFactsProvider() : [];
     {
       const sig = this.currentHedgeViews
         .map((v) => `${v.x},${v.z},${v.radiusM},${v.tier},${v.rooted ? 1 : 0}`)
@@ -4549,6 +4607,29 @@ export class WorldRenderer {
           feral = feral
             ? { ...feral, ...hedgeFields }
             : { suppressed: true, playerInside: false, defenderPos: null, ...hedgeFields };
+        }
+        // The HearthHome seal's field facts (2026-11-06):
+        // composed from the seal views alone — which
+        // binding seal this beast stands in, and whether
+        // its priced target stands sealed against it.
+        // Dangerous kinds only: the seal binds hostiles.
+        // It composes beside the hedge fields, never over
+        // them, and the fairness machines keep their
+        // seats (the suppressed-shell fallback reads the
+        // same as the hedge's).
+        if (this.currentHearthHomeViews.length > 0 && FERAL_DANGEROUS_KINDS.includes(pair.instance.kind)) {
+          const a = pair.instance;
+          const seal = this.hearthHomeSealAt(a.x, a.z);
+          const tpPos = feral?.defenderPos ?? { x: this.player.x, z: this.player.z };
+          const targetSealed = this.hearthHomeSealAt(tpPos.x, tpPos.z) !== null;
+          const sealFields = {
+            sealCenter: seal ? { x: seal.x, z: seal.z } : null,
+            sealRadiusM: seal?.radiusM ?? 0,
+            targetSealedOut: targetSealed,
+          };
+          feral = feral
+            ? { ...feral, ...sealFields }
+            : { suppressed: true, playerInside: false, defenderPos: null, ...sealFields };
         }
         updateAnimal(pair.instance, dt, {
           playerX: this.player.x,
