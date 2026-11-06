@@ -702,6 +702,20 @@ export interface FeralFacts {
   /** The rooted ring tier the PRICED TARGET stands in
    *  (absent/0 = outside) — T2's robust reads it. */
   targetHedgeTier?: number;
+  /** The HearthHome seal THIS animal stands in, when a
+   *  standing seal at tier >= 1 EXCLUDES it (hostiles
+   *  only — the facts stand only for dangerous kinds):
+   *  its centre + radius, which the refusal's exit
+   *  reads. Composed by the renderer from the shell's
+   *  hearthhome provider (2026-11-06). Absent/null =
+   *  no seal binds this beast. */
+  sealCenter?: { x: number; z: number } | null;
+  sealRadiusM?: number;
+  /** The priced TARGET stands inside a seal that
+   *  excludes this beast: no encounter starts against
+   *  it (the seal's re-entry law, with the initiation
+   *  gates). Absent/false = unsealed target. */
+  targetSealedOut?: boolean;
 }
 
 export interface AnimalUpdateInput {
@@ -934,10 +948,38 @@ function stepFeralEncounter(a: AnimalInstance, dt: number, input: AnimalUpdateIn
     a.targetZ = facts.hedgeCenter.z + uz * out;
   }
 
+  // The seal's refusal (HearthHome T1, 2026-11-06):
+  // a hostile inside a standing seal is priced OUT —
+  // engaged or merely standing there, it breaks to
+  // the disengage bolt aimed OUT of the seal, on the
+  // thorn lesson's idiom (Adam's T1: NO admittance —
+  // the seal binds hostiles). Hers and the neutral
+  // middle never read this: the facts stand only for
+  // dangerous kinds, and companions never run this
+  // step at all.
+  if (facts && facts.sealCenter && a.feralState !== 'disengage') {
+    a.feralState = 'disengage';
+    a.feralT = FERAL_DISENGAGE_S;
+    const dx = a.x - facts.sealCenter.x;
+    const dz = a.z - facts.sealCenter.z;
+    const d = Math.hypot(dx, dz);
+    const ux = d > 0.001 ? dx / d : 1;
+    const uz = d > 0.001 ? dz / d : 0;
+    const out = (facts.sealRadiusM ?? 0) + 14;
+    a.targetX = facts.sealCenter.x + ux * out;
+    a.targetZ = facts.sealCenter.z + uz * out;
+  }
+
   if (a.feralState === 'none') {
     if (!facts || !active) return false;
     if (a.snapT > 0 || a.spookT > 0) return false;
     if (facts.suppressed || facts.playerInside) return false;
+    // The seal's re-entry law (2026-11-06): no fight
+    // starts from inside a seal that excludes the
+    // beast, and none starts against a target sealed
+    // against it — it refuses re-entry while the seal
+    // stands.
+    if (facts.sealCenter || facts.targetSealedOut) return false;
     // A beast still stinging from a T3 ring does not
     // start a fight inside it (the re-entry law).
     if ((facts.hedgeTier ?? 0) >= 3 && (a.thornPressure ?? 0) > THORN_REENTRY) return false;

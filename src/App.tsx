@@ -1724,6 +1724,7 @@ import {
   SHELTER_RADIUS,
   type HouseType,
 } from './game/shelter';
+import { siteShelterAt } from './game/siteShelter';
 import {
   evaluateCampReveal,
   isNearStillWater,
@@ -2126,6 +2127,12 @@ import {
   hedgeTier,
   isRooted,
 } from './systems/hedge';
+import {
+  HearthHomeState,
+  hearthhomeFireWarmth,
+  hearthhomeShelterMultiplier,
+  hearthhomeTier,
+} from './systems/hearthhome';
 import {
   CharmState,
   GroundhogRest,
@@ -3225,6 +3232,27 @@ export default function App() {
       shelterState.snapshot(),
       placedTentsRef.current,
     );
+    // RAINSHELTER (the amended drying law's shell half,
+    // 2026-11-05): the fraction of the rain that REACHES
+    // her through the roof overhead — the better of the
+    // placed shelter's roof class and any found
+    // structure's (the farmhouse roof, a village house),
+    // priced enclosed/tent 0 (no rain reaches her),
+    // lean-to 0.5 (DRAFT — it leaks), open sky 1.
+    // Systems' soak reads this fact for its rain term
+    // in place of the shelter multiplier; absent a roof
+    // read the composition still answers 1, never a
+    // guess at cover she does not have.
+    const roofRain = (roof: string): number =>
+      roof === 'enclosed' || roof === 'tent'
+        ? 0
+        : roof === 'leanTo'
+          ? 0.5
+          : 1;
+    const rainShelter = Math.min(
+      roofRain(shelter.roof),
+      roofRain(siteShelterAt(genRef.current, x, z)?.roof ?? 'none'),
+    );
     let fireWarmth = 0;
     for (const fire of fireState.snapshot()) {
       if (!fire.lit) continue;
@@ -3232,6 +3260,35 @@ export default function App() {
       const w = d <= 2.5 ? 1 : d >= 5 ? 0 : (5 - d) / 2.5;
       if (w > fireWarmth) fireWarmth = w;
     }
+    // THE HEARTHHOME COMPOSITION (the door build,
+    // 2026-11-06): inside a seal, Systems' reads grade
+    // the facts — the shelter multiplier steps one grade
+    // better at T1 and reads perfect at T2
+    // (hearthhomeShelterMultiplier over the placed
+    // shelter's base), and a lit hearth OF THE PLACE (a
+    // lit fire standing inside the same seal) warms the
+    // whole footprint at T1 (hearthhomeFireWarmth over
+    // the proximity base). Outside a seal, or under an
+    // unlearned mark, both reads pass the base through.
+    const hhState = hearthhomeStateRef.current;
+    const herSeal = hhState.sealAt(x, z);
+    const hearthLit =
+      herSeal !== undefined &&
+      fireState
+        .snapshot()
+        .some(
+          (fire) =>
+            fire.lit &&
+            hhState.sealAt(fire.x, fire.z)?.placeId === herSeal.placeId,
+        );
+    fireWarmth = hearthhomeFireWarmth(
+      hhState,
+      fragmentStateRef.current,
+      x,
+      z,
+      hearthLit,
+      fireWarmth,
+    );
     return {
       rainIntensity: wf.rainIntensity,
       wind: wf.wind,
@@ -3241,7 +3298,14 @@ export default function App() {
       immersion: siteWaterFacts(genRef.current, x, z).inWater
         ? 'wading'
         : 'none',
-      shelterMultiplier: shelter.multiplier,
+      shelterMultiplier: hearthhomeShelterMultiplier(
+        hhState,
+        fragmentStateRef.current,
+        x,
+        z,
+        shelter.multiplier,
+      ),
+      rainShelter,
       fireWarmth,
       worn: wardrobe.wornItemIds(),
     };
@@ -4025,6 +4089,21 @@ export default function App() {
   const hedgeStateRef = useRef<HedgeState | null>(null);
   if (hedgeStateRef.current === null) {
     hedgeStateRef.current = new HedgeState(bootSave?.hedges ?? []);
+  }
+  // THE HEARTHHOME SEALS (the HearthHome door build,
+  // 2026-11-06): the shell owns the one HearthHomeState
+  // — the same ref-lazy pattern as the hedges, restored
+  // from the boot save's record; snapshot() rides every
+  // saveNow (SaveData.hearthhome, Systems' seat). The
+  // faced places' menus lay through Systems' laySeal
+  // grant; the cold-wet composition reads the seal's
+  // grades (hearthhomeShelterMultiplier /
+  // hearthhomeFireWarmth) at the facts seat.
+  const hearthhomeStateRef = useRef<HearthHomeState | null>(null);
+  if (hearthhomeStateRef.current === null) {
+    hearthhomeStateRef.current = new HearthHomeState(
+      bootSave?.hearthhome ?? [],
+    );
   }
   // THE LAYING WORKING: a held working of a few
   // seconds at the faced home (the candle idiom) —
@@ -5079,6 +5158,11 @@ export default function App() {
           // beside its sibling states (SaveData.
           // hedges, Systems' seat).
           hedges: hedgeStateRef.current.snapshot(),
+          // HearthHome seals (the door build): the
+          // register's snapshot rides every save beside
+          // the hedges (SaveData.hearthhome, Systems'
+          // seat).
+          hearthhome: hearthhomeStateRef.current.snapshot(),
           // RITUAL SAVE WIRING: stagings + awakenings ride
           // every save as-is (StagingBook / CharmState
           // snapshots; serialize writes them verbatim,
@@ -9836,7 +9920,10 @@ export default function App() {
       );
       if (result.ok === false) {
         if (result.code === 'name') {
-          showFeedback('You do not know its true name.', 'blocked');
+          showFeedback(
+            'You do not know its true name — a Waking speaks it.',
+            'blocked',
+          );
         } else if (result.code === 'trust') {
           showFeedback(
             'Not yet — it does not know you well enough.',
@@ -11814,15 +11901,85 @@ export default function App() {
   // under every door (pickupFurniturePiece); a
   // refused pick-up leaves the menu standing (the
   // cauldron rule), a completed one closes it.
-  const workstationMenuActions = (): ContextAction[] => [
-    { id: 'craft', label: 'Craft' },
-    { id: 'pick-up', label: 'Pick up Crafted Workstation' },
-    { id: 'close', label: 'Close [X]' },
-  ];
+  // THE HEARTHHOME DOOR (the door build, 2026-11-06;
+  // Adam's ruling: the seal is laid from the faced
+  // place's own menu): one press, uncosted, through
+  // Systems' laySeal grant — the row stands only where
+  // the mark is known (tier >= 1) and the place wears
+  // no seal yet (a sealed place reads as sealed: the
+  // row's absence is the display, the Hedge law). The
+  // refusal lines and the success line are DRAFT copy
+  // for Adam's pin pass.
+  const STATION_SEAL_RADIUS_M = 3;
+  const laySealAt = (place: {
+    placeId: string;
+    x: number;
+    z: number;
+    radiusM: number;
+  }): boolean => {
+    const outcome = hearthhomeStateRef.current.laySeal(
+      fragmentStateRef.current,
+      place,
+      worldDayNow(),
+    );
+    if (outcome.ok) {
+      showFeedback('The HearthHome seal settles over this place.', 'gain');
+      saveNow();
+      return true;
+    }
+    if (outcome.code === 'tier') {
+      showFeedback('You have not learned the HearthHome mark.', 'blocked');
+    } else if (outcome.code === 'already-sealed') {
+      showFeedback('This place already wears its seal.', 'blocked');
+    } else {
+      showFeedback('There is no bounded place here to seal.', 'blocked');
+    }
+    return false;
+  };
+  const sealDoorRow = (placeId: string): ContextAction | null =>
+    hearthhomeTier(fragmentStateRef.current) >= 1 &&
+    !hearthhomeStateRef.current.hasSeal(placeId)
+      ? { id: 'lay-seal', label: 'Lay the HearthHome seal' }
+      : null;
+  // A station seals its GROUND (the UI lane's DRAFT,
+  // claimed to DEV 2026-11-06): the place id keys to
+  // the piece's seat (the stump-site idiom — stable
+  // across saves, and the seal stays with the ground
+  // when the piece is picked up and set down nearby);
+  // the radius is a working ground around the piece.
+  const stationSealPlace = (
+    x: number,
+    z: number,
+  ): { placeId: string; x: number; z: number; radiusM: number } => ({
+    placeId: `station:${x.toFixed(2)},${z.toFixed(2)}`,
+    x,
+    z,
+    radiusM: STATION_SEAL_RADIUS_M,
+  });
+
+  const workstationMenuActions = (bench: {
+    id: string;
+    x: number;
+    z: number;
+  }): ContextAction[] => {
+    const actions: ContextAction[] = [
+      { id: 'craft', label: 'Craft' },
+      { id: 'pick-up', label: 'Pick up Crafted Workstation' },
+    ];
+    const sealRow = sealDoorRow(stationSealPlace(bench.x, bench.z).placeId);
+    if (sealRow) actions.push(sealRow);
+    actions.push({ id: 'close', label: 'Close [X]' });
+    return actions;
+  };
 
   const handleWorkstationAction = (benchId: string, actionId: string) => {
     if (actionId === 'close') {
       setSelectedWorkstationId(null);
+      return;
+    }
+    if (actionId === 'lay-seal') {
+      const bench = workstationState.get(benchId);
+      if (bench) laySealAt(stationSealPlace(bench.x, bench.z));
       return;
     }
     if (actionId === 'craft') {
@@ -11846,6 +12003,10 @@ export default function App() {
           ]
         : [{ id: 'act', label: 'Place grimoire' }];
     actions.push({ id: 'pick-up', label: 'Pick up Writing Desk' });
+    const deskSealRow = sealDoorRow(
+      stationSealPlace(desk.x, desk.z).placeId,
+    );
+    if (deskSealRow) actions.push(deskSealRow);
     actions.push({ id: 'close', label: 'Close [X]' });
     return actions;
   };
@@ -11853,6 +12014,11 @@ export default function App() {
   const handleDeskMenuAction = (deskId: string, actionId: string) => {
     if (actionId === 'close') {
       setSelectedDeskId(null);
+      return;
+    }
+    if (actionId === 'lay-seal') {
+      const desk = deskState.get(deskId);
+      if (desk) laySealAt(stationSealPlace(desk.x, desk.z));
       return;
     }
     if (actionId === 'act') {
@@ -11872,15 +12038,29 @@ export default function App() {
     }
   };
 
-  const loomMenuActions = (): ContextAction[] => [
-    { id: 'weave', label: 'Weave' },
-    { id: 'pick-up', label: 'Pick up Loom' },
-    { id: 'close', label: 'Close [X]' },
-  ];
+  const loomMenuActions = (loom: {
+    id: string;
+    x: number;
+    z: number;
+  }): ContextAction[] => {
+    const actions: ContextAction[] = [
+      { id: 'weave', label: 'Weave' },
+      { id: 'pick-up', label: 'Pick up Loom' },
+    ];
+    const sealRow = sealDoorRow(stationSealPlace(loom.x, loom.z).placeId);
+    if (sealRow) actions.push(sealRow);
+    actions.push({ id: 'close', label: 'Close [X]' });
+    return actions;
+  };
 
   const handleLoomAction = (loomId: string, actionId: string) => {
     if (actionId === 'close') {
       setSelectedLoomId(null);
+      return;
+    }
+    if (actionId === 'lay-seal') {
+      const loom = loomState.get(loomId);
+      if (loom) laySealAt(stationSealPlace(loom.x, loom.z));
       return;
     }
     if (actionId === 'weave') {
@@ -12644,6 +12824,28 @@ export default function App() {
       setHedgeWorking({ homeId: shelterHouseId, progressMs: 0 });
       return;
     }
+    if (actionId === 'lay-seal') {
+      // THE SEAL'S DOOR: the press LAYS (uncosted —
+      // no working, no bar; Adam priced materials only
+      // against the T3 interior). The footprint: the
+      // ring's radius when this home wears its hedge,
+      // else the house's shelter radius.
+      if (!shelterHouseId) return;
+      const house = shelterState
+        .snapshot()
+        .find((h) => h.id === shelterHouseId);
+      if (!house) return;
+      const radiusM = hedgeStateRef.current.hasHedge(shelterHouseId)
+        ? hedgeRadiusM(fragmentStateRef.current)
+        : SHELTER_RADIUS;
+      laySealAt({
+        placeId: shelterHouseId,
+        x: house.x,
+        z: house.z,
+        radiusM,
+      });
+      return;
+    }
     if (!shelterHouseId) return;
     const store = getHomeStore(shelterHouseId);
     const house = shelterState.snapshot().find((h) => h.id === shelterHouseId);
@@ -12884,10 +13086,12 @@ export default function App() {
     // per home, so a ringed home shows no row (menus
     // don't carry tombstones, the upgrade law). The
     // row prices itself in the counts idiom: the
-    // cuttings ride the row's hint (the regular
-    // ContextMenu row renders hint at its right —
-    // countsText renders only in the arrows branch,
-    // so it would be dead here), and a Missing note
+    // cuttings ride the row's countsText (the one
+    // rule — every ContextMenu row renders countsText
+    // at its right, regular and arrows alike, since
+    // the countsText fix 2026-11-05; the home upgrade
+    // row's price was dead until that fix taught the
+    // regular row), and a Missing note
     // names the want when she is short, before any
     // working starts. While the held
     // working stands, the menu's rows are its
@@ -12912,13 +13116,27 @@ export default function App() {
       actions.push({
         id: 'lay-hedge',
         label: 'Lay the Hedge Mark',
-        hint: `Cuttings ${held}/${CUTTINGS_TO_LAY}`,
+        countsText: `Cuttings ${held}/${CUTTINGS_TO_LAY}`,
         disabled: held < CUTTINGS_TO_LAY,
         disabledNote:
           held < CUTTINGS_TO_LAY
             ? `Missing: Cuttings (${held}/${CUTTINGS_TO_LAY})`
             : undefined,
       });
+    }
+    // THE HEARTHHOME SEAL'S DOOR (Adam's ruling,
+    // 2026-11-05; the door build 2026-11-06): at a faced
+    // home of hers, knowing the HearthHome mark seats
+    // the laying — one seal per place, so a sealed home
+    // shows no row (the row's absence is the display).
+    // The seal and the Hedge ring compose on the same
+    // place id by design (Systems' two-records-one-place
+    // shape): the footprint is the ring's radius when
+    // the home is ringed, else the house's shelter
+    // radius — the only footprint facts the place has.
+    if (shelterHouseId) {
+      const sealRow = sealDoorRow(shelterHouseId);
+      if (sealRow) actions.push(sealRow);
     }
     actions.push({ id: 'close', label: 'Close [X]' });
     return actions;
@@ -15407,7 +15625,9 @@ export default function App() {
       return;
     }
     if (selectedWorkstation !== undefined) {
-      const target = flattenMenuTargets(workstationMenuActions())[digit - 1];
+      const target = flattenMenuTargets(
+        workstationMenuActions(selectedWorkstation),
+      )[digit - 1];
       if (target && !target.disabled) {
         handleWorkstationAction(selectedWorkstation.id, target.id);
       }
@@ -15423,7 +15643,9 @@ export default function App() {
       return;
     }
     if (selectedLoom !== undefined) {
-      const target = flattenMenuTargets(loomMenuActions())[digit - 1];
+      const target = flattenMenuTargets(loomMenuActions(selectedLoom))[
+        digit - 1
+      ];
       if (target && !target.disabled) {
         handleLoomAction(selectedLoom.id, target.id);
       }
@@ -17609,7 +17831,7 @@ export default function App() {
           >
             <ContextMenu theme={lookThemes.world}
               objectName="Crafted Workstation"
-              actions={workstationMenuActions()}
+              actions={workstationMenuActions(selectedWorkstation)}
               showKeyHints={!isTouch}
               onSelect={(id) =>
                 handleWorkstationAction(selectedWorkstation.id, id)
@@ -17641,7 +17863,7 @@ export default function App() {
           >
             <ContextMenu theme={lookThemes.world}
               objectName="Loom"
-              actions={loomMenuActions()}
+              actions={loomMenuActions(selectedLoom)}
               showKeyHints={!isTouch}
               onSelect={(id) => handleLoomAction(selectedLoom.id, id)}
               onClose={() => setSelectedLoomId(null)}
