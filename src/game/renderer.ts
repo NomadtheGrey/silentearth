@@ -3699,8 +3699,26 @@ export class WorldRenderer {
         // Windows + wattle bands around the wall.
         hg.add(houseBox(0.5, 0.5, 0.06, 0x2a2018, -f / 4, 1.3, (f * 0.8) / 2 + 0.01));
         hg.add(houseBox(0.5, 0.5, 0.06, 0x2a2018, f / 4, 1.3, (f * 0.8) / 2 + 0.01));
-        hg.add(houseBox(f + 0.06, 0.08, f * 0.8 + 0.06, 0xb09a6a, 0, 0.6, 0));
-        hg.add(houseBox(f + 0.06, 0.08, f * 0.8 + 0.06, 0xb09a6a, 0, 1.7, 0));
+        // THE BANDS AS FACE STRIPS (Adam's band fix,
+        // 2026-11-06): the bands were SOLID SLABS — a box
+        // 0.06 larger than the wall in both axes — so each
+        // slab's underside and top face crossed the whole
+        // interior in mid-air, and the upper one (1.66-1.74)
+        // straddles her eye height (1.7) exactly: the black
+        // band of his field report, with a 'ceiling' on top
+        // when he jumped. They are now what they were
+        // always meant to be — thin strips ON the four
+        // faces, in the strands' construction (FrontSide
+        // box(), centred on the face plane, 0.03 proud
+        // outside as the slabs read, culled and occluded
+        // from inside). The exterior silhouette is
+        // unchanged; nothing spans the room at any height.
+        for (const bandY of [0.6, 1.7]) {
+          hg.add(box(f + 0.06, 0.08, 0.06, 0xb09a6a, 0, bandY, (f * 0.8) / 2));
+          hg.add(box(f + 0.06, 0.08, 0.06, 0xb09a6a, 0, bandY, -(f * 0.8) / 2));
+          hg.add(box(0.06, 0.08, f * 0.8 + 0.06, 0xb09a6a, f / 2, bandY, 0));
+          hg.add(box(0.06, 0.08, f * 0.8 + 0.06, 0xb09a6a, -f / 2, bandY, 0));
+        }
         // Woven texture (Adam 2026-10-28 — texture pass before
         // the merge goes live): vertical wattle strands on all
         // four exterior faces, interlaced with the horizontal
