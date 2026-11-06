@@ -43,6 +43,14 @@ export interface BuildRecord {
 
 const ALL_RECORDS: BuildRecord[] = [
   {
+    merge: 'Merge #89',
+    pr: 132,
+    sha: '375899b',
+    date: '2026-11-06',
+    what: 'THE EXIT, REPRICED TO ITS SIGN (hotfix) — #88 dressed the way back in light and priced its act off a single cell: the shaft’s glow spills ten metres and reads as the door from the whole entry area, while the EXIT offer reached five and a half. The reach is the entry block now — the arrival cell plus its ring of cells, far corner 7.21 m, priced at 7.5 — so the ground the sign promises and the ground the act covers are the same ground. The climb on layer 2 inherits the reach, as it inherited the old one.',
+    why: 'Adam stood in the shaft’s glow twice on the day #88 shipped — 5.0 m out by one read, 6.1 m by the other, looking into the column — and the door refused him both times on range alone: he was inside everything the sign said and outside everything the act allowed. A sign that promises more ground than its act covers is a broken promise in the game’s own terms, so the act moved to the sign’s footprint: no deeper than the entry’s own neighbourhood, and no shallower than the light.',
+  },
+  {
     merge: 'Merge #88',
     pr: 131,
     sha: 'b5c9c83',
