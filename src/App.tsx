@@ -13214,6 +13214,21 @@ export default function App() {
       ? null
       : (ritualRecipeFor(selectedSiteStaged.bone) ?? null);
 
+  // SKY PULSE (rite Landing B, 2026-11-05 — Adam's dusk
+  // lag): the panel derives its sky line from the live sky
+  // at render time, but renders stall while she stands
+  // still with the panel up — the line read 'window
+  // closed' through a whole dusk band it never saw open.
+  // While a site panel stands with a staged rite, a 1 s
+  // pulse re-renders so the line (and the completion
+  // reading beside it) follows the sky's own cadence.
+  const [, setSkyPulse] = useState(0);
+  useEffect(() => {
+    if (selectedSiteId === null || selectedSiteStaging === null) return;
+    const pulse = window.setInterval(() => setSkyPulse((n) => n + 1), 1000);
+    return () => window.clearInterval(pulse);
+  }, [selectedSiteId, selectedSiteStaging]);
+
   // Ritual panel option lists, hoisted from the panel's
   // JSX so the PC-key digit dispatch (below) reads the
   // SAME lists the panel renders — one source, no
