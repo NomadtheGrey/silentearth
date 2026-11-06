@@ -492,17 +492,7 @@ export class PlayerController {
     // cos facing); forward-walking in first-person already
     // yields facing = yaw + PI). Movement keeps setting
     // facing from travel direction, as in every mode.
-    // FIRST PERSON JOINS THE SYNC (the cave-exit cone,
-    // 2026-11-06): the faced law (the shell's facingOf)
-    // reads `facing`, so a first-person player who stops
-    // and turns the camera to face a thing was aiming
-    // with her feet's last direction while her eyes were
-    // on it — Adam stood in his cave's entry shaft,
-    // looking into the column, and the exit refused him
-    // at every heading of a turn in place. In first
-    // person her eyes ARE her facing: standing still now
-    // agrees with walking forward, as behind already did.
-    if (this.mode === 'behind' || this.mode === 'first') {
+    if (this.mode === 'behind') {
       this.facing = this.yaw + Math.PI;
     }
     const now = performance.now();
@@ -578,11 +568,7 @@ export class PlayerController {
     }
     this.yaw = snap.yaw;
     this.pitch = Math.max(-1.45, Math.min(1.45, snap.pitch));
-    // The look sync's second seat (applyLook is the
-    // first): first person syncs too — see the cave-exit
-    // cone note in applyLook. A restored or travelled
-    // facing lands with her eyes, not her last step.
-    if (this.mode === 'behind' || this.mode === 'first') {
+    if (this.mode === 'behind') {
       this.facing = this.yaw + Math.PI;
     }
     bus.emit('player:looked', { pitch: this.pitch, mode: this.mode });
