@@ -860,6 +860,24 @@ export function caveMouthsNear(
  *  word as to why. */
 export const CAVE_ENTER_RANGE_M = 6;
 
+/** The exit offer's reach (m) — the entry CELL, not the
+ *  anchor point (Adam's exit pin, 2026-11-06: 'The
+ *  player should not have to guess where the exit is.
+ *  It should be plainly obvious upon arrival'). The
+ *  anchor sits at the arrival cell's corner vertex; the
+ *  far corner of that cell stands a full diagonal away
+ *  (CAVE_CELL_M * sqrt(2) = 4.81), so the disc is the
+ *  diagonal + her stance margin: standing ANYWHERE in
+ *  the arrival cell, facing the entry shaft (which
+ *  stands at the anchor), the EXIT pill stands. The
+ *  same reach prices layer 2's climb at its own entry
+ *  anchor. DRAFT for Adam's pin pass. The old geography
+ *  (HARVEST_RANGE 2.5 around the bare anchor, nothing
+ *  rendered there) stranded Adam at the way back on
+ *  2026-11-06: 0.92 m from the point, facing a wall,
+ *  no pill, no sign. */
+export const CAVE_EXIT_RANGE_M = 5.5;
+
 /** A facade mouth read as a PASSAGE: the threshold
  *  plane she crosses on foot. The plane stands at the
  *  spot's depth out of the face (planeV along the out

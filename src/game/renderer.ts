@@ -843,6 +843,17 @@ export class WorldRenderer {
    *  held so bus-triggered rebuilds (a patch seated, a
    *  fungus picked) re-derive the same glow. */
   private caveGlow: { seed: string; key: string } | null = null;
+  /** THE ENTRY SHAFT (Adam's exit pin, 2026-11-06 —
+   *  'plainly obvious upon arrival'): the light shaft
+   *  group standing at the active cave layer's entry
+   *  anchor (column + floor pool + cap + one warm light
+   *  + drifting motes), rebuilt wherever the cave glow
+   *  rebuilds and reseated on layer changes. Null off
+   *  cave dimensions. The motes' Points + per-mote fall
+   *  speeds ride beside it for the loop's drift. */
+  private entryShaftGroup: THREE.Group | null = null;
+  private entryShaftMotes: THREE.Points | null = null;
+  private entryShaftMoteSpeeds: number[] = [];
   private unsubMossPainted: (() => void) | null = null;
   private unsubGlowHarvest: (() => void) | null = null;
   /** Trailing ground wetness 0..1 (swamp fog's weather
@@ -1209,6 +1220,12 @@ export class WorldRenderer {
     });
     this.unsubGlowHarvest = bus.on('harvest:completed', (p) => {
       if (this.caveGlow && p.kind === 'scatter') this.rebuildCaveGlow();
+    });
+    // The entry shaft follows the layer (descend/ascend
+    // swap no generator — the shaft reseats on the
+    // layer event alone).
+    bus.on('dimension:layer', () => {
+      if (this.caveGlow) this.rebuildEntryShaft();
     });
     // Feral resolutions (2026-11-03): the shell resolves
     // a contact through Systems' ledger and reports the
@@ -2800,6 +2817,7 @@ export class WorldRenderer {
     this.fungusLights = [];
     this.caveGlow = null;
     this.disposeMossPaintGroup();
+    this.disposeEntryShaft();
     if (!seed) return;
     if (seat?.lightSpots) {
       // A seated dimension (upstairs): its spots arrive
@@ -2851,6 +2869,124 @@ export class WorldRenderer {
    * floor discs flat, wall discs on the wall's plane,
    * ceiling discs facing down.
    */
+  private disposeEntryShaft(): void {
+    if (!this.entryShaftGroup) return;
+    this.scene.remove(this.entryShaftGroup);
+    this.entryShaftGroup.traverse((o) => {
+      const mesh = o as THREE.Mesh;
+      if (mesh.geometry) mesh.geometry.dispose();
+      const mat = mesh.material as THREE.Material | undefined;
+      if (mat) mat.dispose();
+    });
+    this.entryShaftGroup = null;
+    this.entryShaftMotes = null;
+    this.entryShaftMoteSpeeds = [];
+  }
+
+  /** THE ENTRY SHAFT, built (Adam's exit pin,
+   *  2026-11-06): a shaft of daylight at the active
+   *  layer's entry anchor — the way back dressed in
+   *  the world. She materializes at the anchor on
+   *  entry, so the sign stands in her arrival view by
+   *  construction: a translucent column from the
+   *  ceiling hole to a lit pool at her feet, warm
+   *  light spilling onto the entry cell's walls, dust
+   *  motes drifting down the column. Built wherever
+   *  the cave glow is (re)built and reseated on layer
+   *  changes; layer 2's climb anchor wears the same
+   *  shaft. Numbers DRAFT for Adam's pin pass. */
+  private rebuildEntryShaft(): void {
+    this.disposeEntryShaft();
+    if (!this.caveGlow) return;
+    const { seed, key } = this.caveGlow;
+    const layout = caveLayoutForKey(seed, key);
+    const layer =
+      layout.layers[dimensionState.currentLayer() - 1] ?? layout.layers[0];
+    if (!layer) return;
+    const a = layer.entryAnchor;
+    const group = new THREE.Group();
+    const shaftColor = 0xffe9b8;
+    // The column: open-ended, additive, depth-write
+    // off — light, not a wall.
+    const column = new THREE.Mesh(
+      new THREE.CylinderGeometry(1.25, 1.6, 3.4, 20, 1, true),
+      new THREE.MeshBasicMaterial({
+        color: shaftColor,
+        transparent: true,
+        opacity: 0.15,
+        blending: THREE.AdditiveBlending,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+      }),
+    );
+    column.position.set(a.x, 1.7, a.z);
+    group.add(column);
+    // The pool where the light lands.
+    const pool = new THREE.Mesh(
+      new THREE.CircleGeometry(1.75, 24),
+      new THREE.MeshBasicMaterial({
+        color: 0xffedb5,
+        transparent: true,
+        opacity: 0.32,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      }),
+    );
+    pool.rotation.x = -Math.PI / 2;
+    pool.position.set(a.x, 0.04, a.z);
+    group.add(pool);
+    // The bright cap at the ceiling hole.
+    const cap = new THREE.Mesh(
+      new THREE.CircleGeometry(1.25, 20),
+      new THREE.MeshBasicMaterial({
+        color: 0xfff6d8,
+        transparent: true,
+        opacity: 0.5,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+      }),
+    );
+    cap.rotation.x = Math.PI / 2;
+    cap.position.set(a.x, 3.38, a.z);
+    group.add(cap);
+    // The spill: one warm light over the pool.
+    const light = new THREE.PointLight(0xffe2a8, 14, 10, 1.8);
+    light.position.set(a.x, 2.3, a.z);
+    group.add(light);
+    // Dust motes drifting down the column (positions
+    // in shaft-local space; the loop drifts them).
+    const MOTES = 26;
+    const positions = new Float32Array(MOTES * 3);
+    this.entryShaftMoteSpeeds = [];
+    for (let i = 0; i < MOTES; i++) {
+      const r = Math.sqrt(Math.random()) * 1.25;
+      const th = Math.random() * Math.PI * 2;
+      positions[i * 3] = Math.cos(th) * r;
+      positions[i * 3 + 1] = 0.2 + Math.random() * 3.0;
+      positions[i * 3 + 2] = Math.sin(th) * r;
+      this.entryShaftMoteSpeeds.push(0.1 + Math.random() * 0.18);
+    }
+    const moteGeo = new THREE.BufferGeometry();
+    moteGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    const motes = new THREE.Points(
+      moteGeo,
+      new THREE.PointsMaterial({
+        color: 0xfff3cf,
+        size: 0.05,
+        transparent: true,
+        opacity: 0.85,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      }),
+    );
+    motes.position.set(a.x, 0, a.z);
+    group.add(motes);
+    this.entryShaftMotes = motes;
+    this.entryShaftGroup = group;
+    this.scene.add(group);
+  }
+
   private rebuildCaveGlow(): void {
     if (!this.caveGlow) return;
     const { seed, key } = this.caveGlow;
@@ -2917,6 +3053,9 @@ export class WorldRenderer {
       this.scene.add(group);
       this.mossPaintGroup = group;
     }
+    // The entry shaft rides every glow rebuild — the
+    // sign and the glow share the cave's lifecycle.
+    this.rebuildEntryShaft();
   }
 
   /**
@@ -4851,6 +4990,18 @@ export class WorldRenderer {
       );
       (sprite.material as THREE.SpriteMaterial).opacity =
         SMOKE_PEAK_OPACITY * Math.sin(Math.PI * phase);
+    }
+    // Entry-shaft motes: dust drifting down the light
+    // column, wrapping at the pool. No allocation —
+    // the position attribute is rewritten in place.
+    if (this.entryShaftMotes) {
+      const attr = this.entryShaftMotes.geometry.getAttribute('position');
+      for (let i = 0; i < this.entryShaftMoteSpeeds.length; i++) {
+        let y = attr.getY(i) - this.entryShaftMoteSpeeds[i] * dt;
+        if (y < 0.15) y = 3.2;
+        attr.setY(i, y);
+      }
+      attr.needsUpdate = true;
     }
     if (this.placedGroup) {
       this.placedGroup.traverse((obj) => {

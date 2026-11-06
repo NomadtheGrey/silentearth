@@ -2063,6 +2063,7 @@ import {
   caveMouthsNear,
   CAVE_DIMENSION_KEY,
   CAVE_ENTER_RANGE_M,
+  CAVE_EXIT_RANGE_M,
 } from './game/caves';
 import { dimensionState } from './game/dimensionState';
 import {
@@ -15159,17 +15160,23 @@ export default function App() {
       // (pluralization: the layout reads by active key).
       const layout = caveLayoutForKey(seed, dimensionState.activeKey());
       if (dimensionState.currentLayer() === 1) {
+        // THE EXIT'S OWN REACH (Adam's exit pin,
+        // 2026-11-06): the offer prices off the entry
+        // CELL (CAVE_EXIT_RANGE_M), not the bare anchor
+        // point — anywhere in the arrival cell, facing
+        // the entry shaft, the EXIT pill stands.
         considerCave(
           'cave-exit',
           '',
           layout.entryAnchor.x,
           layout.entryAnchor.z,
+          CAVE_EXIT_RANGE_M,
         );
         const shaft = layout.layers[0]?.shaftAnchor;
         if (shaft) considerCave('cave-descend', '', shaft.x, shaft.z);
       } else if (dimensionState.currentLayer() === 2) {
         const entry = layout.layers[1]?.entryAnchor;
-        if (entry) considerCave('cave-climb', '', entry.x, entry.z);
+        if (entry) considerCave('cave-climb', '', entry.x, entry.z, CAVE_EXIT_RANGE_M);
       }
     }
     if (homeHouse !== undefined) {
