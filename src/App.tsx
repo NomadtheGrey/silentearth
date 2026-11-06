@@ -14878,6 +14878,18 @@ export default function App() {
     // The rest of the field, in tie order (the pair winner
     // keeps ties — challengers must be strictly nearer).
     const challengers: UseWinner[] = [];
+    // THE DIRECTION-FREE EXIT (Adam's ruling, 2026-11-06:
+    // 'the direction shouldn't have anything to do with
+    // the exit... exit pill should appear for her wherever
+    // she is in that circle'): the cave-exit and cave-climb
+    // arms seat HERE instead of the challenger race — priced
+    // on zone alone (within their reach of the anchor, no
+    // cone), and a seated zone exit WINS the race outright
+    // (see the return below): a door under her feet outranks
+    // a faced harvestable; she can step out of the circle to
+    // harvest. The climb wears the same rule — the same
+    // species of door, a shaft she stands in.
+    let zoneExit: UseWinner | null = null;
     if (trapRowTrap) {
       const f = facingOf(trapRowTrap.x, trapRowTrap.z);
       if (f.isFaced) {
@@ -15058,6 +15070,13 @@ export default function App() {
     ): void => {
       const f = facingOf(x, z);
       if (f.distance <= range) anyCandidateInRange = true;
+      if (kind === 'cave-exit' || kind === 'cave-climb') {
+        // Zone alone (Adam's ruling, above): no cone test.
+        if (f.distance <= range) {
+          zoneExit = { kind, id, distance: f.distance };
+        }
+        return;
+      }
       if (f.isFaced && f.distance <= range) {
         challengers.push({ kind, id, distance: f.distance });
       }
@@ -15163,9 +15182,11 @@ export default function App() {
       if (dimensionState.currentLayer() === 1) {
         // THE EXIT'S OWN REACH (Adam's exit pin,
         // 2026-11-06): the offer prices off the entry
-        // CELL (CAVE_EXIT_RANGE_M), not the bare anchor
-        // point — anywhere in the arrival cell, facing
-        // the entry shaft, the EXIT pill stands.
+        // BLOCK (CAVE_EXIT_RANGE_M), not the bare anchor
+        // point — and by his later ruling the same day
+        // it prices on zone alone: anywhere inside the
+        // reach, facing anywhere, the EXIT pill stands
+        // (the direction-free seat in considerCave).
         considerCave(
           'cave-exit',
           '',
@@ -15218,6 +15239,9 @@ export default function App() {
         winner = challenger;
       }
     }
+    // The zone exit outranks the whole race (Adam's
+    // ruling, 2026-11-06 — see the zoneExit seat above).
+    if (zoneExit !== null) return zoneExit;
     if (winner !== null) return winner;
     // Fallbacks: scry (visible; it has no world position,
     // so it never outranks a positioned target), then
