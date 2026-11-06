@@ -105,6 +105,14 @@ export interface CaveLayer {
    *  is presently just the far anchor (a future shaft
    *  would hang off it). */
   shaftAnchor: CaveAnchor | null;
+  /** THE UP HOLE (Adam's separation ruling, 2026-11-06:
+   *  'just move the down away from the up'): on deeper
+   *  layers, the CLIMB's departure + price point, dealt
+   *  at its own cell clear of the entry anchor (the down
+   *  landing) — landing from the down never seats her
+   *  inside the climb's circle. Null on layer 1, whose
+   *  up is the exit at the entry anchor. */
+  upAnchor: CaveAnchor | null;
   walls: SiteWallBox[];
   features: ScatterObject[];
 }
@@ -120,7 +128,9 @@ export interface CaveLayout {
   fungusLights: { x: number; z: number }[];
   /** The fragment anchor (distributed instances only in
    *  this round: a carved stone staged at the deepest
-   *  layer's far dead end; the DEBUT cave — cave:main, the
+   *  layer's own dealt seat, clear of its doors (the
+   *  separation ruling, 2026-11-06 — formerly the far
+   *  dead end); the DEBUT cave — cave:main, the
    *  first cave (Adam, 2026-11-01: 'designated' retires as
    *  a category; all caves populate by seed and location)
    *  — keeps its exact v1 layout and reports null: no
@@ -302,7 +312,86 @@ function deriveLayer(
     }
   }
 
-  return { index, origin, grid, entryAnchor, shaftAnchor, walls, features };
+  // THE UP HOLE (Adam's ruling, 2026-11-06: 'just move
+  // the down away from the up'). Dealt LAST, off its own
+  // sibling stream (`${label}:anchors`), so every draw
+  // above — maze, walls, dressing — stays byte-identical
+  // to the pre-separation dealer; only the climb's point
+  // moves (the stone's seat deals with the layout,
+  // below). Cell centres are always open floor here
+  // (walls ride the edges); a centre dressed with a
+  // floor feature (a pool, a boulder, a fungus) is not
+  // a seat.
+  const anchors = mulberry32(deriveSeed(worldSeed, `${label}:anchors`));
+  const euclid = (
+    a: { x: number; z: number },
+    b: { x: number; z: number },
+  ): number => Math.hypot(a.x - b.x, a.z - b.z);
+  const dressed = (c: { x: number; z: number }): boolean =>
+    features.some(
+      (f) =>
+        (f.kind === 'cavePool' ||
+          f.kind === 'caveBoulder' ||
+          f.kind === 'twilightFungus') &&
+        euclid(f, c) < 1.2,
+    );
+  const centres: { x: number; z: number }[] = [];
+  for (let row = 0; row < grid; row++) {
+    for (let col = 0; col < grid; col++) {
+      centres.push(cellCenter(col, row));
+    }
+  }
+  const pickClear = (
+    ok: { x: number; z: number }[],
+    against: { x: number; z: number }[],
+  ): { x: number; z: number } => {
+    if (ok.length > 0) {
+      return ok[Math.floor(anchors() * ok.length)];
+    }
+    // No satisfying cell (a cramped deal): the centre
+    // whose worst clearance is greatest — deterministic,
+    // and the separation census reports how often the
+    // full guarantee could not be dealt.
+    let bestC = centres[0];
+    let bestScore = -1;
+    for (const c of centres) {
+      const score = Math.min(...against.map((a) => euclid(c, a)));
+      if (score > bestScore) {
+        bestScore = score;
+        bestC = c;
+      }
+    }
+    return bestC;
+  };
+  // The up hole: deeper layers only — clear of the down
+  // landing by the climb's circle + walking room, and
+  // clear of the layer's own shaft against a future
+  // deeper door hanging off it.
+  let upAnchor: CaveAnchor | null = null;
+  if (index >= 2) {
+    const ok = centres.filter(
+      (c) =>
+        euclid(c, entryAnchor) >= CAVE_UP_ENTRY_SEPARATION_M &&
+        (!shaftAnchor || euclid(c, shaftAnchor) >= CAVE_STONE_CLEAR_M) &&
+        !dressed(c),
+    );
+    const pick = pickClear(ok, [entryAnchor]);
+    upAnchor = {
+      x: pick.x,
+      z: pick.z,
+      yaw: yawFacing(entryAnchor.x - pick.x, entryAnchor.z - pick.z),
+    };
+  }
+  return {
+    index,
+    origin,
+    grid,
+    entryAnchor,
+    shaftAnchor,
+    upAnchor,
+    walls,
+    features,
+  };
 }
 
 /**
@@ -346,21 +435,86 @@ export function caveLayoutForKey(worldSeed: string, key: string): CaveLayout {
   }
 
   // The fragment anchor (instances only this round —
-  // the debut cave's layout stays byte-stable).
+  // the debut cave's layout stays byte-stable). Since
+  // the separation ruling (2026-11-06) it is dealt its
+  // own seat in the block below — the stone no longer
+  // stands at the far shaft anchor.
   let fragmentSpot: { x: number; z: number } | null = null;
   if (!isMain) {
     const deepest = layers[layers.length - 1];
-    if (deepest.shaftAnchor) {
-      fragmentSpot = { x: deepest.shaftAnchor.x, z: deepest.shaftAnchor.z };
-      deepest.features.push({
-        kind: 'carvedStone',
-        x: fragmentSpot.x,
-        z: fragmentSpot.z,
-        y: 0,
-        scale: 1,
-        rotY: 0,
-      });
+    // THE STONE'S OWN SEAT (the separation ruling,
+    // 2026-11-06): dealt here, off its own virgin
+    // stream, from the deepest layer's cell centres —
+    // clear of that layer's up point (the up hole on
+    // deeper layers; the exit at the entry anchor on a
+    // one-layer cave) by the full priced reach, and
+    // clear of its landing and shaft, so a readable
+    // stand always exists outside every door's circle.
+    // (Per-layer stone dealing was priced and struck:
+    // a later round deals it from its own fresh stream
+    // without moving a single cave dealt today.)
+    const stoneRand = mulberry32(
+      deriveSeed(worldSeed, `dimension:${key}:layer${deepest.index}:stone`),
+    );
+    const mid = (deepest.grid - 1) / 2;
+    const centres: { x: number; z: number }[] = [];
+    for (let row = 0; row < deepest.grid; row++) {
+      for (let col = 0; col < deepest.grid; col++) {
+        centres.push({
+          x: deepest.origin.x + (col - mid) * CAVE_CELL_M,
+          z: deepest.origin.z + (row - mid) * CAVE_CELL_M,
+        });
+      }
     }
+    const distTo = (
+      a: { x: number; z: number },
+      b: { x: number; z: number },
+    ): number => Math.hypot(a.x - b.x, a.z - b.z);
+    const dressed = (c: { x: number; z: number }): boolean =>
+      deepest.features.some(
+        (f) =>
+          (f.kind === 'cavePool' ||
+            f.kind === 'caveBoulder' ||
+            f.kind === 'twilightFungus') &&
+          distTo(f, c) < 1.2,
+      );
+    const upPoint = deepest.upAnchor ?? deepest.entryAnchor;
+    const ok = centres.filter(
+      (c) =>
+        distTo(c, upPoint) >= CAVE_STONE_UP_SEPARATION_M &&
+        distTo(c, deepest.entryAnchor) >= CAVE_STONE_CLEAR_M &&
+        (!deepest.shaftAnchor ||
+          distTo(c, deepest.shaftAnchor) >= CAVE_STONE_CLEAR_M) &&
+        !dressed(c),
+    );
+    let pick: { x: number; z: number };
+    if (ok.length > 0) {
+      pick = ok[Math.floor(stoneRand() * ok.length)];
+    } else {
+      // No satisfying cell: the greatest worst-clearance
+      // centre (deterministic; the census reports it).
+      pick = centres[0];
+      let bestScore = -1;
+      for (const c of centres) {
+        const score = Math.min(
+          distTo(c, upPoint),
+          distTo(c, deepest.entryAnchor),
+        );
+        if (score > bestScore) {
+          bestScore = score;
+          pick = c;
+        }
+      }
+    }
+    fragmentSpot = { x: pick.x, z: pick.z };
+    deepest.features.push({
+      kind: 'carvedStone',
+      x: fragmentSpot.x,
+      z: fragmentSpot.z,
+      y: 0,
+      scale: 1,
+      rotY: 0,
+    });
   }
 
   const fungusLights = layer1.features
@@ -883,6 +1037,31 @@ export const CAVE_ENTER_RANGE_M = 6;
  *  him at the way back entirely: 0.92 m from the
  *  point, facing a wall, no pill, no sign. */
 export const CAVE_EXIT_RANGE_M = 7.5;
+
+/** THE SEPARATION REACHES (Adam's ruling, 2026-11-06:
+ *  the down, the up, and the stone each keep their own
+ *  ground). Derived from the pinned reaches — a door's
+ *  zone (CAVE_EXIT_RANGE_M 7.5) plus a faced act's reach
+ *  (2.5) plus margin — so a readable stand always
+ *  exists OUTSIDE the door's circle and INSIDE the
+ *  stone's reach. The margins are DRAFT for his pin
+ *  pass; the structure (no point inside another's
+ *  circle or reach) is the ruling. */
+/** The up hole deals at least this far from the
+ *  layer's down landing (the entry anchor): the climb's
+ *  circle (7.5) + 1 m of walking room. */
+export const CAVE_UP_ENTRY_SEPARATION_M = 8.5;
+/** The stone deals at least this far from the layer's
+ *  up point (on layer 1, the exit at the entry anchor):
+ *  the door's circle (7.5) + the reading reach (2.5) +
+ *  0.5 of slack — a stand exists that reads the stone
+ *  from outside the circle. */
+export const CAVE_STONE_UP_SEPARATION_M = 10.5;
+/** The stone deals at least this far from the layer's
+ *  other points (the down landing, the shaft): two
+ *  faced reaches (2.5 + 2.5) — neither act's circle
+ *  swallows the other's stand. */
+export const CAVE_STONE_CLEAR_M = 5;
 
 /** A facade mouth read as a PASSAGE: the threshold
  *  plane she crosses on foot. The plane stands at the

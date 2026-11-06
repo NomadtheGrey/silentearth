@@ -2054,7 +2054,10 @@ import {
   FARMHOUSE_CLEAR_RADIUS_M,
   farmhouseInstancesInRect,
 } from './game/farmhouses';
-import { fragmentCarriersHere as carriersHere } from './game/carriers';
+import {
+  caveCarrier,
+  fragmentCarriersHere as carriersHere,
+} from './game/carriers';
 import {
   caveInstanceForKey,
   caveInstancesInRect,
@@ -14763,6 +14766,33 @@ export default function App() {
     const player = playerRef.current;
     const gen = genRef.current;
     if (!player || !gen) return [];
+    // IN-CAVE CARRIER (UI, 2026-11-06; found by
+    // Background's separation drive): the projection
+    // below prices carriers by SURFACE geography —
+    // cave instances enumerated in a rect around her
+    // SURFACE position. Underground she stands in
+    // cave coordinates, where no surface instance
+    // stands, so a cave's own Circle stone could
+    // never be offered in-cave. Underground, ask the
+    // active cave directly (carriers.caveCarrier,
+    // Background's exported per-instance read) and
+    // price its stone in the cave frame she stands
+    // in. The debut cave mints no carrier (its
+    // layout reports no fragment spot — Adam,
+    // 2026-11-01), so cave:main returns [] here,
+    // unchanged; the surface path below is
+    // untouched.
+    if (dimensionState.isUnderground()) {
+      const carrier = caveCarrier(gen.seed, dimensionState.activeKey());
+      if (
+        carrier &&
+        Math.hypot(carrier.x - player.x, carrier.z - player.z) <=
+          HARVEST_RANGE
+      ) {
+        return [carrier];
+      }
+      return [];
+    }
     return carriersHere(
       gen.seed,
       gen.findSpawn(),
@@ -15215,7 +15245,12 @@ export default function App() {
         // any facing, with the same winner standing.
         if (shaft) considerCave('cave-descend', '', shaft.x, shaft.z);
       } else if (dimensionState.currentLayer() === 2) {
-        const entry = layout.layers[1]?.entryAnchor;
+        // THE UP HOLE (Adam's separation ruling,
+        // 2026-11-06): the climb prices from the layer's
+        // upAnchor — its own point, dealt clear of the
+        // down landing (the entry anchor) she arrived at.
+        const layer2 = layout.layers[1];
+        const entry = layer2?.upAnchor ?? layer2?.entryAnchor;
         if (entry) considerCave('cave-climb', '', entry.x, entry.z, CAVE_EXIT_RANGE_M);
       }
     }
@@ -16423,8 +16458,7 @@ export default function App() {
   // disagree.
   const useWinner = computeUseWinner();
   useWinnerRef.current = useWinner;
-
-  // The faced furniture, derived once per render for
+ // The faced furniture, derived once per render for
   // the feed branch below + the pick-up pill's seat
   // (the press re-derives — see handlePickupFurniture).
   const furnitureFacedNow = facedFurniture();

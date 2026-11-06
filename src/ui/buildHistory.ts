@@ -43,6 +43,14 @@ export interface BuildRecord {
 
 const ALL_RECORDS: BuildRecord[] = [
   {
+    merge: 'Merge #92',
+    pr: 135,
+    sha: '524b0bb',
+    date: '2026-11-06',
+    what: 'THE SEPARATION — the down, the up, and the stone no longer share a floor. A deeper layer now deals its own UP HOLE, at least 8.5 m of floor from the landing the descend sets her on, and the climb, the entry shaft of light, and the scry arrow all price from that hole instead of the landing. The carved stone deals a seat of its own too, at least 10.5 m from its layer's up point and clear of its landing and shaft, off fresh dealing streams that touch nothing else — every cave already in a world deals byte-identical walls, dressing, and doors; only the climb's point and the stone's seat move. And the stone can be READ where it stands: the shell now asks the active cave directly for its carrier when she is underground, where before it priced cave stones by surface geography and the offer could never arrive.',
+    why: 'Adam's ruling, in his words: just move the down away from the up. On the old deal the fragment stone stood at the far shaft anchor and the climb priced from the landing, and the census found deals (about 1 in 37) where every stand within the stone's reading reach fell inside the climb's circle — the door answered before her hands ever could, and the stone was unreadable there. The separation drive then proved a deeper cut: at a stone's own stand, in any cave, the Transcribe offer never stood at all, because the shell looked for the cave among surface places while she stood in cave coordinates. Both are fixed here, and both were proven in drives, not just probes: descend and land with no climb offered, walk to the up hole and climb, and the stone reads at its own far point.',
+  },
+  {
     merge: 'Merge #91',
     pr: 134,
     sha: '8149b33',
