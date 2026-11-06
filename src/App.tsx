@@ -9588,7 +9588,21 @@ export default function App() {
   };
   const toggleCompanionsPanel = () => {
     if (companionsOpen) setCompanionsOpen(false);
-    else openCompanionsPanel();
+    // THE DOOR FACT, INHERITED BY THE KEY (2026-11-06):
+    // closing is never gated; opening needs a bonded
+    // companion — the panel's door exists only while
+    // she has one (the button rows render on the same
+    // fact). The gate lives here, read live off the
+    // state ref, so every door — the buttons and the
+    // N key alike — inherits it, the journal's
+    // toggle pattern exactly.
+    else if (
+      companionStateRef.current
+        .snapshot()
+        .some((record) => record.bond !== 'none')
+    ) {
+      openCompanionsPanel();
+    }
   };
   // The journal's toggle (dialog audit #4): closing is
   // never gated; opening needs the carried journal (the
@@ -16046,6 +16060,7 @@ export default function App() {
         else if (key === 'k') toggleCraftingPanel();
         else if (key === 'l') toggleCharmsPanel();
         else if (key === 'j') toggleJournalPanel();
+        else if (key === 'n') toggleCompanionsPanel();
         // E CLOSES THE CRAFTING WINDOW (Adam, 2026-10-31 —
         // the flint lesson: while crafting was up, E did
         // nothing at all). E is the window's own key now,
@@ -16095,6 +16110,14 @@ export default function App() {
         toggleCharmsPanel();
       } else if (key === 'j') {
         toggleJournalPanel();
+      } else if (key === 'n') {
+        // THE COMPANIONS KEY (Adam's tap, 2026-11-06):
+        // N joins the panel family — priced over O,
+        // which sits one key from Inventory on the
+        // crowded row. The toggle follows the
+        // journal's pattern; the panel's buttons
+        // carry the N chip on PC. Touch unchanged.
+        toggleCompanionsPanel();
       } else if (key === 'p') {
         pauseState.setPaused(!pausedRef.current);
       }
@@ -18565,6 +18588,14 @@ export default function App() {
                 }
               >
                 Companions
+                {!isTouch ? (
+                  <span
+                    aria-hidden="true"
+                    className={'ml-1 ' + KEY_BADGE_CLASS}
+                  >
+                    N
+                  </span>
+                ) : null}
               </button>
             ) : null}
             {hasJournalItem ? (
@@ -18826,6 +18857,14 @@ export default function App() {
                 className="min-h-[44px] rounded bg-moss-deep px-3 py-2 text-sm hover:bg-moss"
               >
                 Companions
+                {!isTouch ? (
+                  <span
+                    aria-hidden="true"
+                    className={'ml-1 ' + KEY_BADGE_CLASS}
+                  >
+                    N
+                  </span>
+                ) : null}
               </button>
             ) : null}
             {hasJournalItem ? (
