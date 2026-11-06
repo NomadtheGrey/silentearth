@@ -2234,6 +2234,21 @@ const caveMouthCache = new Map<string, CaveMouthSite>();
  * centre, face). The v1 mouth passes its historical
  * label, so its rocks land exactly where they always did.
  */
+/** How far out of the face the mouth's spot stands (m).
+ *  THE RESEAT (Adam's cave-mouth fix, 2026-11-06): the
+ *  spot stood 2.6 m out — an invisible point floating in
+ *  the approach, and the entry offer's disc floated with
+ *  it. It now stands AT the frame: 1.0 m out, the closest
+ *  ground that is still clear of the threshold box for
+ *  the exit anchor (the box's face at 0.55 + her wall
+ *  radius 0.3 = 0.85). The passage plane rides the same
+ *  depth: she crosses the spot's plane a step before the
+ *  wall would stop her, and the crossing is the door. */
+export const CAVE_MOUTH_SPOT_V_M = 1.0;
+/** Half the opening's width (m) — the threshold box's
+ *  half-width; the passage fires only within it. */
+export const CAVE_MOUTH_OPENING_HALF_M = 1.05;
+
 export function buildCaveMouthFacade(
   seed: string,
   rocksLabel: string,
@@ -2301,7 +2316,7 @@ if (alongX) {
   }
 }
 
-const mouthSpot = toWorld(0, 2.6);
+const mouthSpot = toWorld(0, CAVE_MOUTH_SPOT_V_M);
   return { features, walls, mouthSpot };
 }
 
