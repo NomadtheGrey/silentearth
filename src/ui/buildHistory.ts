@@ -43,6 +43,14 @@ export interface BuildRecord {
 
 const ALL_RECORDS: BuildRecord[] = [
   {
+    merge: 'Merge #88',
+    pr: 131,
+    sha: 'b5c9c83',
+    date: '2026-11-06',
+    what: 'CAVES AND COTTAGES — the afternoon Adam got stuck in his own cave, answered whole. THE WAY BACK, DRESSED: the cave exit is plainly obvious upon arrival now, by his pin — a shaft of daylight stands at the entry anchor (a light column to a lit pool at her feet, a bright cap at the ceiling hole, warm light on the entry cell’s walls, dust motes drifting down it), and she materializes inside it, so the sign is in her first view without turning; layer 2’s climb anchor wears the same shaft. THE EXIT ZONE: the offer prices off the entry CELL, not the bare point — anywhere in the arrival cell, facing the shaft, the EXIT prompt stands; the old 2.5-metre disc around an invisible point is gone. THE PHANTOM NAMES, EVICTED: the ground tag read the surface’s facts at cave coordinates, so a fen’s peat carpet, ponds, and silt named themselves in the dark where none exist; underground it now reads the dimension’s own ground — cave pools name themselves, and nothing else can. AND THE COTTAGE BAND, RETIRED: the Woven Cottage’s two wattle bands were solid slabs crossing the whole room in mid-air, the upper one straddling her eye height exactly — the black band of his field report, ceiling and all; they are thin strips on the walls’ faces now, proud outside as designed, and nothing spans the room.',
+    why: 'Adam walked into his cave through the new passage, explored, came back to the way back, and found nothing — no prompt, no door, no sign — standing less than a metre from the exit point itself. His pin set the standard the fix is priced to: the player should not have to guess where the exit is; it should be plainly obvious upon arrival. The phantom carpet stood in the same frame as his only tag — the cave naming things that are not there while the one point that was there carried no name at all. The cottage band is the same disease in a lit room: geometry drawn across the player’s air instead of on the wall it belonged to. All three close the way his reports asked — the world shows what is true, where it is true.',
+  },
+  {
     merge: 'Merge #87',
     pr: 130,
     sha: 'd4dc6e5',
