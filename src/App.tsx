@@ -1724,6 +1724,7 @@ import {
   SHELTER_RADIUS,
   type HouseType,
 } from './game/shelter';
+import { siteShelterAt } from './game/siteShelter';
 import {
   evaluateCampReveal,
   isNearStillWater,
@@ -3225,6 +3226,27 @@ export default function App() {
       shelterState.snapshot(),
       placedTentsRef.current,
     );
+    // RAINSHELTER (the amended drying law's shell half,
+    // 2026-11-05): the fraction of the rain that REACHES
+    // her through the roof overhead — the better of the
+    // placed shelter's roof class and any found
+    // structure's (the farmhouse roof, a village house),
+    // priced enclosed/tent 0 (no rain reaches her),
+    // lean-to 0.5 (DRAFT — it leaks), open sky 1.
+    // Systems' soak reads this fact for its rain term
+    // in place of the shelter multiplier; absent a roof
+    // read the composition still answers 1, never a
+    // guess at cover she does not have.
+    const roofRain = (roof: string): number =>
+      roof === 'enclosed' || roof === 'tent'
+        ? 0
+        : roof === 'leanTo'
+          ? 0.5
+          : 1;
+    const rainShelter = Math.min(
+      roofRain(shelter.roof),
+      roofRain(siteShelterAt(genRef.current, x, z)?.roof ?? 'none'),
+    );
     let fireWarmth = 0;
     for (const fire of fireState.snapshot()) {
       if (!fire.lit) continue;
@@ -3242,6 +3264,7 @@ export default function App() {
         ? 'wading'
         : 'none',
       shelterMultiplier: shelter.multiplier,
+      rainShelter,
       fireWarmth,
       worn: wardrobe.wornItemIds(),
     };
