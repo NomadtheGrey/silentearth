@@ -14163,6 +14163,21 @@ export default function App() {
     cloudPendingRemove,
     cloudPendingRestore,
     cloudPendingNewGame,
+    // THE DIALOGUP MEMBERS BELOW WERE MISSING (the
+    // silent-E fix, 2026-11-05): the body's dialogUp
+    // gate reads every one of these, but with them
+    // absent from the deps a dialog that ROSE while a
+    // menu opened and FELL afterwards never re-ran the
+    // effect — the leash stayed unsubscribed and the
+    // selection outlived its menu invisibly, eating E
+    // until an Escape cleared it (Adam's four dead
+    // acts). With them seated, a dialog's fall resumes
+    // the leash and no selection can outlive the
+    // dialog's shadow.
+    pendingCarriedTrap,
+    cloudConflictPrompt,
+    cloudWakeOffer,
+    itemInfoId,
     placedTents,
     homeHouse,
   ]);
