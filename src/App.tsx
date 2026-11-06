@@ -2032,6 +2032,7 @@ import {
 } from './game/cauldronState';
 import {
   barnSite,
+  caveMouthSite,
   chapelSite,
   drownedMillSite,
   farmhouseSite,
@@ -2056,10 +2057,12 @@ import {
 import { fragmentCarriersHere as carriersHere } from './game/carriers';
 import {
   caveInstanceForKey,
+  caveInstancesInRect,
   caveLayoutForKey,
   caveMouths,
   caveMouthsNear,
   CAVE_DIMENSION_KEY,
+  CAVE_ENTER_RANGE_M,
 } from './game/caves';
 import { dimensionState } from './game/dimensionState';
 import {
@@ -15049,10 +15052,11 @@ export default function App() {
       id: string,
       x: number,
       z: number,
+      range: number = HARVEST_RANGE,
     ): void => {
       const f = facingOf(x, z);
-      if (f.distance <= HARVEST_RANGE) anyCandidateInRange = true;
-      if (f.isFaced && f.distance <= HARVEST_RANGE) {
+      if (f.distance <= range) anyCandidateInRange = true;
+      if (f.isFaced && f.distance <= range) {
         challengers.push({ kind, id, distance: f.distance });
       }
     };
@@ -15096,15 +15100,21 @@ export default function App() {
         // registered instance near her (instances keyed
         // by their cave key as the winner id; travel
         // routes by it).
+        // THE MOUTH'S OWN REACH (Adam's cave-mouth fix,
+        // 2026-11-06): the entry offer prices at
+        // CAVE_ENTER_RANGE_M around the reseated spot —
+        // from his reported stand in front of the debut
+        // mouth, the ENTER pill must stand. Other arms
+        // keep HARVEST_RANGE.
         for (const mouth of caveMouthsNear(
           String(gen.seed),
           gen.findSpawn(),
           (x, z) => gen.weightsAt(x, z),
           player.x,
           player.z,
-          HARVEST_RANGE,
+          CAVE_ENTER_RANGE_M,
         )) {
-          considerCave('cave-enter', mouth.id, mouth.spot.x, mouth.spot.z);
+          considerCave('cave-enter', mouth.id, mouth.spot.x, mouth.spot.z, CAVE_ENTER_RANGE_M);
         }
         // UPSTAIRS ENTRY: the singular's key is the bare
         // 'farmhouse'; each family instance rides its own
@@ -15266,6 +15276,23 @@ export default function App() {
       showFeedback(line, 'blocked');
     }
   };
+
+  // THE PASSAGE'S CONSUMER (Adam's cave-mouth fix,
+  // 2026-11-06): the renderer declares a threshold
+  // crossing ('cave:threshold-crossed'); the travel
+  // composition is the pill's own — enterCave by the
+  // mouth id, refusals from the same table. The guard
+  // mirrors the race's arms: the passage speaks only
+  // from the surface (dimensionState reads any
+  // non-surface key as underground, attics included).
+  useEffect(() => {
+    const off = bus.on('cave:threshold-crossed', ({ mouthId }) => {
+      if (dimensionState.isUnderground()) return;
+      if (isUpstairsKey(dimensionState.activeKey())) return;
+      handleCaveTravel({ kind: 'cave-enter', id: mouthId });
+    });
+    return off;
+  }, []);
 
   // The upstairs press (UI half, 2026-11-01): the cave
   // press's sibling — compose Background's validated
@@ -16884,6 +16911,30 @@ export default function App() {
     )) {
       candidates.push({
         key: 'homestead',
+        x: instance.center.x,
+        z: instance.center.z,
+      });
+    }
+    // THE CAVE MOUTHS (Adam's cave-mouth fix, 2026-11-06):
+    // the mouth joins the structure tags under the
+    // standing grammar — the debut is 'The Cave Mouth',
+    // dealt instances are 'Cave Mouth' — at the site
+    // CENTRE, where the frame stands. (Before this the
+    // mouth was in no tag feed at all: the place did not
+    // name itself, and its door did not announce itself.)
+    candidates.push({
+      key: 'cave-mouth',
+      ...caveMouthSite(gen.seed, spawn, weights).center,
+    });
+    const caveReach = STRUCTURE_TAG_RANGE_M + 14;
+    for (const instance of caveInstancesInRect(gen.seed, spawn, weights, {
+      minX: player.x - caveReach,
+      maxX: player.x + caveReach,
+      minZ: player.z - caveReach,
+      maxZ: player.z + caveReach,
+    })) {
+      candidates.push({
+        key: 'cave-mouth-instance',
         x: instance.center.x,
         z: instance.center.z,
       });

@@ -64,7 +64,7 @@ import { standingInWater, terrainSpeedAt, WADING_FACTOR, type WaterDisc } from '
 import { distanceToWater } from './waterProximity';
 import { riverParamsFor, riverRibbonForChunk } from './river';
 import { barnSite, caveMouthSite, chapelSite, drownedMillSite, farmhouseSite, generalStoreSite, groveEntranceSeat, groveSite, mazeEntranceSeat, pushOutOfWalls, railSidingSite, schoolhouseSite, siloSite, sunkenRoadSite, villageSite, wallsNearSites, GROVE_CELL_M, GROVE_GRID_CELLS, type SiteFootprint } from './sites';
-import { caveFootprintFor, caveInstancesInRect, caveLayoutForKey, caveMouthsNear, caveSurfaceAim, type CaveSurfaceHit } from './caves';
+import { caveFootprintFor, caveInstancesInRect, caveLayoutForKey, caveMouthsNear, caveSurfaceAim, crossedMouth, passageMouthsNear, type CavePassageMouth, type CaveSurfaceHit } from './caves';
 import { mossPaintState } from './mossPaintState';
 import { bearingDegrees, SURFACE_DIMENSION_KEY, type NamedPlace, type NamedPlacesState } from './namedPlaces';
 import { dimensionState } from './dimensionState';
@@ -972,6 +972,14 @@ export class WorldRenderer {
   private exodusGroup: THREE.Group | null = null;
   private exodusMeshes = new Map<string, THREE.Group>();
   private exodusMouthCache: { at: number; list: { id: string; x: number; z: number }[] } | null = null;
+  /** The cave passage watch: facade mouths near her
+   *  (refreshed like the exodus list) + her last stepped
+   *  position — the crossing is read off the segment
+   *  between the two. Null inside a dimension: the watch
+   *  is a surface sense, and a travel write must never
+   *  draw a segment. */
+  private passageMouthCache: { at: number; list: CavePassageMouth[] } | null = null;
+  private passagePrevPos: { x: number; z: number } | null = null;
   /** Memo for the site-walls query's cave-instance spawn (see siteWallsAt). */
   private wallsSpawnMemo: { seed: string; spawn: { x: number; z: number } } | null = null;
   /**
@@ -4719,6 +4727,36 @@ export class WorldRenderer {
           this.poseAnimal(g.instance, this.guideGroup);
         }
       }
+    }
+    // THE CAVE PASSAGE (Adam's cave-mouth fix,
+    // 2026-11-06): the renderer is the side that sees her
+    // step, so it declares the crossing — her frame
+    // segment against the facade mouths' threshold
+    // planes, inward only. The shell's travel
+    // composition consumes the event and runs enterCave;
+    // nothing here travels. Inside a dimension the watch
+    // reseeds: a travel write draws no segment.
+    if (!this.gen.dimensionKey) {
+      const curPos = { x: this.player.x, z: this.player.z };
+      if (this.passagePrevPos) {
+        const now = performance.now();
+        if (!this.passageMouthCache || now - this.passageMouthCache.at > 2000) {
+          const spawn = this.gen.findSpawn();
+          this.passageMouthCache = {
+            at: now,
+            list: passageMouthsNear(
+              String(this.gen.seed), spawn,
+              (wx, wz) => this.gen.weightsAt(wx, wz),
+              curPos.x, curPos.z, 24,
+            ),
+          };
+        }
+        const hit = crossedMouth(this.passagePrevPos, curPos, this.passageMouthCache.list);
+        if (hit) bus.emit('cave:threshold-crossed', { mouthId: hit });
+      }
+      this.passagePrevPos = curPos;
+    } else {
+      this.passagePrevPos = null;
     }
     // The bat exodus (2026-10-31): stepped after the
     // guide; meshes pool against the runtime's bats. A

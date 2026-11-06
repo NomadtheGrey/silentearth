@@ -65,6 +65,8 @@ export const STRUCTURE_TAG_NAMES: Readonly<Record<string, string>> = {
   'village-house': 'Burnt House',
   homestead: 'Homestead',
   'farmhouse-instance': 'Farmhouse',
+  'cave-mouth': 'The Cave Mouth',
+  'cave-mouth-instance': 'Cave Mouth',
 };
 
 export interface StructureTagProps {

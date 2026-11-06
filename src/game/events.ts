@@ -619,6 +619,15 @@ export interface EventMap {
    * sound) is the shell's.
    */
   'guide:call': { x: number; z: number; bearingDeg: number; compass: string };
+  /**
+   * The cave passage (Adam's cave-mouth fix, 2026-11-06):
+   * the renderer — the side that sees her step — declares
+   * that she crossed a facade mouth's threshold plane on
+   * foot, inward. The shell's travel composition consumes
+   * it (enterCave by the mouth id). Inward only; exits
+   * keep their doors and never emit this.
+   */
+  'cave:threshold-crossed': { mouthId: string };
 }
 
 type Handler<E> = (payload: E) => void;

@@ -41,6 +41,7 @@ import type { WorldGen } from './worldgen';
 import {
   barnSite,
   buildCaveMouthFacade,
+  CAVE_MOUTH_OPENING_HALF_M,
   caveMouthSite,
   chapelSite,
   distToSegment,
@@ -847,4 +848,88 @@ export function caveMouthsNear(
     out.push({ id: inst.key, spot: inst.mouthSpot, exitYaw: inst.exitYaw, walls: inst.walls });
   }
   return out;
+}
+
+/** The entry offer's reach (m), priced by acceptance
+ *  (Adam's cave-mouth fix, 2026-11-06; DRAFT for his pin
+ *  pass): from his reported stand (-369.1, -13.4) facing
+ *  the debut mouth, the ENTER pill must stand. His
+ *  distance to the reseated spot is 5.48 m; the disc is
+ *  6. The old geography (HARVEST_RANGE 2.5 around a spot
+ *  floating 2.6 m out) left him 1.39 m outside it with no
+ *  word as to why. */
+export const CAVE_ENTER_RANGE_M = 6;
+
+/** A facade mouth read as a PASSAGE: the threshold
+ *  plane she crosses on foot. The plane stands at the
+ *  spot's depth out of the face (planeV along the out
+ *  axis from the centre), spanning the opening's width.
+ *  The farmhouse cellar mouth is NOT a passage — it has
+ *  no facade and no plane; it keeps the pill only. */
+export interface CavePassageMouth {
+  id: string;
+  cx: number;
+  cz: number;
+  outX: number;
+  outZ: number;
+  planeV: number;
+  halfW: number;
+}
+
+export function passageMouthsNear(
+  worldSeed: string,
+  spawn: { x: number; z: number },
+  weightsAtPos: (x: number, z: number) => BiomeWeights,
+  x: number,
+  z: number,
+  radius: number,
+): CavePassageMouth[] {
+  const out: CavePassageMouth[] = [];
+  const add = (id: string, center: { x: number; z: number }, spot: { x: number; z: number }): void => {
+    const dx = spot.x - center.x;
+    const dz = spot.z - center.z;
+    const v = Math.hypot(dx, dz);
+    if (v < 1e-6) return;
+    if (Math.hypot(center.x - x, center.z - z) > radius + v) return;
+    out.push({
+      id, cx: center.x, cz: center.z,
+      outX: dx / v, outZ: dz / v, planeV: v, halfW: CAVE_MOUTH_OPENING_HALF_M,
+    });
+  };
+  const debut = caveMouthSite(worldSeed, spawn, weightsAtPos);
+  add('mouth', debut.center, debut.mouthSpot);
+  for (const inst of caveInstancesInRect(worldSeed, spawn, weightsAtPos, {
+    minX: x - radius, maxX: x + radius, minZ: z - radius, maxZ: z + radius,
+  })) {
+    add(inst.key, inst.center, inst.mouthSpot);
+  }
+  return out;
+}
+
+/** The crossing test (pure): her step from prev to cur
+ *  crosses a mouth's threshold plane INWARD, within the
+ *  opening's width -> that mouth's id, else null. A step
+ *  longer than 3 m is a teleport (a travel write, a
+ *  restore), never a crossing — the passage is walked,
+ *  not written. Outward crossings never fire: leaving a
+ *  cave keeps its existing doors. */
+export function crossedMouth(
+  prev: { x: number; z: number },
+  cur: { x: number; z: number },
+  mouths: CavePassageMouth[],
+): string | null {
+  const step = Math.hypot(cur.x - prev.x, cur.z - prev.z);
+  if (step === 0 || step > 3) return null;
+  for (const m of mouths) {
+    const dPrev = (prev.x - m.cx) * m.outX + (prev.z - m.cz) * m.outZ;
+    if (dPrev <= m.planeV) continue;
+    const dCur = (cur.x - m.cx) * m.outX + (cur.z - m.cz) * m.outZ;
+    if (dCur > m.planeV) continue;
+    const t = (dPrev - m.planeV) / (dPrev - dCur);
+    const px = prev.x + (cur.x - prev.x) * t;
+    const pz = prev.z + (cur.z - prev.z) * t;
+    const lat = (px - m.cx) * -m.outZ + (pz - m.cz) * m.outX;
+    if (Math.abs(lat) <= m.halfW) return m.id;
+  }
+  return null;
 }
