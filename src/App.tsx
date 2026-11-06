@@ -6603,6 +6603,30 @@ export default function App() {
             return [];
           }),
         );
+        // ONE STAGED-BONE FACT (rite pair landing, 2026-11-05):
+        // the two stores restore from the same entries
+        // under different filters — the book's is stricter
+        // (every flag + extrasDone), the site's keeps any
+        // bonePlaced entry — so an older save's entry can
+        // restore the site's bone while the book drops its
+        // record. The panel needs both readers and fell
+        // back to the stage list over a staged bone, while
+        // the staging refusal (the site's fact) said the
+        // site already holds one — the panel contradicting
+        // itself in Adam's screenshots. Heal at the seat:
+        // any site-held bone with no book entry gets its
+        // entry back with the placement set; the steps
+        // past placement are unknowable and read as
+        // not-yet (she simply redoes them), and staging
+        // another bone still refuses on the site's fact.
+        for (const record of ritualSiteState.snapshot()) {
+          if (!stagingBookRef.current.get(record.site.siteId, record.bone)) {
+            stagingBookRef.current.getOrCreate(
+              record.site.siteId,
+              record.bone,
+            ).bonePlaced = true;
+          }
+        }
         // LOOK SAVE WIRING (same pre-construction pattern):
         // nameSight.restore() is silent and replaces; the
         // shell's NameSight starts empty, so a second
@@ -10082,6 +10106,12 @@ export default function App() {
       // used to anchor at the site — the feed is every
       // line's seat now, so the site lookup is gone).
       ritualSiteState.unstageBone(entry.siteKey);
+      // THE BOOK CLEARS BESIDE THE SITE (Systems' design,
+      // wired 2026-11-05 with the rite pair landing): the
+      // spent entry leaves the book in the same act, so
+      // the save stops carrying it and the two stores
+      // cannot split over a completion.
+      stagingBookRef.current.clear(entry.siteKey, entry.boneKind);
       showFeedback(`The ${boneDisplayFor(result.kind)} awakens.`, 'gain');
       changed = true;
     }
