@@ -14878,6 +14878,22 @@ export default function App() {
     // The rest of the field, in tie order (the pair winner
     // keeps ties — challengers must be strictly nearer).
     const challengers: UseWinner[] = [];
+    // THE DIRECTION-FREE DOORS (Adam's ruling, 2026-11-06:
+    // 'the direction shouldn't have anything to do with
+    // the exit... exit pill should appear for her wherever
+    // she is in that circle'; extended the same day to the
+    // Go deeper pill, and the climb with it): the cave-exit,
+    // cave-climb and cave-descend arms seat HERE instead of
+    // the challenger race — priced on zone alone (within
+    // their reach of the anchor, no cone), and a seated zone
+    // door WINS the race outright (see the return below): a
+    // door under her feet outranks a faced harvestable; she
+    // can step out of the circle to harvest. Two doors can
+    // be live in one room (layer 1 seats the exit and the
+    // descend): the NEAREST zone door holds the seat, and
+    // the exit — seated first — keeps it on a tie (the way
+    // out outranks the way down).
+    let zoneExit: UseWinner | null = null;
     if (trapRowTrap) {
       const f = facingOf(trapRowTrap.x, trapRowTrap.z);
       if (f.isFaced) {
@@ -15058,6 +15074,21 @@ export default function App() {
     ): void => {
       const f = facingOf(x, z);
       if (f.distance <= range) anyCandidateInRange = true;
+      if (
+        kind === 'cave-exit' ||
+        kind === 'cave-climb' ||
+        kind === 'cave-descend'
+      ) {
+        // Zone alone (Adam's ruling, above): no cone
+        // test. The nearest zone door holds the seat.
+        if (
+          f.distance <= range &&
+          (zoneExit === null || f.distance < zoneExit.distance)
+        ) {
+          zoneExit = { kind, id, distance: f.distance };
+        }
+        return;
+      }
       if (f.isFaced && f.distance <= range) {
         challengers.push({ kind, id, distance: f.distance });
       }
@@ -15163,9 +15194,11 @@ export default function App() {
       if (dimensionState.currentLayer() === 1) {
         // THE EXIT'S OWN REACH (Adam's exit pin,
         // 2026-11-06): the offer prices off the entry
-        // CELL (CAVE_EXIT_RANGE_M), not the bare anchor
-        // point — anywhere in the arrival cell, facing
-        // the entry shaft, the EXIT pill stands.
+        // BLOCK (CAVE_EXIT_RANGE_M), not the bare anchor
+        // point — and by his later ruling the same day
+        // it prices on zone alone: anywhere inside the
+        // reach, facing anywhere, the EXIT pill stands
+        // (the direction-free seat in considerCave).
         considerCave(
           'cave-exit',
           '',
@@ -15174,6 +15207,12 @@ export default function App() {
           CAVE_EXIT_RANGE_M,
         );
         const shaft = layout.layers[0]?.shaftAnchor;
+        // GO DEEPER IS A DOOR TOO (Adam's ruling extended,
+        // 2026-11-06): the descend seats in the same
+        // direction-free zone as the exit — its circle is
+        // its own reach (the default: she stands at the
+        // shaft mouth), and inside it the pill stands at
+        // any facing, with the same winner standing.
         if (shaft) considerCave('cave-descend', '', shaft.x, shaft.z);
       } else if (dimensionState.currentLayer() === 2) {
         const entry = layout.layers[1]?.entryAnchor;
@@ -15218,6 +15257,9 @@ export default function App() {
         winner = challenger;
       }
     }
+    // A seated zone door outranks the whole race (Adam's
+    // ruling, 2026-11-06 — see the zoneExit seat above).
+    if (zoneExit !== null) return zoneExit;
     if (winner !== null) return winner;
     // Fallbacks: scry (visible; it has no world position,
     // so it never outranks a positioned target), then
