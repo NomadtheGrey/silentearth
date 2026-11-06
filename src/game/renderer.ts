@@ -47,7 +47,7 @@ import {
   stepActors,
 } from './companionRuntime';
 import { catActor, catGlowOn, clearCat, ensureCat, installCatPreyAccess, stepCat } from './catRuntime';
-import { clearGuide, clearRetarget, guideActor, guideVisible, isLesserGroveGleamed, retargetGuide, seatYFor, stageGuide, stepGuide, GUIDE_LEAD_RING_M, GUIDE_LESSER_RANGE_M } from './guideRuntime';
+import { clearGuide, clearRetarget, guideActor, guideVisible, isLesserGroveGleamed, retargetGuide, stageGuide, stepGuide, GUIDE_LEAD_RING_M, GUIDE_LESSER_RANGE_M } from './guideRuntime';
 import { currentWeatherFacts, seatWeatherState, stepWeather, weatherStateSnapshot, RAIN_VISIBLE_INTENSITY, type WeatherSpellRecord } from './weatherSpells';
 import { exodusBats, stepExodus } from './exodusRuntime';
 import { crowGlowIntensity, CROW_GLOW_EMISSIVE } from './crow';
@@ -958,7 +958,7 @@ export class WorldRenderer {
   private catPropKind: string | null = null;
   /** Cover points (trees / bushes) per chunk, for settle/dart watch points. */
   private coverMemo = new Map<string, { x: number; z: number }[]>();
-  /** The guide's layer (a single crow mesh) + its tree-point memo. */
+  /** The guide's layer (a single crow mesh). */
   private guideGroup: THREE.Group | null = null;
   /** Lesser groves the raven has already led her to (the
    *  arrival latch — see updateGuideRetarget). */
@@ -968,7 +968,6 @@ export class WorldRenderer {
   private rainStreaks: THREE.Points | null = null;
   private rainSplashes: THREE.Points | null = null;
   private rainSplashLife: Float32Array | null = null;
-  private treeMemo = new Map<string, { x: number; z: number; crownY: number }[]>();
   /** The bat exodus layer: pooled bat meshes keyed by bat id. */
   private exodusGroup: THREE.Group | null = null;
   private exodusMeshes = new Map<string, THREE.Group>();
@@ -1786,15 +1785,10 @@ export class WorldRenderer {
     const village = villageSite(String(gen.seed), gen.findSpawn(), (x, z) => gen.weightsAt(x, z));
     ensureCat(village.hearthHouse.hearthSpot.x, village.hearthHouse.hearthSpot.z);
     const grove = groveSite(String(gen.seed), gen.findSpawn(), (x, z) => gen.weightsAt(x, z).dominant);
-    // The grove seat reads the grove's own nearest tree
-    // crown through the one seat law (seatYFor — ON the
-    // crown's top, never sunk in it).
-    const grovePerch = this.treePointNear(grove.center.x, grove.center.z, 12);
-    stageGuide(
-      grove.center.x,
-      grove.center.z,
-      grovePerch ? seatYFor(grovePerch) : undefined,
-    );
+    // The hover re-cut (2026-11-06): the guide needs no
+    // tree to stage on — it is staged with the Grove's
+    // point alone and flies to its station.
+    stageGuide(grove.center.x, grove.center.z);
   }
 
   /**
@@ -1911,78 +1905,6 @@ export class WorldRenderer {
       return;
     }
     retargetGuide(best.seat.x, best.seat.z);
-  }
-
-  /** The kinds a perch may stand on (sparse-country
-   *  staging, 2026-11-03): a raven can sit on any tall
-   *  tree — the generic tree, the tall scenery tree, the
-   *  pine, and the Grove's own oaks. The search once read
-   *  'tree' only, which made the Grove's own oaks
-   *  invisible as perches and left pine country and
-   *  tall-tree country unstageable however near a tree
-   *  stood. Every consumer of treePointNear inherits the
-   *  widening: the grove seat registration, the staging
-   *  cascade, and every hop's perch search. */
-  private static PERCH_KINDS: ReadonlySet<ScatterKind> = new Set([
-    'tree',
-    'tallTree',
-    'pineTree',
-    'groveOak',
-  ]);
-  /** A perch kind's crown-top height at scale 1, measured
-   *  once off its built geometry (geometry top + the
-   *  mesh's baseY — the renderer's own placement sum,
-   *  so the crown a perch reads is the crown that draws). */
-  private crownTopCache = new Map<string, number>();
-  private crownTopFor(kind: ScatterKind): number {
-    let top = this.crownTopCache.get(kind);
-    if (top === undefined) {
-      const mesh = SOURCE_FOR_KIND[kind].mesh;
-      const geo = buildKindGeometry(mesh, kind);
-      geo.computeBoundingBox();
-      top = (geo.boundingBox?.max.y ?? 0) + mesh.baseY;
-      geo.dispose();
-      this.crownTopCache.set(kind, top);
-    }
-    return top;
-  }
-
-  private treePointNear(
-    x: number,
-    z: number,
-    r: number,
-  ): { x: number; z: number; crownY: number } | null {
-    const pcx = Math.floor(x / CHUNK_SIZE);
-    const pcz = Math.floor(z / CHUNK_SIZE);
-    let best: { x: number; z: number; crownY: number } | null = null;
-    let bestD = r;
-    for (let cx = pcx - 1; cx <= pcx + 1; cx++) {
-      for (let cz = pcz - 1; cz <= pcz + 1; cz++) {
-        const key = `${cx},${cz}`;
-        let pts = this.treeMemo.get(key);
-        if (!pts) {
-          pts = [];
-          for (const obj of this.gen.generateChunk(cx, cz).objects) {
-            if (WorldRenderer.PERCH_KINDS.has(obj.kind)) {
-              pts.push({
-                x: obj.x,
-                z: obj.z,
-                crownY: this.crownTopFor(obj.kind) * obj.scale,
-              });
-            }
-          }
-          this.treeMemo.set(key, pts);
-        }
-        for (const p of pts) {
-          const d = Math.hypot(p.x - x, p.z - z);
-          if (d < bestD) {
-            bestD = d;
-            best = p;
-          }
-        }
-      }
-    }
-    return best;
   }
 
   /**
@@ -4776,7 +4698,7 @@ export class WorldRenderer {
     }
     // The raven guide (2026-10-31): stepped after the cat,
     // in its own one-mesh layer; visible only while it
-    // perches or flies, and never inside a dimension.
+    // hovers or flies, and never inside a dimension.
     {
       const g = guideActor();
       if (g) {
@@ -4786,7 +4708,6 @@ export class WorldRenderer {
           playerZ: this.player.z,
           windowOpen: this.guideWindowOpen(),
           dimensionActive: !!this.gen.dimensionKey,
-          perchNear: (x, z, r) => this.treePointNear(x, z, r),
         });
         if (!this.guideGroup) {
           this.guideGroup = new THREE.Group();
