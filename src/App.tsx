@@ -6770,6 +6770,26 @@ export default function App() {
         rooted: isRooted(hedge, day),
       }));
     });
+    // THE HEARTHHOME SEAL VIEWS (the feral leg,
+    // 2026-11-06): Background's seat, the hedge
+    // provider's mirror — the views derive shell-side
+    // from the state: centre + radius from the seal
+    // record, the tier from her CURRENT HearthHome
+    // knowledge (the same value on every view; seals
+    // don't root, so no day read). The renderer binds
+    // only views at tier >= 1 (Systems' sealAdmits
+    // line) — passing the true tier through is all the
+    // honesty it needs. Unregistered would mean no
+    // refusals at a seal's edge.
+    renderer.setHearthHomeFactsProvider(() => {
+      const tier = hearthhomeTier(fragmentStateRef.current);
+      return hearthhomeStateRef.current.snapshot().map((seal) => ({
+        x: seal.x,
+        z: seal.z,
+        radiusM: seal.radiusM,
+        tier,
+      }));
+    });
     renderer.setInjurySpeedFactor(injury.effects().movementMultiplier);
     // LOOK owl hook (hook only): the owl charm is a later
     // charm (fashioned/enchanted, id not decided), so the
