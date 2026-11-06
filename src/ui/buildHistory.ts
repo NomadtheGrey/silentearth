@@ -43,6 +43,14 @@ export interface BuildRecord {
 
 const ALL_RECORDS: BuildRecord[] = [
   {
+    merge: 'Merge #87',
+    pr: 130,
+    sha: 'd4dc6e5',
+    date: '2026-11-06',
+    what: 'DOORS AND DUSK — three of Adam’s own field reports close. THE SEAL, COMPLETED: the shell seats the HearthHome provider, so the seal’s teeth promised in #86 are live — a hostile inside a standing seal breaks and bolts, and no feral opens on her or hers inside one; the sealed-home drive proved it at a live bear, the warning against the unsealed stand, silence against the sealed. TWILIGHT, SETTLED: the rite windows and the sky’s band are priced at Adam’s final pin — thirty in-game minutes either side of sunrise and sunset, an elevation band that breathes with the season — and the cave-mouth bats pour on that same band now, dawn and dusk, instead of their own private clock. THE RAVEN, RE-CUT: the guide no longer tree-hops. It hovers — holding a standoff on the grove’s bearing, stepping off toward the grove when she closes, and when she walks away it shuttles, down to her with a call and back out the bearing, until she takes the road again; arriving, it hovers over the door itself. AND CAVES GET DOORS: crossing a mouth’s threshold on foot takes her in, at the debut and every dealt mouth; the entry spot reseats at the frame and the ENTER prompt reaches six metres, so it stands from where a player actually stops; and the mouth names itself at last — ‘The Cave Mouth’, ‘Cave Mouth’ — in the structure tags.',
+    why: 'Each piece is a door Adam found shut or silent in play. The seal bound no beast until its provider was seated — #86 said so plainly, and this merge keeps that word. The raven parked forever on an isolated tree at his fen because its hop search could not leave it; his answer — hover, do not hop — replaced the locomotion whole, perches and all. And at the cave mouth he reported ‘no way in’: the hunt found there was no walk-in at all, only a prompt inside a small disc floating in front of the frame, from a step beyond where he stood — so the mouth got a real passage, a prompt that reaches him, and a name. The twilight rides along because the band is one fact wherever it is read: the rites, the sky, and the bats now agree on when dusk is.',
+  },
+  {
     merge: 'Merge #86',
     pr: 129,
     sha: '6ad3c3c',
