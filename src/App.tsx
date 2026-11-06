@@ -9859,7 +9859,10 @@ export default function App() {
       );
       if (result.ok === false) {
         if (result.code === 'name') {
-          showFeedback('You do not know its true name.', 'blocked');
+          showFeedback(
+            'You do not know its true name — a Waking speaks it.',
+            'blocked',
+          );
         } else if (result.code === 'trust') {
           showFeedback(
             'Not yet — it does not know you well enough.',
