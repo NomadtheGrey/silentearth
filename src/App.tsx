@@ -12907,10 +12907,12 @@ export default function App() {
     // per home, so a ringed home shows no row (menus
     // don't carry tombstones, the upgrade law). The
     // row prices itself in the counts idiom: the
-    // cuttings ride the row's hint (the regular
-    // ContextMenu row renders hint at its right —
-    // countsText renders only in the arrows branch,
-    // so it would be dead here), and a Missing note
+    // cuttings ride the row's countsText (the one
+    // rule — every ContextMenu row renders countsText
+    // at its right, regular and arrows alike, since
+    // the countsText fix 2026-11-05; the home upgrade
+    // row's price was dead until that fix taught the
+    // regular row), and a Missing note
     // names the want when she is short, before any
     // working starts. While the held
     // working stands, the menu's rows are its
@@ -12935,7 +12937,7 @@ export default function App() {
       actions.push({
         id: 'lay-hedge',
         label: 'Lay the Hedge Mark',
-        hint: `Cuttings ${held}/${CUTTINGS_TO_LAY}`,
+        countsText: `Cuttings ${held}/${CUTTINGS_TO_LAY}`,
         disabled: held < CUTTINGS_TO_LAY,
         disabledNote:
           held < CUTTINGS_TO_LAY
