@@ -85,6 +85,8 @@ import {
   VILLAGE_WALL_H_M,
   type SiteWallBox,
   type VillageHouseState,
+  ROOF_RECT_INSET_M,
+  type RoofRect,
 } from './sites';
 import {
   DISTRIBUTION_CELL_M,
@@ -167,6 +169,8 @@ export interface VillageInstance {
   /** World axis the street runs along. */
   streetAxis: 'x' | 'z';
   plots: VillageInstancePlot[];
+  /** Roofed interiors for the rain-shelter read (2026-11-05). */
+  roofRects: RoofRect[];
   /** The one hearth-standing house + its hearth spot. */
   hearthHouse: {
     x: number;
@@ -543,6 +547,34 @@ function buildVillagePlan(
 }
 
 /** The accepted instance for one cell, or null. */
+/**
+ * The instance's roofed interiors (rain-shelter read,
+ * 2026-11-05): every STANDING plot shelters — houses
+ * are squares (rotation-free at VILLAGE_SEGMENT_M
+ * half-side); the store's long axis runs along the
+ * street, so its halves swap with the street axis. A
+ * charred plot's roof has fallen; collapsed/gone have
+ * none — they contribute no rect.
+ */
+function villageRoofRects(
+  plots: VillageInstancePlot[],
+  streetAxis: 'x' | 'z',
+): RoofRect[] {
+  const rects: RoofRect[] = [];
+  for (const p of plots) {
+    if (p.state !== 'standing') continue;
+    if (p.kind === 'store') {
+      const hw = (streetAxis === 'z' ? STORE_WALL_D_M : STORE_WALL_W_M) / 2 - ROOF_RECT_INSET_M;
+      const hd = (streetAxis === 'z' ? STORE_WALL_W_M : STORE_WALL_D_M) / 2 - ROOF_RECT_INSET_M;
+      rects.push({ minX: p.x - hw, maxX: p.x + hw, minZ: p.z - hd, maxZ: p.z + hd });
+    } else {
+      const h = VILLAGE_SEGMENT_M - ROOF_RECT_INSET_M;
+      rects.push({ minX: p.x - h, maxX: p.x + h, minZ: p.z - h, maxZ: p.z + h });
+    }
+  }
+  return rects;
+}
+
 function villageInstanceAt(
   worldSeed: string,
   spawn: { x: number; z: number },
@@ -657,6 +689,7 @@ function villageInstanceAt(
         structureCount: cand.structureCount,
         streetAxis: plan.streetAxis,
         plots: plan.plots,
+        roofRects: villageRoofRects(plan.plots, plan.streetAxis),
         hearthHouse: plan.hearthHouse,
         well: plan.well,
         boneSpots: plan.boneSpots,

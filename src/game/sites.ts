@@ -69,6 +69,54 @@ export interface SiteWallBox {
   maxZ: number;
 }
 
+/**
+ * A roofed interior's world AABB (the rain-shelter
+ * site read, 2026-11-05 — DEV's found-roofs filing):
+ * where a found structure's roof actually stands, for
+ * siteShelterAt. Each roofed site record carries its
+ * own rects, computed in its build where the frame
+ * (swap, dims, ruin state) is known — a fallen roof
+ * contributes no rect.
+ */
+export interface RoofRect {
+  minX: number;
+  maxX: number;
+  minZ: number;
+  maxZ: number;
+}
+
+/** Inset from a structure's outer walls to its sheltered interior (DRAFT). */
+export const ROOF_RECT_INSET_M = 0.3;
+
+/** The world AABB of a local rect under a site's quarter-turn frame. */
+export function roofRectFor(
+  toWorld: (lx: number, lz: number) => { x: number; z: number },
+  lx0: number,
+  lz0: number,
+  lx1: number,
+  lz1: number,
+): RoofRect {
+  const a = toWorld(lx0, lz0);
+  const b = toWorld(lx1, lz1);
+  return {
+    minX: Math.min(a.x, b.x),
+    maxX: Math.max(a.x, b.x),
+    minZ: Math.min(a.z, b.z),
+    maxZ: Math.max(a.z, b.z),
+  };
+}
+
+/** The world AABB of a centred local rect (W x D), inset, under the frame. */
+export function centeredRoofRect(
+  toWorld: (lx: number, lz: number) => { x: number; z: number },
+  w: number,
+  d: number,
+): RoofRect {
+  const hw = w / 2 - ROOF_RECT_INSET_M;
+  const hd = d / 2 - ROOF_RECT_INSET_M;
+  return roofRectFor(toWorld, -hw, -hd, hw, hd);
+}
+
 /** A grid cell in the grove maze (col west->east, row north->south). */
 export interface MazeCell {
   col: number;
@@ -656,6 +704,8 @@ export interface SchoolSite {
   features: ScatterObject[];
   walls: SiteWallBox[];
   bounds: { minX: number; maxX: number; minZ: number; maxZ: number };
+  /** Roofed interiors for the rain-shelter read (2026-11-05). */
+  roofRects: RoofRect[];
 }
 
 const schoolCache = new Map<string, SchoolSite>();
@@ -954,6 +1004,7 @@ export function schoolhouseSite(
     distance,
     clearRadius: SCHOOL_CLEAR_RADIUS_M,
     doorSide: worldDoorSide,
+    roofRects: [centeredRoofRect(toWorld, W, D)],
     features,
     walls,
     bounds: {
@@ -1056,6 +1107,8 @@ export interface VillageSite {
   features: ScatterObject[];
   walls: SiteWallBox[];
   bounds: { minX: number; maxX: number; minZ: number; maxZ: number };
+  /** Roofed interiors for the rain-shelter read (2026-11-05). */
+  roofRects: RoofRect[];
 }
 
 const villageCache = new Map<string, VillageSite>();
@@ -1337,6 +1390,14 @@ export function villageSite(
     distance,
     clearRadius: VILLAGE_CLEAR_RADIUS_M,
     streetAxis: swap ? 'z' : 'x',
+    roofRects: plots
+      .filter((p) => p.state === 'standing')
+      .map((p) => ({
+        minX: p.x - VILLAGE_SEGMENT_M + ROOF_RECT_INSET_M,
+        maxX: p.x + VILLAGE_SEGMENT_M - ROOF_RECT_INSET_M,
+        minZ: p.z - VILLAGE_SEGMENT_M + ROOF_RECT_INSET_M,
+        maxZ: p.z + VILLAGE_SEGMENT_M - ROOF_RECT_INSET_M,
+      })),
     plots,
     // The hearth house always exists (its plot is forced).
     hearthHouse: hearthHouse!,
@@ -1409,6 +1470,8 @@ export interface FarmSite {
   features: ScatterObject[];
   walls: SiteWallBox[];
   bounds: { minX: number; maxX: number; minZ: number; maxZ: number };
+  /** Roofed interiors for the rain-shelter read (2026-11-05). */
+  roofRects: RoofRect[];
 }
 
 const farmCache = new Map<string, FarmSite>();
@@ -1755,6 +1818,7 @@ export function farmhouseSite(
     hearthSpot: hearthWorld,
     hearthStone: stoneWorld,
     cellarDoor: cellarWorld,
+    roofRects: [centeredRoofRect(toWorld, W, D)],
     features,
     walls,
     bounds: {
@@ -1840,6 +1904,8 @@ export interface ChapelSite {
   features: ScatterObject[];
   walls: SiteWallBox[];
   bounds: { minX: number; maxX: number; minZ: number; maxZ: number };
+  /** Roofed interiors for the rain-shelter read (2026-11-05). */
+  roofRects: RoofRect[];
 }
 
 const chapelCache = new Map<string, ChapelSite>();
@@ -2099,6 +2165,7 @@ export function chapelSite(
     doorSide: toWorldSide(doorSide),
     yardSide: toWorldSide(yardLocalSide),
     inscriptionStone: inscription,
+    roofRects: [centeredRoofRect(toWorld, W, D)],
     features,
     walls,
     bounds: {
@@ -2429,6 +2496,8 @@ export interface StoreSite {
   features: ScatterObject[];
   walls: SiteWallBox[];
   bounds: { minX: number; maxX: number; minZ: number; maxZ: number };
+  /** Roofed interiors for the rain-shelter read (2026-11-05). */
+  roofRects: RoofRect[];
 }
 
 const storeCache = new Map<string, StoreSite>();
@@ -2761,6 +2830,7 @@ export function generalStoreSite(
     counterSpot: counterWorld,
     shelfSpots,
     stoveSpot,
+    roofRects: [centeredRoofRect(toWorld, W, D)],
     features,
     walls,
     bounds: {
@@ -2842,6 +2912,8 @@ export interface MillSite {
   features: ScatterObject[];
   walls: SiteWallBox[];
   bounds: { minX: number; maxX: number; minZ: number; maxZ: number };
+  /** Roofed interiors for the rain-shelter read (2026-11-05). */
+  roofRects: RoofRect[];
 }
 
 const millCache = new Map<string, MillSite>();
@@ -3168,6 +3240,21 @@ export function drownedMillSite(
     }
   }
 
+  // The rain-shelter rect (2026-11-05): the standing
+  // slope shelters the LAND half; a tipped mill shelters
+  // nothing. Local frame: north = -lz, east = +lx.
+  const roofRects: RoofRect[] =
+    state === 'tipped'
+      ? []
+      : [
+          roofRectFor(
+            toWorld,
+            landSide === 'east' ? 0 : -W / 2 + ROOF_RECT_INSET_M,
+            landSide === 'south' ? 0 : -D / 2 + ROOF_RECT_INSET_M,
+            landSide === 'west' ? 0 : W / 2 - ROOF_RECT_INSET_M,
+            landSide === 'north' ? 0 : D / 2 - ROOF_RECT_INSET_M,
+          ),
+        ];
   const site: MillSite = {
     id: 'mill',
     seed,
@@ -3180,6 +3267,7 @@ export function drownedMillSite(
     wheelSpot,
     riverT: pick.t,
     bankSide,
+    roofRects,
     features,
     walls,
     bounds: {
@@ -3809,6 +3897,8 @@ export interface BarnSite {
   features: ScatterObject[];
   walls: SiteWallBox[];
   bounds: { minX: number; maxX: number; minZ: number; maxZ: number };
+  /** Roofed interiors for the rain-shelter read (2026-11-05). */
+  roofRects: RoofRect[];
 }
 
 const barnCache = new Map<string, BarnSite>();
@@ -4083,6 +4173,22 @@ export function barnSite(
     feat('riverSilt', inW.x, inW.z, 0, 1.1, planRand() * Math.PI);
   }
 
+  // The rain-shelter rect (2026-11-05): standing and
+  // holed barns shelter their footprint (a holed bay is
+  // below this read's grain); a fallen-end barn shelters
+  // all but its fallen end bay (the far end from the door).
+  const roofRects: RoofRect[] =
+    state === 'fallen-end'
+      ? [
+          roofRectFor(
+            toWorld,
+            doorEnd === 'east' ? -W / 2 + SEG : -W / 2 + ROOF_RECT_INSET_M,
+            -D / 2 + ROOF_RECT_INSET_M,
+            doorEnd === 'east' ? W / 2 - ROOF_RECT_INSET_M : W / 2 - SEG,
+            D / 2 - ROOF_RECT_INSET_M,
+          ),
+        ]
+      : [centeredRoofRect(toWorld, W, D)];
   const site: BarnSite = {
     id: 'barn',
     seed,
@@ -4095,6 +4201,7 @@ export function barnSite(
     stallSide: worldSide(stallLocal),
     leanToSide: leanToLocal ? worldSide(leanToLocal) : null,
     interiorSpot: center,
+    roofRects,
     features,
     walls,
     bounds: {

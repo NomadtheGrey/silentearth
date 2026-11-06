@@ -43,6 +43,14 @@ export interface BuildRecord {
 
 const ALL_RECORDS: BuildRecord[] = [
   {
+    merge: 'Merge #85',
+    pr: 128,
+    sha: '95153c7',
+    date: '2026-11-06',
+    what: 'THE REPAIR BUNDLE — the raven stops leading her to lesser groves she has already gleaned; found roofs shelter in the rain’s own ledger now — a village house, the farmhouse, the Burnt Village hearth house answer dry where their roofs stand, and the charred ones answer honestly wet; the way home is gated as ruled: the scry-raised arrows wait for Returning’s first tier, while the pigeon-wing charm points home ungated, the early road it was always meant to be; the feed stands as a HUD element in its own right, aging on the clock; the HearthHome mark’s systems half stands ready, inert until its door is built; a companion’s leash no longer eats her E in silence; a wedged rite record heals at boot and a finished rite clears its staging; and a staged rite’s panel breathes with the sky once a second, so its window reads true while she stands still.',
+    why: 'Repairs from Adam’s playtest, each traced to its mechanism: the bird that re-led her to harvested groves, the rain that fell through the Burnt Village roof in the facts, the home arrow that stood after the Scry itself had refused her, the rite panel that missed a whole dusk while she stood still. The HearthHome half rides inert by design — the pillar’s third mark in its sequence (Returning, Hedge, HearthHome), its door next.',
+  },
+  {
     merge: 'Merge #84',
     pr: 127,
     sha: 'd4cf0d6',
