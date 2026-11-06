@@ -15215,7 +15215,12 @@ export default function App() {
         // any facing, with the same winner standing.
         if (shaft) considerCave('cave-descend', '', shaft.x, shaft.z);
       } else if (dimensionState.currentLayer() === 2) {
-        const entry = layout.layers[1]?.entryAnchor;
+        // THE UP HOLE (Adam's separation ruling,
+        // 2026-11-06): the climb prices from the layer's
+        // upAnchor — its own point, dealt clear of the
+        // down landing (the entry anchor) she arrived at.
+        const layer2 = layout.layers[1];
+        const entry = layer2?.upAnchor ?? layer2?.entryAnchor;
         if (entry) considerCave('cave-climb', '', entry.x, entry.z, CAVE_EXIT_RANGE_M);
       }
     }
@@ -16423,8 +16428,7 @@ export default function App() {
   // disagree.
   const useWinner = computeUseWinner();
   useWinnerRef.current = useWinner;
-
-  // The faced furniture, derived once per render for
+ // The faced furniture, derived once per render for
   // the feed branch below + the pick-up pill's seat
   // (the press re-derives — see handlePickupFurniture).
   const furnitureFacedNow = facedFurniture();

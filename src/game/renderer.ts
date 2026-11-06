@@ -2245,7 +2245,13 @@ export class WorldRenderer {
         layout.layers[dimensionState.currentLayer() - 1] ??
         layout.layers[0];
       if (!layer) return null;
-      const a = layer.entryAnchor;
+      // The way back (the separation ruling, 2026-11-06):
+      // on deeper layers the arrows point at the UP HOLE,
+      // not the down landing.
+      const a =
+        layer.index >= 2
+          ? (layer.upAnchor ?? layer.entryAnchor)
+          : layer.entryAnchor;
       return {
         kind: 'cave-exit',
         x: a.x,
@@ -2894,7 +2900,11 @@ export class WorldRenderer {
    *  motes drifting down the column. Built wherever
    *  the cave glow is (re)built and reseated on layer
    *  changes; layer 2's climb anchor wears the same
-   *  shaft. Numbers DRAFT for Adam's pin pass. */
+   *  shaft. Numbers DRAFT for Adam's pin pass.
+   *  THE SEAT (the separation ruling, 2026-11-06): on
+   *  deeper layers the light marks the UP HOLE (the
+   *  layer's upAnchor) — the way back from that floor —
+   *  not the down landing she arrived at. */
   private rebuildEntryShaft(): void {
     this.disposeEntryShaft();
     if (!this.caveGlow) return;
@@ -2903,7 +2913,10 @@ export class WorldRenderer {
     const layer =
       layout.layers[dimensionState.currentLayer() - 1] ?? layout.layers[0];
     if (!layer) return;
-    const a = layer.entryAnchor;
+    const a =
+      layer.index >= 2
+        ? (layer.upAnchor ?? layer.entryAnchor)
+        : layer.entryAnchor;
     const group = new THREE.Group();
     const shaftColor = 0xffe9b8;
     // The column: open-ended, additive, depth-write
