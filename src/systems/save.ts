@@ -578,6 +578,23 @@ export interface SavedHedge {
 }
 
 /**
+ * One laid HearthHome seal, as saved (the hearthhome
+ * landing, 2026-11-05). Mirrors hearthhome.ts's
+ * SealRecord field-for-field (snapshot = stored =
+ * restore, zero conversion). `placeId` is the bounded
+ * place's id, opaque + verbatim; radiusM is the
+ * footprint's radius (a fact of the place); laidDay
+ * is a world day.
+ */
+export interface SavedSeal {
+  placeId: string;
+  x: number;
+  z: number;
+  radiusM: number;
+  laidDay: number;
+}
+
+/**
  * World harvest state, as saved. Structural mirror of the game
  * layer's HarvestStateSnapshot (harvestState.ts) by literal —
  * systems does not import game modules. The engine's restore()
@@ -813,6 +830,8 @@ export interface SaveData {
   namedPlaces: SavedNamedPlace[];
   /** Laid hedges, one per ringed home; [] for old saves. */
   hedges: SavedHedge[];
+  /** Laid HearthHome seals, one per sealed place; [] for old saves. */
+  hearthhome: SavedSeal[];
   /** The cave visit this save was written in (boot-at-the-mouth
    * fact); null for surface saves and old saves. */
   dimensionVisit: SavedDimensionVisit | null;
@@ -1084,6 +1103,18 @@ export interface SaveDraft {
     z: number;
     laidDay: number;
     rootedDay: number;
+  }>;
+  /**
+   * Laid HearthHome seals from the seal state's
+   * snapshot. OPTIONAL, same trap-save pattern as
+   * hedges.
+   */
+  hearthhome?: ReadonlyArray<{
+    placeId: string;
+    x: number;
+    z: number;
+    radiusM: number;
+    laidDay: number;
   }>;
   /**
    * The cave visit, from dimensionState.snapshot() at
@@ -1578,6 +1609,15 @@ export function serializeSave(draft: SaveDraft): SaveData {
       z: hedge.z,
       laidDay: hedge.laidDay,
       rootedDay: hedge.rootedDay,
+    })),
+    // Seals: the state's snapshot written AS-IS (place
+    // ids verbatim, centres, radii, days).
+    hearthhome: (draft.hearthhome ?? []).map((seal) => ({
+      placeId: seal.placeId,
+      x: seal.x,
+      z: seal.z,
+      radiusM: seal.radiusM,
+      laidDay: seal.laidDay,
     })),
     // The visit fact: written AS-IS (dimension key +
     // entry mouth verbatim). Absent/null in the draft
@@ -2372,6 +2412,29 @@ export function deserializeSave(value: unknown): SaveData | null {
         });
       }
     }
+    // Seals are optional on read, same leniency as
+    // hedges: an old v1 save without the field loads
+    // hearthhome: []. Per-entry: a seal rides WHOLE —
+    // non-empty string place id, finite centre, a
+    // positive finite radius, a finite day — a bad
+    // entry drops alone; a non-array field loads [].
+    const hearthhome: SavedSeal[] = [];
+    if (value.hearthhome !== undefined && Array.isArray(value.hearthhome)) {
+      for (const entry of value.hearthhome) {
+        if (!isRecord(entry)) continue;
+        if (typeof entry.placeId !== 'string' || entry.placeId === '') continue;
+        if (!Number.isFinite(entry.x) || !Number.isFinite(entry.z)) continue;
+        if (!Number.isFinite(entry.radiusM) || (entry.radiusM as number) <= 0) continue;
+        if (!Number.isFinite(entry.laidDay)) continue;
+        hearthhome.push({
+          placeId: entry.placeId,
+          x: entry.x as number,
+          z: entry.z as number,
+          radiusM: entry.radiusM as number,
+          laidDay: entry.laidDay as number,
+        });
+      }
+    }
     // The visit fact is optional on read: an old v1
     // save without it loads with dimensionVisit: null.
     // A record passes with its key verbatim and its
@@ -2947,6 +3010,7 @@ export function deserializeSave(value: unknown): SaveData | null {
       mossPaint,
       namedPlaces,
       hedges,
+      hearthhome,
       dimensionVisit,
       acquisitionOrder,
       companions,

@@ -67,6 +67,8 @@ import {
   SIDING_HALF_WIDTH_M,
   SITE_SPACING_MARGIN_M,
   type SiteWallBox,
+  centeredRoofRect,
+  type RoofRect,
 } from './sites';
 import {
   DISTRIBUTION_CELL_M,
@@ -125,6 +127,8 @@ export interface HomesteadInstance {
   dressing: number;
   /** The house plan's quarter-turn bearing (rad). */
   houseTheta: number;
+  /** Roofed interiors for the rain-shelter read (2026-11-05). */
+  roofRects: RoofRect[];
   /** The house + yard as scatter (the site pass emits). */
   features: ScatterObject[];
   /** Collision boxes for the standing wall segments +
@@ -172,7 +176,7 @@ function buildHomesteadPlan(
   burnt: boolean,
   dressing: number,
   greatStone: { x: number; z: number },
-): { features: ScatterObject[]; walls: SiteWallBox[]; houseTheta: number } {
+): { features: ScatterObject[]; walls: SiteWallBox[]; houseTheta: number; roofRects: RoofRect[] } {
   const rand = mulberry32(deriveSeed(worldSeed, `homestead-plan:${key}`));
   const swap = rand() < 0.5;
   const houseTheta = swap ? Math.PI / 2 : 0;
@@ -226,6 +230,9 @@ function buildHomesteadPlan(
     return new Set(others.slice(0, n));
   };
 
+  // The rain-shelter fact (2026-11-05): set where a
+  // roof is emitted standing (the charred coin below).
+  let roofStands = false;
   if (!burnt) {
     // Weathered and empty: at most one stretch gone.
     const missing = pickMissing(rand() < 0.35 ? 1 : 0);
@@ -234,6 +241,7 @@ function buildHomesteadPlan(
       emitSeg(s, 'homesteadWall');
     }
     feat('homesteadRoof', center.x, center.z, HOMESTEAD_WALL_H_M, 1, houseTheta);
+    roofStands = true;
     // Yard dressing: rubble where the years dropped it.
     const rubble = Math.floor(dressing * 2.99);
     for (let i = 0; i < rubble; i++) {
@@ -249,6 +257,7 @@ function buildHomesteadPlan(
     }
     if (rand() < HOMESTEAD_CHARRED_ROOF_STANDS) {
       feat('homesteadRoofCharred', center.x, center.z, HOMESTEAD_WALL_H_M, 1, houseTheta);
+      roofStands = true;
     } else {
       feat('homesteadRoofFallen', center.x, center.z, 0, 1, houseTheta);
     }
@@ -266,7 +275,12 @@ function buildHomesteadPlan(
   feat('hearthStone', greatStone.x, greatStone.z, 0, 1.25, theta);
   box(greatStone.x, greatStone.z, 0.7, 0.7);
 
-  return { features, walls, houseTheta };
+  return {
+    features,
+    walls,
+    houseTheta,
+    roofRects: roofStands ? [centeredRoofRect(toWorld, H * 2, H * 2)] : [],
+  };
 }
 
 /** The accepted instance for one cell, or null. */
@@ -383,6 +397,7 @@ function homesteadInstanceAt(
         houseTheta: plan.houseTheta,
         features: plan.features,
         walls: plan.walls,
+        roofRects: plan.roofRects,
         clearRadius: HOMESTEAD_CLEAR_RADIUS_M,
         bounds: {
           minX: x - HOMESTEAD_CLEAR_RADIUS_M,

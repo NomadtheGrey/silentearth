@@ -2173,6 +2173,15 @@ interface FeedbackItem {
   tone: FeedbackTone;
   /** True in the line's last ~0.6 s: the row fades out. */
   fading: boolean;
+  /**
+   * When the line was seated (or last refreshed), wall
+   * clock — the aging tick reads AGES from this stamp,
+   * never from timer bookkeeping (the feed-HUD build:
+   * a throttled timer queue in a backgrounded tab left
+   * minutes-old lines hanging across the gauges; a
+   * clock read cannot be throttled into a lie).
+   */
+  bornAt: number;
 }
 
 /**
@@ -4276,6 +4285,11 @@ export default function App() {
   // (arrowsVisible), so the arrival-dismiss path clears
   // only the scry flag — pigeon arrows stay while the
   // charm is listed, by design (effects are always on).
+  // Adam's refinement (2026-11-05) keeps it that way:
+  // the pigeon is the early-game road home while
+  // Returning fragments are hard to acquire, so its
+  // pointing is NOT gated on the mark — only the
+  // scry-raised arrows are (syncScryRevealGate below).
   // Fox reaches the player controller (nullable ref);
   // mole is a module-level setter; the three vision
   // hooks reach the renderer (nullable ref).
@@ -4284,6 +4298,7 @@ export default function App() {
     rendererRef.current?.setPigeonWayHome(
       charms.isAwakened('pigeon-wing-bone'),
     );
+    syncScryRevealGate();
     rendererRef.current?.setOwlNightSight(charms.isAwakened('owl-talon'));
     rendererRef.current?.setBatNightWayfinding(
       charms.isAwakened('bat-wing-bone'),
@@ -4291,6 +4306,41 @@ export default function App() {
     playerRef.current?.setSwiftStep(charms.isAwakened('fox-femur'));
     setMoleEarthSense(charms.isAwakened('mole-paw'));
   };
+
+  // THE SCRY-REVEAL GATE (Adam's ruling + refinement,
+  // 2026-11-05 — his live #83 playtest): he stood at
+  // water, the Scry gate refused in words ('You have
+  // not learned the Returning mark'), and the home
+  // arrow still stood over his house. His word, as
+  // refined minutes later: the SCRY-raised camp
+  // arrows gate on Returning T1 — and ONLY those.
+  // The pigeon-wing charm stays an independent
+  // early-game road home, ungated (its seat above).
+  //
+  // The camp arrows' only TRUE seat (handleScry's
+  // reveal) already stands behind the gate at its
+  // head; this sync is the structural half — a
+  // standing reveal is dismissed and the arrows
+  // cleared the moment the gate reads closed, so
+  // the display can never outlive the right to it.
+  // (The reveal is session-only state and fragments
+  // are never lost, so in play this fires only as
+  // the invariant's guard.) Mirror-guarded: it runs
+  // on the gate's transitions (boot via
+  // syncCharmHooks, and every player:moved). The
+  // exit-arrow suppression composes untouched — it
+  // reads the exit seat, not these drives.
+  const scryGateRef = useRef<boolean | null>(null);
+  const syncScryRevealGate = () => {
+    const allowed = canScry(fragmentStateRef.current);
+    if (scryGateRef.current === allowed) return;
+    scryGateRef.current = allowed;
+    if (!allowed && divinationRef.current.isRevealed) {
+      divinationRef.current.dismiss();
+      rendererRef.current?.setCampArrowsVisible(false);
+    }
+  };
+
   // Crow tier (glow landing, 2026-10-28): shell wiring
   // setCrowTier ← crowGlowTier, beside syncCharmHooks (boot
   // + ritual completion, same two call sites). Carried =
@@ -4465,9 +4515,6 @@ export default function App() {
   const useWinnerRef = useRef<UseWinner | null>(null);
   const transitionTimerRef = useRef<number | undefined>(undefined);
   const feedbackCounterRef = useRef(0);
-  const feedbackTimersRef = useRef<
-    Map<string, { fade: number; remove: number }>
-  >(new Map());
 
   // PAUSE (Adam, 2026-10-26 — core 54e525c): the engine pause
   // flag, mirrored for the shell. The ref is what the timers
@@ -6180,8 +6227,21 @@ export default function App() {
   // and re-seats as newest instead of stacking a twin
   // (multi-press struggle narration). Life is the tuned
   // 4 s, the last ~0.6 s fading.
+  //
+  // AGING IS READ OFF THE CLOCK (the feed-HUD build,
+  // 2026-11-05): every line carries its bornAt stamp,
+  // and the aging tick below derives fading + expiry
+  // from ages. The per-line setTimeout pair this
+  // replaces could be throttled into uselessness by a
+  // backgrounded tab — Adam's screenshot showed
+  // minutes-old lines still hanging across his gauges
+  // after he came back to the game. A clock read
+  // cannot be throttled into a lie: the first tick
+  // after the tab wakes retires every overdue line.
   const FEED_MAX = 4;
   const FEED_MAX_TOUCH = 3;
+  const FEED_FADE_MS = 3400;
+  const FEED_LIFE_MS = 4000;
   const showFeedback = (text: string, tone: FeedbackTone) => {
     const cap = isTouch ? FEED_MAX_TOUCH : FEED_MAX;
     setFeedbacks((current) => {
@@ -6189,39 +6249,47 @@ export default function App() {
         (item) => item.text === text && item.tone === tone,
       );
       const id = twin ? twin.id : `fb-${feedbackCounterRef.current++}`;
-      const existing = feedbackTimersRef.current.get(id);
-      if (existing) {
-        window.clearTimeout(existing.fade);
-        window.clearTimeout(existing.remove);
-      }
-      const fade = window.setTimeout(() => {
-        setFeedbacks((list) =>
-          list.map((item) =>
-            item.id === id ? { ...item, fading: true } : item,
-          ),
-        );
-      }, 3400);
-      const remove = window.setTimeout(() => {
-        setFeedbacks((list) => list.filter((item) => item.id !== id));
-        feedbackTimersRef.current.delete(id);
-      }, 4000);
-      feedbackTimersRef.current.set(id, { fade, remove });
       const rest = current.filter((item) => item.id !== id);
-      const next = [...rest, { id, text, tone, fading: false }];
-      while (next.length > cap) {
-        const dropped = next.shift();
-        if (dropped && dropped.id !== id) {
-          const timers = feedbackTimersRef.current.get(dropped.id);
-          if (timers) {
-            window.clearTimeout(timers.fade);
-            window.clearTimeout(timers.remove);
-            feedbackTimersRef.current.delete(dropped.id);
-          }
-        }
-      }
+      const next = [
+        ...rest,
+        { id, text, tone, fading: false, bornAt: Date.now() },
+      ];
+      while (next.length > cap) next.shift();
       return next;
     });
   };
+
+  // THE AGING TICK: while any line stands, a short
+  // interval ages the stack off the clock — a line
+  // fades once its age passes FEED_FADE_MS and leaves
+  // past FEED_LIFE_MS. Returning the same list when
+  // nothing changed keeps the tick render-free.
+  const feedStanding = feedbacks.length > 0;
+  useEffect(() => {
+    if (!feedStanding) return;
+    const timer = window.setInterval(() => {
+      const now = Date.now();
+      setFeedbacks((list) => {
+        let changed = false;
+        const next: FeedbackItem[] = [];
+        for (const item of list) {
+          const age = now - item.bornAt;
+          if (age > FEED_LIFE_MS) {
+            changed = true;
+            continue;
+          }
+          if (age > FEED_FADE_MS && !item.fading) {
+            changed = true;
+            next.push({ ...item, fading: true });
+          } else {
+            next.push(item);
+          }
+        }
+        return changed ? next : list;
+      });
+    }, 250);
+    return () => window.clearInterval(timer);
+  }, [feedStanding]);
 
   // Boot the world once. StrictMode double-mounts in dev only; the
   // cleanup below disposes the first instance, and the production build
@@ -6535,6 +6603,30 @@ export default function App() {
             return [];
           }),
         );
+        // ONE STAGED-BONE FACT (rite pair landing, 2026-11-05):
+        // the two stores restore from the same entries
+        // under different filters — the book's is stricter
+        // (every flag + extrasDone), the site's keeps any
+        // bonePlaced entry — so an older save's entry can
+        // restore the site's bone while the book drops its
+        // record. The panel needs both readers and fell
+        // back to the stage list over a staged bone, while
+        // the staging refusal (the site's fact) said the
+        // site already holds one — the panel contradicting
+        // itself in Adam's screenshots. Heal at the seat:
+        // any site-held bone with no book entry gets its
+        // entry back with the placement set; the steps
+        // past placement are unknowable and read as
+        // not-yet (she simply redoes them), and staging
+        // another bone still refuses on the site's fact.
+        for (const record of ritualSiteState.snapshot()) {
+          if (!stagingBookRef.current.get(record.site.siteId, record.bone)) {
+            stagingBookRef.current.getOrCreate(
+              record.site.siteId,
+              record.bone,
+            ).bonePlaced = true;
+          }
+        }
         // LOOK SAVE WIRING (same pre-construction pattern):
         // nameSight.restore() is silent and replaces; the
         // shell's NameSight starts empty, so a second
@@ -6889,6 +6981,19 @@ export default function App() {
     // probes' pattern).
     installGuideProbes({
       groveDiscovered: () => discoveryStateRef.current.groveDiscovered(),
+      // THE LESSER-GLEAM PROBE (Background's grove
+      // family, 9238bbd; installed 2026-11-05): the
+      // raven's lesser retarget skips groves she has
+      // already gleamed — a lesser grove's carrier is
+      // a Circle fragment (id '<grove key>:fragment'),
+      // so gleamed = that id stands among her Circle
+      // copies. Uninstalled, the probe defaulted
+      // ungleamed forever and the bird would have led
+      // her back to harvested groves.
+      lesserGroveGleamed: (fragmentId) =>
+        (
+          fragmentStateRef.current.progressFor('circle')?.copies ?? []
+        ).some((copy) => copy.fragmentId === fragmentId),
     });
     // TRUST MARKER INSTALL (Background's marker layer,
     // 2026-11-01): the renderer's trust sprites read
@@ -6983,6 +7088,9 @@ export default function App() {
           div.reveal(findCamps(houses));
         }
       }
+      // THE SCRY-REVEAL GATE on the movement cadence:
+      // the gate's transitions re-read here first.
+      syncScryRevealGate();
       setScryVisible(
         !div.isRevealed &&
           houses.length > 0 &&
@@ -7645,11 +7753,6 @@ export default function App() {
       window.clearInterval(hungerTimer);
       window.clearTimeout(warningFlashTimerRef.current);
       window.clearTimeout(transitionTimerRef.current);
-      for (const timers of feedbackTimersRef.current.values()) {
-        window.clearTimeout(timers.fade);
-        window.clearTimeout(timers.remove);
-      }
-      feedbackTimersRef.current.clear();
       window.removeEventListener('resize', onResize);
       window.removeEventListener('pagehide', onPageHide);
       offCamera();
@@ -10003,6 +10106,12 @@ export default function App() {
       // used to anchor at the site — the feed is every
       // line's seat now, so the site lookup is gone).
       ritualSiteState.unstageBone(entry.siteKey);
+      // THE BOOK CLEARS BESIDE THE SITE (Systems' design,
+      // wired 2026-11-05 with the rite pair landing): the
+      // spent entry leaves the book in the same act, so
+      // the save stops carrying it and the two stores
+      // cannot split over a completion.
+      stagingBookRef.current.clear(entry.siteKey, entry.boneKind);
       showFeedback(`The ${boneDisplayFor(result.kind)} awakens.`, 'gain');
       changed = true;
     }
@@ -13105,6 +13214,21 @@ export default function App() {
       ? null
       : (ritualRecipeFor(selectedSiteStaged.bone) ?? null);
 
+  // SKY PULSE (rite Landing B, 2026-11-05 — Adam's dusk
+  // lag): the panel derives its sky line from the live sky
+  // at render time, but renders stall while she stands
+  // still with the panel up — the line read 'window
+  // closed' through a whole dusk band it never saw open.
+  // While a site panel stands with a staged rite, a 1 s
+  // pulse re-renders so the line (and the completion
+  // reading beside it) follows the sky's own cadence.
+  const [, setSkyPulse] = useState(0);
+  useEffect(() => {
+    if (selectedSiteId === null || selectedSiteStaging === null) return;
+    const pulse = window.setInterval(() => setSkyPulse((n) => n + 1), 1000);
+    return () => window.clearInterval(pulse);
+  }, [selectedSiteId, selectedSiteStaging]);
+
   // Ritual panel option lists, hoisted from the panel's
   // JSX so the PC-key digit dispatch (below) reads the
   // SAME lists the panel renders — one source, no
@@ -14084,6 +14208,21 @@ export default function App() {
     cloudPendingRemove,
     cloudPendingRestore,
     cloudPendingNewGame,
+    // THE DIALOGUP MEMBERS BELOW WERE MISSING (the
+    // silent-E fix, 2026-11-05): the body's dialogUp
+    // gate reads every one of these, but with them
+    // absent from the deps a dialog that ROSE while a
+    // menu opened and FELL afterwards never re-ran the
+    // effect — the leash stayed unsubscribed and the
+    // selection outlived its menu invisibly, eating E
+    // until an Escape cleared it (Adam's four dead
+    // acts). With them seated, a dialog's fall resumes
+    // the leash and no selection can outlive the
+    // dialog's shadow.
+    pendingCarriedTrap,
+    cloudConflictPrompt,
+    cloudWakeOffer,
+    itemInfoId,
     placedTents,
     homeHouse,
   ]);
@@ -17746,36 +17885,56 @@ export default function App() {
               : `Pick up ${displayNameFor(desktopPilePickup.item)} × ${desktopPilePickup.quantity}`}
           </button>
         ) : null}
-        {/* THE MESSAGE FEED (Adam, 2026-10-31): the spoken
-          lines' ONE seat — a reserved stack in the same
-          z-40 overlay (above the world buttons, below z-50
-          modals), bottom-center, clear of the pill column
-          (upper-center), the HUD (left), the seed bar
-          (bottom-left) and the controls hint (bottom-right).
-          The stack is bottom-anchored, so it grows UPWARD:
-          the newest line (last in the list) sits at the
-          fixed bottom seat and older lines ride up, fading
-          in their last ~0.6 s before they expire from the
-          top. Pointer-events-none: speech never takes a
-          tap. */}
-        <div
-          aria-live="polite"
-          className="pointer-events-none absolute inset-x-0 bottom-28 flex flex-col items-center justify-end gap-1.5 px-2"
-        >
-          {feedbacks.map((feedback) => (
-            <Fragment key={feedback.id}>
-              <ObjectFeedback
-                text={feedback.text}
-                tone={feedback.tone}
-                className={
-                  feedback.fading
-                    ? 'opacity-0 transition-opacity duration-500'
-                    : 'transition-opacity duration-500'
-                }
-              />
-            </Fragment>
-          ))}
-        </div>
+        {/* THE MESSAGE FEED (Adam, 2026-10-31; a REAL HUD
+          ELEMENT since the feed-HUD build, 2026-11-05):
+          the spoken lines' ONE seat — and now a citizen
+          of the #69 HUD system whole: the stack lives in
+          a HudElement ('feed'), so it is DRAGGABLE and
+          CLOSABLE like every other piece, its offset and
+          hidden flag persisting per pointer class in
+          localStorage (never the save; the Options HUD
+          tab lists it and brings it back). The seat stays
+          in the same z-40 overlay (above the world
+          buttons, below z-50 modals), bottom-center,
+          clear of the pill column (upper-center), the
+          HUD columns, the seed bar (bottom-left) and the
+          controls hint (bottom-right) in the DEFAULT
+          layout — and Adam can move it off whatever his
+          own layout puts beneath. The stack is
+          bottom-anchored, so it grows UPWARD: the newest
+          line (last in the list) sits at the fixed bottom
+          seat and older lines ride up, fading in their
+          last ~0.6 s before they expire from the top.
+          The element mounts only while lines stand (an
+          empty feed is no furniture; the hidden flag in
+          the layout store still governs it whenever it
+          mounts). Speech never takes a tap: the stack is
+          pointer-events-none; only the element's own
+          grip / hide chrome takes pointer input. */}
+        {feedbacks.length > 0 ? (
+          <div className="pointer-events-none absolute inset-x-0 bottom-28 flex justify-center px-2">
+            <HudElement hud={hudLayout} id="feed">
+              <div
+                aria-live="polite"
+                className="flex flex-col items-center justify-end gap-1.5"
+              >
+                {feedbacks.map((feedback) => (
+                  <Fragment key={feedback.id}>
+                    <ObjectFeedback
+                      text={feedback.text}
+                      tone={feedback.tone}
+                      className={
+                        feedback.fading
+                          ? 'opacity-0 transition-opacity duration-500'
+                          : 'transition-opacity duration-500'
+                      }
+                    />
+                  </Fragment>
+                ))}
+              </div>
+            </HudElement>
+          </div>
+        ) : null}
       </div>
 
       {/* HUD shell: needs row + HUD block. The needs row

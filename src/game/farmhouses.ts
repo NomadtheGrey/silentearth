@@ -76,6 +76,8 @@ import {
   SIDING_HALF_WIDTH_M,
   SITE_SPACING_MARGIN_M,
   type SiteWallBox,
+  centeredRoofRect,
+  type RoofRect,
 } from './sites';
 import {
   DISTRIBUTION_CELL_M,
@@ -123,6 +125,8 @@ export interface FarmhouseInstance {
   theta: number;
   /** Weathered-standing, or fled-in-a-hurry ransacked. */
   state: FarmhouseState;
+  /** Roofed interiors for the rain-shelter read (2026-11-05). */
+  roofRects: RoofRect[];
   /** One resolved variant index per piece slot (the
    *  table-length seam's counts at derivation time). */
   slots: Record<FarmhouseSlot, number>;
@@ -286,6 +290,7 @@ function farmhouseInstanceAt(
         dressing,
         features: [],
         walls: [],
+        roofRects: [],
         clearRadius: FARMHOUSE_CLEAR_RADIUS_M,
         bounds: {
           minX: x - FARMHOUSE_CLEAR_RADIUS_M,
@@ -297,6 +302,7 @@ function farmhouseInstanceAt(
       const plan = buildFarmhousePlan(worldSeed, result);
       result.features = plan.features;
       result.walls = plan.walls;
+      result.roofRects = plan.roofRects;
     }
   }
   instanceCache.set(cacheKey, result);
@@ -373,7 +379,7 @@ export const FARMHOUSE_RIDGE_H_M: readonly number[] = [2.04, 2.93];
 function buildFarmhousePlan(
   worldSeed: string,
   inst: FarmhouseInstance,
-): { features: ScatterObject[]; walls: SiteWallBox[] } {
+): { features: ScatterObject[]; walls: SiteWallBox[]; roofRects: RoofRect[] } {
   const rand = mulberry32(deriveSeed(worldSeed, `farmhouse-plan:${inst.key}`));
   const { x: cx, z: cz } = inst.center;
   const swap = inst.theta !== 0;
@@ -584,7 +590,9 @@ function buildFarmhousePlan(
     rubbleAt(out.lx, out.lz);
   }
 
-  return { features, walls };
+  // The roof stands in both states (ransacked is an
+  // interior condition) — the whole footprint shelters.
+  return { features, walls, roofRects: [centeredRoofRect(toWorld, L, D)] };
 }
 
 /**
