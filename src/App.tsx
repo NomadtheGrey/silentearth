@@ -2063,6 +2063,8 @@ import {
   caveMouthsNear,
   CAVE_DIMENSION_KEY,
   CAVE_ENTER_RANGE_M,
+  CAVE_EXIT_RANGE_M,
+  createCaveGen,
 } from './game/caves';
 import { dimensionState } from './game/dimensionState';
 import {
@@ -15159,17 +15161,23 @@ export default function App() {
       // (pluralization: the layout reads by active key).
       const layout = caveLayoutForKey(seed, dimensionState.activeKey());
       if (dimensionState.currentLayer() === 1) {
+        // THE EXIT'S OWN REACH (Adam's exit pin,
+        // 2026-11-06): the offer prices off the entry
+        // CELL (CAVE_EXIT_RANGE_M), not the bare anchor
+        // point — anywhere in the arrival cell, facing
+        // the entry shaft, the EXIT pill stands.
         considerCave(
           'cave-exit',
           '',
           layout.entryAnchor.x,
           layout.entryAnchor.z,
+          CAVE_EXIT_RANGE_M,
         );
         const shaft = layout.layers[0]?.shaftAnchor;
         if (shaft) considerCave('cave-descend', '', shaft.x, shaft.z);
       } else if (dimensionState.currentLayer() === 2) {
         const entry = layout.layers[1]?.entryAnchor;
-        if (entry) considerCave('cave-climb', '', entry.x, entry.z);
+        if (entry) considerCave('cave-climb', '', entry.x, entry.z, CAVE_EXIT_RANGE_M);
       }
     }
     if (homeHouse !== undefined) {
@@ -16999,13 +17007,33 @@ export default function App() {
   // the def's own (SOURCE_FOR_KIND — 'Ash', 'Pond',
   // 'Silt Bed'...), never a coined table; the plate
   // sits at the disc centre, painted by the same
-  // StructureTag plate the singulars use. Dimension
-  // gens answer truthfully through the query (cave
-  // pools name themselves underground).
+  // StructureTag plate the singulars use. Underground
+  // the query reads the dimension's own generator
+  // (see the phantom fix inside — the surface gen's
+  // discs at cave coordinates were the leak).
   const groundTag = ((): { name: string; x: number; y: number } | null => {
     const player = playerRef.current;
     if (!player) return null;
-    const gen = genRef.current;
+    // THE DIMENSION'S OWN DISCS (Background's phantom
+    // fix, 2026-11-06): the shell's genRef is the
+    // SURFACE generator in every dimension (it never
+    // swaps — travel swaps the renderer's), so reading
+    // it underground priced the surface's facts at cave
+    // coordinates: a fen's peat carpet, pond, and silt
+    // named themselves inside cave:main where none
+    // exist (Adam's 'Peat Moss Carpet', standing 0.92 m
+    // from the entry anchor with no exit in sight).
+    // Underground, the query reads the dimension's own
+    // generator — a cave gen's chunks are its layout's
+    // features, so cave pools name themselves and
+    // nothing else can. Other dimensions (attics) have
+    // no disc facts: the tag stands down there.
+    const activeKey = dimensionState.activeKey();
+    const gen = dimensionState.isUnderground()
+      ? activeKey.startsWith('cave:')
+        ? createCaveGen(seed, activeKey)
+        : null
+      : genRef.current;
     if (!gen) return null;
     const features = discFeaturesInRect(gen, {
       minX: player.x - GROUND_TAG_RANGE_M,
