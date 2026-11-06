@@ -233,19 +233,24 @@ export function sunElevationAtCycle(cycleT: number, month: number): number {
  * for the rest, 'full-moon' from the moon phase, 'none'
  * needing no check) reads straight off cyclePhase /
  * cycleSplit — no ritual code lives here, only the windows.
- * BAND WIDTH (PINNED by Adam, 2026-11-06: 'Twilight,
- * maybe that can be one minute; 30 seconds before/after
- * sunrise/sunset'): TWILIGHT_DEG = 16° — derived by
- * probe against this module's own elevation math at
- * the default (September, equal 300 s arcs, the
- * 10-minute cycle): 8° measured 30.5 s total per
- * window; 16° measures 61.8 s, 30.9 s on each side of
- * the crossing — his one minute, symmetric. (Civil
- * twilight is 6°; the rite windows run generous on
- * purpose.) The band is defined in ELEVATION, so the
- * window breathes with the year (a June dusk ~43 s, a
- * December dusk ~95 s at the same 16°) — the pin
- * prices the default season the game starts in.
+ * BAND WIDTH (PINNED by Adam, 2026-11-06, re-priced
+ * the same day in HIS units): the window is 30
+ * IN-GAME MINUTES either side of the crossing — 60
+ * in-game minutes total. (An earlier same-day reading
+ * priced it in real seconds; Adam corrected the unit.)
+ * At the 600 s cycle (1440 in-game minutes), 60
+ * in-game minutes = 25.0 real seconds. TWILIGHT_DEG =
+ * 6.5, derived by probe against this module's own
+ * elevation math at the default (September, equal
+ * 300 s arcs): it measures 24.7 real seconds = 59.4
+ * in-game minutes, 29.7 on each side of the crossing,
+ * dawn and dusk alike — his half hour each way to
+ * within an in-game minute. (Civil twilight is 6°.)
+ * The band is defined in ELEVATION, so the window
+ * breathes with the year, in his units: at the same
+ * 6.5° a June dusk measures ~42 in-game minutes and
+ * a December dusk ~122 — the pin prices the default
+ * season the game starts in.
  * VISUAL: the rig's existing horizon sunset tint already
  * ramps over ~20° of elevation; inside the checkable band
  * it now strengthens to full at the horizon crossing, so
@@ -255,8 +260,8 @@ export function sunElevationAtCycle(cycleT: number, month: number): number {
  * half is day) — the sleep gate and the shell's isNight
  * read exactly as before.
  */
-/** The twilight band (PINNED: one real minute — see the dawn/dusk note). */
-export const TWILIGHT_DEG = 16;
+/** The twilight band (PINNED: 30 in-game minutes either side — see the dawn/dusk note). */
+export const TWILIGHT_DEG = 6.5;
 /** Extra horizon tint inside the checkable band (lane-decided, flagged). */
 export const TWILIGHT_TINT_BOOST = 0.3;
 
