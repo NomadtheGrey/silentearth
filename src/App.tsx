@@ -2064,6 +2064,7 @@ import {
   CAVE_DIMENSION_KEY,
   CAVE_ENTER_RANGE_M,
   CAVE_EXIT_RANGE_M,
+  createCaveGen,
 } from './game/caves';
 import { dimensionState } from './game/dimensionState';
 import {
@@ -17006,13 +17007,33 @@ export default function App() {
   // the def's own (SOURCE_FOR_KIND — 'Ash', 'Pond',
   // 'Silt Bed'...), never a coined table; the plate
   // sits at the disc centre, painted by the same
-  // StructureTag plate the singulars use. Dimension
-  // gens answer truthfully through the query (cave
-  // pools name themselves underground).
+  // StructureTag plate the singulars use. Underground
+  // the query reads the dimension's own generator
+  // (see the phantom fix inside — the surface gen's
+  // discs at cave coordinates were the leak).
   const groundTag = ((): { name: string; x: number; y: number } | null => {
     const player = playerRef.current;
     if (!player) return null;
-    const gen = genRef.current;
+    // THE DIMENSION'S OWN DISCS (Background's phantom
+    // fix, 2026-11-06): the shell's genRef is the
+    // SURFACE generator in every dimension (it never
+    // swaps — travel swaps the renderer's), so reading
+    // it underground priced the surface's facts at cave
+    // coordinates: a fen's peat carpet, pond, and silt
+    // named themselves inside cave:main where none
+    // exist (Adam's 'Peat Moss Carpet', standing 0.92 m
+    // from the entry anchor with no exit in sight).
+    // Underground, the query reads the dimension's own
+    // generator — a cave gen's chunks are its layout's
+    // features, so cave pools name themselves and
+    // nothing else can. Other dimensions (attics) have
+    // no disc facts: the tag stands down there.
+    const activeKey = dimensionState.activeKey();
+    const gen = dimensionState.isUnderground()
+      ? activeKey.startsWith('cave:')
+        ? createCaveGen(seed, activeKey)
+        : null
+      : genRef.current;
     if (!gen) return null;
     const features = discFeaturesInRect(gen, {
       minX: player.x - GROUND_TAG_RANGE_M,
