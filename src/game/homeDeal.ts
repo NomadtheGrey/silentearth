@@ -16,9 +16,9 @@
  * THE STREAM: the deal draws on a SIBLING stream
  * ('carrier:<key>:deal') of the carrier's mint stream
  * ('carrier:<key>'), never the mint stream itself — so
- * every carrier's completeness roll stays byte-identical
- * to what it was before the deal existed. Only the mark
- * is new.
+ * every carrier's mint roll (the arc deal since Adam's
+ * mint, 2026-11-07) stays exactly what it was before
+ * the deal existed. Only the mark is new.
  *
  * A leaf (seed.ts only) so both minting sites — the
  * singulars in carriers.ts and the village instances in

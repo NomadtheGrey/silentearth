@@ -28,12 +28,20 @@
  *                by its own hash; see homeDeal.ts for the
  *                table and the stream law.
  *   completeness the legible fraction, 0..1, seeded per
- *                carrier. Class bands (DRAFT): standing
- *                stones read high (0.7–1.0); the cave
- *                circles are mostly ruined (0.25–0.6);
- *                fire-touched inscriptions — the village
- *                hearth, the burnt homesteads' stones —
- *                read between (0.35–0.75).
+ *                carrier. THE MINT (Adam's ruling,
+ *                2026-11-07): the dealt truth is an ARC —
+ *                arcStart (a random hour, 0–11) and
+ *                arcHours (a random integer length,
+ *                4–6) — ONE dealing range for every
+ *                carrier family, Home, Circle and Travel
+ *                alike; the old class bands (standing
+ *                0.7–1.0, cave 0.25–0.6, burnt 0.35–0.75)
+ *                are RETIRED as deal inputs.
+ *                completeness rides as the arc's derived
+ *                share, arcHours / 12, so standing
+ *                consumers read the same number the arc
+ *                implies until Systems' filled-clock
+ *                accumulation re-keys them.
  *
  * GRAVES ARE RESERVED (Adam, 2026-11-01): graves and
  * their marks belong to the mark line that starts with
@@ -60,6 +68,9 @@
  */
 
 import { deriveSeed, mulberry32 } from './seed';
+import { dealFragmentArc } from './fragmentArc';
+
+export { dealFragmentArc };
 import type { BiomeWeights } from '../types';
 import { farmhouseSite, groveSite, villageSite } from './sites';
 import { caveInstancesInRect, caveLayoutForKey } from './caves';
@@ -68,10 +79,16 @@ import { villageInstancesInRect } from './villages';
 import { groveInstancesInRect } from './groves';
 import { dealHomeMark } from './homeDeal';
 
-/** The three facts a faced carrier hands the shell. */
+/** The facts a faced carrier hands the shell: the arc
+ * (start + length, the dealt truth) and its share. */
 export interface FragmentCarrier {
   fragmentId: string;
   mark: string;
+  /** The arc's start hour, 0–11 (Adam's mint, 2026-11-07). */
+  arcStart: number;
+  /** The arc's length in hours, an integer 4–6. */
+  arcHours: number;
+  /** The arc's share of the whole sign: arcHours / 12. */
   completeness: number;
 }
 
@@ -82,20 +99,21 @@ export interface CarrierHere extends FragmentCarrier {
 }
 
 type Band = readonly [number, number];
-/** Standing stones, little weathered. */
+/** RETIRED as deal inputs (Adam's mint, 2026-11-07 —
+ * one arc range for every family). Kept as the record
+ * of the bands the portion era dealt by; nothing reads
+ * them to mint any longer. */
 export const CARRIER_BAND_STONE: Band = [0.7, 1.0];
-/** Runic circles, mostly ruined (Adam's cave reading). */
 export const CARRIER_BAND_CIRCLE: Band = [0.25, 0.6];
-/** Fire-touched inscriptions. */
 export const CARRIER_BAND_BURNT: Band = [0.35, 0.75];
 
-/** Mint a carrier's facts: id from its key, completeness seeded in its band. */
-export function mintCarrier(worldSeed: string, carrierKey: string, mark: string, band: Band): FragmentCarrier {
+/** Mint a carrier's facts: id from its key, the arc off its own stream. */
+export function mintCarrier(worldSeed: string, carrierKey: string, mark: string): FragmentCarrier {
   const rand = mulberry32(deriveSeed(worldSeed, `carrier:${carrierKey}`));
   return {
     fragmentId: `${carrierKey}:fragment`,
     mark,
-    completeness: band[0] + rand() * (band[1] - band[0]),
+    ...dealFragmentArc(rand),
   };
 }
 
@@ -106,7 +124,7 @@ export function farmhouseCarrier(
   weightsAtPos: (x: number, z: number) => BiomeWeights,
 ): CarrierHere {
   const farm = farmhouseSite(worldSeed, spawn, weightsAtPos);
-  return { ...mintCarrier(worldSeed, 'farmhouse', dealHomeMark(worldSeed, 'farmhouse'), CARRIER_BAND_STONE), x: farm.hearthStone.x, z: farm.hearthStone.z };
+  return { ...mintCarrier(worldSeed, 'farmhouse', dealHomeMark(worldSeed, 'farmhouse')), x: farm.hearthStone.x, z: farm.hearthStone.z };
 }
 
 /** The burnt village's hearth stone — a home that was; its mark is dealt (homeDeal.ts). */
@@ -117,7 +135,7 @@ export function villageCarrier(
 ): CarrierHere {
   const village = villageSite(worldSeed, spawn, weightsAtPos);
   const spot = village.hearthHouse.hearthSpot;
-  return { ...mintCarrier(worldSeed, 'village', dealHomeMark(worldSeed, 'village'), CARRIER_BAND_BURNT), x: spot.x, z: spot.z };
+  return { ...mintCarrier(worldSeed, 'village', dealHomeMark(worldSeed, 'village')), x: spot.x, z: spot.z };
 }
 
 /** The Grove's carved stone — a Circle fragment, standing. */
@@ -129,7 +147,7 @@ export function groveCarrier(
   const grove = groveSite(worldSeed, spawn, (x, z) => weightsAtPos(x, z).dominant);
   const stone = grove.features.find((f) => f.kind === 'carvedStone');
   if (!stone) return null;
-  return { ...mintCarrier(worldSeed, grove.id, 'circle', CARRIER_BAND_STONE), x: stone.x, z: stone.z };
+  return { ...mintCarrier(worldSeed, grove.id, 'circle'), x: stone.x, z: stone.z };
 }
 
 /** A cave instance's runic circle, from its layout's fragment spot. */
@@ -137,7 +155,7 @@ export function caveCarrier(worldSeed: string, instanceKey: string): CarrierHere
   const layout = caveLayoutForKey(worldSeed, instanceKey);
   if (!layout.fragmentSpot) return null;
   return {
-    ...mintCarrier(worldSeed, instanceKey, 'circle', CARRIER_BAND_CIRCLE),
+    ...mintCarrier(worldSeed, instanceKey, 'circle'),
     x: layout.fragmentSpot.x,
     z: layout.fragmentSpot.z,
   };
@@ -169,8 +187,7 @@ export function caveCarrierForLayer(
   return {
     fragmentId: `${instanceKey}:fragment:L${layer}`,
     mark: 'circle',
-    completeness:
-      CARRIER_BAND_CIRCLE[0] + rand() * (CARRIER_BAND_CIRCLE[1] - CARRIER_BAND_CIRCLE[0]),
+    ...dealFragmentArc(rand),
     x: floor.stoneSpot.x,
     z: floor.stoneSpot.z,
   };

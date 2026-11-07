@@ -116,10 +116,13 @@ import { homesteadInstancesInRect, HOMESTEAD_CLEAR_RADIUS_M } from './homesteads
 import { farmhouseInstancesInRect, FARMHOUSE_CLEAR_RADIUS_M } from './farmhouses';
 import { villageInstancesInRect } from './villages';
 import type { FragmentCarrier } from './carriers';
+import { dealFragmentArc } from './fragmentArc';
 
 /** Presence per distribution cell. DRAFT. */
 export const GROVE_CELL_PRESENCE = 0.3;
-/** The carved stone's completeness band. DRAFT. */
+/** RETIRED as a deal input (Adam's mint, 2026-11-07):
+ * the lesser groves deal the one arc range now. Kept
+ * as the record of the band this family dealt by. */
 export const LESSER_GROVE_CARRIER_BAND: readonly [number, number] = [0.4, 0.8];
 /**
  * ADAM'S GROVE SIZE LAW (2026-11-05, as corrected by
@@ -309,13 +312,14 @@ export function lesserGroveInstanceAt(
       const carved = layout.features.find((f) => f.kind === 'carvedStone');
       const carvedSpot = carved ? { x: carved.x, z: carved.z } : cand.center;
       // The carrier facts (minted here to keep the
-      // derivation self-contained; the band is this
-      // family's own, priced in the header).
+      // derivation self-contained; the arc deal is the
+      // one mint range, carriers.ts — this family's
+      // old band is retired as a deal input).
       const crand = mulberry32(deriveSeed(worldSeed, `carrier:${key}`));
       const fragmentCarrier: FragmentCarrier = {
         fragmentId: `${key}:fragment`,
         mark: 'circle',
-        completeness: LESSER_GROVE_CARRIER_BAND[0] + crand() * (LESSER_GROVE_CARRIER_BAND[1] - LESSER_GROVE_CARRIER_BAND[0]),
+        ...dealFragmentArc(crand),
       };
       result = {
         key,
