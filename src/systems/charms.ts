@@ -47,9 +47,10 @@
 //   effect (not a one-shot). HungerState multiplier
 //   support BUILT (Track A 2026-10-28); the shell sets
 //   it from its own carried boolean (UI syncShrewEffect
-//   — shell-supplied, list-ready). shrewEffectActive
-//   below is UNUSED pending its signature change (see
-//   its note) — do not wire from it.
+//   — shell-supplied, list-ready). (The old
+//   inventory-reading helper that stood here was
+//   retired in the toggles build, 2026-11-06 — see
+//   its tombstone below.)
 // - Effect WIRING into hunger/UI shells (shell calls
 //   update + setDrainMultiplier) is the shell's
 //   follow-up — nothing here calls it unprompted.
@@ -239,8 +240,9 @@ export const FIRST_CHARM_EFFECT: FirstCharmEffect = {
  * Every factor helper gates on CHARM-LIST MEMBERSHIP +
  * awakened: `carried` is a SHELL-SUPPLIED boolean (list
  * membership once the list lands) — never a main-
- * inventory read (shrew lesson; shrewEffectActive's
- * direct read stays unused for exactly this reason).
+ * inventory read (the shrew lesson; the one helper
+ * that read inventory directly was retired unused in
+ * the toggles build, 2026-11-06).
  * The shell multiplies drain factors (shrew × snake);
  * storage/capacity bonuses add to their own bases.
  */
@@ -643,33 +645,18 @@ export class GroundhogRest {
 }
 
 /**
- * UNUSED — pending a signature change to a shell-
- * supplied carried boolean (header note, charm-list
- * build 2026-10-28). Do NOT call: it reads main
- * inventory directly, which goes wrong once the list
- * lands (list charms are not inventory stacks). The
- * shell path is correct and stays: UI syncShrewEffect
- * computes carried (interim main-inventory count,
- * list membership when the list lands) && awakened,
- * then setDrainMultiplier(0.9 or 1) — snake multiplies
- * its factor into the same product (snakeDrainFactor
- * below; drain multipliers combine multiplicatively).
- * Switch /
- * retirement rides UI's panel landing (the carried
- * switch), not this one.
- * (Kept, not deleted: the formula lives here until
- * the switch — deletion without a replacement reader
- * would strand the reference.)
+ * RETIRED (the toggles build, 2026-11-06 — the removal
+ * Systems' 56eb46e assigned to this landing):
+ * shrewEffectActive(inventory, charms) stood here,
+ * UNUSED since the charm list landed — it read main
+ * inventory directly, which goes wrong once charms
+ * live in the list (list charms are not inventory
+ * stacks). Nothing ever called it; the shell path was
+ * always the true one (UI syncShrewEffect computes
+ * carried from list membership — now awakened AND
+ * enabled — and sets the drain product). Deleted, not
+ * re-signed: no replacement reader is needed.
  */
-export function shrewEffectActive(
-  inventory: PersonalInventory,
-  charms: CharmState,
-): boolean {
-  return (
-    inventory.count(FIRST_CHARM_ITEM) > 0 &&
-    charms.isAwakened(FIRST_CHARM_KIND)
-  );
-}
 
 /**
  * Record a bone pickup as a LOOK (Adam's ruling — see

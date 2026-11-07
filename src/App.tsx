@@ -4241,13 +4241,14 @@ export default function App() {
     // interim main-inventory count is gone (the shrew
     // item no longer sits in main inventory — the
     // save migration drops it on load, and the grant
-    // records no item). Deliberately NOT
-    // shrewEffectActive(inventory, charms): the landed
-    // helper reads the main inventory directly, which
-    // goes wrong once the list lands (list charms are
-    // not inventory stacks) — DEV blessed leaving it
-    // unused, and Systems noted it UNUSED pending a
-    // signature change to a shell-supplied boolean.
+    // records no item). Deliberately NOT the old
+    // shrewEffectActive(inventory, charms): that helper
+    // read the main inventory directly, which went
+    // wrong once the list landed (list charms are not
+    // inventory stacks). It stood UNUSED from the list
+    // landing until the toggles build (2026-11-06)
+    // retired it outright, on Systems' assignment in
+    // 56eb46e — this shell read was always the true one.
     const shrewCarried =
       charmStateRef.current.isAwakened(FIRST_CHARM_KIND) &&
       charmStateRef.current.isEnabled(FIRST_CHARM_KIND);
