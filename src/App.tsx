@@ -3798,6 +3798,13 @@ export default function App() {
   const [selectedCharmKind, setSelectedCharmKind] = useState<string | null>(
     null,
   );
+  // CHARM TOGGLES (2026-11-06): charmEntries below is a
+  // render-scope map over ref state (listCharms), so a
+  // toggle flip needs a render to re-stamp the rows on
+  // BOTH doors (panel + journal). The toggle act bumps
+  // this version; the value itself is never read (the
+  // ritualVersion pattern).
+  const [, setCharmListVersion] = useState(0);
   const [selectedItemId, setSelectedItemId] = useState<string | undefined>(
     undefined,
   );
@@ -4225,6 +4232,11 @@ export default function App() {
     // (Systems 9e9a9dd) — the list IS the awakened
     // kinds, so carried = isAwakened, and the drain
     // formula's carried && awakened collapses to it.
+    // TOGGLES (2026-11-06): the read is now awakened
+    // AND enabled — a turned-off shrew charm neither
+    // warns nor slows the drain; the latch's not-carried
+    // arm resets, so turning it back on while hungry
+    // fires fresh, exactly like a re-carry.
     // This is the switch the shrew build staged: the
     // interim main-inventory count is gone (the shrew
     // item no longer sits in main inventory — the
@@ -4236,7 +4248,9 @@ export default function App() {
     // not inventory stacks) — DEV blessed leaving it
     // unused, and Systems noted it UNUSED pending a
     // signature change to a shell-supplied boolean.
-    const shrewCarried = charmStateRef.current.isAwakened(FIRST_CHARM_KIND);
+    const shrewCarried =
+      charmStateRef.current.isAwakened(FIRST_CHARM_KIND) &&
+      charmStateRef.current.isEnabled(FIRST_CHARM_KIND);
     const result = warningRef.current.update(hunger.value(), shrewCarried);
     // Boolean setState bails out when unchanged, so
     // the steady state costs no re-render; fired is an
@@ -4347,7 +4361,8 @@ export default function App() {
     const fact = stormApproaching(genRef.current, player.x, player.z);
     const result = weatherWarningRef.current.update(
       fact,
-      charmStateRef.current.isAwakened('deer-antler-tip'),
+      charmStateRef.current.isAwakened('deer-antler-tip') &&
+        charmStateRef.current.isEnabled('deer-antler-tip'),
     );
     setDeerWarningActive(result.active);
     if (result.fired) {
@@ -4365,33 +4380,48 @@ export default function App() {
   // (list charms are not inventory stacks, same rule
   // as syncShrewEffect). The setters are idempotent
   // booleans, so re-syncing is harmless. Call sites are
-  // the ONLY list-change paths — boot (after restore +
-  // grant) and ritual completion (after awaken) — no
-  // timer: hook booleans change only on awakening.
-  // Pigeon always-on: the renderer ORs scry + pigeon
+  // the list-change paths — boot (after restore +
+  // grant), ritual completion (after awaken), and (the
+  // toggles build, 2026-11-06) the toggle act — no
+  // timer: hook booleans change only on awakening or
+  // on a toggle flip.
+  // Pigeon pointing: the renderer ORs scry + pigeon
   // (arrowsVisible), so the arrival-dismiss path clears
   // only the scry flag — pigeon arrows stay while the
-  // charm is listed, by design (effects are always on).
-  // Adam's refinement (2026-11-05) keeps it that way:
-  // the pigeon is the early-game road home while
-  // Returning fragments are hard to acquire, so its
-  // pointing is NOT gated on the mark — only the
-  // scry-raised arrows are (syncScryRevealGate below).
+  // charm is listed AND switched on. Adam's refinement
+  // (2026-11-05) keeps the rest: the pigeon is the
+  // early-game road home while Returning fragments are
+  // hard to acquire, so its pointing is NOT gated on
+  // the mark — only the scry-raised arrows are
+  // (syncScryRevealGate below). The toggle is the
+  // player's own switch, not a mark gate.
   // Fox reaches the player controller (nullable ref);
   // mole is a module-level setter; the three vision
   // hooks reach the renderer (nullable ref).
+  // TOGGLES (2026-11-06): every read below is awakened
+  // AND enabled — Systems' enabled fact beside
+  // isAwakened (56eb46e). A turned-off charm's hook
+  // reads false, exactly as an unawakened one does.
   const syncCharmHooks = () => {
     const charms = charmStateRef.current;
     rendererRef.current?.setPigeonWayHome(
-      charms.isAwakened('pigeon-wing-bone'),
+      charms.isAwakened('pigeon-wing-bone') &&
+        charms.isEnabled('pigeon-wing-bone'),
     );
     syncScryRevealGate();
-    rendererRef.current?.setOwlNightSight(charms.isAwakened('owl-talon'));
-    rendererRef.current?.setBatNightWayfinding(
-      charms.isAwakened('bat-wing-bone'),
+    rendererRef.current?.setOwlNightSight(
+      charms.isAwakened('owl-talon') && charms.isEnabled('owl-talon'),
     );
-    playerRef.current?.setSwiftStep(charms.isAwakened('fox-femur'));
-    setMoleEarthSense(charms.isAwakened('mole-paw'));
+    rendererRef.current?.setBatNightWayfinding(
+      charms.isAwakened('bat-wing-bone') &&
+        charms.isEnabled('bat-wing-bone'),
+    );
+    playerRef.current?.setSwiftStep(
+      charms.isAwakened('fox-femur') && charms.isEnabled('fox-femur'),
+    );
+    setMoleEarthSense(
+      charms.isAwakened('mole-paw') && charms.isEnabled('mole-paw'),
+    );
   };
 
   // THE SCRY-REVEAL GATE (Adam's ruling + refinement,
@@ -9484,6 +9514,18 @@ export default function App() {
     ...charm,
     display: boneDisplayFor(charm.kind),
   }));
+  // The journal's Charms rows — the SAME entries,
+  // re-keyed to the book's row shape (display -> name).
+  // One row source, two doors, by construction (the
+  // toggles build, 2026-11-06): the panel and the book
+  // can never disagree about a charm's switch.
+  const journalCharmRows = charmEntries.map((charm) => ({
+    kind: charm.kind,
+    name: charm.display,
+    tier: charm.tier,
+    note: charm.note,
+    enabled: charm.enabled,
+  }));
 
   // PANEL FAMILY (Adam, 2026-10-29: the three HUD
   // panels SWAP — "switch out without any further
@@ -10045,6 +10087,32 @@ export default function App() {
         ? current
         : (charmEntries[0]?.kind ?? null),
     );
+  };
+
+  // THE CHARM TOGGLE ACT (Adam's ruling 2026-11-05;
+  // the toggles build, 2026-11-06): one act behind BOTH
+  // switches — the Charms panel's detail seat and the
+  // journal's Charms page call this and nothing else.
+  // The flip is Systems' (setEnabled refuses an
+  // unawakened kind; a refused flip changes nothing and
+  // saves nothing). A landed flip re-runs the whole
+  // sync family — THE NEW CALL SITE: the syncs' standing
+  // sites are boot + ritual completion, and a toggle is
+  // the third list-change path (the effect facts move
+  // without an awakening). Then the entries mirror
+  // re-stamps (version bump) and the save carries the
+  // fact (snapshot writes enabled explicitly, so the
+  // choice persists across reload).
+  const handleToggleCharm = (kind: string) => {
+    const charms = charmStateRef.current;
+    if (!charms.setEnabled(kind, !charms.isEnabled(kind))) return;
+    setCharmListVersion((version) => version + 1);
+    syncShrewEffect();
+    syncCharmHooks();
+    syncCrowTier();
+    syncCharmBonuses();
+    syncDeerWarning();
+    saveNow();
   };
 
   const skyLabelFor = (sky: string): string => {
@@ -16311,8 +16379,14 @@ export default function App() {
   // no range or math invented here. Gate: frog listed
   // (list membership + awakened) AND fact non-null;
   // null = no hint, exactly per the API (no waters, or
-  // beyond range, or already at/in water).
-  const frogHint = charmStateRef.current.isAwakened('frog-pelvis')
+  // beyond range, or already at/in water). TOGGLES
+  // (2026-11-06): the gate is awakened AND enabled —
+  // the hint IS the frog charm's effect, so its switch
+  // mutes it like every other effect read.
+  const frogHint = (
+    charmStateRef.current.isAwakened('frog-pelvis') &&
+    charmStateRef.current.isEnabled('frog-pelvis')
+  )
     ? nearestStillWater(
         position.x,
         position.z,
@@ -19309,6 +19383,7 @@ export default function App() {
             charms={charmEntries}
             selectedKind={selectedCharmKind}
             onSelectKind={setSelectedCharmKind}
+            onToggleKind={handleToggleCharm}
             onClose={() => setCharmsOpen(false)}
             comfortable={isTouch}
           />
@@ -19344,6 +19419,8 @@ export default function App() {
               )
             }
             nameMaxChars={NAME_MAX_CHARS}
+            charms={journalCharmRows}
+            onToggleCharm={handleToggleCharm}
             quests={questDisplay}
             onMarkQuest={toggleActiveQuestMark}
             onClose={() => setJournalOpen(false)}
