@@ -95,6 +95,9 @@ export type ScatterKind =
   | 'pineTree'
   | 'standingStone'
   | 'carvedStone'
+  | 'flatStone'
+  | 'flatStoneWall'
+  | 'flatStoneCeil'
   | 'hedgeWall'
   | 'hoardMound'
   // Site-pass kinds (the Schoolhouse, sites.ts — same rule:

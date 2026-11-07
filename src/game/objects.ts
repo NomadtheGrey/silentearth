@@ -806,6 +806,60 @@ export const SOURCES: HarvestSourceDef[] = [
     mesh: { shape: 'stone', color: 0x97928a, extraColor: 0xcfc7b4, baseY: 0.75 },
   },
   {
+    id: 'flatStone',
+    kind: 'flatStone',
+    name: 'Flat Stone',
+    description:
+      'A flat stone slab lying face-up at a fragment ' +
+      'carrier seat — caves and the Home/Travel surface ' +
+      'carriers (Adam, 2026-11-07: the upright carved ' +
+      'stone read as a gravestone; the gravestone is ' +
+      'saved for graves). Its recessed panel is the ' +
+      'socket the fragment\u2019s glyph stretch will seat ' +
+      'in; empty until the stretch arrives. The Grove ' +
+      'keeps its standing carvedStone.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: [],
+    mesh: { shape: 'stone', color: 0x97928a, extraColor: 0xcfc7b4, baseY: 0.085 },
+  },
+  {
+    id: 'flatStoneWall',
+    kind: 'flatStoneWall',
+    name: 'Flat Stone, Wall-Seated',
+    description:
+      'The flat fragment stone standing in a wall\u2019s ' +
+      'plane, face out (Adam, 2026-11-07). Same slab, ' +
+      'same recessed panel socket as its floor twin; ' +
+      'emitted where a carrier seats on a cave wall.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: [],
+    mesh: { shape: 'stone', color: 0x97928a, extraColor: 0xcfc7b4, baseY: 0.41 },
+  },
+  {
+    id: 'flatStoneCeil',
+    kind: 'flatStoneCeil',
+    name: 'Flat Stone, Ceiling-Seated',
+    description:
+      'The flat fragment stone hanging face-down from ' +
+      'a cave ceiling (Adam, 2026-11-07). Same slab, ' +
+      'same recessed panel socket; an anchor shoulder ' +
+      'rises into the ceiling. Cave Circle stones ship ' +
+      'with empty panels — Circle\u2019s sign is not drawn ' +
+      'yet; the socket waits.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: [],
+    mesh: { shape: 'stone', color: 0x97928a, extraColor: 0xcfc7b4, baseY: 0.165 },
+  },
+  {
     id: 'hedgeWall',
     kind: 'hedgeWall',
     name: 'Hedgerow',

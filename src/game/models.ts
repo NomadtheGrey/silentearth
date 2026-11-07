@@ -182,6 +182,23 @@ const lyingCyl = (
  * `obj.y + baseY * s` placement (with scale s) lands them at
  * exactly the old world heights, shrunk or full.
  */
+/**
+ * The flat-stone family's inscription socket (Adam,
+ * 2026-11-07): every orientation carries the SAME
+ * recessed panel (this W x H), and these are the panel
+ * centres in each kind's LOCAL space (origin at the
+ * geometry centre, local ground = -baseY), with the
+ * face normal — the seat the renderer places the glyph
+ * stretch's decal on (a hair proud of the centre plane,
+ * along the normal). Probe-asserted against the built
+ * geometry (flatstone-check).
+ */
+export const FLATSTONE_PANEL_W = 0.85;
+export const FLATSTONE_PANEL_H = 0.55;
+export const FLATSTONE_WALL_PANEL = { c: [0, 0.035, 0.05], n: [0, 0, 1] } as const;
+export const FLATSTONE_FLOOR_PANEL = { c: [0, 0.07, 0], n: [0, 1, 0] } as const;
+export const FLATSTONE_CEIL_PANEL = { c: [0, -0.15, 0], n: [0, -1, 0] } as const;
+
 export function buildKindGeometry(spec: MeshSpec, kind: ScatterKind): THREE.BufferGeometry {
   const c = spec.color;
   const e = spec.extraColor ?? c;
@@ -362,6 +379,48 @@ export function buildKindGeometry(spec: MeshSpec, kind: ScatterKind): THREE.Buff
       part(box(0.85, 1.25, 0.45), c, { p: [0, 0.1, 0] }),
       part(box(0.56, 0.82, 0.07), e, { p: [0, 0.12, 0.26] }),
     ]);
+  }
+  // Kind overrides (the FLAT-STONE family, 2026-11-07;
+  // Adam: the upright carrier read as a gravestone —
+  // 'save the gravestone for graves'): ONE slab in
+  // three seatings. Built once in FACE SPACE (slab
+  // 1.05 x 0.75 x 0.13, face +Z; a panel plate recessed
+  // 0.015 behind the face inside a proud rim — the
+  // inscription socket, FLATSTONE_*_PANEL above; a
+  // smaller back plate softening the silhouette), then
+  // oriented per kind: wall stands as built on a low
+  // foot; floor tips face-up; ceiling hangs face-down
+  // on an anchor shoulder. Features carry rotY only,
+  // so the orientations are kinds, not rotations. The
+  // grove's carvedStone above does NOT move (DEV's
+  // call: a standing stone among standing stones).
+  if (kind === 'flatStone' || kind === 'flatStoneWall' || kind === 'flatStoneCeil') {
+    const faceParts = [
+      part(box(1.05, 0.75, 0.13), c),
+      part(box(FLATSTONE_PANEL_W, FLATSTONE_PANEL_H, 0.02), e, { p: [0, 0, 0.04] }),
+      part(box(0.95, 0.05, 0.03), shade(c, 0.85), { p: [0, 0.3, 0.055] }),
+      part(box(0.95, 0.05, 0.03), shade(c, 0.85), { p: [0, -0.3, 0.055] }),
+      part(box(0.05, 0.55, 0.03), shade(c, 0.85), { p: [0.46, 0, 0.055] }),
+      part(box(0.05, 0.55, 0.03), shade(c, 0.85), { p: [-0.46, 0, 0.055] }),
+      part(box(0.95, 0.65, 0.04), shade(c, 0.8), { p: [0, 0, -0.085] }),
+    ];
+    if (kind === 'flatStoneWall') {
+      faceParts.push(part(box(1.1, 0.07, 0.2), shade(c, 0.75), { p: [0, -0.41, 0] }));
+      const g = merge(faceParts);
+      g.translate(0, 0.035, 0);
+      return g;
+    }
+    if (kind === 'flatStone') {
+      const g = merge(faceParts);
+      g.rotateX(-Math.PI / 2);
+      g.translate(0, 0.02, 0);
+      return g;
+    }
+    faceParts.push(part(box(0.5, 0.3, 0.18), shade(c, 0.9), { p: [0, 0, -0.175] }));
+    const g = merge(faceParts);
+    g.rotateX(Math.PI / 2);
+    g.translate(0, -0.1, 0);
+    return g;
   }
   // Kind override (hedge wall, sites landing 2026-10-30): one
   // maze cell-edge of dense hedgerow — a woody core box with a
