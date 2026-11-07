@@ -257,7 +257,7 @@ export function snakeDrainFactor(
   carried: boolean,
   charms: CharmState,
 ): number {
-  return carried && charms.isAwakened('snake-vertebra')
+  return carried && charms.isAwakened('snake-vertebra') && charms.isEnabled('snake-vertebra')
     ? SNAKE_EFFECT.drainMultiplier
     : 1;
 }
@@ -267,7 +267,7 @@ export function mouseStorageBonus(
   carried: boolean,
   charms: CharmState,
 ): number {
-  return carried && charms.isAwakened('mouse-spine')
+  return carried && charms.isAwakened('mouse-spine') && charms.isEnabled('mouse-spine')
     ? MOUSE_EFFECT.storageBonus
     : 0;
 }
@@ -277,7 +277,7 @@ export function bearCapacityBonusLb(
   carried: boolean,
   charms: CharmState,
 ): number {
-  return carried && charms.isAwakened('bear-claw')
+  return carried && charms.isAwakened('bear-claw') && charms.isEnabled('bear-claw')
     ? BEAR_EFFECT.capacityBonusLb
     : 0;
 }
@@ -292,7 +292,7 @@ export function rabbitFleeFactor(
   carried: boolean,
   charms: CharmState,
 ): number {
-  return carried && charms.isAwakened('rabbit-jaw')
+  return carried && charms.isAwakened('rabbit-jaw') && charms.isEnabled('rabbit-jaw')
     ? RABBIT_EFFECT.fleeFactor
     : 1;
 }
@@ -307,7 +307,7 @@ export function raccoonBonusPoints(
   carried: boolean,
   charms: CharmState,
 ): number {
-  return carried && charms.isAwakened('raccoon-tooth')
+  return carried && charms.isAwakened('raccoon-tooth') && charms.isEnabled('raccoon-tooth')
     ? RACCOON_EFFECT.bonusPoints
     : 0;
 }
@@ -322,7 +322,7 @@ export function wolfSignRangeFactor(
   carried: boolean,
   charms: CharmState,
 ): number {
-  return carried && charms.isAwakened('wolf-tooth')
+  return carried && charms.isAwakened('wolf-tooth') && charms.isEnabled('wolf-tooth')
     ? WOLF_EFFECT.signRangeFactor
     : 1;
 }
@@ -338,7 +338,7 @@ export function groundhogWakeBonus(
   carried: boolean,
   charms: CharmState,
 ): number {
-  return carried && charms.isAwakened('groundhog-tooth')
+  return carried && charms.isAwakened('groundhog-tooth') && charms.isEnabled('groundhog-tooth')
     ? GROUNDHOG_EFFECT.wakeBonus
     : 0;
 }
@@ -362,7 +362,7 @@ export function crowGlowTier(
   carried: boolean,
   charms: CharmState,
 ): number {
-  return carried && charms.isAwakened('crow-beak')
+  return carried && charms.isAwakened('crow-beak') && charms.isEnabled('crow-beak')
     ? charms.tierOf('crow-beak')
     : 0;
 }
@@ -371,6 +371,16 @@ export function crowGlowTier(
 export interface SavedAwakening {
   kind: string;
   tier: number;
+  /**
+   * The charm toggle (Adam's ruling, 2026-11-05;
+   * built 2026-11-06): false = the player has turned
+   * this charm's EFFECT off. ABSENT = ON, so saves
+   * written before the toggle wake with every charm
+   * on. The toggle mutes the effect only — the
+   * awakening, its tier, and its journal presence
+   * stand either way (DEV's fork ruling, 2026-11-06).
+   */
+  enabled?: boolean;
 }
 
 /**
@@ -381,6 +391,8 @@ export interface SavedAwakening {
  */
 export class CharmState {
   private tiers = new Map<string, number>();
+  /** Kinds whose effect the player has toggled OFF. */
+  private disabled = new Set<string>();
 
   /** Tier held for a kind (0 when unawakened). */
   tierOf(kind: string): number {
@@ -392,30 +404,71 @@ export class CharmState {
     return this.tierOf(kind) > 0;
   }
 
-  /** Record an awakening (never downgrades). */
+  /**
+   * Is this kind's EFFECT on? The toggle read beside
+   * isAwakened: an awakened kind is on unless the
+   * player turned it off; an unawakened kind reads
+   * false (there is no effect to be on). Effect
+   * helpers gate awakened && enabled; existence
+   * reads (the journal, the already-woken gates)
+   * stay on isAwakened alone.
+   */
+  isEnabled(kind: string): boolean {
+    return this.tierOf(kind) > 0 && !this.disabled.has(kind);
+  }
+
+  /**
+   * Turn a kind's effect off or on. Refuses an
+   * unawakened kind (false — nothing is recorded; a
+   * toggle cannot predate its awakening). Returns
+   * true when the toggle state stands as asked.
+   */
+  setEnabled(kind: string, enabled: boolean): boolean {
+    if (this.tierOf(kind) <= 0) return false;
+    if (enabled) {
+      this.disabled.delete(kind);
+    } else {
+      this.disabled.add(kind);
+    }
+    return true;
+  }
+
+  /**
+   * Record an awakening (never downgrades). A
+   * tier-up PRESERVES an existing off: the toggle is
+   * the player's fact, not the tier's.
+   */
   awaken(kind: string, tier: number): void {
     if (tier <= 0) return;
     this.tiers.set(kind, Math.max(this.tierOf(kind), tier));
   }
 
-  /** Snapshot for save (insertion order, copies). */
+  /** Snapshot for save (insertion order, copies; the toggle written explicitly). */
   snapshot(): SavedAwakening[] {
-    return [...this.tiers.entries()].map(([kind, tier]) => ({ kind, tier }));
+    return [...this.tiers.entries()].map(([kind, tier]) => ({
+      kind,
+      tier,
+      enabled: !this.disabled.has(kind),
+    }));
   }
 
   /**
    * Boot restore only: clears and rebuilds from valid
    * entries (non-empty kind + positive-int tier; bad
-   * entries dropped). Never call mid-game over live
-   * awakenings.
+   * entries dropped). A valid entry's enabled ===
+   * false restores its toggle off; absent or true
+   * restores on (absent = on — old saves wake all-on).
+   * Never call mid-game over live awakenings.
    */
   restore(entries: readonly SavedAwakening[]): void {
     this.tiers.clear();
+    this.disabled.clear();
     for (const entry of entries) {
       if (!entry || typeof entry !== 'object') continue;
       if (typeof entry.kind !== 'string' || entry.kind === '') continue;
       if (!Number.isInteger(entry.tier) || entry.tier <= 0) continue;
       this.tiers.set(entry.kind, entry.tier);
+      if (entry.enabled === false) this.disabled.add(entry.kind);
     }
   }
 }
@@ -428,6 +481,8 @@ export interface ListedCharm {
   tier: number;
   /** Display line: boneNote's awakened branch. */
   note: string;
+  /** The toggle fact (the panel + journal rows render their switch from it). */
+  enabled: boolean;
 }
 
 /**
@@ -438,10 +493,11 @@ export interface ListedCharm {
  * never appear (snapshot holds awakened records only).
  */
 export function listCharms(charms: CharmState): ListedCharm[] {
-  return charms.snapshot().map(({ kind, tier }) => ({
+  return charms.snapshot().map(({ kind, tier, enabled }) => ({
     kind,
     tier,
     note: boneNote(kind, charms),
+    enabled: enabled !== false,
   }));
 }
 
@@ -569,7 +625,10 @@ export class GroundhogRest {
 
   /** Wake: rested iff carried + awakened at wake. */
   wake(carried: boolean, charms: CharmState): void {
-    this.rested = carried && charms.isAwakened('groundhog-tooth');
+    this.rested =
+      carried &&
+      charms.isAwakened('groundhog-tooth') &&
+      charms.isEnabled('groundhog-tooth');
   }
 
   /** Sleep-start: the rested day ends. */
