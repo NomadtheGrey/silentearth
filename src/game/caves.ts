@@ -105,6 +105,18 @@ export interface CaveAnchor {
   yaw: number;
 }
 
+/** A CHAMBER (2026-11-06): a block of cells whose
+ *  internal walls the carve pass knocked out — one open
+ *  room inside the maze. The heart is the room's
+ *  deepest dealt cell: the seat a future guardian
+ *  stands on, and where a dealt pool relocates. */
+export interface CaveChamber {
+  col: number;
+  row: number;
+  size: number;
+  heart: { x: number; z: number };
+}
+
 /** One derived cave layer. */
 export interface CaveLayer {
   index: number;
@@ -135,6 +147,9 @@ export interface CaveLayer {
    *  A non-paying layer's seat is null — it dealt the
    *  candidate and the ladder declined it. */
   stoneSpot: { x: number; z: number } | null;
+  /** The chambers the carve pass opened on this layer
+   *  (possibly none). */
+  chambers: CaveChamber[];
   walls: SiteWallBox[];
   features: ScatterObject[];
 }
@@ -148,15 +163,11 @@ export interface CaveLayout {
   entryAnchor: CaveAnchor;
   /** Twilight-fungus light spots (layer 1 entry only). */
   fungusLights: { x: number; z: number }[];
-  /** The fragment anchor (distributed instances only in
-   *  this round: a carved stone staged at the deepest
-   *  layer's own dealt seat, clear of its doors (the
-   *  separation ruling, 2026-11-06 — formerly the far
-   *  dead end); the DEBUT cave — cave:main, the
-   *  first cave (Adam, 2026-11-01: 'designated' retires as
-   *  a category; all caves populate by seed and location)
-   *  — keeps its exact v1 layout and reports null: no
-   *  layer guarantee under the general rules). */
+  /** The fragment anchor: the DEEPEST layer's stone
+   *  seat (the depth + fragment core, 2026-11-06 —
+   *  every layer deals a candidate; the deepest stands
+   *  guaranteed, earlier floors roll the pay ladder,
+   *  and the debut cave stands with the family). */
   fragmentSpot: { x: number; z: number } | null;
   /** The footprint the wall query reads underground. */
   footprint: SiteFootprint;
@@ -437,6 +448,155 @@ function deriveLayer(
     }
     stoneSpot = { x: bestC.x, z: bestC.z };
   }
+  // THE CHAMBER CARVE (Adam, 2026-11-06: 'the chambers
+  // could be carved out after cave treatment'; 'Ya we
+  // can run it over explored caves'; the debut included
+  // — 'let's have the chamber pass over that too'; the
+  // hosting his too: 'Oh you want to put a pool in some
+  // chambers? Ok.'). A POST-DEAL PASS: the maze, the
+  // distances, the dressing, the anchors, and the stone
+  // have all dealt exactly as they always have; the
+  // carve — off its own virgin stream
+  // (`${label}:chambers`) — picks a block of cells and
+  // knocks its INTERNAL walls out, turning a knot of
+  // corridors into one open room. Carving only removes
+  // walls: every feature seat, anchor, and distance
+  // stands as dealt, and reachability can only grow
+  // (the spanning tree is untouched — the carve adds
+  // openings to it, never cuts). Placement discipline
+  // (the separation law as carve rules): a block never
+  // CONTAINS the entry cell, the shaft cell, the up
+  // hole's cell, or the stone's dealt cell — a chamber
+  // may open beside any of them, never through them.
+  const cellOf = (p: { x: number; z: number }): { col: number; row: number } => ({
+    col: Math.round((p.x - origin.x) / CAVE_CELL_M + mid),
+    row: Math.round((p.z - origin.z) / CAVE_CELL_M + mid),
+  });
+  const chambers: CaveChamber[] = [];
+  {
+    const carveRand = mulberry32(deriveSeed(worldSeed, `${label}:chambers`));
+    const barred = new Set<string>();
+    const bar = (col: number, row: number): void => {
+      barred.add(`${col},${row}`);
+    };
+    bar(0, mid);
+    bar(shaftCell.col, shaftCell.row);
+    if (upAnchor) {
+      const u = cellOf(upAnchor);
+      bar(u.col, u.row);
+    }
+    const stoneCell = cellOf(stoneSpot);
+    bar(stoneCell.col, stoneCell.row);
+    const legalBlocks = (
+      size: number,
+      taken: CaveChamber[],
+    ): { col: number; row: number }[] => {
+      const out: { col: number; row: number }[] = [];
+      for (let r0 = 0; r0 + size <= grid; r0++) {
+        for (let c0 = 0; c0 + size <= grid; c0++) {
+          let ok = true;
+          for (let r = r0; r < r0 + size && ok; r++) {
+            for (let c = c0; c < c0 + size && ok; c++) {
+              if (barred.has(`${c},${r}`)) ok = false;
+            }
+          }
+          if (!ok) continue;
+          for (const t of taken) {
+            if (
+              c0 < t.col + t.size &&
+              t.col < c0 + size &&
+              r0 < t.row + t.size &&
+              t.row < r0 + size
+            ) {
+              ok = false;
+              break;
+            }
+          }
+          if (ok) out.push({ col: c0, row: r0 });
+        }
+      }
+      return out;
+    };
+    const dealBlock = (taken: CaveChamber[]): void => {
+      let size = 2;
+      if (grid >= CHAMBER_LARGE_MIN_GRID && carveRand() < CHAMBER_LARGE_CHANCE) size = 3;
+      let options = legalBlocks(size, taken);
+      if (options.length === 0 && size === 3) {
+        size = 2;
+        options = legalBlocks(size, taken);
+      }
+      if (options.length === 0) return;
+      const pick = options[Math.floor(carveRand() * options.length)];
+      // The heart: the block's deepest dealt cell (the
+      // greatest pre-carve distance; row-major first on
+      // ties) — the seat the room keeps for what comes.
+      let heart = { col: pick.col, row: pick.row };
+      let heartDist = -1;
+      for (let r = pick.row; r < pick.row + size; r++) {
+        for (let c = pick.col; c < pick.col + size; c++) {
+          if (dist[r][c] > heartDist) {
+            heartDist = dist[r][c];
+            heart = { col: c, row: r };
+          }
+        }
+      }
+      chambers.push({
+        col: pick.col,
+        row: pick.row,
+        size,
+        heart: cellCenter(heart.col, heart.row),
+      });
+    };
+    dealBlock([]);
+    if (
+      grid >= CHAMBER_SECOND_MIN_GRID &&
+      chambers.length > 0 &&
+      carveRand() < CHAMBER_SECOND_CHANCE
+    ) {
+      dealBlock(chambers);
+    }
+    if (chambers.length > 0) {
+      // Knock the internal walls out: a rock feature or
+      // collision box centred on a block-internal edge
+      // midpoint goes. (Midpoints are metres apart; the
+      // hair of tolerance cannot misfire.)
+      const edges: { x: number; z: number }[] = [];
+      for (const b of chambers) {
+        for (let r = b.row; r < b.row + b.size; r++) {
+          for (let c = b.col; c < b.col + b.size - 1; c++) {
+            const ctr = cellCenter(c, r);
+            edges.push({ x: ctr.x + CAVE_CELL_M / 2, z: ctr.z });
+          }
+        }
+        for (let r = b.row; r < b.row + b.size - 1; r++) {
+          for (let c = b.col; c < b.col + b.size; c++) {
+            const ctr = cellCenter(c, r);
+            edges.push({ x: ctr.x, z: ctr.z + CAVE_CELL_M / 2 });
+          }
+        }
+      }
+      const onEdge = (x: number, z: number): boolean =>
+        edges.some((e) => Math.abs(e.x - x) < 1e-6 && Math.abs(e.z - z) < 1e-6);
+      for (let i = features.length - 1; i >= 0; i--) {
+        const f = features[i];
+        if (f.kind === 'caveRock' && onEdge(f.x, f.z)) features.splice(i, 1);
+      }
+      for (let i = walls.length - 1; i >= 0; i--) {
+        const w = walls[i];
+        if (onEdge((w.minX + w.maxX) / 2, (w.minZ + w.maxZ) / 2)) walls.splice(i, 1);
+      }
+      // THE HOSTING: a dealt pool moves into the first
+      // chamber's heart — a pool in a room is the room's
+      // reason. (More contents follow this pattern
+      // later, by Adam's filed direction.)
+      const pool = features.find((f) => f.kind === 'cavePool');
+      if (pool) {
+        pool.x = chambers[0].heart.x;
+        pool.z = chambers[0].heart.z;
+      }
+    }
+  }
+
   return {
     index,
     origin,
@@ -445,6 +605,7 @@ function deriveLayer(
     shaftAnchor,
     upAnchor,
     stoneSpot,
+    chambers,
     walls,
     features,
   };
@@ -1096,6 +1257,14 @@ export const CAVE_STONE_UP_SEPARATION_M = 10.5;
  *  faced reaches (2.5 + 2.5) — neither act's circle
  *  swallows the other's stand. */
 export const CAVE_STONE_CLEAR_M = 5;
+
+/** CHAMBERS (DRAFT, 2026-11-06): on a wide floor, the
+ *  carve's block may deal 3x3 instead of 2x2 on this
+ *  roll, and a second chamber may follow on this one. */
+export const CHAMBER_LARGE_CHANCE = 0.25;
+export const CHAMBER_LARGE_MIN_GRID = 9;
+export const CHAMBER_SECOND_CHANCE = 1 / 3;
+export const CHAMBER_SECOND_MIN_GRID = 9;
 
 /** A facade mouth read as a PASSAGE: the threshold
  *  plane she crosses on foot. The plane stands at the
