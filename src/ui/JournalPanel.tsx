@@ -47,6 +47,17 @@
  * the caller's stamp of the one charm list, and its
  * switch flips the same fact the Charms panel's
  * switch flips — off mutes the effect only.
+ *
+ * The book's head carries its ORDER control (the
+ * Newest sort, 2026-11-06): 'Standing order' reads
+ * every page as recorded (the default); 'Newest'
+ * asks the caller to re-stamp the listing pages
+ * freshest-first — marks by their latest copy's
+ * recorded day, named places by their naming day,
+ * names and charms by reversed recorded order (no
+ * day is kept for those). The quest log stands
+ * outside the control by ruling: its act/thread
+ * grouping IS its order.
  */
 
 import { Fragment, useState } from 'react';
@@ -164,6 +175,20 @@ export interface JournalCharmRow {
 }
 
 export interface JournalPanelProps {
+  /**
+   * The book's order (the Newest sort, 2026-11-06):
+   * 'standing' = each page in its recorded order (the
+   * book's standing read, the default); 'newest' =
+   * the caller re-stamps the listing pages
+   * freshest-first. The panel renders the control at
+   * the book's head; the ordering itself is the
+   * caller's stamping (the quest log is excluded by
+   * ruling — its grouping IS its order). Omitted =
+   * no control (the book reads standing).
+   */
+  sortOrder?: 'standing' | 'newest';
+  /** Report a tap on the order control. */
+  onSortChange?: (order: 'standing' | 'newest') => void;
   /** One row per begun mark, caller's order. */
   marks: JournalMarkRow[];
   /**
@@ -258,6 +283,8 @@ export interface JournalPanelProps {
 }
 
 export function JournalPanel({
+  sortOrder,
+  onSortChange,
   marks,
   names,
   onRecite,
@@ -373,6 +400,26 @@ export function JournalPanel({
     >
       <div className="mb-2 flex items-center justify-between gap-2">
         <h2 className={'text-base font-semibold ' + t.heading}>Journal</h2>
+        {onSortChange ? (
+          <span className="flex items-center gap-1" role="group" aria-label="Journal order">
+            <button
+              type="button"
+              aria-pressed={sortOrder !== 'newest'}
+              onClick={() => onSortChange('standing')}
+              className={btn + t.button}
+            >
+              Standing order
+            </button>
+            <button
+              type="button"
+              aria-pressed={sortOrder === 'newest'}
+              onClick={() => onSortChange('newest')}
+              className={btn + t.button}
+            >
+              Newest
+            </button>
+          </span>
+        ) : null}
         {onClose ? (
           <button
             type="button"

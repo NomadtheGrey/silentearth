@@ -236,6 +236,8 @@ export type ScatterKind =
   // chamber walls, ceiling slabs, stalactites, pools, and
   // the entrance's twilight fungus.
   | 'caveRock'
+  | 'caveRockB'
+  | 'caveRockC'
   | 'caveCeiling'
   | 'stalactite'
   | 'cavePool'

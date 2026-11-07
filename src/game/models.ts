@@ -735,19 +735,100 @@ export function buildKindGeometry(spec: MeshSpec, kind: ScatterKind): THREE.Buff
       part(blob(0.5), shade(e, 1.0), { p: [0.55, -0.3, 0.2], s: [1, 0.7, 1] }),
     ]);
   }
-  if (kind === 'caveRock') {
-    // A chamber wall segment: one cell long, ceiling
-    // height, with an irregular brow along the top.
-    return merge([
-      part(box(CAVE_CELL_M, 3.2, 0.55), c),
-      part(box(CAVE_CELL_M, 0.3, 0.72), shade(c, 0.9), { p: [0, 1.55, 0], r: [0, 0, 0.02] }),
-      part(box(0.5, 0.8, 0.62), shade(c, 1.06), { p: [-1.1, -1.2, 0] }),
-    ]);
+  if (kind === 'caveRock' || kind === 'caveRockB' || kind === 'caveRockC') {
+    // A chamber wall segment, ROCK-CUT (2026-11-06): the
+    // masonry-flat slab is gone. Each variant is a stack
+    // of strata with seeded offsets and tilts, shade-
+    // banded, its faces jittered by a weld-safe hash (the
+    // hash reads ROUNDED positions, so coincident verts
+    // move together and no seams crack), plus knobs and
+    // the brow. Three variants x the emission's rotY
+    // flips = six reads down a corridor. THE ENVELOPE is
+    // law (probe-asserted): nothing passes |z| 0.37 —
+    // the old brow's own protrusion (0.36) past the
+    // collision face (0.28) is the tolerance, and the
+    // displacement biases into the rock.
+    const jitter = (geo: THREE.BufferGeometry, salt: number): THREE.BufferGeometry => {
+      const pos = geo.getAttribute('position');
+      for (let i = 0; i < pos.count; i++) {
+        const x = pos.getX(i);
+        const z = pos.getZ(i);
+        const rx = Math.round(x * 24);
+        const ry = Math.round(pos.getY(i) * 24);
+        const rz = Math.round(z * 24);
+        const h1 = Math.sin(rx * 127.1 + ry * 311.7 + rz * 74.7 + salt * 269.5) * 43758.5453;
+        const h2 = Math.sin(rx * 53.3 + ry * 191.9 + rz * 157.9 + salt * 97.1) * 28001.8384;
+        pos.setX(i, x + (h1 - Math.floor(h1) - 0.5) * 0.05);
+        pos.setZ(i, z + (h2 - Math.floor(h2) - 0.5) * 0.035);
+      }
+      geo.computeVertexNormals();
+      return geo;
+    };
+    const vi = kind === 'caveRock' ? 0 : kind === 'caveRockB' ? 1 : 2;
+    const strata: { h: number; t: number; zo: number; tilt: number; sh: number; split?: boolean }[] =
+      vi === 0
+        ? [
+            { h: 0.85, t: 0.55, zo: 0, tilt: 0.015, sh: 1.0 },
+            { h: 0.8, t: 0.58, zo: -0.02, tilt: -0.02, sh: 0.92 },
+            { h: 0.8, t: 0.52, zo: 0.02, tilt: 0.01, sh: 1.05 },
+            { h: 0.75, t: 0.6, zo: -0.01, tilt: 0.025, sh: 0.88 },
+          ]
+        : vi === 1
+          ? [
+              { h: 1.15, t: 0.6, zo: 0.01, tilt: -0.01, sh: 0.95 },
+              { h: 1.05, t: 0.52, zo: -0.03, tilt: 0.02, sh: 1.06 },
+              { h: 1.0, t: 0.58, zo: 0, tilt: -0.015, sh: 0.9, split: true },
+            ]
+          : [
+              { h: 0.64, t: 0.52, zo: -0.02, tilt: 0.012, sh: 1.0 },
+              { h: 0.64, t: 0.58, zo: 0.02, tilt: -0.012, sh: 0.9 },
+              { h: 0.64, t: 0.52, zo: -0.02, tilt: 0.012, sh: 1.07 },
+              { h: 0.64, t: 0.58, zo: 0.02, tilt: -0.012, sh: 0.93 },
+              { h: 0.64, t: 0.52, zo: -0.01, tilt: 0.01, sh: 0.86 },
+            ];
+    const parts: THREE.BufferGeometry[] = [];
+    let yBase = -1.6;
+    strata.forEach((s, si) => {
+      const cy = yBase + s.h / 2;
+      if (s.split) {
+        for (const sx of [-1, 1]) {
+          parts.push(jitter(part(box(CAVE_CELL_M / 2 - 0.03, s.h, s.t), shade(c, s.sh), { p: [sx * (CAVE_CELL_M / 4 + 0.015), cy, s.zo], r: [0, 0, s.tilt] }), vi * 10 + si * 2 + (sx + 1) / 2));
+        }
+      } else {
+        parts.push(jitter(part(box(CAVE_CELL_M, s.h, s.t), shade(c, s.sh), { p: [0, cy, s.zo], r: [0, 0, s.tilt] }), vi * 10 + si));
+      }
+      yBase += s.h;
+    });
+    // Knobs + the brow, per variant.
+    if (vi === 0) {
+      parts.push(jitter(part(box(0.55, 0.75, 0.28), shade(c, 1.08), { p: [-1.05, -1.15, 0.16] }), 40));
+      parts.push(jitter(part(box(CAVE_CELL_M, 0.28, 0.66), shade(c, 0.9), { p: [0, 1.52, 0.02], r: [0, 0, 0.02] }), 41));
+    } else if (vi === 1) {
+      parts.push(jitter(part(box(0.7, 0.9, 0.3), shade(c, 1.1), { p: [0.95, -1.05, 0.15] }), 42));
+      parts.push(jitter(part(box(CAVE_CELL_M, 0.26, 0.62), shade(c, 0.92), { p: [0, 1.53, 0], r: [0, 0, -0.015] }), 43));
+    } else {
+      parts.push(jitter(part(box(0.45, 0.5, 0.26), shade(c, 1.05), { p: [-1.2, -1.3, 0.17] }), 44));
+      parts.push(jitter(part(box(CAVE_CELL_M, 0.34, 0.7), shade(c, 0.85), { p: [0, 1.5, 0], r: [0, 0, 0.018] }), 45));
+    }
+    return merge(parts);
   }
   if (kind === 'caveCeiling') {
+    // The VAULT (2026-11-06): the flat slab becomes a
+    // stepped pyramid — a rim frame at the old underside
+    // (local -0.175, world 3.22: the clearance floor does
+    // not move), then two shrinking tiers rising to
+    // +0.41 at the center. Direction-free, so the grid
+    // reads domed per cell. The legacy hanging lump keeps
+    // its size and (x, z) seat, re-hung from the tier it
+    // now sits under.
     return merge([
-      part(box(CAVE_CELL_M, 0.35, CAVE_CELL_M), c),
-      part(box(0.5, 0.3, 0.5), shade(c, 0.88), { p: [0.4, -0.3, -0.3] }),
+      part(box(CAVE_CELL_M, 0.3, 0.55), c, { p: [0, -0.025, -1.425] }),
+      part(box(CAVE_CELL_M, 0.3, 0.55), c, { p: [0, -0.025, 1.425] }),
+      part(box(0.55, 0.3, 2.3), c, { p: [-1.425, -0.025, 0] }),
+      part(box(0.55, 0.3, 2.3), c, { p: [1.425, -0.025, 0] }),
+      part(box(2.3, 0.18, 2.3), shade(c, 1.05), { p: [0, 0.14, 0] }),
+      part(box(1.2, 0.18, 1.2), shade(c, 0.92), { p: [0, 0.32, 0] }),
+      part(box(0.5, 0.34, 0.5), shade(c, 0.88), { p: [0.4, -0.1, -0.3] }),
     ]);
   }
   if (kind === 'stalactite') {

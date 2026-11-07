@@ -153,6 +153,40 @@ function validSpot(
  * saved list back. All reads return copies — the
  * register's entries are never handed out live.
  */
+/**
+ * The journal sink (the trap-steal pattern's sibling,
+ * 2026-11-06): this leaf imports NOTHING (the law
+ * above), so it cannot reach the journal's change
+ * leaf in src/systems/ — instead it DECLARES a sink
+ * the shell wires once at boot to the journal
+ * (an adapter stamping kind: 'place' onto the fact).
+ * The naming acts declare through it when a write
+ * STANDS; restore never declares. Unwired (null),
+ * declarations go nowhere and cost nothing.
+ */
+export interface NamedPlaceJournalFact {
+  label: string;
+  deepen?: boolean;
+}
+
+type NamedPlacesJournalSink = (fact: NamedPlaceJournalFact) => void;
+
+let namedPlacesJournalSink: NamedPlacesJournalSink | null = null;
+
+/** Wire (or unwire, with null) the journal sink. The shell's boot seat. */
+export function setNamedPlacesJournalSink(
+  sink: NamedPlacesJournalSink | null,
+): void {
+  namedPlacesJournalSink = sink;
+}
+
+function declareNamedPlace(label: string, deepen: boolean): void {
+  if (!namedPlacesJournalSink) return;
+  namedPlacesJournalSink(
+    deepen ? { label, deepen: true } : { label },
+  );
+}
+
 export class NamedPlacesState {
   private places: NamedPlace[] = [];
 
@@ -180,6 +214,9 @@ export class NamedPlacesState {
     if (near) {
       near.name = name;
       near.day = input.day;
+      // A re-naming: the entry stands, its name moved —
+      // declared as a deepening of the existing entry.
+      declareNamedPlace(name, true);
       return { ...near };
     }
     const place: NamedPlace = {
@@ -192,6 +229,8 @@ export class NamedPlacesState {
       day: input.day,
     };
     this.places.push(place);
+    // A new place stands in the journal: declared.
+    declareNamedPlace(name, false);
     return { ...place };
   }
 
@@ -203,6 +242,7 @@ export class NamedPlacesState {
     if (!place) return false;
     place.name = clean;
     place.day = day;
+    declareNamedPlace(clean, true);
     return true;
   }
 

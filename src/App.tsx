@@ -2055,7 +2055,7 @@ import {
   farmhouseInstancesInRect,
 } from './game/farmhouses';
 import {
-  caveCarrier,
+  caveCarrierForLayer,
   fragmentCarriersHere as carriersHere,
 } from './game/carriers';
 import {
@@ -3780,6 +3780,20 @@ export default function App() {
   // camp act, the read gate 2026-11-01) — no HUD door
   // of its own.
   const [journalOpen, setJournalOpen] = useState(false);
+  // THE JOURNAL'S ORDER (the Newest sort, 2026-11-06;
+  // Adam asked for the option — 'at least a Newest' —
+  // not a new default): 'standing' renders every page
+  // in its recorded order, exactly as the book has
+  // always read; 'newest' re-stamps the listing pages
+  // freshest-first at their mapping sites below.
+  // Session-only (DEV ruling): the book reopens on
+  // standing order each sitting, never saved. The
+  // quest log is EXCLUDED by ruling — its act/thread
+  // grouping IS its order; bases likewise keep their
+  // standing head (a travel enumeration, not entries).
+  const [journalSortOrder, setJournalSortOrder] = useState<
+    'standing' | 'newest'
+  >('standing');
   // The panel's mirror of CompanionState (records are
   // ref-state; the mirror is what renders). Refreshed at
   // boot and after every companion act.
@@ -7644,6 +7658,35 @@ export default function App() {
     // eligibleKindsFor directly — no new Systems
     // function). Rolls use the trap's baited flag
     // (always false until a baiting landing adds one).
+    // The catch write passes the clock (Systems' stamp,
+    // 2026-11-06): the roll handler holds the sky, so
+    // it stamps the absolute game hour the catch was
+    // made — the steal beat below reads elapsed time
+    // off that stamp.
+    // TRAP STEAL (UI, 2026-11-06; Adam's fork: 'The
+    // count should survive a reload on traps' — the
+    // persisted stamp, not in-memory counting): the
+    // SAME 'trap:hour' emit carries a second beat —
+    // every trap whose catch STANDS rolls to be
+    // robbed, priced by the hours since its stamp
+    // (elapsed = 24 x daysElapsed + the emitted hour,
+    // minus caughtAtHour; the payload's hour is
+    // hour-of-day, and a sleep burst rolls its skipped
+    // hours before dawn — the day count is read before
+    // the jump, so a burst prices its early hours
+    // against the night that spawned them, never
+    // negative). An unstamped catch reads freshly
+    // caught (elapsed 0 — Systems' leniency) and can
+    // never be robbed until it has a stamp and hours
+    // on it. Chance = min(1, RATE x hours), RATE
+    // 0.04/h DRAFT (a full day standing = certainly
+    // taken). A hit clears the catch (the stamp dies
+    // with it) and voices ONE notice; 'trap:catch'
+    // saves. The trap itself is never consumed. The
+    // steal beat runs FIRST, on the catches standing
+    // when the hour turned — a catch made this very
+    // hour has no hours on it and is never priced.
+    const TRAP_STEAL_RATE_PER_HOUR = 0.04;
     const offTrapCatch = bus.on('trap:catch', () => {
       refreshTrapsFromState();
       saveNow();
@@ -7651,9 +7694,33 @@ export default function App() {
     const offTrapPlaced = bus.on('trap:placed', () => {
       refreshTrapsFromState();
     });
-    const offTrapHour = bus.on('trap:hour', () => {
+    const offTrapHour = bus.on('trap:hour', ({ hour }) => {
       const gen = genRef.current;
       if (!gen) return;
+      const sky = rendererRef.current?.snapshotSky();
+      const nowAbsoluteHour = sky ? sky.daysElapsed * 24 + hour : null;
+      if (nowAbsoluteHour !== null) {
+        for (const trap of trapState.snapshot()) {
+          if (trap.catch === null) continue;
+          const stamp = trap.caughtAtHour;
+          const elapsed =
+            typeof stamp === 'number' && Number.isFinite(stamp)
+              ? Math.max(0, nowAbsoluteHour - stamp)
+              : 0;
+          if (elapsed <= 0) continue;
+          const vanishChance = Math.min(
+            1,
+            TRAP_STEAL_RATE_PER_HOUR * elapsed,
+          );
+          if (Math.random() < vanishChance) {
+            trapState.setCatch(trap.id, null);
+            showFeedback(
+              'Something has been at your trap — the catch is gone.',
+              'info',
+            );
+          }
+        }
+      }
       for (const trap of trapState.snapshot()) {
         if (trap.catch !== null) continue;
         const eligible = eligibleKindsFor(
@@ -7662,7 +7729,11 @@ export default function App() {
         );
         const outcome = resolveTrapHour(eligible, trap.baited);
         if (outcome.caught) {
-          trapState.setCatch(trap.id, outcome.kind);
+          trapState.setCatch(
+            trap.id,
+            outcome.kind,
+            nowAbsoluteHour ?? undefined,
+          );
         }
       }
     });
@@ -9520,7 +9591,16 @@ export default function App() {
   // One row source, two doors, by construction (the
   // toggles build, 2026-11-06): the panel and the book
   // can never disagree about a charm's switch.
-  const journalCharmRows = charmEntries.map((charm) => ({
+  // NEWEST (charms): awakening order is all the book
+  // records — no day — so Newest reverses it
+  // (order-only, as priced). The Charms PANEL keeps
+  // the standing order in both states: the sort is
+  // the book's control, not the panel's.
+  const journalCharmRows = (
+    journalSortOrder === 'newest'
+      ? [...charmEntries].reverse()
+      : charmEntries
+  ).map((charm) => ({
     kind: charm.kind,
     name: charm.display,
     tier: charm.tier,
@@ -14865,8 +14945,31 @@ export default function App() {
     // 2026-11-01), so cave:main returns [] here,
     // unchanged; the surface path below is
     // untouched.
+    // PER-LAYER READ (UI, 2026-11-06; Background's
+    // cave depth + fragment core, bb00bf1): a cave
+    // can now carry a stone on ANY floor — the
+    // deepest guaranteed, each earlier floor by its
+    // pay roll (Adam's fork: the entry floor counts
+    // as the first intermediate) — so the question
+    // is asked of the floor she STANDS on:
+    // carriers.caveCarrierForLayer, fed her layer
+    // (dimensionState.currentLayer(), 1-based). The
+    // deepest floor's read IS caveCarrier (id and
+    // completeness byte-stable), a paying earlier
+    // floor mints '<key>:fragment:L<n>', and a floor
+    // that rolled no stone reads null — the branch's
+    // contract is unchanged ([carrier] within
+    // HARVEST_RANGE, else []), and floor coordinates
+    // keep the floors apart. The core also lifted
+    // the cave:main exclusion (the debut deals and
+    // mints like any cave); the branch is agnostic —
+    // it asks, it does not mint.
     if (dimensionState.isUnderground()) {
-      const carrier = caveCarrier(gen.seed, dimensionState.activeKey());
+      const carrier = caveCarrierForLayer(
+        gen.seed,
+        dimensionState.activeKey(),
+        dimensionState.currentLayer(),
+      );
       if (
         carrier &&
         Math.hypot(carrier.x - player.x, carrier.z - player.z) <=
@@ -15304,7 +15407,16 @@ export default function App() {
       // The anchors of the cave she's actually in
       // (pluralization: the layout reads by active key).
       const layout = caveLayoutForKey(seed, dimensionState.activeKey());
-      if (dimensionState.currentLayer() === 1) {
+      // THE DOORS PRICE PER FLOOR (the depth core,
+      // 2026-11-06): the exit on the entry floor; the
+      // climb at any deeper floor's own up hole; the
+      // descend at any floor's shaft that has a floor
+      // below it. Each is a direction-free zone act, as
+      // ruled — inside its circle the pill stands at any
+      // facing, and the nearest door holds the seat.
+      const layerNow = dimensionState.currentLayer();
+      const layerHere = layout.layers[layerNow - 1];
+      if (layerNow === 1) {
         // THE EXIT'S OWN REACH (Adam's exit pin,
         // 2026-11-06): the offer prices off the entry
         // BLOCK (CAVE_EXIT_RANGE_M), not the bare anchor
@@ -15319,22 +15431,26 @@ export default function App() {
           layout.entryAnchor.z,
           CAVE_EXIT_RANGE_M,
         );
-        const shaft = layout.layers[0]?.shaftAnchor;
+      }
+      if (layerNow >= 2 && layerHere) {
+        // THE UP HOLE (Adam's separation ruling,
+        // 2026-11-06): the climb prices from the layer's
+        // upAnchor — its own point, dealt clear of the
+        // down landing (the entry anchor) she arrived at.
+        const up = layerHere.upAnchor ?? layerHere.entryAnchor;
+        if (up) considerCave('cave-climb', '', up.x, up.z, CAVE_EXIT_RANGE_M);
+      }
+      if (layerHere && layout.layers.length > layerNow) {
         // GO DEEPER IS A DOOR TOO (Adam's ruling extended,
         // 2026-11-06): the descend seats in the same
         // direction-free zone as the exit — its circle is
         // its own reach (the default: she stands at the
         // shaft mouth), and inside it the pill stands at
-        // any facing, with the same winner standing.
+        // any facing. It seats only when a floor actually
+        // lies below; a lone floor's shaft mouth offers
+        // nothing (the travel refusal stays as backstop).
+        const shaft = layerHere.shaftAnchor;
         if (shaft) considerCave('cave-descend', '', shaft.x, shaft.z);
-      } else if (dimensionState.currentLayer() === 2) {
-        // THE UP HOLE (Adam's separation ruling,
-        // 2026-11-06): the climb prices from the layer's
-        // upAnchor — its own point, dealt clear of the
-        // down landing (the entry anchor) she arrived at.
-        const layer2 = layout.layers[1];
-        const entry = layer2?.upAnchor ?? layer2?.entryAnchor;
-        if (entry) considerCave('cave-climb', '', entry.x, entry.z, CAVE_EXIT_RANGE_M);
       }
     }
     if (homeHouse !== undefined) {
@@ -16556,7 +16672,7 @@ export default function App() {
   // disagree.
   const useWinner = computeUseWinner();
   useWinnerRef.current = useWinner;
- // The faced furniture, derived once per render for
+// The faced furniture, derived once per render for
   // the feed branch below + the pick-up pill's seat
   // (the press re-derives — see handlePickupFurniture).
   const furnitureFacedNow = facedFurniture();
@@ -17285,9 +17401,28 @@ export default function App() {
   // reads as a word on a DRAFT scale.
   const fragmentBestWord = (best: number | null): string | null =>
     best === null ? null : best >= 0.75 ? 'clear' : best >= 0.4 ? 'worn' : 'faint';
-  const journalRows: JournalMarkRow[] = fragmentStateRef.current
-    .snapshot()
-    .map((progress) => {
+  const journalRows: JournalMarkRow[] = (() => {
+    const progresses = fragmentStateRef.current.snapshot();
+    // NEWEST (marks): a mark's freshness is its LATEST
+    // copy's recorded day — the day its tally last
+    // moved (a begun mark with no copy yet falls back
+    // to the day the pursuit began); ties settle by
+    // reverse begun order.
+    const ordered =
+      journalSortOrder === 'newest'
+        ? progresses
+            .map((progress, index) => ({
+              progress,
+              index,
+              freshDay:
+                progress.copies.length > 0
+                  ? Math.max(...progress.copies.map((copy) => copy.day))
+                  : (progress.seekingSinceDay ?? 0),
+            }))
+            .sort((a, b) => b.freshDay - a.freshDay || b.index - a.index)
+            .map((entry) => entry.progress)
+        : progresses;
+    return ordered.map((progress) => {
       const tally = fragmentStateRef.current.tallyFor(progress.mark);
       return {
         mark: progress.mark,
@@ -17299,6 +17434,7 @@ export default function App() {
         seekingSinceDay: progress.seekingSinceDay,
       };
     });
+  })();
 
   // The journal's NAMES page (the familiar road,
   // 2026-11-02): one row per kind whose true name a rite
@@ -17306,29 +17442,36 @@ export default function App() {
   // familiar's row carries its borrow posture for the
   // Recite door (FamiliarState owns the arithmetic; this
   // only reads it at render).
-  const journalNameRows = familiarStateRef.current
-    .knownKinds()
-    .map((kind) => {
-      const gift = giftFor(kind);
+  // NEWEST (names): no day is recorded for a learned
+  // name — the snapshot's first-look order is all the
+  // book honestly holds, so Newest reverses it
+  // (order-only, as priced).
+  const journalNameKinds = familiarStateRef.current.knownKinds();
+  const journalNameRows = (
+    journalSortOrder === 'newest'
+      ? [...journalNameKinds].reverse()
+      : journalNameKinds
+  ).map((kind) => {
+    const gift = giftFor(kind);
       const standingFamiliar = companionStateRef.current.familiar();
-      const isFamiliar = standingFamiliar?.kind === kind;
-      const nowSec = Date.now() / 1000;
-      return {
-        kind,
-        label: companionKindLabel(kind),
-        name: trueNameFor(kind) ?? kind,
-        gift: gift?.phrase ?? '—',
-        isFamiliar,
-        giftWorking: gift?.giftId != null,
-        borrowState: !isFamiliar
-          ? undefined
-          : familiarStateRef.current.activeBorrow(nowSec)
-            ? ('borrowed' as const)
-            : familiarStateRef.current.isResting(nowSec)
-              ? ('resting' as const)
-              : ('ready' as const),
-      };
-    });
+    const isFamiliar = standingFamiliar?.kind === kind;
+    const nowSec = Date.now() / 1000;
+    return {
+      kind,
+      label: companionKindLabel(kind),
+      name: trueNameFor(kind) ?? kind,
+      gift: gift?.phrase ?? '—',
+      isFamiliar,
+      giftWorking: gift?.giftId != null,
+      borrowState: !isFamiliar
+        ? undefined
+        : familiarStateRef.current.activeBorrow(nowSec)
+          ? ('borrowed' as const)
+          : familiarStateRef.current.isResting(nowSec)
+            ? ('resting' as const)
+            : ('ready' as const),
+    };
+  });
 
   // The journal's PLACES page (the naming build,
   // 2026-11-05): one row per named place — her current
@@ -17378,9 +17521,26 @@ export default function App() {
         day: place.day,
       };
     };
+    // NEWEST (places): within each dimension group —
+    // the current-dimension-first composition stands
+    // in both orders; it is a reading aid, not an
+    // entry order — the named places sort by their
+    // recorded naming day, freshest first, register
+    // order reversed for ties. (Bases are stamped
+    // separately and keep their standing head under
+    // both orders, by ruling.)
+    const orderGroup = (group: NamedPlace[]): NamedPlace[] =>
+      journalSortOrder === 'newest'
+        ? group
+            .map((place, index) => ({ place, index }))
+            .sort(
+              (a, b) => b.place.day - a.place.day || b.index - a.index,
+            )
+            .map((entry) => entry.place)
+        : group;
     return [
-      ...all.filter((pl) => pl.dimensionKey === activeKey).map(toRow),
-      ...all.filter((pl) => pl.dimensionKey !== activeKey).map(toRow),
+      ...orderGroup(all.filter((pl) => pl.dimensionKey === activeKey)).map(toRow),
+      ...orderGroup(all.filter((pl) => pl.dimensionKey !== activeKey)).map(toRow),
     ];
   })();
   // Her bases for the same page (the Returning
@@ -19403,6 +19563,8 @@ export default function App() {
         ) : null}
         {journalOpen ? (
           <JournalPanel theme={lookThemes.world}
+            sortOrder={journalSortOrder}
+            onSortChange={setJournalSortOrder}
             marks={journalRows}
             names={journalNameRows}
             onRecite={handleRecite}

@@ -1836,6 +1836,34 @@ export const SOURCES: HarvestSourceDef[] = [
     mesh: { shape: 'stone', color: 0x4c463f, extraColor: 0x3a362f, baseY: 1.6 },
   },
   {
+    id: 'caveRockB',
+    kind: 'caveRockB',
+    name: 'Cave Wall',
+    description:
+      'The living rock of the cave (Adam, 2026-10-30). ' +
+      'Solid; the chambers are cut through it.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['deepBog'],
+    mesh: { shape: 'stone', color: 0x4c463f, extraColor: 0x35322c, baseY: 1.6 },
+  },
+  {
+    id: 'caveRockC',
+    kind: 'caveRockC',
+    name: 'Cave Wall',
+    description:
+      'The living rock of the cave (Adam, 2026-10-30). ' +
+      'Solid; the chambers are cut through it.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: ['deepBog'],
+    mesh: { shape: 'stone', color: 0x50463c, extraColor: 0x3a362f, baseY: 1.6 },
+  },
+  {
     id: 'caveCeiling',
     kind: 'caveCeiling',
     name: 'Cave Ceiling',
