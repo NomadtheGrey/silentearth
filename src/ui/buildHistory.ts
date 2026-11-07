@@ -43,6 +43,14 @@ export interface BuildRecord {
 
 const ALL_RECORDS: BuildRecord[] = [
   {
+    merge: 'Merge #93',
+    pr: 137,
+    sha: 'ddf498a',
+    date: '2026-11-06',
+    what: 'THE COMPANIONS KEY AND THE CHARM TOGGLES — the Companions panel gains its PC key, N, so a bonded friend is one press away; the door itself still opens by discovery, gated on a bonded companion record. And every charm can now be turned off and on again, in its panel and on the journal’s Charms page: the awakening stands, the tier stands, the name stays known — only the effect sleeps while the charm is off, and the choice saves with the world. Riding in the same landing, the callerless shrewEffectActive helper is retired from charms.ts, its tombstone left where it stood.',
+    why: 'Two of Adam’s calls. The key follows its door: the panel existed with no key of its own in the PC family, and a key that summons companions before one is bonded would spend the discovery the panel is built on — so the key works only once a companion record exists. The toggles answer his fork ruling directly: per-charm, off mutes the EFFECT only — the scry arrows, the hooks, the shrew’s carry, the deer’s warning all read awakened-and-enabled now, while the awakening itself, and everything that reads it, stands untouched.',
+  },
+  {
     merge: 'Merge #92',
     pr: 135,
     sha: '524b0bb',
