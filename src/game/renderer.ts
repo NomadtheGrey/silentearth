@@ -4043,7 +4043,11 @@ export class WorldRenderer {
       // initial rebuildPlacedGroup (torchState.restore first).
       const tg = new THREE.Group();
       tg.position.set(torch.x, -PLACED_TORCH_SINK, torch.z);
-      tg.add(buildTorch());
+      // The head wears the record's kind (Models'
+      // pitch variant, 2026-11-07): a planted pitch
+      // torch reads as one; the plain path is the
+      // standing build unchanged.
+      tg.add(buildTorch(torch.kind));
       group.add(tg);
       this.addTorchLight(torch.x, torch.z, torch.kind);
     }
