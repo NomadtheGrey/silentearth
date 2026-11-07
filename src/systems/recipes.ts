@@ -112,6 +112,9 @@ export const ITEMS = {
   // see torch.ts for the batch lighting action).
   torch: 'torch',
   litTorch: 'lit-torch',
+  pitch: 'pitch',
+  pitchTorch: 'pitch-torch',
+  litPitchTorch: 'lit-pitch-torch',
   // Paper chain (2026-10-27 — grimoire materials; see the
   // paper-chain recipes below for the chain).
   plantPulp: 'plant-pulp',
@@ -774,6 +777,32 @@ const DRAFT_RECIPES: Recipe[] = [
       'are lane-decided for the pin pass; no tallow/resin ' +
       '(not in the game). Placeable candles are NOT in this ' +
       'order (later, after torches).',
+  },
+  {
+    id: 'pitch-torch',
+    name: 'Pitch Torch',
+    status: 'draft',
+    output: { item: ITEMS.pitchTorch, quantity: 1 },
+    ingredients: [
+      i(ITEMS.snapWood, 1),
+      i(ITEMS.twinedCordage, 1),
+      i(ITEMS.dryKindling, 1),
+      i(ITEMS.pitch, 1),
+    ],
+    station: 'hand',
+    notes:
+      'DRAFT (2026-11-07, the pitch torch; torch.ts). ' +
+      'The standing torch recipe + pitch — pitch ' +
+      'specifically, no class substitution (Adam: it ' +
+      'is an enhancement, not a staple). The plain ' +
+      'torch stands untouched (no fuel, no burnout — ' +
+      'his standing law); a pitch torch burns BRIGHTER ' +
+      'with greatly extended range (Background\'s ' +
+      'profile, keyed off the item id — the item IS ' +
+      'the profile record). The pitch item is founded ' +
+      'ahead: unobtainable until the extraction work ' +
+      'founds the making of it (resin boiled down in ' +
+      'the cauldron). Quantities draft.',
   },
 
   // --- Paper chain (Adam, DEV chat 2026-10-27, solid-points

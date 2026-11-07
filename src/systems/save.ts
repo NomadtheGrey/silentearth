@@ -360,6 +360,16 @@ export interface SavedTorch {
   x: number;
   z: number;
   id?: string;
+  /**
+   * The planted torch's KIND (the pitch torch,
+   * 2026-11-07; Background's seat, relayed by DEV):
+   * the lit item id planted ('lit-torch' /
+   * 'lit-pitch-torch'). OPTIONAL — absent reads as a
+   * standing (plain) torch; without it a planted
+   * pitch torch would reload plain and its brightness
+   * would not survive the reload.
+   */
+  kind?: string;
 }
 
 /**
@@ -1032,6 +1042,7 @@ export interface SaveDraft {
     x: number;
     z: number;
     id?: string;
+    kind?: string;
   }>;
   /**
    * Placed altars from the placed-altar source
@@ -1553,6 +1564,7 @@ export function serializeSave(draft: SaveDraft): SaveData {
       x: torch.x,
       z: torch.z,
       ...(torch.id !== undefined ? { id: torch.id } : {}),
+      ...(torch.kind !== undefined ? { kind: torch.kind } : {}),
     })),
     // Altars: written AS-IS (positions verbatim, id when
     // the entity provides one — no filtering, no
@@ -2260,6 +2272,9 @@ export function deserializeSave(value: unknown): SaveData | null {
           z: entry.z as number,
           ...(typeof entry.id === 'string'
             ? { id: entry.id as string }
+            : {}),
+          ...(typeof entry.kind === 'string'
+            ? { kind: entry.kind as string }
             : {}),
         });
       }
