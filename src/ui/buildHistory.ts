@@ -43,6 +43,14 @@ export interface BuildRecord {
 
 const ALL_RECORDS: BuildRecord[] = [
   {
+    merge: 'Merge #96',
+    pr: 140,
+    sha: 'c0f4c03',
+    date: '2026-11-07',
+    what: 'THE ROSTER AND THE GAZETTEER — the companions now stand in a book of their own: kindred grouped with their counts, each soul named with its bond, its stance, its trust and its whereabouts, freed one by one or by number under a two-press arm, and parted from by the same ladder that raised them, the familiar never swept. Beside it the journal learns places: a register of found ground that flips once and never rewrites — villages, groves, caves and carriers declared by sighting, by standing on a carrier’s ground, by crossing a cave’s threshold — and the first hook is set: opening the journal is itself a journal fact now, latching saved on the spot, so find-bone’s Read your journal step can complete at last, and a quest’s completion is saved the moment it lands. The lures answer in the field: a prey scent draws prey in to mill at her stand-off and turns predators off at sixteen metres, a predator scent the mirror — the loop live end to end, facts, field, and the provider between. The caves’ walls are re-cut on the Cappadocia verdict — soft rock worn smooth, no plank seams. Two works ride in their machinery: the pitch torch, whose lit kind burns at twice the brightness and half again the reach, standing or carried; and the brewing shelf — kind-scents, rain-shed wax, warmth unguents by beeswax or resin — with the hearth miniquest’s gears turning beneath.',
+    why: 'Adam’s book is becoming the game’s memory, and this batch gives it two new kinds of remembering: who travels with her, and where she has been. The roster was owed since the companions outgrew a panel’s worth of names; the gazetteer is the Places foundation, built register-first so the book’s surface can be dressed over facts that never move once written. The lure loop closes a law Adam stated plainly — every scent answers both ways — that the brews had waited on since they shipped with no field to answer in. The rest is the day’s harvest riding one gate, as the batching rule asks: walls his eye rejected and re-cut, a brighter torch that is an upgrade and never a fuel, and the cauldron’s shelf stocked ahead of its journal page. Two riders are named, not promised here: the miniquest’s journal surface rides the book landing, and the pitch torch’s carried-kind line in the shell trails into the same landing.',
+  },
+  {
     merge: 'Merge #95',
     pr: 139,
     sha: '7de23bd',
