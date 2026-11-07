@@ -59,8 +59,23 @@
  * arms the row ('Release?' with Release / Keep), the
  * second confirms. The arm is panel-local state and
  * dies with the row. There is no release-all — a
- * guarded act stays singular. (Release-by-number of a
- * kind rides the group header in the follow cut.)
+ * guarded act stays singular.
+ *
+ * WHEREABOUTS (cut 2): a row may carry the caller's
+ * whereabouts line — where the animal stands, composed
+ * shell-side from the actor runtime (records carry no
+ * position; the panel only renders the caller's text,
+ * or nothing when the caller cannot honestly say).
+ *
+ * RELEASE BY NUMBER (cut 2): a group of 2+ companions
+ * offers a 'Release some…' door on its header: the
+ * player picks a count (1..count, default all), the
+ * arm names the kind and the number, and the confirm
+ * runs the caller's bulk act (Systems' releaseByKind:
+ * bonded companions only, oldest first — the familiar
+ * is never swept, and a demoted cat IS a companion of
+ * its kind: the accepted edge, DEV 2026-11-07). The
+ * arm is panel-local, like the row's.
  */
 
 import { useState } from 'react';
@@ -89,6 +104,14 @@ export interface RosterRow {
   releaseEffect: 'demote' | 'free';
   /** True when the kind takes no commands (the cat). */
   isCat: boolean;
+  /**
+   * The whereabouts line (cut 2): where this animal
+   * stands, in the caller's words ('With you',
+   * 'At <place>', '<n> m <wind>', 'Out of sight').
+   * Null = the caller cannot honestly say; no line
+   * renders.
+   */
+  whereaboutsLine: string | null;
 }
 
 export interface RosterKindGroup {
@@ -111,6 +134,12 @@ export interface RosterPanelProps {
   onStanceAll?: (stance: RosterStanceLabel) => void;
   /** A confirmed Release on one row (post-guard; the caller runs the ladder). */
   onRelease?: (creatureId: string) => void;
+  /**
+   * A confirmed release-by-number (cut 2; post-guard):
+   * free `count` companions of `kind` (the caller's
+   * bulk act; the familiar is never among them).
+   */
+  onReleaseKind?: (kind: string, count: number) => void;
   /** Per-row note text, keyed by creatureId (the cat's theater line lands here). */
   notes?: Readonly<Record<string, string | undefined>>;
   /** Note text under the All-row (the cat's line when the All-row meets one). */
@@ -152,6 +181,7 @@ export function RosterPanel({
   onStance,
   onStanceAll,
   onRelease,
+  onReleaseKind,
   notes,
   allNote,
   onClose,
@@ -161,6 +191,8 @@ export function RosterPanel({
 }: RosterPanelProps) {
   const t = UI_THEMES[theme];
   const [armedReleaseId, setArmedReleaseId] = useState<string | null>(null);
+  const [armedKind, setArmedKind] = useState<string | null>(null);
+  const [kindCount, setKindCount] = useState(1);
   const btn = comfortable
     ? 'rounded px-3 py-2 text-sm min-h-[44px] '
     : 'rounded px-2 py-1 text-sm ';
@@ -193,19 +225,84 @@ export function RosterPanel({
         <p className={'italic ' + t.muted}>No companions yet.</p>
       ) : (
         <div className="flex flex-col gap-y-4">
-          {groups.map((group) => (
+          {groups.map((group) => {
+            const freeable = group.rows.filter(
+              (r) => r.releaseEffect === 'free',
+            ).length;
+            return (
             <div key={group.kind}>
-              <h3
-                className={
-                  'mb-1.5 text-sm font-semibold ' + t.heading
-                }
-              >
-                {group.kindLabel}
-                <span className={'font-normal ' + t.muted}>
-                  {' '}
-                  — {group.count}
-                </span>
-              </h3>
+              <div className="mb-1.5 flex flex-wrap items-center gap-x-2">
+                <h3
+                  className={
+                    'text-sm font-semibold ' + t.heading
+                  }
+                >
+                  {group.kindLabel}
+                  <span className={'font-normal ' + t.muted}>
+                    {' '}
+                    — {group.count}
+                  </span>
+                </h3>
+                {onReleaseKind && freeable >= 2 ? (
+                  armedKind === group.kind ? (
+                    <span className="flex flex-wrap items-center gap-1">
+                      <span className={'text-sm ' + t.muted}>
+                        Release {kindCount} {group.kindLabel}
+                        {kindCount === 1 ? '' : 's'}? They will go
+                        loose.
+                      </span>
+                      {Array.from(
+                        { length: freeable },
+                        (_, i) => i + 1,
+                      ).map((n) => (
+                        <button
+                          key={n}
+                          type="button"
+                          aria-pressed={kindCount === n}
+                          aria-label={`Release ${n}`}
+                          onClick={() => setKindCount(n)}
+                          className={
+                            btn +
+                            (kindCount === n ? t.selected : t.button)
+                          }
+                        >
+                          {n}
+                        </button>
+                      ))}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const n = kindCount;
+                          setArmedKind(null);
+                          onReleaseKind(group.kind, n);
+                        }}
+                        className={btn + t.primary}
+                      >
+                        Release
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setArmedKind(null)}
+                        className={btn + t.button}
+                      >
+                        Keep
+                      </button>
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setKindCount(freeable);
+                        setArmedKind(group.kind);
+                      }}
+                      aria-label={`Release some ${group.kindLabel}`}
+                      className={btn + t.button}
+                    >
+                      Release some…
+                    </button>
+                  )
+                ) : null}
+              </div>
               <ul className="flex flex-col gap-y-3">
                 {group.rows.map((row) => (
                   <li
@@ -271,6 +368,11 @@ export function RosterPanel({
                         </button>
                       )}
                     </div>
+                    {row.whereaboutsLine ? (
+                      <p className={'text-sm ' + t.muted}>
+                        {row.whereaboutsLine}
+                      </p>
+                    ) : null}
                     {trio(row.stance, (stance) =>
                       onStance?.(row.creatureId, stance),
                     )}
@@ -283,7 +385,8 @@ export function RosterPanel({
                 ))}
               </ul>
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
 

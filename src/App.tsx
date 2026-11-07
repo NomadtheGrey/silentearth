@@ -1664,6 +1664,7 @@ import {
   type AnimalKind,
 } from './game/animals';
 import {
+  actorById as runtimeActorById,
   comeHere as runtimeComeHere,
   makeCompanionInstance,
   restoreActor,
@@ -2126,6 +2127,7 @@ import {
   snatchFish,
   type CompanionStance,
   type RosterRow as SystemsRosterRow,
+  type RosterWhereabouts as SystemsRosterWhereabouts,
   type SavedCompanion,
 } from './systems/companions';
 import {
@@ -9689,17 +9691,94 @@ export default function App() {
   // it (at most one familiar can stand). One composition,
   // stamped once per render: the N door and the journal's
   // Companions page render the SAME groups through the
-  // one RosterPanel — one row source, two doors. The
-  // whereabouts projection is NOT supplied in this cut
-  // (it rides the follow cut), so rows carry its null —
-  // the record alone cannot say, and the panel shows
-  // no whereabouts line for it.
+  // one RosterPanel — one row source, two doors.
+  //
+  // WHEREABOUTS (cut 2): the facts-in projection rides
+  // rosterList's seat — records carry no position, so
+  // the shell composes each animal's standing from the
+  // actor runtime: a follower at her side reads
+  // 'following'; a stayed actor reads 'camp' when its
+  // anchor stands in a named place (the register's
+  // nearest, within the place's own ground — the
+  // placeName honestly derived), else 'roaming'. The
+  // CAT is never in the runtime: its actor's bond at
+  // 'hearth' reads 'hearth' (the village seat); an
+  // attending cat composes from its instance like any
+  // actor. Underground she stands apart from every
+  // surface actor (they wait above): the projection
+  // returns undefined and the row carries null — no
+  // line, rather than a lie. The row's LINE renders
+  // here from the composed fact: 'with you' under
+  // 25 m, else '<n> m <wind>'; a camped actor near a
+  // named place reads 'At <place>'; the hearth cat
+  // reads 'At the hearth'. All copy DRAFT.
+  const ROSTER_NEAR_M = 25;
+  const ROSTER_PLACE_GROUND_M = 30;
+  const ROSTER_COMPASS = [
+    'N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW',
+  ];
+  const rosterWhereaboutsFor = (
+    creatureId: string,
+  ): SystemsRosterWhereabouts | undefined => {
+    if (dimensionState.isUnderground()) return undefined;
+    const player = playerRef.current;
+    if (!player) return undefined;
+    if (creatureId === CAT_ID) {
+      const cat = catActor();
+      if (!cat) return undefined;
+      if (cat.bond === 'hearth') return { presence: 'hearth' };
+      const d = Math.hypot(
+        cat.instance.x - player.x,
+        cat.instance.z - player.z,
+      );
+      return { presence: d <= ROSTER_NEAR_M ? 'following' : 'roaming' };
+    }
+    const actor = runtimeActorById(creatureId);
+    if (!actor) return undefined;
+    if (actor.mode === 'follow' || actor.mode === 'come') {
+      return { presence: 'following' };
+    }
+    const near = namedPlacesRef.current.nearest(
+      actor.anchorX,
+      actor.anchorZ,
+      dimensionState.activeKey(),
+    );
+    if (near && near.distanceM <= ROSTER_PLACE_GROUND_M) {
+      return { presence: 'camp', placeName: near.place.name };
+    }
+    return { presence: 'roaming' };
+  };
+  const rosterWhereaboutsLine = (
+    record: SystemsRosterRow,
+  ): string | null => {
+    const w = record.whereabouts;
+    if (!w) return 'Out of sight';
+    if (w.presence === 'hearth') return 'At the hearth';
+    if (w.presence === 'camp') {
+      return w.placeName ? `At ${w.placeName}` : 'At camp';
+    }
+    const player = playerRef.current;
+    if (!player) return 'Out of sight';
+    const actor =
+      record.creatureId === CAT_ID
+        ? catActor()?.instance
+        : runtimeActorById(record.creatureId)?.instance;
+    if (!actor) return 'Out of sight';
+    const d = Math.hypot(actor.x - player.x, actor.z - player.z);
+    if (d <= ROSTER_NEAR_M) return 'With you';
+    const wind =
+      ROSTER_COMPASS[
+        Math.round(bearingDegrees(player.x, player.z, actor) / 45) % 8
+      ];
+    return `${Math.round(d)} m ${wind}`;
+  };
   const rosterGroups: RosterKindGroup[] = [];
   {
     const byKind = new Map<string, RosterRow[]>();
     const rosterRows: SystemsRosterRow[] =
       companionStateRef.current.rosterList(
         rendererRef.current?.snapshotSky()?.daysElapsed ?? 0,
+        rosterWhereaboutsFor,
       );
     for (const record of rosterRows) {
       if (record.bond === 'none') continue;
@@ -9711,6 +9790,7 @@ export default function App() {
         trust: record.trust,
         releaseEffect: record.releaseEffect,
         isCat: record.kind === 'cat',
+        whereaboutsLine: rosterWhereaboutsLine(record),
       };
       const rows = byKind.get(record.kind);
       if (rows) rows.push(row);
@@ -10094,6 +10174,9 @@ export default function App() {
       saveNow();
       return;
     }
+    // (Systems' demote seats trust verbatim since
+    // 85b1aa1 — the rite's step-down never touches the
+    // earned number; nothing shell-side adjusts it.)
     const removed = result.record;
     // The shell speaks for Systems' return on the bus
     // (the emitter-layering rule): the runtime hears
@@ -10114,6 +10197,34 @@ export default function App() {
     saveNow();
     // The last bond going closes the panel — its door
     // is gone with the list it would show.
+    const anyBonded = companionStateRef.current
+      .snapshot()
+      .some((record) => record.bond !== 'none');
+    if (!anyBonded) setCompanionsOpen(false);
+  };
+  const handleCompanionReleaseKind = (kind: string, count: number) => {
+    // RELEASE BY NUMBER (roster cut 2): Systems'
+    // releaseByKind frees bonded COMPANIONS of the
+    // kind, oldest first — the familiar never stands
+    // in it (the bulk act never catches the singular
+    // bond unnamed). Each freed record runs the same
+    // departure speech as the per-record 'freed'
+    // branch: the cat goes home (its seat), everyone
+    // else hears the released emit. A demoted cat IS
+    // a companion of its kind and can be freed here —
+    // the accepted edge (DEV, 2026-11-07); its count
+    // is one in practice.
+    const freed = companionStateRef.current.releaseByKind(kind, count);
+    if (freed.length === 0) return;
+    for (const record of freed) {
+      if (record.kind === 'cat') {
+        setCatBond('hearth');
+      } else {
+        bus.emit('companion:released', { id: record.creatureId });
+      }
+    }
+    refreshCompanions();
+    saveNow();
     const anyBonded = companionStateRef.current
       .snapshot()
       .some((record) => record.bond !== 'none');
@@ -19734,6 +19845,7 @@ export default function App() {
             onStance={handleCompanionStance}
             onStanceAll={handleCompanionStanceAll}
             onRelease={handleCompanionRelease}
+            onReleaseKind={handleCompanionReleaseKind}
             notes={companionPanelNotes}
             allNote={companionAllNote ?? undefined}
             onClose={() => setCompanionsOpen(false)}
@@ -19770,6 +19882,7 @@ export default function App() {
                 onStance={handleCompanionStance}
                 onStanceAll={handleCompanionStanceAll}
                 onRelease={handleCompanionRelease}
+                onReleaseKind={handleCompanionReleaseKind}
                 notes={companionPanelNotes}
                 allNote={companionAllNote ?? undefined}
                 comfortable={isTouch}
