@@ -191,6 +191,7 @@ import {
   type InjuryStage,
 } from './injury';
 import type { ScentSnapshot } from './scent';
+import type { WarmthUnguentSnapshot, WaxSnapshot } from './unguents';
 // Single source for the ritual records (rituals.ts /
 // charms.ts own them; save.ts imports them — no second
 // mirror to drift, the placed-torch id lesson).
@@ -360,6 +361,16 @@ export interface SavedTorch {
   x: number;
   z: number;
   id?: string;
+  /**
+   * The planted torch's KIND (the pitch torch,
+   * 2026-11-07; Background's seat, relayed by DEV):
+   * the lit item id planted ('lit-torch' /
+   * 'lit-pitch-torch'). OPTIONAL — absent reads as a
+   * standing (plain) torch; without it a planted
+   * pitch torch would reload plain and its brightness
+   * would not survive the reload.
+   */
+  kind?: string;
 }
 
 /**
@@ -604,6 +615,23 @@ export interface SavedSeal {
 }
 
 /**
+ * One found place in the gazetteer (the gazetteer
+ * landing, 2026-11-07). Mirrors gazetteer.ts's
+ * GazetteerRecord field-for-field (snapshot = stored
+ * = restore, zero conversion).
+ */
+export interface SavedGazetteerEntry {
+  placeKey: string;
+  family: string;
+  name: string;
+  x: number;
+  z: number;
+  dimensionKey: string;
+  dayFound: number;
+  carrierSeen: boolean;
+}
+
+/**
  * World harvest state, as saved. Structural mirror of the game
  * layer's HarvestStateSnapshot (harvestState.ts) by literal —
  * systems does not import game modules. The engine's restore()
@@ -841,6 +869,8 @@ export interface SaveData {
   hedges: SavedHedge[];
   /** Laid HearthHome seals, one per sealed place; [] for old saves. */
   hearthhome: SavedSeal[];
+  /** Found places (the gazetteer); [] for old saves. */
+  gazetteer: SavedGazetteerEntry[];
   /** The cave visit this save was written in (boot-at-the-mouth
    * fact); null for surface saves and old saves. */
   dimensionVisit: SavedDimensionVisit | null;
@@ -883,6 +913,10 @@ export interface SaveData {
   /** Her applied scent (scent.ts); unscented for old
    * saves. */
   scent: ScentSnapshot;
+  /** Her warmth unguent's clock (unguents.ts); 0 for old saves. */
+  unguent: WarmthUnguentSnapshot;
+  /** Her garments' rain-shed wax (unguents.ts); {} for old saves. */
+  wax: WaxSnapshot;
   /** The last place she COMPLETED a sleep (the
    * crawl-back's encampment seat); null for old saves
    * and until she first sleeps. */
@@ -1013,6 +1047,7 @@ export interface SaveDraft {
     x: number;
     z: number;
     id?: string;
+    kind?: string;
   }>;
   /**
    * Placed altars from the placed-altar source
@@ -1126,6 +1161,17 @@ export interface SaveDraft {
     z: number;
     radiusM: number;
     laidDay: number;
+  }>;
+  /** Found places from the gazetteer state's snapshot. OPTIONAL, trap pattern. */
+  gazetteer?: ReadonlyArray<{
+    placeKey: string;
+    family: string;
+    name: string;
+    x: number;
+    z: number;
+    dimensionKey: string;
+    dayFound: number;
+    carrierSeen: boolean;
   }>;
   /**
    * The cave visit, from dimensionState.snapshot() at
@@ -1248,6 +1294,10 @@ export interface SaveDraft {
     category?: string | null;
     secondsLeft?: number;
   };
+  /** Her warmth unguent snapshot. OPTIONAL, same pattern. */
+  unguent?: { secondsLeft?: number };
+  /** Her wax snapshot (garment -> exposure-seconds left). OPTIONAL. */
+  wax?: Record<string, number>;
   /**
    * The last completed sleep's seat (the shell writes
    * it at sleep completion). OPTIONAL; null/absent
@@ -1523,6 +1573,7 @@ export function serializeSave(draft: SaveDraft): SaveData {
       x: torch.x,
       z: torch.z,
       ...(torch.id !== undefined ? { id: torch.id } : {}),
+      ...(torch.kind !== undefined ? { kind: torch.kind } : {}),
     })),
     // Altars: written AS-IS (positions verbatim, id when
     // the entity provides one — no filtering, no
@@ -1633,6 +1684,18 @@ export function serializeSave(draft: SaveDraft): SaveData {
       z: seal.z,
       radiusM: seal.radiusM,
       laidDay: seal.laidDay,
+    })),
+    // The gazetteer: the state's snapshot written
+    // AS-IS (keys, families, names verbatim).
+    gazetteer: (draft.gazetteer ?? []).map((entry) => ({
+      placeKey: entry.placeKey,
+      family: entry.family,
+      name: entry.name,
+      x: entry.x,
+      z: entry.z,
+      dimensionKey: entry.dimensionKey,
+      dayFound: entry.dayFound,
+      carrierSeen: entry.carrierSeen,
     })),
     // The visit fact: written AS-IS (dimension key +
     // entry mouth verbatim). Absent/null in the draft
@@ -1756,20 +1819,43 @@ export function serializeSave(draft: SaveDraft): SaveData {
     // writes the unscented record.
     scent:
       (draft.scent?.kind === 'repellent' ||
-        draft.scent?.kind === 'attractor') &&
+        draft.scent?.kind === 'attractor' ||
+        draft.scent?.kind === 'kind-scent') &&
       typeof draft.scent?.secondsLeft === 'number' &&
       Number.isFinite(draft.scent.secondsLeft) &&
       draft.scent.secondsLeft > 0
         ? {
             kind: draft.scent.kind,
             category:
-              draft.scent.kind === 'attractor' &&
+              (draft.scent.kind === 'attractor' ||
+                draft.scent.kind === 'kind-scent') &&
               typeof draft.scent.category === 'string'
                 ? draft.scent.category
                 : null,
             secondsLeft: draft.scent.secondsLeft,
           }
         : { kind: null, category: null, secondsLeft: 0 },
+    // Unguent + wax (2026-11-07): the same posture —
+    // a finite positive unguent clock rides, anything
+    // else writes 0; wax entries ride only as
+    // positive finite numbers under non-empty keys.
+    unguent: {
+      secondsLeft:
+        typeof draft.unguent?.secondsLeft === 'number' &&
+        Number.isFinite(draft.unguent.secondsLeft) &&
+        draft.unguent.secondsLeft > 0
+          ? draft.unguent.secondsLeft
+          : 0,
+    },
+    wax: Object.fromEntries(
+      Object.entries(draft.wax ?? {}).filter(
+        ([garment, left]) =>
+          garment !== '' &&
+          typeof left === 'number' &&
+          Number.isFinite(left) &&
+          left > 0,
+      ),
+    ),
     // Last sleep site: finite coords ride as-is;
     // anything else writes null (no completed sleep
     // on record — the encampment chain falls back).
@@ -2219,6 +2305,9 @@ export function deserializeSave(value: unknown): SaveData | null {
           ...(typeof entry.id === 'string'
             ? { id: entry.id as string }
             : {}),
+          ...(typeof entry.kind === 'string'
+            ? { kind: entry.kind as string }
+            : {}),
         });
       }
     }
@@ -2459,6 +2548,35 @@ export function deserializeSave(value: unknown): SaveData | null {
           z: entry.z as number,
           radiusM: entry.radiusM as number,
           laidDay: entry.laidDay as number,
+        });
+      }
+    }
+    // The gazetteer is optional on read, same leniency
+    // as seals: an old v1 save without it loads
+    // gazetteer: []. Per-entry: an entry rides WHOLE —
+    // non-empty key/family/name/dimension, finite
+    // position and day — a bad entry drops alone;
+    // carrierSeen rides only as a true boolean (a bad
+    // flag reads unseen, never costing the finding).
+    const gazetteer: SavedGazetteerEntry[] = [];
+    if (value.gazetteer !== undefined && Array.isArray(value.gazetteer)) {
+      for (const entry of value.gazetteer) {
+        if (!isRecord(entry)) continue;
+        if (typeof entry.placeKey !== 'string' || entry.placeKey === '') continue;
+        if (typeof entry.family !== 'string' || entry.family === '') continue;
+        if (typeof entry.name !== 'string' || entry.name === '') continue;
+        if (!Number.isFinite(entry.x) || !Number.isFinite(entry.z)) continue;
+        if (typeof entry.dimensionKey !== 'string' || entry.dimensionKey === '') continue;
+        if (!Number.isFinite(entry.dayFound)) continue;
+        gazetteer.push({
+          placeKey: entry.placeKey,
+          family: entry.family,
+          name: entry.name,
+          x: entry.x as number,
+          z: entry.z as number,
+          dimensionKey: entry.dimensionKey,
+          dayFound: entry.dayFound as number,
+          carrierSeen: entry.carrierSeen === true,
         });
       }
     }
@@ -2807,7 +2925,9 @@ export function deserializeSave(value: unknown): SaveData | null {
     let scent: ScentSnapshot = { kind: null, category: null, secondsLeft: 0 };
     if (
       isRecord(value.scent) &&
-      (value.scent.kind === 'repellent' || value.scent.kind === 'attractor') &&
+      (value.scent.kind === 'repellent' ||
+        value.scent.kind === 'attractor' ||
+        value.scent.kind === 'kind-scent') &&
       typeof value.scent.secondsLeft === 'number' &&
       Number.isFinite(value.scent.secondsLeft) &&
       value.scent.secondsLeft > 0
@@ -2815,12 +2935,35 @@ export function deserializeSave(value: unknown): SaveData | null {
       scent = {
         kind: value.scent.kind,
         category:
-          value.scent.kind === 'attractor' &&
+          (value.scent.kind === 'attractor' ||
+            value.scent.kind === 'kind-scent') &&
           typeof value.scent.category === 'string'
             ? value.scent.category
             : null,
         secondsLeft: value.scent.secondsLeft,
       };
+    }
+    // Unguent + wax are optional on read, same
+    // leniency: a finite positive unguent clock
+    // rides, else 0; wax entries ride only whole
+    // (non-empty garment, positive finite seconds),
+    // a bad entry drops alone.
+    const unguent: WarmthUnguentSnapshot = {
+      secondsLeft:
+        isRecord(value.unguent) &&
+        typeof value.unguent.secondsLeft === 'number' &&
+        Number.isFinite(value.unguent.secondsLeft) &&
+        value.unguent.secondsLeft > 0
+          ? value.unguent.secondsLeft
+          : 0,
+    };
+    const wax: WaxSnapshot = {};
+    if (isRecord(value.wax)) {
+      for (const [garment, left] of Object.entries(value.wax)) {
+        if (garment !== '' && typeof left === 'number' && Number.isFinite(left) && left > 0) {
+          wax[garment] = left;
+        }
+      }
     }
     // The last sleep site is optional on read: a
     // record with finite coords rides; anything else
@@ -2943,6 +3086,8 @@ export function deserializeSave(value: unknown): SaveData | null {
         'ritualCompleted',
         'craftedAtStump',
         'familiarObtained',
+        'journalRead',
+        'hearthCrafted',
       ] as const;
       for (const field of questFields) {
         if (typeof record[field] === 'boolean') {
@@ -3048,6 +3193,7 @@ export function deserializeSave(value: unknown): SaveData | null {
       namedPlaces,
       hedges,
       hearthhome,
+      gazetteer,
       dimensionVisit,
       acquisitionOrder,
       companions,
@@ -3062,6 +3208,8 @@ export function deserializeSave(value: unknown): SaveData | null {
       weather,
       injury,
       scent,
+      unguent,
+      wax,
       lastSleepSite,
       feralWarned,
       stagings,

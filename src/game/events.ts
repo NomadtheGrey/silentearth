@@ -332,7 +332,7 @@ export interface EventMap {
    * Renderer rebuilds the placed group from this; UI projects
    * placed-torch chips from torchState.snapshot() + this event.
    */
-  'torch:placed': { id: string; x: number; z: number };
+  'torch:placed': { id: string; x: number; z: number; kind: string };
   /**
    * A placed torch was picked back up (torchState.removeTorch).
    * The pickup grant (return 'lit-torch', lit not unlit) lives

@@ -58,9 +58,21 @@
  * day is kept for those). The quest log stands
  * outside the control by ruling: its act/thread
  * grouping IS its order.
+ *
+ * The book also carries her COMPANY (the roster
+ * dialog, 2026-11-07): the caller passes the roster
+ * as an already-rendered node — the RosterPanel in
+ * its embedded form — and the book seats it as its
+ * Companions page, below Charms and above Quests.
+ * The node is the caller's composition because the
+ * roster is ONE component with TWO doors (this page
+ * and the N panel): the same stamped rows render in
+ * both, and the book never re-stamps them. Like the
+ * quest log, the roster stands outside the sort
+ * control — its grouping IS its order.
  */
 
-import { Fragment, useState } from 'react';
+import { Fragment, useState, type ReactNode } from 'react';
 
 import { UI_THEMES, type UiThemeName } from './themes';
 import {
@@ -260,6 +272,17 @@ export interface JournalPanelProps {
    */
   onToggleCharm?: (kind: string) => void;
   /**
+   * Her company, as the book's Companions page (the
+   * roster dialog): the caller-rendered RosterPanel
+   * node (embedded form — the SAME component and rows
+   * the N door renders). Rendered below Charms and
+   * above Quests whenever supplied — an empty roster
+   * still renders its page (the book's page stands
+   * like the Places section's naming door does).
+   * Omitted = no Companions page.
+   */
+  companions?: ReactNode;
+  /**
    * The quest log the book carries (dialog audit #4):
    * the caller's mapped rows, rendered below the marks
    * as NESTED independent folds — by ACT, then by
@@ -300,6 +323,7 @@ export function JournalPanel({
   onScryTarget,
   charms,
   onToggleCharm,
+  companions,
   quests,
   onMarkQuest,
   onClose,
@@ -760,6 +784,14 @@ export function JournalPanel({
               </li>
             ))}
           </ul>
+        </div>
+      ) : null}
+      {companions !== undefined && companions !== null ? (
+        <div className="mt-3">
+          <h3 className={'mb-2 text-sm font-semibold ' + t.heading}>
+            Companions
+          </h3>
+          {companions}
         </div>
       ) : null}
       {quests ? (

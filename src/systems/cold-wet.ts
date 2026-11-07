@@ -77,6 +77,25 @@ export interface ColdWetFacts {
   rainShelter?: number;
   fireWarmth: number;
   worn: readonly ItemId[];
+  /**
+   * The warmth unguent stands (the unguents landing,
+   * 2026-11-07): shell-derived from WarmthUnguentState
+   * .isActive(). OPTIONAL: absent reads unanointed.
+   * While it stands, the cold rise is cut by
+   * WARMTH_UNGUENT_COLD_CUT.
+   */
+  warmthUnguent?: boolean;
+  /**
+   * The garments whose rain-shed wax still stands
+   * (the unguents landing, 2026-11-07): shell-derived
+   * from WaxState.waxedGarments(). OPTIONAL: absent
+   * reads nothing waxed. A waxed garment in
+   * GARMENT_WEATHER sheds WAX_RAINSHED_BONUS more
+   * rain; waxed bog boots cut the wading soak (they
+   * are not rain garments — the boots answer the
+   * water at her feet, not the rain on her back).
+   */
+  waxedGarments?: readonly string[];
 }
 
 /** Rain reaching her under a lean-to (open-sided; DRAFT). */
@@ -109,6 +128,13 @@ export const WARM_SHELTERED_PER_MIN = 2;
  * kept off her. Keyed by garment item id; a garment not
  * listed answers nothing.
  */
+/** The warmth unguent's cut of the cold rise (DRAFT). */
+export const WARMTH_UNGUENT_COLD_CUT = 0.5;
+/** Extra rain shed by a waxed garment (DRAFT). */
+export const WAX_RAINSHED_BONUS = 0.35;
+/** The waxed bog boots' cut of the wading soak (DRAFT). */
+export const WAXED_BOOTS_WADING_CUT = 0.5;
+
 export const GARMENT_WEATHER: Readonly<
   Record<string, { warmth: number; rainShed: number }>
 > = {
@@ -218,11 +244,14 @@ export class ColdWetState {
 
     let warmth = 0;
     let rainShed = 0;
+    let waxedBoots = false;
     for (const item of facts.worn) {
+      const waxed = facts.waxedGarments?.includes(item) === true;
+      if (waxed && item === 'bog-boots') waxedBoots = true;
       const garment = GARMENT_WEATHER[item];
       if (garment !== undefined) {
         warmth += garment.warmth;
-        rainShed += garment.rainShed;
+        rainShed += garment.rainShed + (waxed ? WAX_RAINSHED_BONUS : 0);
       }
     }
     warmth = Math.min(0.5, warmth);
@@ -255,7 +284,8 @@ export class ColdWetState {
       rainIntensity * unit(facts.rainShelter ?? shelter) * (1 - rainShed);
     let wetDelta = RAIN_SOAK_PER_MIN * rainReaching;
     if (facts.immersion === 'wading') {
-      wetDelta += WADING_SOAK_PER_MIN;
+      wetDelta +=
+        WADING_SOAK_PER_MIN * (waxedBoots ? 1 - WAXED_BOOTS_WADING_CUT : 1);
     } else if (facts.immersion === 'swimming') {
       wetDelta += SWIMMING_SOAK_PER_MIN;
     }
@@ -284,7 +314,8 @@ export class ColdWetState {
       (0.5 + unit(facts.harshness)) *
       shelter *
       (1 + startWet / 100) *
-      (1 - warmth);
+      (1 - warmth) *
+      (1 - (facts.warmthUnguent ? WARMTH_UNGUENT_COLD_CUT : 0));
     let coldDelta = coldRise;
     coldDelta -= WARM_FIRE_PER_MIN * fire;
     if (unit(facts.cold) < 0.25 && shelter < 1) {

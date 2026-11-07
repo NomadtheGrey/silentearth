@@ -97,7 +97,7 @@
  * waiting for the pill.
  */
 
-import { ITEMS } from './recipes';
+import { ITEMS, type ItemId } from './recipes';
 import { PersonalInventory } from './inventory';
 
 /** Lighting route taken by a successful batch. */
@@ -147,7 +147,13 @@ export function lightTorches(
   inventory: PersonalInventory,
   context: TorchLightContext,
 ): LightTorchesOutcome {
-  const count = inventory.count(ITEMS.torch);
+  // BOTH pairs convert in the one press (the pitch
+  // torch, 2026-11-07): the batch law is one press
+  // lights every unlit torch she carries — pitch
+  // torches included, each to its own lit form.
+  const plainCount = inventory.count(ITEMS.torch);
+  const pitchCount = inventory.count(ITEMS.pitchTorch);
+  const count = plainCount + pitchCount;
   if (count <= 0) {
     return { lit: false, count: 0, reason: 'No unlit torch carried.' };
   }
@@ -187,17 +193,21 @@ export function lightTorches(
   // half-converted (net-zero weight makes failure near
   // impossible, but the guarantee is free).
   const trial = inventory.clone();
-  trial.remove(ITEMS.torch, count);
-  const trialGrant = trial.addPartial(ITEMS.litTorch, count);
-  if (trialGrant.granted !== count) {
+  trial.remove(ITEMS.torch, plainCount);
+  trial.remove(ITEMS.pitchTorch, pitchCount);
+  const trialPlain = trial.addPartial(ITEMS.litTorch, plainCount);
+  const trialPitch = trial.addPartial(ITEMS.litPitchTorch, pitchCount);
+  if (trialPlain.granted !== plainCount || trialPitch.granted !== pitchCount) {
     return {
       lit: false,
       count: 0,
       reason: 'No room for lit torches.',
     };
   }
-  inventory.remove(ITEMS.torch, count);
-  inventory.addPartial(ITEMS.litTorch, count);
+  inventory.remove(ITEMS.torch, plainCount);
+  inventory.remove(ITEMS.pitchTorch, pitchCount);
+  inventory.addPartial(ITEMS.litTorch, plainCount);
+  inventory.addPartial(ITEMS.litPitchTorch, pitchCount);
   return { lit: true, method, count };
 }
 
@@ -250,7 +260,10 @@ export function lightTorches(
 /**
  * A placed torch, as handed to Background's place call.
  * Singular by definition: one press places one torch.
- * `item` is always 'lit-torch' (see rules above).
+ * `item` is the LIT form placed — 'lit-torch', or
+ * 'lit-pitch-torch' for a pitch torch (2026-11-07);
+ * the item id IS the light profile's record, and
+ * Background's place call keys its profile off it.
  */
 export interface PlacedTorch {
   item: string;
@@ -280,22 +293,42 @@ export function placeTorch(
   inventory: PersonalInventory,
   x: number,
   z: number,
+  prefer?: 'pitch' | 'plain',
 ): PlaceTorchOutcome {
   if (!Number.isFinite(x) || !Number.isFinite(z)) {
     return { placed: false, reason: 'Invalid position.' };
   }
-  if (inventory.count(ITEMS.litTorch) > 0) {
-    inventory.remove(ITEMS.litTorch, 1);
-  } else if (inventory.count(ITEMS.torch) > 0) {
-    // She lights it in the act of setting it down
-    // (Adam, 2026-11-03): an unlit torch places as a
-    // burning one — the placed record is lit either
-    // way.
-    inventory.remove(ITEMS.torch, 1);
-  } else {
-    return { placed: false, reason: 'No torch carried.' };
+  // The kind ladder (the pitch torch, 2026-11-07): a
+  // carried LIT torch of the preferred kind first,
+  // then the other kind's lit form, then an unlit
+  // torch lit in the act of setting it down (Adam,
+  // 2026-11-03 — the placed record is lit either
+  // way), preferred kind first. Default: pitch leads
+  // (the better light is the one she sets down when
+  // the verb does not choose).
+  const pairs =
+    prefer === 'plain'
+      ? [
+          { lit: ITEMS.litTorch, unlit: ITEMS.torch },
+          { lit: ITEMS.litPitchTorch, unlit: ITEMS.pitchTorch },
+        ]
+      : [
+          { lit: ITEMS.litPitchTorch, unlit: ITEMS.pitchTorch },
+          { lit: ITEMS.litTorch, unlit: ITEMS.torch },
+        ];
+  for (const pair of pairs) {
+    if (inventory.count(pair.lit) > 0) {
+      inventory.remove(pair.lit, 1);
+      return { placed: true, torch: { item: pair.lit, x, z } };
+    }
   }
-  return { placed: true, torch: { item: ITEMS.litTorch, x, z } };
+  for (const pair of pairs) {
+    if (inventory.count(pair.unlit) > 0) {
+      inventory.remove(pair.unlit, 1);
+      return { placed: true, torch: { item: pair.lit, x, z } };
+    }
+  }
+  return { placed: false, reason: 'No torch carried.' };
 }
 
 /**
@@ -306,9 +339,19 @@ export function placeTorch(
  * The grant is always the LIT form — picking up never
  * unlights a torch.
  */
-export function pickupTorch(inventory: PersonalInventory): {
+export function pickupTorch(
+  inventory: PersonalInventory,
+  item: string = ITEMS.litTorch,
+): {
   granted: number;
 } {
-  const grant = inventory.addPartial(ITEMS.litTorch, 1);
+  // The grant is the placed record's own lit kind
+  // (the pitch torch, 2026-11-07): picking up never
+  // unlights a torch, and never changes its kind. A
+  // record naming no lit torch grants nothing.
+  if (item !== ITEMS.litTorch && item !== ITEMS.litPitchTorch) {
+    return { granted: 0 };
+  }
+  const grant = inventory.addPartial(item as ItemId, 1);
   return { granted: grant.granted };
 }
