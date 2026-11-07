@@ -1864,6 +1864,22 @@ export const SOURCES: HarvestSourceDef[] = [
     mesh: { shape: 'stone', color: 0x50463c, extraColor: 0x3a362f, baseY: 1.6 },
   },
   {
+    id: 'cutStoneWall',
+    kind: 'cutStoneWall',
+    name: 'Cut Stone Wall',
+    description:
+      'A wall of flat cut stone (the cave read of ' +
+      '2026-10-30, kept for the RUIN register at Adam\u2019s ' +
+      'word, 2026-11-07 — built stone belongs to built ' +
+      'places). Emitted nowhere today; a kit piece.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: [],
+    mesh: { shape: 'stone', color: 0x4c463f, extraColor: 0x3a362f, baseY: 1.6 },
+  },
+  {
     id: 'caveCeiling',
     kind: 'caveCeiling',
     name: 'Cave Ceiling',
