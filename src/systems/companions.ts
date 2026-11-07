@@ -477,11 +477,12 @@ export class CompanionState {
    * Releasing a companion lets it loose.'):
    * - on a FAMILIAR: the record DEMOTES — bond
    *   'familiar' -> 'companion', the record STANDS
-   *   (stance, origin, fed day kept) with its trust
-   *   seated AT THE BOND LINE (Adam, 2026-11-07: 'At
-   *   three pips' — TRUST_FOR_BOND: not zero, which
-   *   would unbond it, and not its familiar-era
-   *   height); the familiar seat stands empty
+   *   whole (trust, stance, origin, fed day kept —
+   *   the bond steps down, nothing more: Adam's
+   *   simplification, 2026-11-07 — pips belong to
+   *   creatures whose trust she is earning, and the
+   *   rite's own relinquish keeps trust untouched on
+   *   the same step); the familiar seat stands empty
    *   afterward. The caller runs NO departure on a
    *   demote (the animal stays, a companion now).
    * - on a COMPANION (or an unbonded courtship): the
@@ -500,7 +501,6 @@ export class CompanionState {
     if (!record) return { ok: false, code: 'unknown' };
     if (record.bond === 'familiar') {
       record.bond = 'companion';
-      record.trust = TRUST_FOR_BOND;
       return { ok: true, effect: 'demoted', record: { ...record } };
     }
     const freed = this.release(creatureId);
