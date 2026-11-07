@@ -100,34 +100,53 @@ export function tierThresholdsFor(mark: string): readonly number[] {
 }
 
 // ---------------------------------------------------------------------------
-// Portions — which band of the sign a copy carries
+// Portions — the arc of the sign a copy carries
 // ---------------------------------------------------------------------------
 
 /**
  * The portion of its mark's sign a fragment copy
  * represents, DERIVED from its completeness (the
- * portion model, UI 2026-11-05: a fragment is a
- * contiguous stretch of the whole sign; the sign
- * reads in two bands — the RING and the CENTRE). The
- * CENTRE portions are the high-completeness copies —
- * the deep carriers deal them (cave circles, the
- * Burnt Village); a shallow copy shows ring only.
- * THE derivation lives in this ONE helper: the
- * journal phase and the glyph surfaces read portions
- * from here, never re-derive them. The boundary is
- * the journal's standing kept-best line (a copy at
- * 0.75+ already words as 'clear'). DRAFT.
+ * portion model, Adam 2026-11-07 — superseding the
+ * 2026-11-05 ring/centre split, which RETIRES here):
+ * a fragment shows ONE CONTIGUOUS ARC of the WHOLE
+ * sign — ring and centre sliced together by angle,
+ * clock-style (his examples: 10:00-2:00 = a third;
+ * 12:00-6:00 = a half) — drawn SOLID, and the rest
+ * of the sign drawn FADED, so the player can see
+ * what the entire glyph is supposed to look like.
+ * Arc share = the copy's completeness.
+ *
+ * PLACEMENT (DEV's reading of his examples, flagged
+ * to Adam for correction): the arc is CENTRED ON THE
+ * TOP — 10:00-2:00 straddles 12:00, so the sign's
+ * crown is the first thing a fragment keeps. Angles
+ * are degrees measured CLOCKWISE FROM 12:00: a
+ * centred arc of fraction f spans -180*f to +180*f.
+ *
+ * THE derivation lives in this ONE helper: the glyph
+ * surfaces (UI's drawSign contract: sector-solid +
+ * ghost-rest) read portions from here, never
+ * re-derive them. The completeness BANDS themselves
+ * do not move (the carriers still deal the same
+ * numbers); only the reading of a number changes.
  */
-export type FragmentPortion = 'ring' | 'centre';
+export interface FragmentSector {
+  /** The arc's share of the whole sign, [0, 1]. */
+  fraction: number;
+  /** The arc's start, degrees clockwise from 12:00. */
+  startDeg: number;
+  /** The arc's end, degrees clockwise from 12:00. */
+  endDeg: number;
+}
 
-/** Completeness at or above which a copy carries the centre band. */
-export const CENTRE_PORTION_MIN_COMPLETENESS = 0.75;
-
-/** The portion a copy of this completeness represents. */
-export function fragmentPortionFor(completeness: number): FragmentPortion {
-  return completeness >= CENTRE_PORTION_MIN_COMPLETENESS
-    ? 'centre'
-    : 'ring';
+/** The sector a copy of this completeness represents. */
+export function fragmentSectorFor(completeness: number): FragmentSector {
+  const fraction = Math.min(1, Math.max(0, completeness));
+  return {
+    fraction,
+    startDeg: -180 * fraction,
+    endDeg: 180 * fraction,
+  };
 }
 
 // ---------------------------------------------------------------------------
