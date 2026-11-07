@@ -43,6 +43,14 @@ export interface BuildRecord {
 
 const ALL_RECORDS: BuildRecord[] = [
   {
+    merge: 'Merge #95',
+    pr: 139,
+    sha: '7de23bd',
+    date: '2026-11-07',
+    what: 'THE JOURNAL SPEAKS — when the book changes, one line in the feed says so, naming the fact: a fragment taken in, a charm awakened or deepened, a place given its name, a quest completed. A burst of changes gathers into a single line rather than a chatter of them, and a load says nothing at all — what the journal already held before the world woke is not news, and the toast knows it: the declarations fire only on the change itself, never on the restore.',
+    why: 'Adam’s word: whenever the journal is updated, a message should appear on screen. #94 carried the declarations — the states learning to say what changed, into a leaf that imports nothing — and this merge is their surface, the second half of the journal phase’s first bite: the shell listens at boot, surfaces each burst as one line, and guards the one treacherous seat (a saved quest completion reading ‘fresh’ against an empty latch on the first render) so a returning player is greeted by the world, not by old news. The Newest sort from #94 and this toast together make the book both readable and alive.',
+  },
+  {
     merge: 'Merge #94',
     pr: 138,
     sha: '2e97d17',

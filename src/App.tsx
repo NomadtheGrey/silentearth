@@ -1976,6 +1976,11 @@ import {
   type QuestFlags,
 } from './systems/quests';
 import {
+  emitJournalChange,
+  subscribeJournalChanges,
+  type JournalChange,
+} from './systems/journalChanges';
+import {
   canCraft,
   CRAFT_OWNERSHIP_LABELS,
   craftingSection,
@@ -1997,6 +2002,7 @@ import {
   distanceM,
   NAME_MAX_CHARS,
   RENAME_RADIUS_M,
+  setNamedPlacesJournalSink,
   type NamedPlace,
 } from './game/namedPlaces';
 import { placeAltar as grantPlaceAltar } from './systems/altar';
@@ -6428,6 +6434,91 @@ export default function App() {
     return () => window.clearInterval(timer);
   }, [feedStanding]);
 
+  // THE JOURNAL TOAST (the journal bite's surface half,
+  // 2026-11-07; Adam: 'whenever the Journal is updated,
+  // we want a message to appear on screen'): the states
+  // declare their changes into Systems' journalChanges
+  // leaf (7ba39db); the shell subscribes ONCE here and
+  // surfaces each burst as ONE feed line. Facts collect
+  // in a short batch window (DRAFT) so a burst — a rite
+  // completing: a name taught, a charm woken, a quest
+  // done — earns a single line, never a queue; a lone
+  // fact flushes on the same window, named. The feed's
+  // own caps (4, 3 touch; drop-oldest; twin dedupe)
+  // carry the rest of the never-spam care. Restores
+  // emit nothing (the leaf's law), so boot is silent.
+  // Copy DRAFT for Adam's pin pass.
+  const JOURNAL_TOAST_WINDOW_MS = 600;
+  const journalToastRef = useRef<{
+    facts: JournalChange[];
+    timer: number | null;
+  }>({ facts: [], timer: null });
+  useEffect(() => {
+    const flushJournalToast = () => {
+      const holder = journalToastRef.current;
+      holder.timer = null;
+      const facts = holder.facts;
+      holder.facts = [];
+      if (facts.length === 0) return;
+      const fresh = facts.filter((fact) => !fact.deepen);
+      const deepened = facts.filter((fact) => fact.deepen);
+      let line: string;
+      if (facts.length === 1) {
+        const fact = facts[0];
+        line = fact.deepen
+          ? `Your journal deepens — ${fact.label}.`
+          : `Your journal takes a new entry — ${fact.label}.`;
+      } else if (deepened.length === 0) {
+        line = `Your journal takes ${fresh.length} new entries.`;
+      } else if (fresh.length === 0) {
+        line = `Your journal deepens in ${deepened.length} places.`;
+      } else {
+        line = `Your journal grows — ${fresh.length} new ${
+          fresh.length === 1 ? 'entry' : 'entries'
+        }, ${deepened.length} deepened.`;
+      }
+      showFeedback(line, 'info');
+    };
+    const offJournal = subscribeJournalChanges((change) => {
+      const holder = journalToastRef.current;
+      holder.facts.push(change);
+      if (holder.timer === null) {
+        holder.timer = window.setTimeout(
+          flushJournalToast,
+          JOURNAL_TOAST_WINDOW_MS,
+        );
+      }
+    });
+    // THE PLACE SINK (the wiring contract, DEV relay
+    // 2026-11-06): the naming register imports nothing
+    // (its leaf law), so its facts reach the leaf
+    // through this boot adapter, stamped kind 'place'.
+    // A removal declares nothing (no removal kind
+    // exists in the fact shape — Systems' call, DEV
+    // accepted).
+    setNamedPlacesJournalSink((fact) =>
+      emitJournalChange({
+        kind: 'place',
+        label: fact.label,
+        ...(fact.deepen ? { deepen: true } : {}),
+      }),
+    );
+    return () => {
+      offJournal();
+      setNamedPlacesJournalSink(null);
+      const holder = journalToastRef.current;
+      if (holder.timer !== null) {
+        window.clearTimeout(holder.timer);
+        holder.timer = null;
+      }
+      holder.facts = [];
+    };
+    // showFeedback reads only the stable feed setter +
+    // refs (its seat above); the boot subscription is
+    // seated once, like its bus siblings.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Boot the world once. StrictMode double-mounts in dev only; the
   // cleanup below disposes the first instance, and the production build
   // mounts exactly once.
@@ -8349,6 +8440,30 @@ export default function App() {
         ...latchedCompletedRef.current,
         ...freshCompletions,
       ]);
+      // THE QUEST EMIT SEAT (the journal bite; DEV's
+      // ruling 2026-11-06): completions are derived
+      // reads — no systems write exists to declare
+      // them — so the shell declares them here, at its
+      // own detection. An id reads fresh exactly once
+      // per session (the latch check above is the
+      // guard), and the render-scope seat cannot
+      // double-fire. THE BOOT-RENDER GUARD: this facts
+      // site runs on the boot render too — one render
+      // BEFORE the boot effect seats
+      // latchedCompletedRef from the save — where a
+      // saved completion would read 'fresh' against
+      // the still-empty latch. saveRestoredRef is the
+      // shell's own restored flag: until it stands,
+      // fresh ids latch silently (the pre-restore
+      // render's union is exactly the boot seat's own
+      // work); from the first post-restore render on,
+      // a fresh read is a live completion and declares.
+      if (saveRestoredRef.current) {
+        for (const id of freshCompletions) {
+          const title = questById(id)?.title;
+          if (title) emitJournalChange({ kind: 'quest', label: title });
+        }
+      }
     }
   }
   const questDisplay = questFacts
