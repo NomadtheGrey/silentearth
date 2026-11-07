@@ -860,6 +860,55 @@ export const SOURCES: HarvestSourceDef[] = [
     mesh: { shape: 'stone', color: 0x97928a, extraColor: 0xcfc7b4, baseY: 0.165 },
   },
   {
+    id: 'huntCabin',
+    kind: 'huntCabin',
+    name: 'Hunting Cabin',
+    description:
+      'A small log cabin in the woods (2026-11-07, the ' +
+      'Home structures program\u2019s first family): log ' +
+      'courses with alternating corner ends, a stone ' +
+      'chimney on the hearth gable, a front porch. A Home ' +
+      'carrier \u2014 its fragment seats at the hearth ' +
+      'inside. Whole-cabin kind; siting facts ride the ' +
+      'CABIN_* constants in models.ts.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: [],
+    mesh: { shape: 'log', color: 0x6b4e33, extraColor: 0x4f4630, baseY: 1.15 },
+  },
+  {
+    id: 'huntCabinLean',
+    kind: 'huntCabinLean',
+    name: 'Hunting Cabin, Lean-To',
+    description:
+      'The hunting cabin with a side lean-to shed and a ' +
+      'lower-pitched roof (2026-11-07). Same log build, ' +
+      'same hearth seat; a Home carrier.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: [],
+    mesh: { shape: 'log', color: 0x63503a, extraColor: 0x554833, baseY: 1.15 },
+  },
+  {
+    id: 'huntCabinBare',
+    kind: 'huntCabinBare',
+    name: 'Hunting Cabin, Bare',
+    description:
+      'The hunting cabin bare \u2014 no porch, a steep ' +
+      'weathered roof (2026-11-07). Same log build, same ' +
+      'hearth seat; a Home carrier.',
+    harvestable: false,
+    permitTier: null,
+    secondaryYields: [],
+    provenance: 'draft',
+    biomes: [],
+    mesh: { shape: 'log', color: 0x5d4c38, extraColor: 0x4a4238, baseY: 1.15 },
+  },
+  {
     id: 'hedgeWall',
     kind: 'hedgeWall',
     name: 'Hedgerow',

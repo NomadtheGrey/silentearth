@@ -193,6 +193,25 @@ const lyingCyl = (
  * along the normal). Probe-asserted against the built
  * geometry (flatstone-check).
  */
+/**
+ * The hunting cabin's siting facts (2026-11-07), for
+ * Background's family derivation: the wall rectangle,
+ * wall height, the door (a GAP on the +Z long side,
+ * centred this far left of centre, this wide — the
+ * door-side collision box splits there), the hearth
+ * seat (local; the derivation seats 'hearthStone'
+ * there and the fragment rides that hearth — the
+ * homestead idiom), and the clearing the structure
+ * asks for. Probe-asserted (cabin-check doorway +
+ * hearth volumes empty of cabin geometry).
+ */
+export const CABIN_WALL_W_M = 4.2;
+export const CABIN_WALL_D_M = 3.4;
+export const CABIN_WALL_H_M = 2.3;
+export const CABIN_DOOR = { offsetX: -0.55, width: 0.9 } as const;
+export const CABIN_HEARTH_SEAT = { x: -1.42, z: 0 } as const;
+export const CABIN_CLEAR_ASK_M = 7;
+
 export const FLATSTONE_PANEL_W = 0.85;
 export const FLATSTONE_PANEL_H = 0.55;
 export const FLATSTONE_WALL_PANEL = { c: [0, 0.035, 0.05], n: [0, 0, 1] } as const;
@@ -420,6 +439,116 @@ export function buildKindGeometry(spec: MeshSpec, kind: ScatterKind): THREE.Buff
     const g = merge(faceParts);
     g.rotateX(Math.PI / 2);
     g.translate(0, -0.1, 0);
+    return g;
+  }
+  // Kind overrides (the HUNTING CABINS, 2026-11-07 —
+  // the Home structures program's first family): ONE
+  // parameterized log builder, three whole-cabin
+  // kinds. Log courses with the saddle-notch tell
+  // (round log ENDS alternating at the corners), the
+  // door a GAP and windows gaps with course lintels
+  // (the standing law), stepped log gables, plank
+  // roof slabs, a stone chimney on the hearth gable.
+  // Built in ground space (y = 0 at the floor) and
+  // dropped by the defs' baseY at the end. The siting
+  // facts ride the CABIN_* constants; the hearth seat
+  // volume stays EMPTY of cabin geometry (probe-
+  // asserted) for the derivation's hearthStone.
+  if (kind === 'huntCabin' || kind === 'huntCabinLean' || kind === 'huntCabinBare') {
+    const vi = kind === 'huntCabin' ? 0 : kind === 'huntCabinLean' ? 1 : 2;
+    const rise = [1.3, 1.0, 1.6][vi];
+    const parts: THREE.BufferGeometry[] = [];
+    const runsFor = (gaps: [number, number][]): [number, number][] => {
+      let runs: [number, number][] = [[-CABIN_WALL_W_M / 2, CABIN_WALL_W_M / 2]];
+      for (const [g0, g1] of gaps) {
+        const next: [number, number][] = [];
+        for (const [r0, r1] of runs) {
+          if (g1 <= r0 || g0 >= r1) { next.push([r0, r1]); continue; }
+          if (g0 > r0) next.push([r0, g0]);
+          if (g1 < r1) next.push([g1, r1]);
+        }
+        runs = next;
+      }
+      return runs.filter(([a, b]) => b - a > 0.05);
+    };
+    // Log courses: long walls carry the gaps, short
+    // walls run full; corner ends alternate by course.
+    for (let i = 0; i < 9; i++) {
+      const y = 0.13 + i * 0.24;
+      const sh = i % 2 === 0 ? 0.96 : 1.04;
+      const jit = ((i * 7 + vi) % 3 - 1) * 0.012;
+      for (const s of [1, -1]) {
+        const gaps: [number, number][] = [];
+        if (s === 1 && i <= 7) gaps.push([CABIN_DOOR.offsetX - CABIN_DOOR.width / 2, CABIN_DOOR.offsetX + CABIN_DOOR.width / 2]);
+        if (i >= 4 && i <= 6) gaps.push(s === 1 ? [1.0, 1.6] : [0.55, 1.25]);
+        for (const [r0, r1] of runsFor(gaps)) {
+          parts.push(part(box(r1 - r0, 0.22, 0.18), shade(c, sh), { p: [(r0 + r1) / 2, y, s * 1.61 + jit] }));
+        }
+        parts.push(part(box(0.18, 0.22, 3.04), shade(c, sh === 0.96 ? 1.04 : 0.96), { p: [s * 2.01, y, 0] }));
+        for (const sz of [1, -1]) {
+          if (i % 2 === 0) {
+            parts.push(part(cyl(0.095, 0.095, 0.36, 7), shade(c, 1.12), { p: [s * 2.16, y, sz * 1.61], r: [0, 0, Math.PI / 2] }));
+          } else {
+            parts.push(part(cyl(0.095, 0.095, 0.36, 7), shade(c, 1.12), { p: [s * 2.01, y, sz * 1.76], r: [Math.PI / 2, 0, 0] }));
+          }
+        }
+      }
+    }
+    // Top plates + collar beams (open rafters inside).
+    parts.push(part(box(CABIN_WALL_W_M, 0.14, 0.2), shade(c, 0.92), { p: [0, 2.23, 1.61] }));
+    parts.push(part(box(CABIN_WALL_W_M, 0.14, 0.2), shade(c, 0.92), { p: [0, 2.23, -1.61] }));
+    for (const bx of [-1.2, 0, 1.2]) {
+      parts.push(part(box(0.09, 0.12, 3.0), shade(c, 0.85), { p: [bx, 2.62, 0] }));
+    }
+    // Stepped log gables.
+    for (const s of [1, -1]) {
+      for (let gy = 0; ; gy++) {
+        const y = 2.42 + gy * 0.24;
+        if (y >= CABIN_WALL_H_M + rise - 0.1) break;
+        const half = Math.max(0.14, 1.7 * (1 - (y - CABIN_WALL_H_M + 0.12) / rise));
+        parts.push(part(box(0.16, 0.22, half * 2), shade(c, gy % 2 === 0 ? 0.98 : 1.05), { p: [s * 2.01, y, 0] }));
+      }
+    }
+    // Roof slabs + ridge (eave 1.95 out, ridge above).
+    const dz = 1.95;
+    const dy = rise + 0.16;
+    const slopeLen = Math.hypot(dz, dy) + 0.1;
+    const ang = Math.atan2(dy, dz);
+    for (const s of [1, -1]) {
+      parts.push(part(box(4.7, 0.07, slopeLen), e, { p: [0, 2.26 + rise / 2, s * 0.975], r: [s * ang, 0, 0] }));
+    }
+    parts.push(part(box(4.7, 0.09, 0.12), shade(e, 0.85), { p: [0, CABIN_WALL_H_M + rise + 0.05, 0] }));
+    // Chimney on the hearth gable (outside, -X).
+    const hCh = CABIN_WALL_H_M + rise + 0.35;
+    parts.push(part(box(0.5, hCh, 0.5), shade(e, 1.5), { p: [-2.32, hCh / 2, 0] }));
+    parts.push(part(box(0.68, 0.09, 0.68), shade(e, 1.2), { p: [-2.32, hCh + 0.045, 0] }));
+    parts.push(part(box(0.28, 0.16, 0.28), shade(e, 0.6), { p: [-2.32, hCh + 0.16, 0] }));
+    // Floor + stone footings.
+    parts.push(part(box(CABIN_WALL_W_M, 0.07, CABIN_WALL_D_M), shade(c, 0.78), { p: [0, 0.035, 0] }));
+    for (const sx of [1, -1]) for (const sz of [1, -1]) {
+      parts.push(part(box(0.42, 0.3, 0.42), shade(e, 1.4), { p: [sx * 1.85, -0.06, sz * 1.45] }));
+    }
+    if (vi === 0) {
+      // The PORCH: deck, posts, beam, lean slab.
+      parts.push(part(box(CABIN_WALL_W_M, 0.09, 1.15), shade(c, 0.82), { p: [0, 0.1, 2.28] }));
+      for (const px of [-1.9, 0, 1.9]) {
+        parts.push(part(box(0.11, 1.95, 0.11), shade(c, 0.9), { p: [px, 1.12, 2.78] }));
+      }
+      parts.push(part(box(4.3, 0.1, 0.13), shade(c, 0.88), { p: [0, 2.12, 2.78] }));
+      parts.push(part(box(4.5, 0.06, 1.4), e, { p: [0, 2.19, 2.3], r: [0.16, 0, 0] }));
+    } else if (vi === 1) {
+      // The LEAN-TO: posts, beam, sloped slab, half-walls.
+      for (const pz of [-1.35, 1.35]) {
+        parts.push(part(box(0.1, 1.75, 0.1), shade(c, 0.9), { p: [3.15, 0.87, pz] }));
+      }
+      parts.push(part(box(0.1, 0.09, 3.2), shade(c, 0.88), { p: [3.15, 1.79, 0] }));
+      parts.push(part(box(1.45, 0.06, 3.3), e, { p: [2.6, 2.02, 0], r: [0, 0, -0.24] }));
+      for (const s of [1, -1]) {
+        parts.push(part(box(1.3, 0.85, 0.05), shade(c, 0.94), { p: [2.62, 0.42, s * 1.62] }));
+      }
+    }
+    const g = merge(parts);
+    g.translate(0, -1.15, 0);
     return g;
   }
   // Kind override (hedge wall, sites landing 2026-10-30): one
