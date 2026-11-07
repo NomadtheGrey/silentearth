@@ -157,6 +157,13 @@ export interface QuestFlags {
   craftedAtStump: boolean;
   /** Shell sets when a Waking's rite yields a familiar (the familiar road, 2026-11-02). */
   familiarObtained: boolean;
+  /**
+   * Shell sets when she first opens the journal (the
+   * quest-hooks seat, 2026-11-07): steps that complete
+   * BY READING THE JOURNAL read this flag — the first
+   * is find-bone's field-book step.
+   */
+  journalRead: boolean;
 }
 
 /** All-false flags (fresh save / before any flag is set). */
@@ -167,6 +174,7 @@ export function emptyQuestFlags(): QuestFlags {
     ritualCompleted: false,
     craftedAtStump: false,
     familiarObtained: false,
+    journalRead: false,
   };
 }
 
@@ -181,6 +189,7 @@ export interface SavedQuestFlags {
   ritualCompleted?: boolean;
   craftedAtStump?: boolean;
   familiarObtained?: boolean;
+  journalRead?: boolean;
   /**
    * The ACTIVE MARK: the one quest id she has marked
    * active (the HUD card's quest), or absent for none.
@@ -720,14 +729,26 @@ export const QUEST_DEFINITIONS: readonly QuestDefinition[] = [
     title: 'Find a Bone',
     thread: 'land',
     act: 'survival',
+    // Two steps since the quest-hooks landing
+    // (2026-11-07): the bone, and the journal becoming
+    // her field book — the second completes BY READING
+    // THE JOURNAL (the shell sets flags.journalRead on
+    // the first open). isDone stays the exact fold of
+    // the components (the decomposition law).
     isDone: (facts) =>
-      BONE_ITEM_IDS.some((bone) => facts.inventory.count(bone) > 0),
+      BONE_ITEM_IDS.some((bone) => facts.inventory.count(bone) > 0) &&
+      facts.flags.journalRead,
     components: [
       {
         id: 'find-bone',
         label: 'Find a bone',
         isDone: (facts) =>
           BONE_ITEM_IDS.some((bone) => facts.inventory.count(bone) > 0),
+      },
+      {
+        id: 'read-journal',
+        label: 'Read your journal',
+        isDone: (facts) => facts.flags.journalRead,
       },
     ],
   },
