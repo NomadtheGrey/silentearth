@@ -2055,7 +2055,7 @@ import {
   farmhouseInstancesInRect,
 } from './game/farmhouses';
 import {
-  caveCarrier,
+  caveCarrierForLayer,
   fragmentCarriersHere as carriersHere,
 } from './game/carriers';
 import {
@@ -14865,8 +14865,31 @@ export default function App() {
     // 2026-11-01), so cave:main returns [] here,
     // unchanged; the surface path below is
     // untouched.
+    // PER-LAYER READ (UI, 2026-11-06; Background's
+    // cave depth + fragment core, bb00bf1): a cave
+    // can now carry a stone on ANY floor — the
+    // deepest guaranteed, each earlier floor by its
+    // pay roll (Adam's fork: the entry floor counts
+    // as the first intermediate) — so the question
+    // is asked of the floor she STANDS on:
+    // carriers.caveCarrierForLayer, fed her layer
+    // (dimensionState.currentLayer(), 1-based). The
+    // deepest floor's read IS caveCarrier (id and
+    // completeness byte-stable), a paying earlier
+    // floor mints '<key>:fragment:L<n>', and a floor
+    // that rolled no stone reads null — the branch's
+    // contract is unchanged ([carrier] within
+    // HARVEST_RANGE, else []), and floor coordinates
+    // keep the floors apart. The core also lifted
+    // the cave:main exclusion (the debut deals and
+    // mints like any cave); the branch is agnostic —
+    // it asks, it does not mint.
     if (dimensionState.isUnderground()) {
-      const carrier = caveCarrier(gen.seed, dimensionState.activeKey());
+      const carrier = caveCarrierForLayer(
+        gen.seed,
+        dimensionState.activeKey(),
+        dimensionState.currentLayer(),
+      );
       if (
         carrier &&
         Math.hypot(carrier.x - player.x, carrier.z - player.z) <=
