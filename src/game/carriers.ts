@@ -75,6 +75,7 @@ import type { BiomeWeights } from '../types';
 import { farmhouseSite, groveSite, villageSite } from './sites';
 import { caveInstancesInRect, caveLayoutForKey } from './caves';
 import { homesteadInstancesInRect } from './homesteads';
+import { huntingCabinInstancesInRect } from './huntingCabins';
 import { villageInstancesInRect } from './villages';
 import { groveInstancesInRect } from './groves';
 import { dealHomeMark } from './homeDeal';
@@ -230,6 +231,11 @@ export function fragmentCarriersHere(
   // a dealt fragment no door can reach is not a deal).
   // Every instance mints its carrier, so no guard.
   for (const inst of villageInstancesInRect(worldSeed, spawn, weightsAtPos, rect)) {
+    near({ ...inst.fragmentCarrier, x: inst.fragmentSpot.x, z: inst.fragmentSpot.z });
+  }
+  // The hunting cabins' hearths (2026-11-07: carriage
+  // at birth — every cabin mints, so no guard).
+  for (const inst of huntingCabinInstancesInRect(worldSeed, spawn, weightsAtPos, rect)) {
     near({ ...inst.fragmentCarrier, x: inst.fragmentSpot.x, z: inst.fragmentSpot.z });
   }
   // The lesser groves' carved stones (the family's own

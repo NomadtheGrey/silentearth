@@ -42,6 +42,7 @@ import {
 import { villageInstancesInRect } from './villages';
 import { farmhouseInstancesInRect } from './farmhouses';
 import { homesteadInstancesInRect } from './homesteads';
+import { huntingCabinInstancesInRect } from './huntingCabins';
 import type { ShelterRoofClass } from './shelter';
 import type { WorldGen } from './worldgen';
 
@@ -91,6 +92,11 @@ export function siteShelterAt(
     }
   }
   for (const inst of homesteadInstancesInRect(seed, spawn, weightsAtPos, probe)) {
+    for (const r of inst.roofRects) {
+      if (inside(r, x, z)) return { roof: 'enclosed' };
+    }
+  }
+  for (const inst of huntingCabinInstancesInRect(seed, spawn, weightsAtPos, probe)) {
     for (const r of inst.roofRects) {
       if (inside(r, x, z)) return { roof: 'enclosed' };
     }
