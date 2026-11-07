@@ -79,6 +79,7 @@ import { deriveSeed, mulberry32 } from './seed';
 import { caveInstancesInRect } from './caves';
 import type { FragmentCarrier } from './carriers';
 import { dealFragmentArc } from './fragmentArc';
+import { dealHomesteadMark } from './homeDeal';
 
 /** Per-cell presence draw (DRAFT). */
 export const HOMESTEAD_CELL_PRESENCE = 0.45;
@@ -120,8 +121,9 @@ export interface HomesteadInstance {
   /**
    * The carrier facts for Systems' inscribe() (the
    * carriers.ts field set): minted iff carrying — the
-   * TRAVEL mark, its arc dealt by the one mint range
-   * (Adam's mint, 2026-11-07).
+   * mark dealt by the DEAL SHARE (Home alongside
+   * Travel, 2026-11-07), its arc dealt by the one
+   * mint range (Adam's mint, 2026-11-07).
    */
   fragmentCarrier: FragmentCarrier | null;
   /** Yard dressing richness 0..1 (the plan consumes). */
@@ -381,7 +383,9 @@ function homesteadInstanceAt(
         const crand = mulberry32(deriveSeed(worldSeed, `carrier:${key}`));
         fragmentCarrier = {
           fragmentId: `${key}:fragment`,
-          mark: 'travel',
+          // THE DEAL SHARE (2026-11-07): Home alongside
+          // Travel, read off the share stream.
+          mark: dealHomesteadMark(worldSeed, key),
           ...dealFragmentArc(crand),
         };
       }
