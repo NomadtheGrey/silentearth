@@ -196,7 +196,28 @@ export const ITEMS = {
   repellent: 'repellent',
   preyLure: 'prey-lure',
   predatorLure: 'predator-lure',
+  rabbitScent: 'rabbit-scent',
+  squirrelScent: 'squirrel-scent',
+  muskratScent: 'muskrat-scent',
+  mouseScent: 'mouse-scent',
+  voleScent: 'vole-scent',
+  groundhogScent: 'groundhog-scent',
+  opossumScent: 'opossum-scent',
+  raccoonScent: 'raccoon-scent',
+  beaverScent: 'beaver-scent',
+  deerScent: 'deer-scent',
+  foxScent: 'fox-scent',
+  wolfScent: 'wolf-scent',
+  bearScent: 'bear-scent',
+  crowScent: 'crow-scent',
+  owlScent: 'owl-scent',
+  snakeScent: 'snake-scent',
+  turtleScent: 'turtle-scent',
+  pigeonScent: 'pigeon-scent',
   wash: 'wash',
+  warmthUnguent: 'warmth-unguent',
+  resin: 'resin',
+  rainShedWax: 'rain-shed-wax',
   // The glass chain (2026-11-05 — Adam's chain: stone
   // ground to sand, sand melted to glass, glass
   // fashioned to the ball).
@@ -674,6 +695,65 @@ const DRAFT_RECIPES: Recipe[] = [
       'draft.',
   },
   {
+    id: 'warmth-unguent',
+    name: 'Warmth Unguent',
+    status: 'draft',
+    output: { item: ITEMS.warmthUnguent, quantity: 2 },
+    station: 'cauldron',
+    ingredients: [i(ITEMS.tallow, 1), i(ITEMS.beeswax, 1)],
+    useLine: 'Rubbed on, it holds her warmth in — the cold climbs slower',
+    notes:
+      'DRAFT (2026-11-07, the unguents; unguents.ts). ' +
+      'Tallow and beeswax, rendered soft together. The ' +
+      'beeswax stands in the RESIN CLASS (Adam, ' +
+      '2026-11-07: no problem with substitutions — ' +
+      '\'we want her to be able to make do with what ' +
+      'she has on hand\') — no founded resin gates this ' +
+      'recipe; a true pine resin, if the extractions ' +
+      'seed ever founds one, joins the same class. ' +
+      'Quantities draft.',
+  },
+  {
+    id: 'warmth-unguent-resin',
+    name: 'Warmth Unguent',
+    status: 'draft',
+    output: { item: ITEMS.warmthUnguent, quantity: 2 },
+    station: 'cauldron',
+    ingredients: [i(ITEMS.tallow, 1), i(ITEMS.resin, 1)],
+    useLine: 'Rubbed on, it holds her warmth in — the cold climbs slower',
+    notes:
+      'DRAFT (2026-11-07, the unguents). The SAME ' +
+      'unguent on the resin road — Adam\'s substitution ' +
+      'ruling (resin serves as the beeswax substitute; ' +
+      'she makes do with what she has on hand) carried ' +
+      'the candle two-roads way: two rows, one output, ' +
+      'neither compounding with the other. (The ' +
+      'either/or upgradeFrom shape is transformation-' +
+      'only and cannot hold a second ingredient; a ' +
+      'true ingredient CLASS is the extractions seed\'s ' +
+      'question.) The resin item is founded ahead — ' +
+      'unobtainable until the extraction work gives ' +
+      'her the making of it. Quantities draft.',
+  },
+  {
+    id: 'rain-shed-wax',
+    name: 'Rain-Shed Wax',
+    status: 'draft',
+    output: { item: ITEMS.rainShedWax, quantity: 2 },
+    station: 'cauldron',
+    ingredients: [i(ITEMS.beeswax, 2)],
+    useLine: 'Worked into a garment — rain and wading shed off it',
+    notes:
+      'DRAFT (2026-11-07, the unguents; unguents.ts). ' +
+      'Beeswax alone, worked warm in the cauldron — the ' +
+      'clothing thread\'s Waxing seed and this item are ' +
+      'ONE thing (Adam\'s unification, 2026-11-03). ' +
+      'Worked into a garment it raises that garment\'s ' +
+      'rain-shedding (and, on bog boots, cuts the ' +
+      'wading soak) while the wax lasts; the wax wears ' +
+      'only in reaching weather. Quantities draft.',
+  },
+  {
     id: 'repellent',
     name: 'Repellent',
     status: 'draft',
@@ -726,6 +806,330 @@ const DRAFT_RECIPES: Recipe[] = [
       'turn feral — the fairness machines still hold ' +
       '(a drawn feral warns first, as always). ' +
       'Quantities draft.',
+  },
+  {
+    id: 'rabbit-scent',
+    name: 'Rabbit Scent',
+    status: 'draft',
+    output: { item: ITEMS.rabbitScent, quantity: 2 },
+    station: 'cauldron',
+    ingredients: [i(ITEMS.tallow, 1), i(ITEMS.primalBoneRabbitJaw, 1)],
+    useLine: 'Doused herself in it — she smells of rabbit',
+    notes:
+      'DRAFT (2026-11-07, the kind-scents; scent.ts). ' +
+      'Tallow and the kind\'s own primal bone, rendered ' +
+      'down together — she wears the kind\'s smell, and ' +
+      'a feeding offered to that kind lands warmer ' +
+      '(the kind-scent ease). One scent at a time, as ' +
+      'always. The bone is a Waking material — spending ' +
+      'one on smell is a real choice, priced for the ' +
+      'pin pass. Quantities draft.',
+  },
+  {
+    id: 'squirrel-scent',
+    name: 'Squirrel Scent',
+    status: 'draft',
+    output: { item: ITEMS.squirrelScent, quantity: 2 },
+    station: 'cauldron',
+    ingredients: [i(ITEMS.tallow, 1), i(ITEMS.primalBoneSquirrelTailBone, 1)],
+    useLine: 'Doused herself in it — she smells of squirrel',
+    notes:
+      'DRAFT (2026-11-07, the kind-scents; scent.ts). ' +
+      'Tallow and the kind\'s own primal bone, rendered ' +
+      'down together — she wears the kind\'s smell, and ' +
+      'a feeding offered to that kind lands warmer ' +
+      '(the kind-scent ease). One scent at a time, as ' +
+      'always. The bone is a Waking material — spending ' +
+      'one on smell is a real choice, priced for the ' +
+      'pin pass. Quantities draft.',
+  },
+  {
+    id: 'muskrat-scent',
+    name: 'Muskrat Scent',
+    status: 'draft',
+    output: { item: ITEMS.muskratScent, quantity: 2 },
+    station: 'cauldron',
+    ingredients: [i(ITEMS.tallow, 1), i(ITEMS.primalBoneMuskratTail, 1)],
+    useLine: 'Doused herself in it — she smells of muskrat',
+    notes:
+      'DRAFT (2026-11-07, the kind-scents; scent.ts). ' +
+      'Tallow and the kind\'s own primal bone, rendered ' +
+      'down together — she wears the kind\'s smell, and ' +
+      'a feeding offered to that kind lands warmer ' +
+      '(the kind-scent ease). One scent at a time, as ' +
+      'always. The bone is a Waking material — spending ' +
+      'one on smell is a real choice, priced for the ' +
+      'pin pass. Quantities draft.',
+  },
+  {
+    id: 'mouse-scent',
+    name: 'Mouse Scent',
+    status: 'draft',
+    output: { item: ITEMS.mouseScent, quantity: 2 },
+    station: 'cauldron',
+    ingredients: [i(ITEMS.tallow, 1), i(ITEMS.primalBoneMouseSpine, 1)],
+    useLine: 'Doused herself in it — she smells of mouse',
+    notes:
+      'DRAFT (2026-11-07, the kind-scents; scent.ts). ' +
+      'Tallow and the kind\'s own primal bone, rendered ' +
+      'down together — she wears the kind\'s smell, and ' +
+      'a feeding offered to that kind lands warmer ' +
+      '(the kind-scent ease). One scent at a time, as ' +
+      'always. The bone is a Waking material — spending ' +
+      'one on smell is a real choice, priced for the ' +
+      'pin pass. Quantities draft.',
+  },
+  {
+    id: 'vole-scent',
+    name: 'Vole Scent',
+    status: 'draft',
+    output: { item: ITEMS.voleScent, quantity: 2 },
+    station: 'cauldron',
+    ingredients: [i(ITEMS.tallow, 1), i(ITEMS.primalBoneVoleSkull, 1)],
+    useLine: 'Doused herself in it — she smells of vole',
+    notes:
+      'DRAFT (2026-11-07, the kind-scents; scent.ts). ' +
+      'Tallow and the kind\'s own primal bone, rendered ' +
+      'down together — she wears the kind\'s smell, and ' +
+      'a feeding offered to that kind lands warmer ' +
+      '(the kind-scent ease). One scent at a time, as ' +
+      'always. The bone is a Waking material — spending ' +
+      'one on smell is a real choice, priced for the ' +
+      'pin pass. Quantities draft.',
+  },
+  {
+    id: 'groundhog-scent',
+    name: 'Groundhog Scent',
+    status: 'draft',
+    output: { item: ITEMS.groundhogScent, quantity: 2 },
+    station: 'cauldron',
+    ingredients: [i(ITEMS.tallow, 1), i(ITEMS.primalBoneGroundhogTooth, 1)],
+    useLine: 'Doused herself in it — she smells of groundhog',
+    notes:
+      'DRAFT (2026-11-07, the kind-scents; scent.ts). ' +
+      'Tallow and the kind\'s own primal bone, rendered ' +
+      'down together — she wears the kind\'s smell, and ' +
+      'a feeding offered to that kind lands warmer ' +
+      '(the kind-scent ease). One scent at a time, as ' +
+      'always. The bone is a Waking material — spending ' +
+      'one on smell is a real choice, priced for the ' +
+      'pin pass. Quantities draft.',
+  },
+  {
+    id: 'opossum-scent',
+    name: 'Opossum Scent',
+    status: 'draft',
+    output: { item: ITEMS.opossumScent, quantity: 2 },
+    station: 'cauldron',
+    ingredients: [i(ITEMS.tallow, 1), i(ITEMS.primalBoneOpossumCrest, 1)],
+    useLine: 'Doused herself in it — she smells of opossum',
+    notes:
+      'DRAFT (2026-11-07, the kind-scents; scent.ts). ' +
+      'Tallow and the kind\'s own primal bone, rendered ' +
+      'down together — she wears the kind\'s smell, and ' +
+      'a feeding offered to that kind lands warmer ' +
+      '(the kind-scent ease). One scent at a time, as ' +
+      'always. The bone is a Waking material — spending ' +
+      'one on smell is a real choice, priced for the ' +
+      'pin pass. Quantities draft.',
+  },
+  {
+    id: 'raccoon-scent',
+    name: 'Raccoon Scent',
+    status: 'draft',
+    output: { item: ITEMS.raccoonScent, quantity: 2 },
+    station: 'cauldron',
+    ingredients: [i(ITEMS.tallow, 1), i(ITEMS.primalBoneRaccoonTooth, 1)],
+    useLine: 'Doused herself in it — she smells of raccoon',
+    notes:
+      'DRAFT (2026-11-07, the kind-scents; scent.ts). ' +
+      'Tallow and the kind\'s own primal bone, rendered ' +
+      'down together — she wears the kind\'s smell, and ' +
+      'a feeding offered to that kind lands warmer ' +
+      '(the kind-scent ease). One scent at a time, as ' +
+      'always. The bone is a Waking material — spending ' +
+      'one on smell is a real choice, priced for the ' +
+      'pin pass. Quantities draft.',
+  },
+  {
+    id: 'beaver-scent',
+    name: 'Beaver Scent',
+    status: 'draft',
+    output: { item: ITEMS.beaverScent, quantity: 2 },
+    station: 'cauldron',
+    ingredients: [i(ITEMS.tallow, 1), i(ITEMS.primalBoneBeaverIncisor, 1)],
+    useLine: 'Doused herself in it — she smells of beaver',
+    notes:
+      'DRAFT (2026-11-07, the kind-scents; scent.ts). ' +
+      'Tallow and the kind\'s own primal bone, rendered ' +
+      'down together — she wears the kind\'s smell, and ' +
+      'a feeding offered to that kind lands warmer ' +
+      '(the kind-scent ease). One scent at a time, as ' +
+      'always. The bone is a Waking material — spending ' +
+      'one on smell is a real choice, priced for the ' +
+      'pin pass. Quantities draft.',
+  },
+  {
+    id: 'deer-scent',
+    name: 'Deer Scent',
+    status: 'draft',
+    output: { item: ITEMS.deerScent, quantity: 2 },
+    station: 'cauldron',
+    ingredients: [i(ITEMS.tallow, 1), i(ITEMS.primalBoneDeerAntlerTip, 1)],
+    useLine: 'Doused herself in it — she smells of deer',
+    notes:
+      'DRAFT (2026-11-07, the kind-scents; scent.ts). ' +
+      'Tallow and the kind\'s own primal bone, rendered ' +
+      'down together — she wears the kind\'s smell, and ' +
+      'a feeding offered to that kind lands warmer ' +
+      '(the kind-scent ease). One scent at a time, as ' +
+      'always. The bone is a Waking material — spending ' +
+      'one on smell is a real choice, priced for the ' +
+      'pin pass. Quantities draft.',
+  },
+  {
+    id: 'fox-scent',
+    name: 'Fox Scent',
+    status: 'draft',
+    output: { item: ITEMS.foxScent, quantity: 2 },
+    station: 'cauldron',
+    ingredients: [i(ITEMS.tallow, 1), i(ITEMS.primalBoneFoxFemur, 1)],
+    useLine: 'Doused herself in it — she smells of fox',
+    notes:
+      'DRAFT (2026-11-07, the kind-scents; scent.ts). ' +
+      'Tallow and the kind\'s own primal bone, rendered ' +
+      'down together — she wears the kind\'s smell, and ' +
+      'a feeding offered to that kind lands warmer ' +
+      '(the kind-scent ease). One scent at a time, as ' +
+      'always. The bone is a Waking material — spending ' +
+      'one on smell is a real choice, priced for the ' +
+      'pin pass. Quantities draft.',
+  },
+  {
+    id: 'wolf-scent',
+    name: 'Wolf Scent',
+    status: 'draft',
+    output: { item: ITEMS.wolfScent, quantity: 2 },
+    station: 'cauldron',
+    ingredients: [i(ITEMS.tallow, 1), i(ITEMS.primalBoneWolfTooth, 1)],
+    useLine: 'Doused herself in it — she smells of wolf',
+    notes:
+      'DRAFT (2026-11-07, the kind-scents; scent.ts). ' +
+      'Tallow and the kind\'s own primal bone, rendered ' +
+      'down together — she wears the kind\'s smell, and ' +
+      'a feeding offered to that kind lands warmer ' +
+      '(the kind-scent ease). One scent at a time, as ' +
+      'always. The bone is a Waking material — spending ' +
+      'one on smell is a real choice, priced for the ' +
+      'pin pass. Quantities draft.',
+  },
+  {
+    id: 'bear-scent',
+    name: 'Bear Scent',
+    status: 'draft',
+    output: { item: ITEMS.bearScent, quantity: 2 },
+    station: 'cauldron',
+    ingredients: [i(ITEMS.tallow, 1), i(ITEMS.primalBoneBearClaw, 1)],
+    useLine: 'Doused herself in it — she smells of bear',
+    notes:
+      'DRAFT (2026-11-07, the kind-scents; scent.ts). ' +
+      'Tallow and the kind\'s own primal bone, rendered ' +
+      'down together — she wears the kind\'s smell, and ' +
+      'a feeding offered to that kind lands warmer ' +
+      '(the kind-scent ease). One scent at a time, as ' +
+      'always. The bone is a Waking material — spending ' +
+      'one on smell is a real choice, priced for the ' +
+      'pin pass. Quantities draft.',
+  },
+  {
+    id: 'crow-scent',
+    name: 'Crow Scent',
+    status: 'draft',
+    output: { item: ITEMS.crowScent, quantity: 2 },
+    station: 'cauldron',
+    ingredients: [i(ITEMS.tallow, 1), i(ITEMS.primalBoneCrowBeak, 1)],
+    useLine: 'Doused herself in it — she smells of crow',
+    notes:
+      'DRAFT (2026-11-07, the kind-scents; scent.ts). ' +
+      'Tallow and the kind\'s own primal bone, rendered ' +
+      'down together — she wears the kind\'s smell, and ' +
+      'a feeding offered to that kind lands warmer ' +
+      '(the kind-scent ease). One scent at a time, as ' +
+      'always. The bone is a Waking material — spending ' +
+      'one on smell is a real choice, priced for the ' +
+      'pin pass. Quantities draft.',
+  },
+  {
+    id: 'owl-scent',
+    name: 'Owl Scent',
+    status: 'draft',
+    output: { item: ITEMS.owlScent, quantity: 2 },
+    station: 'cauldron',
+    ingredients: [i(ITEMS.tallow, 1), i(ITEMS.primalBoneOwlTalon, 1)],
+    useLine: 'Doused herself in it — she smells of owl',
+    notes:
+      'DRAFT (2026-11-07, the kind-scents; scent.ts). ' +
+      'Tallow and the kind\'s own primal bone, rendered ' +
+      'down together — she wears the kind\'s smell, and ' +
+      'a feeding offered to that kind lands warmer ' +
+      '(the kind-scent ease). One scent at a time, as ' +
+      'always. The bone is a Waking material — spending ' +
+      'one on smell is a real choice, priced for the ' +
+      'pin pass. Quantities draft.',
+  },
+  {
+    id: 'snake-scent',
+    name: 'Snake Scent',
+    status: 'draft',
+    output: { item: ITEMS.snakeScent, quantity: 2 },
+    station: 'cauldron',
+    ingredients: [i(ITEMS.tallow, 1), i(ITEMS.primalBoneSnakeVertebra, 1)],
+    useLine: 'Doused herself in it — she smells of snake',
+    notes:
+      'DRAFT (2026-11-07, the kind-scents; scent.ts). ' +
+      'Tallow and the kind\'s own primal bone, rendered ' +
+      'down together — she wears the kind\'s smell, and ' +
+      'a feeding offered to that kind lands warmer ' +
+      '(the kind-scent ease). One scent at a time, as ' +
+      'always. The bone is a Waking material — spending ' +
+      'one on smell is a real choice, priced for the ' +
+      'pin pass. Quantities draft.',
+  },
+  {
+    id: 'turtle-scent',
+    name: 'Turtle Scent',
+    status: 'draft',
+    output: { item: ITEMS.turtleScent, quantity: 2 },
+    station: 'cauldron',
+    ingredients: [i(ITEMS.tallow, 1), i(ITEMS.primalBoneTurtleShellFragment, 1)],
+    useLine: 'Doused herself in it — she smells of turtle',
+    notes:
+      'DRAFT (2026-11-07, the kind-scents; scent.ts). ' +
+      'Tallow and the kind\'s own primal bone, rendered ' +
+      'down together — she wears the kind\'s smell, and ' +
+      'a feeding offered to that kind lands warmer ' +
+      '(the kind-scent ease). One scent at a time, as ' +
+      'always. The bone is a Waking material — spending ' +
+      'one on smell is a real choice, priced for the ' +
+      'pin pass. Quantities draft.',
+  },
+  {
+    id: 'pigeon-scent',
+    name: 'Pigeon Scent',
+    status: 'draft',
+    output: { item: ITEMS.pigeonScent, quantity: 2 },
+    station: 'cauldron',
+    ingredients: [i(ITEMS.tallow, 1), i(ITEMS.primalBonePigeonWingBone, 1)],
+    useLine: 'Doused herself in it — she smells of pigeon',
+    notes:
+      'DRAFT (2026-11-07, the kind-scents; scent.ts). ' +
+      'Tallow and the kind\'s own primal bone, rendered ' +
+      'down together — she wears the kind\'s smell, and ' +
+      'a feeding offered to that kind lands warmer ' +
+      '(the kind-scent ease). One scent at a time, as ' +
+      'always. The bone is a Waking material — spending ' +
+      'one on smell is a real choice, priced for the ' +
+      'pin pass. Quantities draft.',
   },
   {
     id: 'candle-from-tallow',

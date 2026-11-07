@@ -2929,7 +2929,7 @@ export default function App() {
     setInjuryUi({ stage: injury.stage() });
   };
   const [scentUi, setScentUi] = useState<{
-    kind: 'repellent' | 'attractor' | null;
+    kind: 'repellent' | 'attractor' | 'kind-scent' | null;
     category: string | null;
   }>(() => {
     const facts = scentState.scent();

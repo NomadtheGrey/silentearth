@@ -164,6 +164,14 @@ export interface QuestFlags {
    * is find-bone's field-book step.
    */
   journalRead: boolean;
+  /**
+   * Shell sets when she CRAFTS the hearth (the hearth
+   * miniquest, 2026-11-07 — the shell's craft-completion
+   * seat knows the recipe id): crafting it OPENS the
+   * miniquest, so the fact is the craft, not the
+   * placement.
+   */
+  hearthCrafted: boolean;
 }
 
 /** All-false flags (fresh save / before any flag is set). */
@@ -175,6 +183,7 @@ export function emptyQuestFlags(): QuestFlags {
     craftedAtStump: false,
     familiarObtained: false,
     journalRead: false,
+    hearthCrafted: false,
   };
 }
 
@@ -190,6 +199,7 @@ export interface SavedQuestFlags {
   craftedAtStump?: boolean;
   familiarObtained?: boolean;
   journalRead?: boolean;
+  hearthCrafted?: boolean;
   /**
    * The ACTIVE MARK: the one quest id she has marked
    * active (the HUD card's quest), or absent for none.
@@ -228,6 +238,22 @@ export interface QuestFacts {
    * live or not.
    */
   hungerStage?: HungerStage;
+  /**
+   * Whether a kiln stands — shell-composed from the
+   * placed-structures feed that already answers the
+   * 'kiln' crafting station (the hearth miniquest,
+   * 2026-11-07). OPTIONAL: absent reads as none
+   * standing; the miniquest's kiln step consults it.
+   */
+  kilnStanding?: boolean;
+  /**
+   * Whether a cauldron sits in a placed hearth —
+   * shell-composed from HearthState's per-hearth
+   * cauldron record (the hearth miniquest, 2026-11-07).
+   * OPTIONAL: absent reads as none seated; the
+   * miniquest's cauldron step consults it.
+   */
+  cauldronSeated?: boolean;
   /**
    * Whether an altar stands — shell-mapped from the
    * altar state (a stump whose additions carry 'altar';
@@ -365,6 +391,15 @@ export interface QuestDefinition {
   act: QuestAct;
   /** The quest's thread within its act (see header). */
   thread: QuestThread;
+  /**
+   * The JOURNAL SECTION the quest lists in (Adam,
+   * 2026-11-07: miniquests in their own section, 'not
+   * all jumbled together with other quests'). Absent
+   * reads 'quests'; a miniquest declares 'miniquests'.
+   * A PRESENTATION seat only — evaluation, the latch,
+   * and the completion machinery are section-blind.
+   */
+  section?: 'quests' | 'miniquests';
   /**
    * The quest's components — an EXACT decomposition of
    * isDone over the same facts (see the header's law).
@@ -641,6 +676,50 @@ export const QUEST_DEFINITIONS: readonly QuestDefinition[] = [
         id: 'place-torch',
         label: 'Set a torch down',
         isDone: (facts) => facts.placedTorches > 0,
+      },
+    ],
+  },
+  {
+    // THE HEARTH MINIQUEST (Adam's design, 2026-11-07):
+    // crafting the hearth OPENS it — the journal then
+    // directs her to the kiln and the cauldron-in-the-
+    // hearth, each only if she has not already built
+    // it. The pre-completion is structural: the kiln
+    // and cauldron steps are derived reads, so work
+    // done ahead of the hearth stands done when the
+    // quest opens, and step one (the craft flag) gates
+    // the fold — nothing completes before its opening.
+    // It lists in the journal's MINIQUESTS section
+    // (Adam: its own section, not jumbled with the
+    // quests), and seats its cauldron in the hearth —
+    // the beat after which the journal names the
+    // brewing shelf (a surface mention, not a step:
+    // an informational component would break the
+    // decomposition law).
+    id: 'the-hearth',
+    title: 'The Hearth',
+    thread: 'fire',
+    act: 'survival',
+    section: 'miniquests',
+    isDone: (facts) =>
+      facts.flags.hearthCrafted &&
+      facts.kilnStanding === true &&
+      facts.cauldronSeated === true,
+    components: [
+      {
+        id: 'craft-hearth',
+        label: 'Craft a hearth',
+        isDone: (facts) => facts.flags.hearthCrafted,
+      },
+      {
+        id: 'build-kiln',
+        label: 'Build a kiln',
+        isDone: (facts) => facts.kilnStanding === true,
+      },
+      {
+        id: 'seat-cauldron',
+        label: 'Set a cauldron in the hearth',
+        isDone: (facts) => facts.cauldronSeated === true,
       },
     ],
   },

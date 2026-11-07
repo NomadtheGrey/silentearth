@@ -191,6 +191,7 @@ import {
   type InjuryStage,
 } from './injury';
 import type { ScentSnapshot } from './scent';
+import type { WarmthUnguentSnapshot, WaxSnapshot } from './unguents';
 // Single source for the ritual records (rituals.ts /
 // charms.ts own them; save.ts imports them — no second
 // mirror to drift, the placed-torch id lesson).
@@ -912,6 +913,10 @@ export interface SaveData {
   /** Her applied scent (scent.ts); unscented for old
    * saves. */
   scent: ScentSnapshot;
+  /** Her warmth unguent's clock (unguents.ts); 0 for old saves. */
+  unguent: WarmthUnguentSnapshot;
+  /** Her garments' rain-shed wax (unguents.ts); {} for old saves. */
+  wax: WaxSnapshot;
   /** The last place she COMPLETED a sleep (the
    * crawl-back's encampment seat); null for old saves
    * and until she first sleeps. */
@@ -1289,6 +1294,10 @@ export interface SaveDraft {
     category?: string | null;
     secondsLeft?: number;
   };
+  /** Her warmth unguent snapshot. OPTIONAL, same pattern. */
+  unguent?: { secondsLeft?: number };
+  /** Her wax snapshot (garment -> exposure-seconds left). OPTIONAL. */
+  wax?: Record<string, number>;
   /**
    * The last completed sleep's seat (the shell writes
    * it at sleep completion). OPTIONAL; null/absent
@@ -1810,20 +1819,43 @@ export function serializeSave(draft: SaveDraft): SaveData {
     // writes the unscented record.
     scent:
       (draft.scent?.kind === 'repellent' ||
-        draft.scent?.kind === 'attractor') &&
+        draft.scent?.kind === 'attractor' ||
+        draft.scent?.kind === 'kind-scent') &&
       typeof draft.scent?.secondsLeft === 'number' &&
       Number.isFinite(draft.scent.secondsLeft) &&
       draft.scent.secondsLeft > 0
         ? {
             kind: draft.scent.kind,
             category:
-              draft.scent.kind === 'attractor' &&
+              (draft.scent.kind === 'attractor' ||
+                draft.scent.kind === 'kind-scent') &&
               typeof draft.scent.category === 'string'
                 ? draft.scent.category
                 : null,
             secondsLeft: draft.scent.secondsLeft,
           }
         : { kind: null, category: null, secondsLeft: 0 },
+    // Unguent + wax (2026-11-07): the same posture —
+    // a finite positive unguent clock rides, anything
+    // else writes 0; wax entries ride only as
+    // positive finite numbers under non-empty keys.
+    unguent: {
+      secondsLeft:
+        typeof draft.unguent?.secondsLeft === 'number' &&
+        Number.isFinite(draft.unguent.secondsLeft) &&
+        draft.unguent.secondsLeft > 0
+          ? draft.unguent.secondsLeft
+          : 0,
+    },
+    wax: Object.fromEntries(
+      Object.entries(draft.wax ?? {}).filter(
+        ([garment, left]) =>
+          garment !== '' &&
+          typeof left === 'number' &&
+          Number.isFinite(left) &&
+          left > 0,
+      ),
+    ),
     // Last sleep site: finite coords ride as-is;
     // anything else writes null (no completed sleep
     // on record — the encampment chain falls back).
@@ -2893,7 +2925,9 @@ export function deserializeSave(value: unknown): SaveData | null {
     let scent: ScentSnapshot = { kind: null, category: null, secondsLeft: 0 };
     if (
       isRecord(value.scent) &&
-      (value.scent.kind === 'repellent' || value.scent.kind === 'attractor') &&
+      (value.scent.kind === 'repellent' ||
+        value.scent.kind === 'attractor' ||
+        value.scent.kind === 'kind-scent') &&
       typeof value.scent.secondsLeft === 'number' &&
       Number.isFinite(value.scent.secondsLeft) &&
       value.scent.secondsLeft > 0
@@ -2901,12 +2935,35 @@ export function deserializeSave(value: unknown): SaveData | null {
       scent = {
         kind: value.scent.kind,
         category:
-          value.scent.kind === 'attractor' &&
+          (value.scent.kind === 'attractor' ||
+            value.scent.kind === 'kind-scent') &&
           typeof value.scent.category === 'string'
             ? value.scent.category
             : null,
         secondsLeft: value.scent.secondsLeft,
       };
+    }
+    // Unguent + wax are optional on read, same
+    // leniency: a finite positive unguent clock
+    // rides, else 0; wax entries ride only whole
+    // (non-empty garment, positive finite seconds),
+    // a bad entry drops alone.
+    const unguent: WarmthUnguentSnapshot = {
+      secondsLeft:
+        isRecord(value.unguent) &&
+        typeof value.unguent.secondsLeft === 'number' &&
+        Number.isFinite(value.unguent.secondsLeft) &&
+        value.unguent.secondsLeft > 0
+          ? value.unguent.secondsLeft
+          : 0,
+    };
+    const wax: WaxSnapshot = {};
+    if (isRecord(value.wax)) {
+      for (const [garment, left] of Object.entries(value.wax)) {
+        if (garment !== '' && typeof left === 'number' && Number.isFinite(left) && left > 0) {
+          wax[garment] = left;
+        }
+      }
     }
     // The last sleep site is optional on read: a
     // record with finite coords rides; anything else
@@ -3030,6 +3087,7 @@ export function deserializeSave(value: unknown): SaveData | null {
         'craftedAtStump',
         'familiarObtained',
         'journalRead',
+        'hearthCrafted',
       ] as const;
       for (const field of questFields) {
         if (typeof record[field] === 'boolean') {
@@ -3150,6 +3208,8 @@ export function deserializeSave(value: unknown): SaveData | null {
       weather,
       injury,
       scent,
+      unguent,
+      wax,
       lastSleepSite,
       feralWarned,
       stagings,

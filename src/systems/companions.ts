@@ -281,6 +281,15 @@ function fedOnDay(record: SavedCompanion, day: number): boolean {
 
 /** Trust one accepted feeding earns (DRAFT). */
 export const TRUST_PER_FEEDING = 1;
+
+/**
+ * The kind-scent's ease (DRAFT, 2026-11-07): extra
+ * trust on a feeding offered while she smells OF
+ * that kind (scent.ts's kindScentFor read, composed
+ * by the shell into feed's opts) — a matched feeding
+ * counts double at the standing rate.
+ */
+export const KIND_SCENT_TRUST_BONUS = 1;
 /** Trust the bond wants (DRAFT: several feedings, several days). */
 export const TRUST_FOR_BOND = 3;
 
@@ -588,6 +597,7 @@ export class CompanionState {
     item: ItemId,
     inventory: CraftingInventory,
     day: number,
+    opts?: { kindScent?: boolean },
   ): FeedResult {
     const existing = this.records.get(creatureId);
     const origin = existing?.origin ?? (kind === 'cat' ? 'found' : 'wild');
@@ -622,7 +632,8 @@ export class CompanionState {
       stance: kind === 'cat' ? null : 'follow',
       lastFedDay: null,
     };
-    record.trust += TRUST_PER_FEEDING;
+    record.trust +=
+      TRUST_PER_FEEDING + (opts?.kindScent ? KIND_SCENT_TRUST_BONUS : 0);
     record.lastFedDay = day;
     this.records.set(creatureId, record);
     return { ok: true, trust: record.trust, bondReady: record.trust >= TRUST_FOR_BOND };
