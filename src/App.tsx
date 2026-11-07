@@ -7644,6 +7644,35 @@ export default function App() {
     // eligibleKindsFor directly — no new Systems
     // function). Rolls use the trap's baited flag
     // (always false until a baiting landing adds one).
+    // The catch write passes the clock (Systems' stamp,
+    // 2026-11-06): the roll handler holds the sky, so
+    // it stamps the absolute game hour the catch was
+    // made — the steal beat below reads elapsed time
+    // off that stamp.
+    // TRAP STEAL (UI, 2026-11-06; Adam's fork: 'The
+    // count should survive a reload on traps' — the
+    // persisted stamp, not in-memory counting): the
+    // SAME 'trap:hour' emit carries a second beat —
+    // every trap whose catch STANDS rolls to be
+    // robbed, priced by the hours since its stamp
+    // (elapsed = 24 x daysElapsed + the emitted hour,
+    // minus caughtAtHour; the payload's hour is
+    // hour-of-day, and a sleep burst rolls its skipped
+    // hours before dawn — the day count is read before
+    // the jump, so a burst prices its early hours
+    // against the night that spawned them, never
+    // negative). An unstamped catch reads freshly
+    // caught (elapsed 0 — Systems' leniency) and can
+    // never be robbed until it has a stamp and hours
+    // on it. Chance = min(1, RATE x hours), RATE
+    // 0.04/h DRAFT (a full day standing = certainly
+    // taken). A hit clears the catch (the stamp dies
+    // with it) and voices ONE notice; 'trap:catch'
+    // saves. The trap itself is never consumed. The
+    // steal beat runs FIRST, on the catches standing
+    // when the hour turned — a catch made this very
+    // hour has no hours on it and is never priced.
+    const TRAP_STEAL_RATE_PER_HOUR = 0.04;
     const offTrapCatch = bus.on('trap:catch', () => {
       refreshTrapsFromState();
       saveNow();
@@ -7651,9 +7680,33 @@ export default function App() {
     const offTrapPlaced = bus.on('trap:placed', () => {
       refreshTrapsFromState();
     });
-    const offTrapHour = bus.on('trap:hour', () => {
+    const offTrapHour = bus.on('trap:hour', ({ hour }) => {
       const gen = genRef.current;
       if (!gen) return;
+      const sky = rendererRef.current?.snapshotSky();
+      const nowAbsoluteHour = sky ? sky.daysElapsed * 24 + hour : null;
+      if (nowAbsoluteHour !== null) {
+        for (const trap of trapState.snapshot()) {
+          if (trap.catch === null) continue;
+          const stamp = trap.caughtAtHour;
+          const elapsed =
+            typeof stamp === 'number' && Number.isFinite(stamp)
+              ? Math.max(0, nowAbsoluteHour - stamp)
+              : 0;
+          if (elapsed <= 0) continue;
+          const vanishChance = Math.min(
+            1,
+            TRAP_STEAL_RATE_PER_HOUR * elapsed,
+          );
+          if (Math.random() < vanishChance) {
+            trapState.setCatch(trap.id, null);
+            showFeedback(
+              'Something has been at your trap — the catch is gone.',
+              'info',
+            );
+          }
+        }
+      }
       for (const trap of trapState.snapshot()) {
         if (trap.catch !== null) continue;
         const eligible = eligibleKindsFor(
@@ -7662,7 +7715,11 @@ export default function App() {
         );
         const outcome = resolveTrapHour(eligible, trap.baited);
         if (outcome.caught) {
-          trapState.setCatch(trap.id, outcome.kind);
+          trapState.setCatch(
+            trap.id,
+            outcome.kind,
+            nowAbsoluteHour ?? undefined,
+          );
         }
       }
     });
