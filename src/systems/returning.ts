@@ -40,7 +40,7 @@
 //
 // THE GATES READ THE WIRING (fragments.ts, 05b1f7e):
 // Returning learns from its OWN fragments, per-mark,
-// under the cumulative ladder [3, 6, 10] — knownTier
+// under the clock law (fills, capped at 3) — knownTier
 // is the one read every door below consults.
 //
 // NO STATE OF ITS OWN: nothing here persists. The
