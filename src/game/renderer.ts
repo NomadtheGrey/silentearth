@@ -1035,6 +1035,15 @@ export class WorldRenderer {
    * views; seals render no mesh in this landing.
    */
   private hearthHomeFactsProvider: (() => HearthHomeSealView[]) | null = null;
+  /** The shell's LURE provider (2026-11-07): per kind,
+   *  the scent's answer for that kind right now
+   *  ('draw' | 'repel' | null), composed shell-side
+   *  from Systems' scentEffectFor over the kind's
+   *  category (Adam's law: prey attractors repel
+   *  predators and vice-versa). The renderer only
+   *  ferries it into the animal step; it never learns
+   *  what a scent is. Absent = plain air. */
+  private lureProvider: ((kind: AnimalKind) => 'draw' | 'repel' | null) | null = null;
   private currentHearthHomeViews: HearthHomeSealView[] = [];
   /**
    * NAMING TAGS: the shell's seat for the named-places
@@ -2114,6 +2123,11 @@ export class WorldRenderer {
   setHearthHomeFactsProvider(fn: (() => HearthHomeSealView[]) | null): void {
     this.hearthHomeFactsProvider = fn;
     this.currentHearthHomeViews = [];
+  }
+
+  /** Register the shell's lure provider (2026-11-07): see the field's note. */
+  setLureProvider(fn: ((kind: AnimalKind) => 'draw' | 'repel' | null) | null): void {
+    this.lureProvider = fn;
   }
 
   /** The binding seal standing at a point, if any (nearest centre wins). */
@@ -4745,6 +4759,7 @@ export class WorldRenderer {
           playerZ: this.player.z,
           night,
           feral,
+          lure: this.lureProvider ? this.lureProvider(pair.instance.kind) : null,
           isWaterSeat: (x, z) => distanceToWater(this.gen, x, z) <= 0,
         });
         // The encounter's outward reports, consumed the
