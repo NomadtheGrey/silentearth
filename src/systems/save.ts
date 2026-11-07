@@ -884,7 +884,8 @@ export interface SaveData {
   feralWarned: string[];
   /** Ritual stagings (site + kind + steps); [] for old saves. */
   stagings: SavedRitualStaging[];
-  /** Charm awakenings (kind + tier); [] for old saves. */
+  /** Charm awakenings (kind + tier + toggle; an absent toggle reads
+   * on); [] for old saves. */
   awakenings: SavedAwakening[];
   /** Bone kinds acquired for one-of-every-bone (the
    * latch's own record — kinds, validated + deduped);
@@ -1270,6 +1271,7 @@ export interface SaveDraft {
   awakenings?: ReadonlyArray<{
     kind: string;
     tier: number;
+    enabled?: boolean;
   }>;
   /**
    * Bone-acquisition latch from boneAcquisitionsFor()
@@ -1786,6 +1788,9 @@ export function serializeSave(draft: SaveDraft): SaveData {
     awakenings: (draft.awakenings ?? []).map((entry) => ({
       kind: entry.kind,
       tier: entry.tier,
+      ...(entry.enabled === undefined
+        ? {}
+        : { enabled: entry.enabled }),
     })),
     // Bone acquisitions: written AS-IS (the helper's
     // union is already kinds-only + deduped); kind
@@ -2867,7 +2872,17 @@ export function deserializeSave(value: unknown): SaveData | null {
         if (!Number.isInteger(entry.tier) || (entry.tier as number) <= 0) {
           continue;
         }
-        awakenings.push({ kind: entry.kind, tier: entry.tier as number });
+        awakenings.push({
+          kind: entry.kind,
+          tier: entry.tier as number,
+          // The toggle rides only when it is a real
+          // boolean: a bad toggle value is IGNORED
+          // (the entry reads on — absent = on) rather
+          // than costing the awakening its record.
+          ...(typeof entry.enabled === 'boolean'
+            ? { enabled: entry.enabled }
+            : {}),
+        });
       }
     }
     // Bone acquisitions are optional on read, same

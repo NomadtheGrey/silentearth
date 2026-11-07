@@ -39,6 +39,14 @@
  * and the selected row carries Rename / Remove name.
  * Selection is the caller's state — this panel only
  * reports the tap.
+ *
+ * The book also carries her CHARMS (the toggles build,
+ * 2026-11-06): Adam ruled a switch next to each charm,
+ * in the panel and mirrored here. The Charms page
+ * stands below Places and above Quests; each row is
+ * the caller's stamp of the one charm list, and its
+ * switch flips the same fact the Charms panel's
+ * switch flips — off mutes the effect only.
  */
 
 import { Fragment, useState } from 'react';
@@ -134,6 +142,27 @@ export interface JournalBaseRow {
   detail: string | null;
 }
 
+/**
+ * One awakened charm, as the book's Charms page carries
+ * it (the toggles build, 2026-11-06): the same row the
+ * Charms panel stamps, from the caller's one mapping —
+ * two doors, one fact. `enabled` is the toggle fact:
+ * off mutes the effect only; the awakening, its tier,
+ * and this row all stand.
+ */
+export interface JournalCharmRow {
+  /** Bone kind (shape slug, e.g. 'pigeon-wing-bone'). */
+  kind: string;
+  /** Display name, e.g. 'Primal Bone - pigeon wing bone'. */
+  name: string;
+  /** Tier held (≥ 1). */
+  tier: number;
+  /** Display line (Systems' awakened-branch note). */
+  note: string;
+  /** The toggle fact: true = the charm's effect is on. */
+  enabled: boolean;
+}
+
 export interface JournalPanelProps {
   /** One row per begun mark, caller's order. */
   marks: JournalMarkRow[];
@@ -190,6 +219,22 @@ export interface JournalPanelProps {
    */
   onScryTarget?: () => void;
   /**
+   * Her awakened charms (the toggles build): rendered
+   * as the book's Charms page, below Places and above
+   * Quests — the journal mirror of the Charms panel's
+   * switches, stamped from the caller's one row source.
+   * Omitted/empty = no charms yet (the section does not
+   * render, like Names).
+   */
+  charms?: JournalCharmRow[];
+  /**
+   * Flip one charm's effect on/off from the book — the
+   * same act the Charms panel's switch runs. The caller
+   * owns the act; the panel only reports the tap.
+   * Omitted = rows render without a switch.
+   */
+  onToggleCharm?: (kind: string) => void;
+  /**
    * The quest log the book carries (dialog audit #4):
    * the caller's mapped rows, rendered below the marks
    * as NESTED independent folds — by ACT, then by
@@ -226,6 +271,8 @@ export function JournalPanel({
   nameMaxChars = 40,
   bases,
   onScryTarget,
+  charms,
+  onToggleCharm,
   quests,
   onMarkQuest,
   onClose,
@@ -629,6 +676,43 @@ export function JournalPanel({
               })}
             </ul>
           )}
+        </div>
+      ) : null}
+      {charms && charms.length > 0 ? (
+        <div className="mt-3">
+          <h3 className={'mb-2 text-sm font-semibold ' + t.heading}>
+            Charms
+          </h3>
+          <ul className="flex flex-col gap-2">
+            {charms.map((row) => (
+              <li
+                key={row.kind}
+                className="flex flex-col gap-y-0.5 rounded-xl bg-black/20 px-3 py-2"
+              >
+                <span className="flex flex-wrap items-baseline gap-x-2">
+                  <span className="font-medium">{row.name}</span>
+                  <span className="text-xs text-stone-400">
+                    Tier {row.tier}
+                    {row.enabled ? '' : ' — its effect is off'}
+                  </span>
+                </span>
+                <span className="text-xs text-stone-400">{row.note}</span>
+                {onToggleCharm ? (
+                  <span className="mt-1">
+                    <button
+                      type="button"
+                      onClick={() => onToggleCharm(row.kind)}
+                      aria-pressed={row.enabled}
+                      aria-label={`Turn ${row.enabled ? 'off' : 'on'} ${row.name}`}
+                      className={btn + t.button}
+                    >
+                      {row.enabled ? 'Turn off' : 'Turn on'}
+                    </button>
+                  </span>
+                ) : null}
+              </li>
+            ))}
+          </ul>
         </div>
       ) : null}
       {quests ? (
