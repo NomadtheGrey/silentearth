@@ -98,6 +98,32 @@ export class ScentState {
     return this.isActive() && this.current.kind === 'repellent';
   }
 
+  /**
+   * THE FLIP SIDE (Adam's law, 2026-11-07): each lure
+   * is TWO-SIDED — the prey scent draws prey AND
+   * repels predators; the predator scent draws
+   * predators AND repels prey. (Otherwise there would
+   * be four douse-ables; too unwieldy.) The effect of
+   * the standing scent on ONE category, as a fact for
+   * the field side: an active attractor DRAWS its own
+   * category and REPELS the other; the repellent
+   * REPELS both (its shipped feral suppression,
+   * restated in this vocabulary); a kind-scent is
+   * neither lure nor repellent here (its field is the
+   * feed seat) and answers null, as do the unscented
+   * and the expired. This read supersedes the v1
+   * survey's 'an attractor never repels' — retired by
+   * Adam's word.
+   */
+  scentEffectFor(category: 'prey' | 'predator'): 'draw' | 'repel' | null {
+    if (!this.isActive()) return null;
+    if (this.current.kind === 'repellent') return 'repel';
+    if (this.current.kind === 'attractor') {
+      return this.current.category === category ? 'draw' : 'repel';
+    }
+    return null;
+  }
+
   /** Lay a scent: replaces whatever stood, full clock. */
   apply(kind: ScentKind, category: string | null): void {
     this.current = {
