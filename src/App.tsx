@@ -1664,6 +1664,7 @@ import {
   type AnimalKind,
 } from './game/animals';
 import {
+  actorById as runtimeActorById,
   comeHere as runtimeComeHere,
   makeCompanionInstance,
   restoreActor,
@@ -2059,7 +2060,16 @@ import {
 import {
   FARMHOUSE_CLEAR_RADIUS_M,
   farmhouseInstancesInRect,
+  type FarmhouseInstance,
 } from './game/farmhouses';
+import {
+  groveInstancesInRect,
+  type LesserGroveInstance,
+} from './game/groves';
+import {
+  villageInstancesInRect,
+  type VillageInstance,
+} from './game/villages';
 import {
   caveCarrierForLayer,
   fragmentCarriersHere as carriersHere,
@@ -2125,6 +2135,8 @@ import {
   provisioningCatchesFor,
   snatchFish,
   type CompanionStance,
+  type RosterRow as SystemsRosterRow,
+  type RosterWhereabouts as SystemsRosterWhereabouts,
   type SavedCompanion,
 } from './systems/companions';
 import {
@@ -2133,6 +2145,7 @@ import {
   trueNameFor,
 } from './systems/familiar';
 import { DiscoveryState } from './systems/discovery';
+import { GazetteerState } from './systems/gazetteer';
 import { FragmentState, markDisplayName } from './systems/fragments';
 import {
   CUTTINGS_TO_LAY,
@@ -2173,7 +2186,11 @@ import { CrowArrows } from './ui/CrowArrows';
 import { RitualPanel } from './ui/RitualPanel';
 import { walkAwayShouldClose } from './ui/walkAway';
 import { CharmsPanel } from './ui/CharmsPanel';
-import { CompanionsPanel } from './ui/CompanionsPanel';
+import {
+  RosterPanel,
+  type RosterKindGroup,
+  type RosterRow,
+} from './ui/RosterPanel';
 import {
   JournalPanel,
   type JournalMarkRow,
@@ -2922,7 +2939,7 @@ export default function App() {
     setInjuryUi({ stage: injury.stage() });
   };
   const [scentUi, setScentUi] = useState<{
-    kind: 'repellent' | 'attractor' | null;
+    kind: 'repellent' | 'attractor' | 'kind-scent' | null;
     category: string | null;
   }>(() => {
     const facts = scentState.scent();
@@ -3008,6 +3025,29 @@ export default function App() {
       // never sees this channel.
       repelled: scentState.isRepelling(),
     };
+  };
+
+  // THE LURE ANSWER (the rider, DEV 2026-11-07;
+  // Background's field half fe0616b, Systems' fact
+  // 52130e5): the renderer asks per kind what her
+  // scent does to it; the shell answers through
+  // Systems' scentEffectFor over the kind's category.
+  // MEMBERSHIP IS BACKGROUND'S OWN LIST (their field
+  // commit's words: predators wolf/bear/fox/owl; prey
+  // deer/rabbit/mouse/squirrel/pigeon) — mirrored here
+  // as data, never derived (no temperament table
+  // encodes it). An unlisted kind answers null (plain
+  // air), exactly as an unregistered provider would.
+  const LURE_PREDATOR_KINDS: readonly string[] = ['wolf', 'bear', 'fox', 'owl'];
+  const LURE_PREY_KINDS: readonly string[] = ['deer', 'rabbit', 'mouse', 'squirrel', 'pigeon'];
+  const lureProvider = (kind: string): 'draw' | 'repel' | null => {
+    if (LURE_PREDATOR_KINDS.includes(kind)) {
+      return scentState.scentEffectFor('predator');
+    }
+    if (LURE_PREY_KINDS.includes(kind)) {
+      return scentState.scentEffectFor('prey');
+    }
+    return null;
   };
 
   // THE FERAL DOOR (the feral build, 2026-11-03; the
@@ -3807,7 +3847,7 @@ export default function App() {
     SavedCompanion[]
   >([]);
   // Per-row note lines keyed by creatureId — the cat's
-  // theater lands here (CompanionsPanel renders them
+  // theater lands here (RosterPanel renders them
   // under the row). The All-row's note is its own state.
   const [companionNotes, setCompanionNotes] = useState<
     Record<string, string>
@@ -4138,6 +4178,24 @@ export default function App() {
   if (hearthhomeStateRef.current === null) {
     hearthhomeStateRef.current = new HearthHomeState(
       bootSave?.hearthhome ?? [],
+    );
+  }
+  // THE GAZETTEER (the gazetteer seats build, 2026-11-07):
+  // the shell owns the one GazetteerState — the same
+  // ref-lazy pattern as the hedges, restored from the
+  // boot save's record (Systems' seat at 8875f09;
+  // snapshot() rides every saveNow). NOTHING declares
+  // into it yet at this seat: the discovery declarations
+  // live at the sighting tick, the cave-entry handler,
+  // and the carrier wrapper below — this ref is only
+  // the register's home. A place is recorded ON
+  // DISCOVERY, never before (Adam's discovery law; the
+  // register refuses nothing the seats honestly declare,
+  // and the first declaration's day never moves).
+  const gazetteerStateRef = useRef<GazetteerState | null>(null);
+  if (gazetteerStateRef.current === null) {
+    gazetteerStateRef.current = new GazetteerState(
+      bootSave?.gazetteer ?? [],
     );
   }
   // THE LAYING WORKING: a held working of a few
@@ -4991,6 +5049,10 @@ export default function App() {
   const unloadSaveSuppressedRef = useRef(false);
 
   const saveNow = () => {
+    // Keep the toast effect's escape current (the
+    // seats build): the ref declared beside the toast
+    // reads through to this writer.
+    saveNowRef.current = saveNow;
     try {
       const meta = saveMetaRef.current;
       const player = playerRef.current;
@@ -5222,6 +5284,11 @@ export default function App() {
           // the hedges (SaveData.hearthhome, Systems'
           // seat).
           hearthhome: hearthhomeStateRef.current.snapshot(),
+          // The gazetteer (the seats build): the
+          // register's snapshot rides every save beside
+          // the hearthhome seals (SaveData.gazetteer,
+          // Systems' seat).
+          gazetteer: gazetteerStateRef.current.snapshot(),
           // RITUAL SAVE WIRING: stagings + awakenings ride
           // every save as-is (StagingBook / CharmState
           // snapshots; serialize writes them verbatim,
@@ -6453,6 +6520,12 @@ export default function App() {
     facts: JournalChange[];
     timer: number | null;
   }>({ facts: [], timer: null });
+  // The save's escape from the boot effect (the seats
+  // build): saveNow is render-scope (line ~5028), the
+  // toast effect mounts once — the ref is assigned
+  // every render below, the effect reads the CURRENT
+  // writer through it.
+  const saveNowRef = useRef<(() => void) | null>(null);
   useEffect(() => {
     const flushJournalToast = () => {
       const holder = journalToastRef.current;
@@ -6478,6 +6551,20 @@ export default function App() {
         }, ${deepened.length} deepened.`;
       }
       showFeedback(line, 'info');
+      // THE COMPLETION SAVE (the gazetteer seats build):
+      // a quest completion detected at the facts site
+      // latches in a ref and otherwise rides out on the
+      // NEXT ambient save — a player who completes a
+      // quest and closes the tab inside that window
+      // loses the latch. A flushed burst that carried a
+      // quest fact means a completion latched within
+      // the window: persist it now. saveNow is the
+      // shell's own idempotent writer (the openJournal
+      // seat's posture); the ref jump below keeps this
+      // boot effect out of saveNow's render scope.
+      if (facts.some((fact) => fact.kind === 'quest')) {
+        saveNowRef.current?.();
+      }
     };
     const offJournal = subscribeJournalChanges((change) => {
       const holder = journalToastRef.current;
@@ -6886,6 +6973,9 @@ export default function App() {
     // — unregistered, no encounter can form) and her
     // injury speed factor at her boot stage.
     renderer.setFeralFactsProvider(feralFactsProvider);
+    // The lure's answer rides beside the feral facts
+    // (the rider): per kind, through Systems' read.
+    renderer.setLureProvider(lureProvider);
     // NAMED PLACES (the naming build): the renderer's
     // tag feed reads the shell's register through this
     // provider (Background's seat, the feral-facts
@@ -7553,6 +7643,13 @@ export default function App() {
       // this timer (the sky does not advance while
       // paused, so no window can arrive then either).
       checkRitualCompletions();
+      // GAZETTEER SIGHTINGS (the seats build): the same
+      // clock watches for found places — a sighting
+      // declares into the register (first declaration
+      // wins; the tick is idempotent by the register's
+      // own flip-once law). Surface only; underground
+      // the cave frame holds no surface geography.
+      declareGazetteerSightings();
       // The borrowing's end rides the same clock: when a
       // borrowed gift's span lapses, its effect comes off
       // and the feed says so (FamiliarState owns the
@@ -9669,23 +9766,139 @@ export default function App() {
   // the same item fact the transcribe gate reads. No
   // journal, no door, nothing teased.
   const hasJournalItem = inventory.count(ITEMS.journal) >= 1;
-  // THE FAMILIAR LEADS (Build 2, Piece 4): the standing
-  // familiar's row seats first in the panel — the
-  // one-standing law made visible in the list's order.
-  // The sort is stable, so companions keep their record
-  // order behind it (at most one familiar can stand).
-  const companionRows = [...bondedCompanions]
-    .sort(
-      (a, b) =>
-        (a.bond === 'familiar' ? 0 : 1) - (b.bond === 'familiar' ? 0 : 1),
-    )
-    .map((record) => ({
-      creatureId: record.creatureId,
-      kindLabel: companionKindLabel(record.kind),
-      bond: record.bond as 'companion' | 'familiar',
-      stance: record.stance,
-      isCat: record.kind === 'cat',
-    }));
+  // THE ROSTER'S GROUPS (the roster dialog, 2026-11-07;
+  // Adam's design of 2026-11-05): her company grouped by
+  // KIND with counts, stamped from Systems' rosterList
+  // (the composed read — the record's facts plus the
+  // release ladder's effect per row). The shell keeps
+  // the roster's STANDING door rule: the page lists the
+  // BONDED company (an unbonded courtship speaks at the
+  // animal, never in the book), so bond-'none' rows are
+  // filtered here. Groups compose in record order
+  // (first-met kind first), and within a kind THE
+  // FAMILIAR LEADS (Build 2, Piece 4's law, kept): the
+  // sort is stable, so the rest keep record order behind
+  // it (at most one familiar can stand). One composition,
+  // stamped once per render: the N door and the journal's
+  // Companions page render the SAME groups through the
+  // one RosterPanel — one row source, two doors.
+  //
+  // WHEREABOUTS (cut 2): the facts-in projection rides
+  // rosterList's seat — records carry no position, so
+  // the shell composes each animal's standing from the
+  // actor runtime: a follower at her side reads
+  // 'following'; a stayed actor reads 'camp' when its
+  // anchor stands in a named place (the register's
+  // nearest, within the place's own ground — the
+  // placeName honestly derived), else 'roaming'. The
+  // CAT is never in the runtime: its actor's bond at
+  // 'hearth' reads 'hearth' (the village seat); an
+  // attending cat composes from its instance like any
+  // actor. Underground she stands apart from every
+  // surface actor (they wait above): the projection
+  // returns undefined and the row carries null — no
+  // line, rather than a lie. The row's LINE renders
+  // here from the composed fact: 'with you' under
+  // 25 m, else '<n> m <wind>'; a camped actor near a
+  // named place reads 'At <place>'; the hearth cat
+  // reads 'At the hearth'. All copy DRAFT.
+  const ROSTER_NEAR_M = 25;
+  const ROSTER_PLACE_GROUND_M = 30;
+  const ROSTER_COMPASS = [
+    'N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW',
+  ];
+  const rosterWhereaboutsFor = (
+    creatureId: string,
+  ): SystemsRosterWhereabouts | undefined => {
+    if (dimensionState.isUnderground()) return undefined;
+    const player = playerRef.current;
+    if (!player) return undefined;
+    if (creatureId === CAT_ID) {
+      const cat = catActor();
+      if (!cat) return undefined;
+      if (cat.bond === 'hearth') return { presence: 'hearth' };
+      const d = Math.hypot(
+        cat.instance.x - player.x,
+        cat.instance.z - player.z,
+      );
+      return { presence: d <= ROSTER_NEAR_M ? 'following' : 'roaming' };
+    }
+    const actor = runtimeActorById(creatureId);
+    if (!actor) return undefined;
+    if (actor.mode === 'follow' || actor.mode === 'come') {
+      return { presence: 'following' };
+    }
+    const near = namedPlacesRef.current.nearest(
+      actor.anchorX,
+      actor.anchorZ,
+      dimensionState.activeKey(),
+    );
+    if (near && near.distanceM <= ROSTER_PLACE_GROUND_M) {
+      return { presence: 'camp', placeName: near.place.name };
+    }
+    return { presence: 'roaming' };
+  };
+  const rosterWhereaboutsLine = (
+    record: SystemsRosterRow,
+  ): string | null => {
+    const w = record.whereabouts;
+    if (!w) return 'Out of sight';
+    if (w.presence === 'hearth') return 'At the hearth';
+    if (w.presence === 'camp') {
+      return w.placeName ? `At ${w.placeName}` : 'At camp';
+    }
+    const player = playerRef.current;
+    if (!player) return 'Out of sight';
+    const actor =
+      record.creatureId === CAT_ID
+        ? catActor()?.instance
+        : runtimeActorById(record.creatureId)?.instance;
+    if (!actor) return 'Out of sight';
+    const d = Math.hypot(actor.x - player.x, actor.z - player.z);
+    if (d <= ROSTER_NEAR_M) return 'With you';
+    const wind =
+      ROSTER_COMPASS[
+        Math.round(bearingDegrees(player.x, player.z, actor) / 45) % 8
+      ];
+    return `${Math.round(d)} m ${wind}`;
+  };
+  const rosterGroups: RosterKindGroup[] = [];
+  {
+    const byKind = new Map<string, RosterRow[]>();
+    const rosterRows: SystemsRosterRow[] =
+      companionStateRef.current.rosterList(
+        rendererRef.current?.snapshotSky()?.daysElapsed ?? 0,
+        rosterWhereaboutsFor,
+      );
+    for (const record of rosterRows) {
+      if (record.bond === 'none') continue;
+      const row: RosterRow = {
+        creatureId: record.creatureId,
+        kindLabel: companionKindLabel(record.kind),
+        bond: record.bond as 'companion' | 'familiar',
+        stance: record.stance,
+        trust: record.trust,
+        releaseEffect: record.releaseEffect,
+        isCat: record.kind === 'cat',
+        whereaboutsLine: rosterWhereaboutsLine(record),
+      };
+      const rows = byKind.get(record.kind);
+      if (rows) rows.push(row);
+      else byKind.set(record.kind, [row]);
+    }
+    for (const [kind, rows] of byKind) {
+      rows.sort(
+        (a, b) =>
+          (a.bond === 'familiar' ? 0 : 1) - (b.bond === 'familiar' ? 0 : 1),
+      );
+      rosterGroups.push({
+        kind,
+        kindLabel: companionKindLabel(kind),
+        count: rows.length,
+        rows,
+      });
+    }
+  }
   // THE HUNT NOTE (Piece 3): while the cat is out, its
   // panel row says so — a live read of the engine actor
   // composed over the notes map (renders tick with her
@@ -9870,6 +10083,25 @@ export default function App() {
     setCraftingOpen(false);
     setCharmsOpen(false);
     setCompanionsOpen(false);
+    // THE JOURNAL-OPEN DECLARATION (the gazetteer seats
+    // build, 2026-11-07): opening the book IS the read —
+    // Systems' find-bone hook reads flags.journalRead
+    // ('Read your journal'), a fact nothing shell-side
+    // set before this seat, so the step could never
+    // complete. Every door funnels here (the J key and
+    // the Read verbs both end at openJournalPanel), so
+    // the latch lives here alone. setQuestFlag is
+    // idempotent (an already-read journal costs
+    // nothing). A bone held before the first open
+    // completes AT the open — Systems' named
+    // consequence, by design. THE SAVE: the flag must
+    // not stand in memory only — a session that opens
+    // the book and closes the tab would lose the read
+    // (and the quest's completion with it) — so the
+    // open saves here, once per first open (the flag's
+    // idempotency gates the repeat opens).
+    setQuestFlag('journalRead');
+    saveNow();
   };
 
   // COMPANION ACTS (build 1, 2026-10-31): the panel's
@@ -10029,8 +10261,32 @@ export default function App() {
     saveNow();
   };
   const handleCompanionRelease = (creatureId: string) => {
-    const removed = companionStateRef.current.release(creatureId);
-    if (removed === null) return;
+    // THE RELEASE ACT (the roster build, 2026-11-07):
+    // the panel's two-press AND the faced act route
+    // through Systems' releaseFromRoster — the
+    // STEP-DOWN LADDER (Adam's law: 'Releasing a
+    // familiar makes it a companion. Releasing a
+    // companion lets it loose.'). Raw release() keeps
+    // its removal contract for its internal riders
+    // (the departed-clear), never for this act.
+    const result = companionStateRef.current.releaseFromRoster(creatureId);
+    if (!result.ok) return;
+    if (result.effect === 'demoted') {
+      // A demote runs NO departure: the record stands,
+      // the animal stays — a companion now, its trust
+      // seated at the bond line by Systems' seat. THE
+      // CAT is the one engine fact to sync: the found
+      // familiar steps down to attending (its bond
+      // follows the record, as at boot).
+      if (result.record.kind === 'cat') setCatBond('attending');
+      refreshCompanions();
+      saveNow();
+      return;
+    }
+    // (Systems' demote seats trust verbatim since
+    // 85b1aa1 — the rite's step-down never touches the
+    // earned number; nothing shell-side adjusts it.)
+    const removed = result.record;
     // The shell speaks for Systems' return on the bus
     // (the emitter-layering rule): the runtime hears
     // the release and starts the departure leg. Its
@@ -10050,6 +10306,34 @@ export default function App() {
     saveNow();
     // The last bond going closes the panel — its door
     // is gone with the list it would show.
+    const anyBonded = companionStateRef.current
+      .snapshot()
+      .some((record) => record.bond !== 'none');
+    if (!anyBonded) setCompanionsOpen(false);
+  };
+  const handleCompanionReleaseKind = (kind: string, count: number) => {
+    // RELEASE BY NUMBER (roster cut 2): Systems'
+    // releaseByKind frees bonded COMPANIONS of the
+    // kind, oldest first — the familiar never stands
+    // in it (the bulk act never catches the singular
+    // bond unnamed). Each freed record runs the same
+    // departure speech as the per-record 'freed'
+    // branch: the cat goes home (its seat), everyone
+    // else hears the released emit. A demoted cat IS
+    // a companion of its kind and can be freed here —
+    // the accepted edge (DEV, 2026-11-07); its count
+    // is one in practice.
+    const freed = companionStateRef.current.releaseByKind(kind, count);
+    if (freed.length === 0) return;
+    for (const record of freed) {
+      if (record.kind === 'cat') {
+        setCatBond('hearth');
+      } else {
+        bus.emit('companion:released', { id: record.creatureId });
+      }
+    }
+    refreshCompanions();
+    saveNow();
     const anyBonded = companionStateRef.current
       .snapshot()
       .some((record) => record.bond !== 'none');
@@ -10354,6 +10638,192 @@ export default function App() {
       return { kind: 'stump', x, z };
     }
     return null;
+  };
+
+  // THE GAZETTEER SIGHTING COMPOSITION (the seats build,
+  // 2026-11-07): discovery keys on SIGHTING, not arrival
+  // (Adam's forgiveness rule — a cluster of pixels
+  // counts, because the render undersells what she
+  // would see). Each second the shell asks the engines'
+  // own enumerations who stands within the family's
+  // sighting range of her, and declares the finding
+  // into Systems' register (recordFound flips once —
+  // the first day never moves, so re-declaring every
+  // tick is free). Ranges are DRAFT, forgiveness-priced,
+  // for Adam's pin pass: villages read by their smoke
+  // (220 m, the standing far-sighting signal), the
+  // burnt village likewise (180 m), the singular
+  // farmhouse 150 m, homesteads 120 m, distributed
+  // farmhouses 120 m, The Grove 120 m, lesser groves
+  // 100 m, cave mouths 60 m (a mouth is a small thing —
+  // and entering declares exactly, below). Names are
+  // the register's vocabulary: the family's own words,
+  // stored verbatim from this seat. The tick never runs
+  // underground (cave coordinates hold no surface
+  // geography) and never before the save restores (the
+  // boot-render ordering law: render-scope facts are
+  // not seated until the boot effect runs).
+  const GAZETTEER_SIGHT_M = {
+    village: 220,
+    burntVillage: 180,
+    farmhouse: 150,
+    homestead: 120,
+    farmhouseInstance: 120,
+    grove: 120,
+    lesserGrove: 100,
+    cave: 60,
+  } as const;
+  const declareGazetteerSightings = () => {
+    if (!saveRestoredRef.current) return;
+    if (dimensionState.isUnderground()) return;
+    const player = playerRef.current;
+    const gen = genRef.current;
+    const gaz = gazetteerStateRef.current;
+    if (!player || !gen || !gaz) return;
+    const day = worldDayNow();
+    const dim = dimensionState.activeKey();
+    const spawn = gen.findSpawn();
+    const weights = (x: number, z: number) => gen.weightsAt(x, z);
+    let declared = false;
+    const declare = (
+      placeKey: string,
+      family: string,
+      name: string,
+      x: number,
+      z: number,
+      rangeM: number,
+    ) => {
+      if (Math.hypot(x - player.x, z - player.z) > rangeM) return;
+      if (gaz.recordFound(placeKey, { family, name, x, z, dimensionKey: dim }, day)) {
+        declared = true;
+      }
+    };
+    // CARRIER-PROXIMATE FINDINGS (the seats build,
+    // found by the acceptance drive): a place's RECORD
+    // stands at its centre, but its CARRIER may stand
+    // well outside the centre's sighting range (the
+    // farmhouse's stone stands ~104 m from its centre;
+    // a village's hearthstone likewise) — she can stand
+    // AT a place's stone, inside its ground, with the
+    // centre still beyond the range, and read the stone
+    // at a place the book has not found. The ground she
+    // stands on is the place: within a family's GROUND
+    // radius of its carrier seat, the place is found.
+    // Ground radii are DRAFT, sized to the family's
+    // clearing (the farmhouse's clear radius is ~110 m).
+    const GAZETTEER_GROUND_M = 130;
+    const declareAtCarrier = (
+      placeKey: string,
+      family: string,
+      name: string,
+      placeX: number,
+      placeZ: number,
+      carrierX: number,
+      carrierZ: number,
+    ) => {
+      if (Math.hypot(carrierX - player.x, carrierZ - player.z) > GAZETTEER_GROUND_M) return;
+      if (gaz.recordFound(placeKey, { family, name, x: placeX, z: placeZ, dimensionKey: dim }, day)) {
+        declared = true;
+      }
+    };
+    const rectFor = (r: number) => ({
+      minX: player.x - r,
+      maxX: player.x + r,
+      minZ: player.z - r,
+      maxZ: player.z + r,
+    });
+    // The distributed families, by their own keys.
+    for (const inst of villageInstancesInRect(gen.seed, spawn, weights, rectFor(GAZETTEER_SIGHT_M.village))) {
+      declare(inst.key, 'village', 'Village', inst.center.x, inst.center.z, GAZETTEER_SIGHT_M.village);
+      declareAtCarrier(inst.key, 'village', 'Village', inst.center.x, inst.center.z, inst.fragmentSpot.x, inst.fragmentSpot.z);
+    }
+    for (const inst of homesteadInstancesInRect(gen.seed, spawn, weights, rectFor(GAZETTEER_SIGHT_M.homestead))) {
+      declare(inst.key, 'homestead', 'Homestead', inst.center.x, inst.center.z, GAZETTEER_SIGHT_M.homestead);
+      if (inst.fragmentSpot) {
+        declareAtCarrier(inst.key, 'homestead', 'Homestead', inst.center.x, inst.center.z, inst.fragmentSpot.x, inst.fragmentSpot.z);
+      }
+    }
+    for (const inst of farmhouseInstancesInRect(gen.seed, spawn, weights, rectFor(GAZETTEER_SIGHT_M.farmhouseInstance))) {
+      declare(inst.key, 'farmhouse', 'Farmhouse', inst.center.x, inst.center.z, GAZETTEER_SIGHT_M.farmhouseInstance);
+    }
+    for (const inst of groveInstancesInRect(gen.seed, spawn, weights, rectFor(GAZETTEER_SIGHT_M.lesserGrove))) {
+      declare(inst.key, 'grove', 'Lesser Grove', inst.center.x, inst.center.z, GAZETTEER_SIGHT_M.lesserGrove);
+      declareAtCarrier(inst.key, 'grove', 'Lesser Grove', inst.center.x, inst.center.z, inst.fragmentSpot.x, inst.fragmentSpot.z);
+    }
+    for (const inst of caveInstancesInRect(gen.seed, spawn, weights, rectFor(GAZETTEER_SIGHT_M.cave))) {
+      declare(inst.key, 'cave', 'Cave', inst.center.x, inst.center.z, GAZETTEER_SIGHT_M.cave);
+    }
+    // The authored singles, by their site seats.
+    const farm = farmhouseSite(gen.seed, spawn, weights);
+    declare('farmhouse', 'farmhouse', 'The Farmhouse', farm.center.x, farm.center.z, GAZETTEER_SIGHT_M.farmhouse);
+    declareAtCarrier('farmhouse', 'farmhouse', 'The Farmhouse', farm.center.x, farm.center.z, farm.hearthStone.x, farm.hearthStone.z);
+    const burnt = villageSite(gen.seed, spawn, weights);
+    declare('village', 'village', 'The Burnt Village', burnt.center.x, burnt.center.z, GAZETTEER_SIGHT_M.burntVillage);
+    declareAtCarrier('village', 'village', 'The Burnt Village', burnt.center.x, burnt.center.z, burnt.hearthHouse.hearthSpot.x, burnt.hearthHouse.hearthSpot.z);
+    const grove = groveSite(gen.seed, spawn, (x, z) => gen.weightsAt(x, z).dominant);
+    declare(grove.id, 'grove', 'The Grove', grove.center.x, grove.center.z, GAZETTEER_SIGHT_M.grove);
+    // A new finding is a durable fact: it rides the
+    // next save like every register write. (The toast
+    // for a finding is the book's business, not this
+    // seat's — the register fills silently until the
+    // Places tab reads it.)
+    if (declared) saveNow();
+  };
+  // THE CAVE-ENTRY DECLARATION (the seats build): a
+  // mouth she walks into blind — fog, night, a ridge in
+  // the way — was never sighted, but entering cannot
+  // lie. The threshold handler declares the entered
+  // cave by its dimension key (the family's own key,
+  // the same string the carrier seats speak). Entering
+  // the DEBUT cave (cave:main) declares too: the core
+  // lifted its exclusion, and the register's law is
+  // discovery, not carriage — a found cave with no
+  // stone still stands in the book.
+  const declareCaveEntered = (mouthId: string) => {
+    const gaz = gazetteerStateRef.current;
+    const gen = genRef.current;
+    if (!gaz || !gen) return;
+    const inst = caveInstanceForKey(
+      gen.seed,
+      gen.findSpawn(),
+      (x, z) => gen.weightsAt(x, z),
+      mouthId,
+    );
+    const x = inst ? inst.center.x : 0;
+    const z = inst ? inst.center.z : 0;
+    if (
+      gaz.recordFound(
+        mouthId,
+        { family: 'cave', name: 'Cave', x, z, dimensionKey: 'surface' },
+        worldDayNow(),
+      )
+    ) {
+      saveNow();
+    }
+  };
+  // THE CARRIER-SEEN DECLARATION (the seats build): the
+  // faced read IS the sighting — when the carrier
+  // wrapper returns a carrier in range, its stone has
+  // stood in her faced read, and the gazetteer flags
+  // the place (Transcribe banks a copy only off this
+  // same read, so the floor rides free). The placeKey
+  // derives from the fragmentId's own stem — every
+  // family mints '<placeKey>:fragment' (an earlier cave
+  // floor's '<placeKey>:fragment:L<n>' stems to the
+  // same place) — probed per family against the
+  // engines' minting sites at build time. The register
+  // refuses unknown keys, so a carrier at an unfound
+  // place flags nothing (she cannot have found the
+  // stone of a place she has not found — the sighting
+  // tick will have declared any place whose stone she
+  // stands at, since every sighting range exceeds the
+  // read's reach).
+  const declareCarrierSeen = (fragmentId: string) => {
+    const gaz = gazetteerStateRef.current;
+    if (!gaz) return false;
+    const placeKey = fragmentId.replace(/:fragment(:L\d+)?$/, '');
+    if (placeKey === fragmentId) return false;
+    return gaz.markCarrierSeen(placeKey);
   };
 
   // RITUAL COMPLETION CHECK (state-based, idempotent):
@@ -15251,6 +15721,12 @@ export default function App() {
     // trap and the hive (the seam above
     // computeUseWinner reads Background's facts).
     for (const carrier of fragmentCarriersHere()) {
+      // The faced read declares the carrier seen (the
+      // seats build): the stone stood in her read, so
+      // the gazetteer flags its place. The flip is a
+      // durable fact — persist it (the read runs per
+      // frame; the save fires only on the flip itself).
+      if (declareCarrierSeen(carrier.fragmentId)) saveNow();
       const f = facingOf(carrier.x, carrier.z);
       if (f.distance <= HARVEST_RANGE) anyCandidateInRange = true;
       if (f.isFaced && f.distance <= HARVEST_RANGE) {
@@ -15688,6 +16164,10 @@ export default function App() {
     const off = bus.on('cave:threshold-crossed', ({ mouthId }) => {
       if (dimensionState.isUnderground()) return;
       if (isUpstairsKey(dimensionState.activeKey())) return;
+      // The entry declares the cave found (the seats
+      // build) — sighting may have missed the mouth;
+      // entering cannot lie.
+      declareCaveEntered(mouthId);
       handleCaveTravel({ kind: 'cave-enter', id: mouthId });
     });
     return off;
@@ -15764,6 +16244,17 @@ export default function App() {
       return;
     }
     const name = markDisplayName(winner.mark);
+    // THE CARRIER-SEEN FLOOR (the gazetteer seats
+    // build): a banked copy means the carrier stood in
+    // her hands — Transcribe declares it seen whatever
+    // the faced read's timing did (the floor under the
+    // ship-read declaration; the register refuses
+    // unknown keys, so an unfound place stays unflagged
+    // until the sighting tick declares it — the tick's
+    // ranges all exceed this reach, so a banked stone
+    // at an undeclared place can only be a boot-order
+    // straggler).
+    declareCarrierSeen(winner.fragmentId);
     const tally = state.tallyFor(winner.mark);
     showFeedback(
       `Copied into your journal — the ${name} mark, ${result.count} of ${tally.needed}.` +
@@ -19665,11 +20156,12 @@ export default function App() {
           />
         ) : null}
         {companionsOpen ? (
-          <CompanionsPanel theme={lookThemes.world}
-            companions={companionRows}
+          <RosterPanel theme={lookThemes.world}
+            groups={rosterGroups}
             onStance={handleCompanionStance}
             onStanceAll={handleCompanionStanceAll}
             onRelease={handleCompanionRelease}
+            onReleaseKind={handleCompanionReleaseKind}
             notes={companionPanelNotes}
             allNote={companionAllNote ?? undefined}
             onClose={() => setCompanionsOpen(false)}
@@ -19699,6 +20191,19 @@ export default function App() {
             nameMaxChars={NAME_MAX_CHARS}
             charms={journalCharmRows}
             onToggleCharm={handleToggleCharm}
+            companions={
+              <RosterPanel theme={lookThemes.world}
+                embedded
+                groups={rosterGroups}
+                onStance={handleCompanionStance}
+                onStanceAll={handleCompanionStanceAll}
+                onRelease={handleCompanionRelease}
+                onReleaseKind={handleCompanionReleaseKind}
+                notes={companionPanelNotes}
+                allNote={companionAllNote ?? undefined}
+                comfortable={isTouch}
+              />
+            }
             quests={questDisplay}
             onMarkQuest={toggleActiveQuestMark}
             onClose={() => setJournalOpen(false)}

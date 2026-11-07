@@ -165,6 +165,14 @@ export const ANIMAL_DEFS: Record<AnimalKind, AnimalDef> = {
 export const HOME_RANGE_M = 8;
 export const FLEE_RADIUS_M = 4;
 export const WARY_FLEE_RADIUS_M = 8;
+/** THE LURES ANSWERED (Adam's law, 2026-11-07; DRAFT):
+ *  a drawn kind answers inside this radius of her, and
+ *  holds its stand this far off (outside the wary flee
+ *  radius, so drawn kinds can arrive and stay); a
+ *  repelled kind keeps off inside this radius instead. */
+export const LURE_DRAW_RADIUS_M = 24;
+export const LURE_DRAW_STANDOFF_M = 10;
+export const LURE_REPEL_RADIUS_M = 16;
 
 /**
  * UNDETECTED (the mole's gift, borrowed — the familiar
@@ -725,6 +733,14 @@ export interface AnimalUpdateInput {
   /** Feral encounter facts (see FeralFacts); absent or
    *  null for every animal outside the danger story. */
   feral?: FeralFacts | null;
+  /** The lure's answer for THIS animal (Adam's law,
+   *  2026-11-07: prey attractors repel predators and
+   *  vice-versa): the shell composes Systems'
+   *  scentEffectFor for the animal's category through
+   *  the renderer's lure provider. 'draw' drifts the
+   *  animal toward her, 'repel' keeps it off, and
+   *  null/absent is plain air — no answer at all. */
+  lure?: 'draw' | 'repel' | null;
   /** Open-water seat test, as on SpawnAnimalsInput —
    *  consulted when a flyer without tree anchors picks
    *  a ground-level wander target (2026-11-05). */
@@ -1151,6 +1167,14 @@ export function updateAnimal(a: AnimalInstance, dt: number, input: AnimalUpdateI
     a.flying = false;
   }
   const fleeRadius = def.temperament === 'wary' ? WARY_FLEE_RADIUS_M : FLEE_RADIUS_M;
+  // The repelled keep-off (the lure's second face): a
+  // repelled animal flees her at the LURE's radius,
+  // not temperament's — precedence flee > repel > draw
+  // > wander is structural below (this branch runs
+  // before the wander seat, and plain proximity inside
+  // temperament's own radius flees regardless).
+  const effFleeRadius =
+    input.lure === 'repel' ? Math.max(fleeRadius, LURE_REPEL_RADIUS_M) : fleeRadius;
   const dxP = a.x - input.playerX;
   const dzP = a.z - input.playerZ;
   const distP = Math.hypot(dxP, dzP);
@@ -1175,10 +1199,10 @@ export function updateAnimal(a: AnimalInstance, dt: number, input: AnimalUpdateI
     a.snapT = Math.max(0, a.snapT - dt);
     if (a.snapT <= 0) spookFish(a, input.playerX, input.playerZ);
   }
-  if (!wisedUp && !undetectedNow && distP < fleeRadius && !(a.spookT > 0) && !(a.snapT > 0)) {
+  if (!wisedUp && !undetectedNow && distP < effFleeRadius && !(a.spookT > 0) && !(a.snapT > 0)) {
     // Per-kind flee style (DRAFT values — see ANIMAL_DEFS).
     // Temperament still sets WHEN (the radius above); style sets HOW.
-    if (def.flee === 'freeze') {
+    if (def.flee === 'freeze' && input.lure !== 'repel') {
       // Hold still instead of fleeing. Timer refreshed each frame
       // so the hold never expires into a wander step while the
       // player stays close; it counts down once the player leaves.
@@ -1233,6 +1257,27 @@ export function updateAnimal(a: AnimalInstance, dt: number, input: AnimalUpdateI
         a.targetX = t.x;
         a.targetZ = t.z;
         a.targetY = t.y;
+        // The drawn drift (the lure's first face): a
+        // drawn kind inside the draw radius trades its
+        // wander pick for a stand on her standoff ring
+        // — beyond the ring, the point on her line at
+        // standoff distance; on it, a fresh point a
+        // little around the ring, so drawn kinds mill
+        // near her instead of scattering. A target bias
+        // at walking pace, never a leash.
+        if (input.lure === 'draw' && distP <= LURE_DRAW_RADIUS_M && distP > 0.001) {
+          const ux = dxP / distP;
+          const uz = dzP / distP;
+          if (distP > LURE_DRAW_STANDOFF_M + 1) {
+            a.targetX = input.playerX + ux * LURE_DRAW_STANDOFF_M;
+            a.targetZ = input.playerZ + uz * LURE_DRAW_STANDOFF_M;
+          } else {
+            const ang = Math.atan2(dzP, dxP) + (Math.random() - 0.5) * 1.2;
+            a.targetX = input.playerX + Math.cos(ang) * LURE_DRAW_STANDOFF_M;
+            a.targetZ = input.playerZ + Math.sin(ang) * LURE_DRAW_STANDOFF_M;
+          }
+          a.targetY = def.movement === 'fly' ? a.perchY : a.y;
+        }
         a.mode = def.movement === 'fly' ? 'fly' : 'wander';
         a.flying = def.movement === 'fly';
       }
@@ -1252,7 +1297,7 @@ export function updateAnimal(a: AnimalInstance, dt: number, input: AnimalUpdateI
     if (dist <= step) {
       a.x = a.targetX;
       a.z = a.targetZ;
-      if (a.mode === 'flee' && distP >= fleeRadius) {
+      if (a.mode === 'flee' && distP >= effFleeRadius) {
         a.mode = def.movement === 'fly' ? 'perched' : 'idle';
         a.flying = false;
         a.timer = 3 + Math.random() * 3;

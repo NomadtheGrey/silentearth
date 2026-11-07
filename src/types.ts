@@ -238,6 +238,7 @@ export type ScatterKind =
   | 'caveRock'
   | 'caveRockB'
   | 'caveRockC'
+  | 'cutStoneWall'
   | 'caveCeiling'
   | 'stalactite'
   | 'cavePool'
