@@ -83,6 +83,18 @@ export const CAVE_LAYER2_GRID = 7;
 export const CAVE_LAYER2_OFFSET = { x: 260, z: 0 };
 /** Chance layer 2 exists at all (DRAFT stream draw). */
 export const CAVE_LAYER2_CHANCE = 0.75;
+/** Chance each DEEPER layer exists, per layer, uncapped
+ *  (the adopted depth law, 2026-11-06: layer 2 at 75%,
+ *  then 1-in-3 per deeper level, no cap). */
+export const CAVE_DEEPER_CHANCE = 1 / 3;
+/** The fragment pay ladder (DRAFT, Adam liked the shape,
+ *  2026-11-06): a non-deepest layer's chance of carrying
+ *  its own stone — the entry floor first when the cave
+ *  goes deeper, climbing per floor, capped. The deepest
+ *  layer always carries. */
+export const FRAGMENT_PAY_BASE = 0.3;
+export const FRAGMENT_PAY_STEP = 0.1;
+export const FRAGMENT_PAY_CAP = 0.8;
 
 const WALL_HALF_T = 0.28;
 
@@ -113,6 +125,16 @@ export interface CaveLayer {
    *  inside the climb's circle. Null on layer 1, whose
    *  up is the exit at the entry anchor. */
   upAnchor: CaveAnchor | null;
+  /** THE STONE'S SEAT ON THIS LAYER (the depth +
+   *  fragment core, 2026-11-06): every layer deals a
+   *  candidate seat clear of its doors (the separation
+   *  distances, off the layer's own ':stone' stream);
+   *  the seat STANDS (non-null, with its carvedStone
+   *  feature and carrier) on the deepest layer always,
+   *  and on any other layer when its pay roll lands.
+   *  A non-paying layer's seat is null — it dealt the
+   *  candidate and the ladder declined it. */
+  stoneSpot: { x: number; z: number } | null;
   walls: SiteWallBox[];
   features: ScatterObject[];
 }
@@ -382,6 +404,39 @@ function deriveLayer(
       yaw: yawFacing(entryAnchor.x - pick.x, entryAnchor.z - pick.z),
     };
   }
+  // THE STONE'S CANDIDATE SEAT: every layer deals one,
+  // off the layer's own ':stone' stream — the same
+  // stream label, candidates, and single first draw
+  // the deepest layer's stone has always dealt by, so
+  // a deepest seat never moves. Whether the seat
+  // STANDS is the layout's pay-ladder call (below);
+  // here it is only dealt, clear of the layer's up
+  // point by the full priced reach.
+  const stoneRand = mulberry32(deriveSeed(worldSeed, `${label}:stone`));
+  const stoneUpPoint = upAnchor ?? entryAnchor;
+  const stoneOk = centres.filter(
+    (c) =>
+      euclid(c, stoneUpPoint) >= CAVE_STONE_UP_SEPARATION_M &&
+      euclid(c, entryAnchor) >= CAVE_STONE_CLEAR_M &&
+      (!shaftAnchor || euclid(c, shaftAnchor) >= CAVE_STONE_CLEAR_M) &&
+      !dressed(c),
+  );
+  let stoneSpot: { x: number; z: number };
+  if (stoneOk.length > 0) {
+    const pick = stoneOk[Math.floor(stoneRand() * stoneOk.length)];
+    stoneSpot = { x: pick.x, z: pick.z };
+  } else {
+    let bestC = centres[0];
+    let bestScore = -1;
+    for (const c of centres) {
+      const score = Math.min(euclid(c, stoneUpPoint), euclid(c, entryAnchor));
+      if (score > bestScore) {
+        bestScore = score;
+        bestC = c;
+      }
+    }
+    stoneSpot = { x: bestC.x, z: bestC.z };
+  }
   return {
     index,
     origin,
@@ -389,6 +444,7 @@ function deriveLayer(
     entryAnchor,
     shaftAnchor,
     upAnchor,
+    stoneSpot,
     walls,
     features,
   };
@@ -411,111 +467,89 @@ export function caveLayoutForKey(worldSeed: string, key: string): CaveLayout {
   if (cached) return cached;
 
   const isMain = key === CAVE_DIMENSION_KEY;
-  let grid1 = CAVE_LAYER1_GRID;
-  let grid2 = CAVE_LAYER2_GRID;
-  let hasLayer2: boolean;
+  const originFor = (index: number): { x: number; z: number } => ({
+    x: CAVE_ORIGIN.x + (index - 1) * CAVE_LAYER2_OFFSET.x,
+    z: CAVE_ORIGIN.z + (index - 1) * CAVE_LAYER2_OFFSET.z,
+  });
+  // DEPTH, UNCAPPED (the adopted law, 2026-11-06):
+  // layer 2 at the standing 75%, then 1-in-3 per deeper
+  // level, no cap. The rolls keep their seats — the
+  // debut draws on its own ':depth' stream (first draw
+  // = layer 2, exactly as v1), instances on their
+  // 'draws' stream (grid1, grid2, layer-2 roll at draws
+  // 1-3, exactly as dealt before) — and deeper layers
+  // consume FURTHER draws, so every cave's existing
+  // floors deal byte-identical; only new depth accrues.
+  const layers: CaveLayer[] = [];
   if (isMain) {
-    hasLayer2 =
-      mulberry32(deriveSeed(worldSeed, `dimension:${key}:depth`))() < CAVE_LAYER2_CHANCE;
+    const depth = mulberry32(deriveSeed(worldSeed, `dimension:${key}:depth`));
+    layers.push(deriveLayer(worldSeed, key, 1, CAVE_ORIGIN, CAVE_LAYER1_GRID));
+    let hasNext = depth() < CAVE_LAYER2_CHANCE;
+    let index = 2;
+    while (hasNext) {
+      layers.push(deriveLayer(worldSeed, key, index, originFor(index), CAVE_LAYER2_GRID));
+      hasNext = depth() < CAVE_DEEPER_CHANCE;
+      index += 1;
+    }
   } else {
     const draws = mulberry32(deriveSeed(worldSeed, `dimension:${key}:draws`));
     // Odd grids only: the maze's entry row is (grid - 1) / 2,
     // integral only for odd sizes (v1's 9 and 7 are odd).
-    grid1 = 7 + 2 * Math.floor(draws() * 3);
-    grid2 = 5 + 2 * Math.floor(draws() * 3);
-    hasLayer2 = draws() < CAVE_LAYER2_CHANCE;
-  }
-
-  const layer1 = deriveLayer(worldSeed, key, 1, CAVE_ORIGIN, grid1);
-  const layers: CaveLayer[] = [layer1];
-  if (hasLayer2) {
-    layers.push(
-      deriveLayer(worldSeed, key, 2, { x: CAVE_ORIGIN.x + CAVE_LAYER2_OFFSET.x, z: CAVE_ORIGIN.z + CAVE_LAYER2_OFFSET.z }, grid2),
-    );
-  }
-
-  // The fragment anchor (instances only this round —
-  // the debut cave's layout stays byte-stable). Since
-  // the separation ruling (2026-11-06) it is dealt its
-  // own seat in the block below — the stone no longer
-  // stands at the far shaft anchor.
-  let fragmentSpot: { x: number; z: number } | null = null;
-  if (!isMain) {
-    const deepest = layers[layers.length - 1];
-    // THE STONE'S OWN SEAT (the separation ruling,
-    // 2026-11-06): dealt here, off its own virgin
-    // stream, from the deepest layer's cell centres —
-    // clear of that layer's up point (the up hole on
-    // deeper layers; the exit at the entry anchor on a
-    // one-layer cave) by the full priced reach, and
-    // clear of its landing and shaft, so a readable
-    // stand always exists outside every door's circle.
-    // (Per-layer stone dealing was priced and struck:
-    // a later round deals it from its own fresh stream
-    // without moving a single cave dealt today.)
-    const stoneRand = mulberry32(
-      deriveSeed(worldSeed, `dimension:${key}:layer${deepest.index}:stone`),
-    );
-    const mid = (deepest.grid - 1) / 2;
-    const centres: { x: number; z: number }[] = [];
-    for (let row = 0; row < deepest.grid; row++) {
-      for (let col = 0; col < deepest.grid; col++) {
-        centres.push({
-          x: deepest.origin.x + (col - mid) * CAVE_CELL_M,
-          z: deepest.origin.z + (row - mid) * CAVE_CELL_M,
-        });
-      }
+    const grid1 = 7 + 2 * Math.floor(draws() * 3);
+    let nextGrid = 5 + 2 * Math.floor(draws() * 3);
+    let hasNext = draws() < CAVE_LAYER2_CHANCE;
+    layers.push(deriveLayer(worldSeed, key, 1, CAVE_ORIGIN, grid1));
+    let index = 2;
+    while (hasNext) {
+      layers.push(deriveLayer(worldSeed, key, index, originFor(index), nextGrid));
+      nextGrid = 5 + 2 * Math.floor(draws() * 3);
+      hasNext = draws() < CAVE_DEEPER_CHANCE;
+      index += 1;
     }
-    const distTo = (
-      a: { x: number; z: number },
-      b: { x: number; z: number },
-    ): number => Math.hypot(a.x - b.x, a.z - b.z);
-    const dressed = (c: { x: number; z: number }): boolean =>
-      deepest.features.some(
-        (f) =>
-          (f.kind === 'cavePool' ||
-            f.kind === 'caveBoulder' ||
-            f.kind === 'twilightFungus') &&
-          distTo(f, c) < 1.2,
-      );
-    const upPoint = deepest.upAnchor ?? deepest.entryAnchor;
-    const ok = centres.filter(
-      (c) =>
-        distTo(c, upPoint) >= CAVE_STONE_UP_SEPARATION_M &&
-        distTo(c, deepest.entryAnchor) >= CAVE_STONE_CLEAR_M &&
-        (!deepest.shaftAnchor ||
-          distTo(c, deepest.shaftAnchor) >= CAVE_STONE_CLEAR_M) &&
-        !dressed(c),
+  }
+  const layer1 = layers[0];
+
+  // THE STONES STAND (the depth + fragment core,
+  // 2026-11-06): every layer dealt its candidate seat
+  // in deriveLayer; here the pay ladder decides which
+  // seats STAND. The deepest always stands. Every
+  // other layer in a multi-floor cave rolls the
+  // climbing ladder — the ENTRY floor first (Adam's
+  // ruled reading: it is the first intermediate when
+  // the cave goes deeper), 30% + 10% per floor, cap
+  // 80%, DRAFT — off a virgin ':pay' stream, one draw
+  // per non-deepest layer in floor order, so no
+  // existing draw anywhere moves; a single-floor
+  // cave's only floor is its deepest and simply
+  // stands, as it always has. THE DEBUT STANDS TOO:
+  // the family's carriage includes cave:main (Adam's
+  // ruling) — the old instance-only exclusion is gone,
+  // and with it the debut layout's v1 byte-stability.
+  const deepest = layers[layers.length - 1];
+  const payRand = mulberry32(deriveSeed(worldSeed, `dimension:${key}:pay`));
+  for (const layer of layers) {
+    const isDeepest = layer === deepest;
+    const chance = Math.min(
+      FRAGMENT_PAY_BASE + FRAGMENT_PAY_STEP * (layer.index - 1),
+      FRAGMENT_PAY_CAP,
     );
-    let pick: { x: number; z: number };
-    if (ok.length > 0) {
-      pick = ok[Math.floor(stoneRand() * ok.length)];
+    const stands = isDeepest || (layers.length >= 2 && payRand() < chance);
+    if (stands && layer.stoneSpot) {
+      layer.features.push({
+        kind: 'carvedStone',
+        x: layer.stoneSpot.x,
+        z: layer.stoneSpot.z,
+        y: 0,
+        scale: 1,
+        rotY: 0,
+      });
     } else {
-      // No satisfying cell: the greatest worst-clearance
-      // centre (deterministic; the census reports it).
-      pick = centres[0];
-      let bestScore = -1;
-      for (const c of centres) {
-        const score = Math.min(
-          distTo(c, upPoint),
-          distTo(c, deepest.entryAnchor),
-        );
-        if (score > bestScore) {
-          bestScore = score;
-          pick = c;
-        }
-      }
+      layer.stoneSpot = null;
     }
-    fragmentSpot = { x: pick.x, z: pick.z };
-    deepest.features.push({
-      kind: 'carvedStone',
-      x: fragmentSpot.x,
-      z: fragmentSpot.z,
-      y: 0,
-      scale: 1,
-      rotY: 0,
-    });
   }
+  const fragmentSpot: { x: number; z: number } | null = deepest.stoneSpot
+    ? { x: deepest.stoneSpot.x, z: deepest.stoneSpot.z }
+    : null;
 
   const fungusLights = layer1.features
     .filter((f) => f.kind === 'twilightFungus')
@@ -523,7 +557,7 @@ export function caveLayoutForKey(worldSeed: string, key: string): CaveLayout {
     .map((f) => ({ x: f.x, z: f.z }));
 
   const allWalls = layers.flatMap((l) => l.walls);
-  const span = (grid1 * CAVE_CELL_M) / 2 + CAVE_CELL_M;
+  const span = (layer1.grid * CAVE_CELL_M) / 2 + CAVE_CELL_M;
   const footprint: SiteFootprint = {
     center: CAVE_ORIGIN,
     clearRadius: span,
@@ -531,7 +565,7 @@ export function caveLayoutForKey(worldSeed: string, key: string): CaveLayout {
     walls: allWalls,
     bounds: {
       minX: CAVE_ORIGIN.x - span,
-      maxX: CAVE_ORIGIN.x + CAVE_LAYER2_OFFSET.x + span,
+      maxX: CAVE_ORIGIN.x + (layers.length - 1) * CAVE_LAYER2_OFFSET.x + span,
       minZ: CAVE_ORIGIN.z - span,
       maxZ: CAVE_ORIGIN.z + span,
     },

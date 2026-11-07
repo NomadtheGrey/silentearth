@@ -15304,7 +15304,16 @@ export default function App() {
       // The anchors of the cave she's actually in
       // (pluralization: the layout reads by active key).
       const layout = caveLayoutForKey(seed, dimensionState.activeKey());
-      if (dimensionState.currentLayer() === 1) {
+      // THE DOORS PRICE PER FLOOR (the depth core,
+      // 2026-11-06): the exit on the entry floor; the
+      // climb at any deeper floor's own up hole; the
+      // descend at any floor's shaft that has a floor
+      // below it. Each is a direction-free zone act, as
+      // ruled — inside its circle the pill stands at any
+      // facing, and the nearest door holds the seat.
+      const layerNow = dimensionState.currentLayer();
+      const layerHere = layout.layers[layerNow - 1];
+      if (layerNow === 1) {
         // THE EXIT'S OWN REACH (Adam's exit pin,
         // 2026-11-06): the offer prices off the entry
         // BLOCK (CAVE_EXIT_RANGE_M), not the bare anchor
@@ -15319,22 +15328,26 @@ export default function App() {
           layout.entryAnchor.z,
           CAVE_EXIT_RANGE_M,
         );
-        const shaft = layout.layers[0]?.shaftAnchor;
+      }
+      if (layerNow >= 2 && layerHere) {
+        // THE UP HOLE (Adam's separation ruling,
+        // 2026-11-06): the climb prices from the layer's
+        // upAnchor — its own point, dealt clear of the
+        // down landing (the entry anchor) she arrived at.
+        const up = layerHere.upAnchor ?? layerHere.entryAnchor;
+        if (up) considerCave('cave-climb', '', up.x, up.z, CAVE_EXIT_RANGE_M);
+      }
+      if (layerHere && layout.layers.length > layerNow) {
         // GO DEEPER IS A DOOR TOO (Adam's ruling extended,
         // 2026-11-06): the descend seats in the same
         // direction-free zone as the exit — its circle is
         // its own reach (the default: she stands at the
         // shaft mouth), and inside it the pill stands at
-        // any facing, with the same winner standing.
+        // any facing. It seats only when a floor actually
+        // lies below; a lone floor's shaft mouth offers
+        // nothing (the travel refusal stays as backstop).
+        const shaft = layerHere.shaftAnchor;
         if (shaft) considerCave('cave-descend', '', shaft.x, shaft.z);
-      } else if (dimensionState.currentLayer() === 2) {
-        // THE UP HOLE (Adam's separation ruling,
-        // 2026-11-06): the climb prices from the layer's
-        // upAnchor — its own point, dealt clear of the
-        // down landing (the entry anchor) she arrived at.
-        const layer2 = layout.layers[1];
-        const entry = layer2?.upAnchor ?? layer2?.entryAnchor;
-        if (entry) considerCave('cave-climb', '', entry.x, entry.z, CAVE_EXIT_RANGE_M);
       }
     }
     if (homeHouse !== undefined) {
@@ -16556,7 +16569,7 @@ export default function App() {
   // disagree.
   const useWinner = computeUseWinner();
   useWinnerRef.current = useWinner;
- // The faced furniture, derived once per render for
+// The faced furniture, derived once per render for
   // the feed branch below + the pick-up pill's seat
   // (the press re-derives — see handlePickupFurniture).
   const furnitureFacedNow = facedFurniture();
