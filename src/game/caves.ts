@@ -761,6 +761,87 @@ export function caveLayoutForKey(worldSeed: string, key: string): CaveLayout {
 }
 
 /** Derive the world's debut cave layout (v1). */
+/**
+ * THE FRAGMENT STONE'S SEAT (Adam's playtest seed,
+ * 2026-11-07; DEV's calls): the fragment's surface is a
+ * FLAT STONE, and in a cave that stone seats on the
+ * floor, on a wall, or on the ceiling — the choice a
+ * virgin stream draw per cave+floor (seat:<key>:L<n>),
+ * so caves vary. The seat is a DERIVED fact beside the
+ * carrier's facts (fragmentId / mark / completeness
+ * never move, and neither does the stone's cell — she
+ * transcribes standing at the cell whatever seat the
+ * slab takes). A WALL seat is honest only when a wall
+ * stands on one of the stone cell's edges in the FINAL
+ * layout (derived post-carve: a chamber's knocked-out
+ * wall can never be chosen); a wall draw with no wall
+ * standing falls to the floor, never re-draws. The
+ * shares are DRAFT for Adam's pin pass.
+ */
+export const CAVE_SEAT_FLOOR_SHARE = 0.5;
+export const CAVE_SEAT_WALL_SHARE = 0.35;
+
+export type CaveStoneSeat = 'floor' | 'wall' | 'ceiling';
+
+export interface CaveStoneSeating {
+  seat: CaveStoneSeat;
+  /** For a wall seat: the unit step from the stone
+   *  cell toward the wall it mounts on. Null otherwise. */
+  wallDir: { dx: number; dz: number } | null;
+}
+
+const CAVE_ROCK_KINDS: ReadonlySet<string> = new Set(['caveRock', 'caveRockB', 'caveRockC']);
+
+/** The wall standing on one of the stone cell's edges,
+ *  if any (fixed scan order N, E, S, W — the first
+ *  standing wall wins, so the read is stable). */
+function stoneCellWallDir(layer: CaveLayer): { dx: number; dz: number } | null {
+  const spot = layer.stoneSpot;
+  if (!spot) return null;
+  const half = CAVE_CELL_M / 2;
+  const edges: Array<{ dx: number; dz: number }> = [
+    { dx: 0, dz: -1 },
+    { dx: 1, dz: 0 },
+    { dx: 0, dz: 1 },
+    { dx: -1, dz: 0 },
+  ];
+  // Wall segments stand AT the edge midpoints (the
+  // derive places them there, one per cell edge), so
+  // the test is a tight window on the midpoint itself.
+  for (const e of edges) {
+    const mx = spot.x + e.dx * half;
+    const mz = spot.z + e.dz * half;
+    for (const f of layer.features) {
+      if (!CAVE_ROCK_KINDS.has(f.kind)) continue;
+      if (Math.abs(f.x - mx) < 0.6 && Math.abs(f.z - mz) < 0.6) return e;
+    }
+  }
+  return null;
+}
+
+/**
+ * One floor's fragment-stone seating, or null when the
+ * floor carries no stone. Pure over the derived
+ * layout + the seat stream — every lane reads the
+ * same seat for the same cave.
+ */
+export function caveStoneSeatForLayer(
+  worldSeed: string,
+  key: string,
+  layer: number,
+): CaveStoneSeating | null {
+  const layout = caveLayoutForKey(worldSeed, key);
+  const floor = layout.layers[layer - 1];
+  if (!floor || !floor.stoneSpot) return null;
+  const wallDir = stoneCellWallDir(floor);
+  const roll = mulberry32(deriveSeed(worldSeed, `seat:${key}:L${layer}`))();
+  if (roll < CAVE_SEAT_FLOOR_SHARE) return { seat: 'floor', wallDir: null };
+  if (roll < CAVE_SEAT_FLOOR_SHARE + CAVE_SEAT_WALL_SHARE) {
+    return wallDir ? { seat: 'wall', wallDir } : { seat: 'floor', wallDir: null };
+  }
+  return { seat: 'ceiling', wallDir: null };
+}
+
 export function caveLayoutFor(worldSeed: string): CaveLayout {
   return caveLayoutForKey(worldSeed, CAVE_DIMENSION_KEY);
 }
