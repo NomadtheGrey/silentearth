@@ -196,40 +196,43 @@ export function exitCave(renderer: WorldRenderer, player: PlayerController): Tra
 }
 
 /**
- * Descend the shaft: layer 1's shaft anchor -> layer 2's
- * entry anchor. A position write inside the cave
+ * Descend the shaft: the current floor's shaft anchor ->
+ * the next floor's entry anchor (the depth core,
+ * 2026-11-06: any floor with a floor below it, not only
+ * the first). A position write inside the cave
  * generator; no gen swap.
  */
 export function descend(player: PlayerController): TravelOutcome {
   if (!dimensionState.isUnderground()) return { ok: false, reason: 'wrong-dimension' };
-  if (dimensionState.currentLayer() !== 1) return { ok: false, reason: 'already-deepest' };
   const seed = dimensionStateSeed();
   if (seed === null) return { ok: false, reason: 'wrong-dimension' };
   const layout = caveLayoutForKey(seed, dimensionState.activeKey());
-  const layer2 = layout.layers[1];
-  if (!layer2) return { ok: false, reason: 'no-deeper-layer' };
-  if (!anchorClear(layer2.entryAnchor, layout.footprint.walls)) {
+  const current = dimensionState.currentLayer();
+  const next = layout.layers[current];
+  if (!next) return { ok: false, reason: 'no-deeper-layer' };
+  if (!anchorClear(next.entryAnchor, layout.footprint.walls)) {
     return { ok: false, reason: 'anchor-blocked' };
   }
-  placeAt(player, layer2.entryAnchor);
-  dimensionState.setLayer(2);
+  placeAt(player, next.entryAnchor);
+  dimensionState.setLayer(current + 1);
   return { ok: true };
 }
 
-/** Climb the shaft back: layer 2 -> layer 1's shaft anchor. */
+/** Climb back one floor: -> the previous floor's shaft anchor. */
 export function ascend(player: PlayerController): TravelOutcome {
   if (!dimensionState.isUnderground()) return { ok: false, reason: 'wrong-dimension' };
-  if (dimensionState.currentLayer() !== 2) return { ok: false, reason: 'wrong-dimension' };
+  const current = dimensionState.currentLayer();
+  if (current < 2) return { ok: false, reason: 'wrong-dimension' };
   const seed = dimensionStateSeed();
   if (seed === null) return { ok: false, reason: 'wrong-dimension' };
   const layout = caveLayoutForKey(seed, dimensionState.activeKey());
-  const shaft = layout.layers[0].shaftAnchor;
+  const shaft = layout.layers[current - 2]?.shaftAnchor;
   if (!shaft) return { ok: false, reason: 'anchor-blocked' };
   if (!anchorClear(shaft, layout.footprint.walls)) {
     return { ok: false, reason: 'anchor-blocked' };
   }
   placeAt(player, shaft);
-  dimensionState.setLayer(1);
+  dimensionState.setLayer(current - 1);
   return { ok: true };
 }
 

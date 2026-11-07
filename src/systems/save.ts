@@ -320,6 +320,15 @@ export interface SavedTrap {
    */
   catch?: string;
   baited?: boolean;
+  /**
+   * The catch stamp (trapState's caughtAtHour, the
+   * absolute game hour the catch was made; the
+   * trap-steal seat, 2026-11-06). Absent = unstamped
+   * (an old save's standing catch reads freshly
+   * caught). Carried through verbatim when present;
+   * trapState.restore() owns its validation.
+   */
+  caughtAtHour?: number;
 }
 
 /**
@@ -980,6 +989,7 @@ export interface SaveDraft {
     z: number;
     catch?: string;
     baited?: boolean;
+    caughtAtHour?: number;
   }>;
   /**
    * Upgraded stumps from stumpState.snapshot()
@@ -1487,6 +1497,9 @@ export function serializeSave(draft: SaveDraft): SaveData {
       // (absent = empty / unbaited); restore validates.
       ...(trap.catch !== undefined ? { catch: trap.catch } : {}),
       ...(trap.baited !== undefined ? { baited: trap.baited } : {}),
+      ...(trap.caughtAtHour !== undefined
+        ? { caughtAtHour: trap.caughtAtHour }
+        : {}),
     })),
     // Stumps: written AS-IS (site ids + coords +
     // additions verbatim, additions copied — never
@@ -2145,6 +2158,15 @@ export function deserializeSave(value: unknown): SaveData | null {
             : {}),
           ...(typeof entry.baited === 'boolean'
             ? { baited: entry.baited as boolean }
+            : {}),
+          // The stamp passes only as a finite number;
+          // a bad stamp is dropped, never the catch
+          // (the toggle leniency). restore() decides
+          // what a stamp without a catch means (it
+          // drops it — a stamp never stands alone).
+          ...(typeof entry.caughtAtHour === 'number' &&
+          Number.isFinite(entry.caughtAtHour)
+            ? { caughtAtHour: entry.caughtAtHour as number }
             : {}),
         });
       }

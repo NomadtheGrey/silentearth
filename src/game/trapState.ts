@@ -62,6 +62,21 @@ export interface PlacedTrap {
   z: number;
   catch: string | null;
   baited: boolean;
+  /**
+   * The catch stamp (the trap-steal seat, Systems,
+   * 2026-11-06; Adam's fork: 'The count should survive
+   * a reload on traps'): the ABSOLUTE GAME HOUR the
+   * standing catch was made — daysElapsed × 24 +
+   * floor(cycleT × 24), the sky's day count and the
+   * same hour index 'trap:hour' emits — or null. Null
+   * = empty trap, OR a catch carrying no stamp (an
+   * old save's standing catch, an argument-less
+   * setCatch): an unstamped catch reads as FRESHLY
+   * CAUGHT (elapsed 0) — the leniency Adam's fork
+   * named; a stamp never accrues retroactively, and
+   * never stands without a catch.
+   */
+  caughtAtHour: number | null;
 }
 
 /**
@@ -75,6 +90,8 @@ export interface RestorableTrap {
   z: number;
   catch?: string | null;
   baited?: boolean;
+  /** The catch stamp (see PlacedTrap.caughtAtHour); absent on old saves. */
+  caughtAtHour?: number | null;
 }
 
 class TrapState {
@@ -96,7 +113,7 @@ class TrapState {
    */
   placeTrap(type: TrapType, x: number, z: number): PlacedTrap {
     const id = `trap:${type}:${++this.counter}`;
-    const trap: PlacedTrap = { id, type, x, z, catch: null, baited: false };
+    const trap: PlacedTrap = { id, type, x, z, catch: null, baited: false, caughtAtHour: null };
     this.traps.set(id, trap);
     bus.emit('trap:placed', { id, type, x, z });
     return trap;
@@ -126,15 +143,36 @@ class TrapState {
 
   /**
    * The shell's catch write path: set on caught hour-roll, clear (null) on
-   * granted collection. Emits 'trap:catch' { id, kind } (kind null = cleared)
+   * granted collection. The optional atHour is the catch stamp's clock
+   * (absolute game hour; see PlacedTrap.caughtAtHour) — supplied by the
+   * shell's roll handler, which holds the sky facts. Emits 'trap:catch' { id, kind } (kind null = cleared)
    * so the shell saves and the UI row re-reads the snapshot. Unknown id is a
    * no-op (false, no emit). Systems never calls this — game state is not
    * Systems' to mutate. No setBaited: no baiting mechanic exists yet.
    */
-  setCatch(id: string, kind: string | null): boolean {
+  setCatch(id: string, kind: string | null, atHour?: number): boolean {
     const trap = this.traps.get(id);
     if (!trap) return false;
-    trap.catch = kind;
+    if (kind === null) {
+      // Collection (or any clear): the stamp dies with
+      // its catch — a stamp never stands alone.
+      trap.catch = null;
+      trap.caughtAtHour = null;
+    } else {
+      // The stamp is written on the empty -> caught
+      // transition, when the caller supplies the clock
+      // (the absolute game hour — see PlacedTrap).
+      // A re-set of a standing catch keeps its original
+      // stamp; an argument-less write leaves the catch
+      // unstamped (reads freshly caught).
+      if (trap.catch === null) {
+        trap.caughtAtHour =
+          typeof atHour === 'number' && Number.isFinite(atHour)
+            ? atHour
+            : null;
+      }
+      trap.catch = kind;
+    }
     bus.emit('trap:catch', { id, kind });
     return true;
   }
@@ -211,6 +249,17 @@ class TrapState {
         z: trap.z,
         catch: typeof trap.catch === 'string' ? trap.catch : null,
         baited: trap.baited === true,
+        // The stamp rides only WITH its catch and only
+        // when finite: an unstamped catch restores null
+        // (freshly caught — the fork's leniency), a bad
+        // stamp drops the stamp, never the catch, and a
+        // stamp without a catch is dropped outright.
+        caughtAtHour:
+          typeof trap.catch === 'string' &&
+          typeof trap.caughtAtHour === 'number' &&
+          Number.isFinite(trap.caughtAtHour)
+            ? trap.caughtAtHour
+            : null,
       });
       const suffix = Number(trap.id.split(':').pop());
       if (Number.isFinite(suffix) && suffix > maxSuffix) maxSuffix = suffix;

@@ -74,6 +74,7 @@
 //
 
 import { ITEMS } from './recipes';
+import { emitJournalChange } from './journalChanges';
 import type { PersonalInventory } from './inventory';
 import type { NameSight, LookResult } from './name-sight';
 
@@ -439,10 +440,27 @@ export class CharmState {
    * Record an awakening (never downgrades). A
    * tier-up PRESERVES an existing off: the toggle is
    * the player's fact, not the tier's.
+   *
+   * A change that STANDS declares itself
+   * (journalChanges.ts): a first awakening is a new
+   * journal entry; a tier increase deepens it (DEV's
+   * ruling, 2026-11-06). A no-op call — the tier does
+   * not rise — writes nothing and declares nothing.
+   * restore() never comes through here, so a load
+   * stays silent by construction. The label is this
+   * module's own display rule (the kind slug as
+   * displayed after 'Primal Bone - ').
    */
   awaken(kind: string, tier: number): void {
     if (tier <= 0) return;
-    this.tiers.set(kind, Math.max(this.tierOf(kind), tier));
+    const before = this.tierOf(kind);
+    if (tier <= before) return;
+    this.tiers.set(kind, tier);
+    emitJournalChange({
+      kind: 'awakening',
+      label: `Primal Bone - ${kind.replace(/-/g, ' ')}`,
+      ...(before > 0 ? { deepen: true } : {}),
+    });
   }
 
   /** Snapshot for save (insertion order, copies; the toggle written explicitly). */

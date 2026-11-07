@@ -144,12 +144,45 @@ export function caveCarrier(worldSeed: string, instanceKey: string): CarrierHere
 }
 
 /**
+ * ONE FLOOR's carrier (the depth + fragment core,
+ * 2026-11-06): the carrier standing on the given
+ * 1-based layer of a cave, or null when that floor
+ * carries no stone. The deepest floor's read IS
+ * caveCarrier — its fragment id ('<key>:fragment')
+ * and completeness stream are unchanged, so copies
+ * already banked in saves keep their identity. Any
+ * other paying floor mints its own: id
+ * '<key>:fragment:L<n>', completeness off its own
+ * virgin carrier stream. The shell's underground
+ * wrapper reads the ACTIVE floor through this.
+ */
+export function caveCarrierForLayer(
+  worldSeed: string,
+  instanceKey: string,
+  layer: number,
+): CarrierHere | null {
+  const layout = caveLayoutForKey(worldSeed, instanceKey);
+  const floor = layout.layers[layer - 1];
+  if (!floor || !floor.stoneSpot) return null;
+  if (layer === layout.layers.length) return caveCarrier(worldSeed, instanceKey);
+  const rand = mulberry32(deriveSeed(worldSeed, `carrier:${instanceKey}:L${layer}`));
+  return {
+    fragmentId: `${instanceKey}:fragment:L${layer}`,
+    mark: 'circle',
+    completeness:
+      CARRIER_BAND_CIRCLE[0] + rand() * (CARRIER_BAND_CIRCLE[1] - CARRIER_BAND_CIRCLE[0]),
+    x: floor.stoneSpot.x,
+    z: floor.stoneSpot.z,
+  };
+}
+
+/**
  * Every carrier within r of a point, nearest first —
- * the shell's faced-target projection (UI's seam). The
- * debut cave (cave:main) mints no carrier: under the
- * general cave rules its layout reports no fragment
- * spot — no layer guarantee (Adam, 2026-11-01); plural
- * caves carry circles.
+ * the shell's faced-target projection (UI's seam).
+ * (The debut cave dealt no fragment under the v1
+ * rules — Adam, 2026-11-01; since the depth core,
+ * 2026-11-06, the family's carriage includes
+ * cave:main and it mints like any cave.)
  */
 export function fragmentCarriersHere(
   worldSeed: string,

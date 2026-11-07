@@ -62,6 +62,7 @@
  * for Adam's pin pass.
  */
 
+import { emitJournalChange } from './journalChanges';
 // ---------------------------------------------------------------------------
 // Records — the persisted shape
 // ---------------------------------------------------------------------------
@@ -372,6 +373,17 @@ export class FragmentState {
     if (tierComplete && progress.completedDay === null) {
       progress.completedDay = day;
     }
+    // The journal declares its own change (journalChanges.ts):
+    // a banked copy is a journal write — the mark's first
+    // copy stands a new entry, every later copy deepens it.
+    // The refusals above returned already and emit nothing;
+    // the constructor's restore path never reaches here, so
+    // a load stays silent by construction.
+    emitJournalChange({
+      kind: 'fragment',
+      label: markDisplayName(mark),
+      ...(first ? {} : { deepen: true }),
+    });
     return {
       ok: true,
       first,
