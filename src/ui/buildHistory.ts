@@ -43,6 +43,14 @@ export interface BuildRecord {
 
 const ALL_RECORDS: BuildRecord[] = [
   {
+    merge: 'Merge #94',
+    pr: 138,
+    sha: '2e97d17',
+    date: '2026-11-07',
+    what: 'THE CAVE PROGRAM, WHOLE — the caves go as deep as the seed deals them now (the ladder has no floor: three caves in four gain a second layer, then one in three per layer beyond), and every floor deals its own carved stone — the deepest always stands, earlier floors roll the climbing ladder, entry floor first — with the debut cave standing in the family, its stone dealt and readable like any other. The doors learned the depth with her: she descends and climbs floor by floor, each landing clear of the way back up. Chambers open inside the maze — rooms carved after the dealing, their walls knocked out of the corridors, a dealt pool drawn into the first room’s heart — and the rock itself has grown faces: three strata of wall under a stepped vault. Riding with it: a trap now remembers the hour of its catch, so a steal can be priced honestly across a reload.',
+    why: 'Adam’s cave sessions built this list piece by piece: the stone that could not be read at its own stand, the doors that shared a floor, the hallways that were all hallway. Each piece was proven the same way — the deal byte-identical where the law said nothing moves, a drive where the law said something should. The journal rides in its first half: the book now declares its own changes — a fragment inscribed, a charm awakened, a place named, the states saying so themselves into a leaf that imports nothing — and the journal can be read newest-first, by recorded day and order. The toast that speaks those declarations aloud is owed, and follows as its own landing.',
+  },
+  {
     merge: 'Merge #93',
     pr: 137,
     sha: 'ddf498a',
