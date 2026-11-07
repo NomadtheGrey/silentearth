@@ -285,8 +285,16 @@ function deriveLayer(
   const feat = (kind: ScatterKind, x: number, z: number, y: number, scale: number, rotY: number): void => {
     features.push({ kind, x, z, y, scale, rotY });
   };
+  // The rock-face roll (Models, 2026-11-06): wall visuals
+  // vary among the three caveRock variants. Its OWN
+  // sibling stream (':rockface', the ':anchors'
+  // precedent) — no existing stream shifts, so the maze,
+  // the walls/footprint, and every downstream draw stay
+  // byte-identical; only feature kind labels vary.
+  const rockRand = mulberry32(deriveSeed(worldSeed, `${label}:rockface`));
+  const ROCK_KINDS: ScatterKind[] = ['caveRock', 'caveRockB', 'caveRockC'];
   const wallAt = (cx: number, cz: number, runsX: boolean): void => {
-    feat('caveRock', cx, cz, 0, 1, runsX ? 0 : Math.PI / 2);
+    feat(ROCK_KINDS[Math.floor(rockRand() * 3)], cx, cz, 0, 1, runsX ? 0 : Math.PI / 2);
     if (runsX) walls.push({ minX: cx - CAVE_CELL_M / 2, maxX: cx + CAVE_CELL_M / 2, minZ: cz - WALL_HALF_T, maxZ: cz + WALL_HALF_T });
     else walls.push({ minX: cx - WALL_HALF_T, maxX: cx + WALL_HALF_T, minZ: cz - CAVE_CELL_M / 2, maxZ: cz + CAVE_CELL_M / 2 });
   };
@@ -579,7 +587,14 @@ function deriveLayer(
         edges.some((e) => Math.abs(e.x - x) < 1e-6 && Math.abs(e.z - z) < 1e-6);
       for (let i = features.length - 1; i >= 0; i--) {
         const f = features[i];
-        if (f.kind === 'caveRock' && onEdge(f.x, f.z)) features.splice(i, 1);
+        // The rock FAMILY (Models' variants, 2026-11-06):
+        // a wall may emit as any of the three rock kinds;
+        // the carve's removal must take the family, or a
+        // B/C rock would stand in the opening its removed
+        // collision box belonged to. (Background's ack,
+        // taken inside Models' hunk as the composition
+        // orders it.)
+        if ((f.kind === 'caveRock' || f.kind === 'caveRockB' || f.kind === 'caveRockC') && onEdge(f.x, f.z)) features.splice(i, 1);
       }
       for (let i = walls.length - 1; i >= 0; i--) {
         const w = walls[i];
