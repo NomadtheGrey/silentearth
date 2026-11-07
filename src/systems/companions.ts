@@ -221,6 +221,39 @@ export interface SavedCompanion {
  * The trust marker's projection (see CompanionState.factsFor):
  * the three facts a fed-marker reads per individual.
  */
+/**
+ * A companion's whereabouts, as the shell composes it
+ * from the actor runtime (the roster read's facts-in
+ * projection — see rosterList). 'hearth' is the found
+ * cat's seat. placeName rides only when honestly
+ * derived (the shell holds the naming register).
+ */
+export interface RosterWhereabouts {
+  presence: 'following' | 'camp' | 'roaming' | 'hearth';
+  placeName?: string;
+}
+
+/** One roster row: the record's facts + the composed whereabouts. */
+export interface RosterRow {
+  creatureId: string;
+  kind: string;
+  bond: CompanionBond;
+  stance: CompanionStance | null;
+  trust: number;
+  fedToday: boolean;
+  origin: CompanionOrigin;
+  /** The release act stands for this record (every row, today). */
+  releasable: boolean;
+  /** What the release act does to this record (the ladder): the familiar demotes, everyone else frees. */
+  releaseEffect: 'demote' | 'free';
+  whereabouts: RosterWhereabouts | null;
+}
+
+/** The roster release-by-record outcome (typed codes, never prose). */
+export type RosterReleaseResult =
+  | { ok: true; effect: 'demoted' | 'freed'; record: SavedCompanion }
+  | { ok: false; code: 'unknown' };
+
 export interface CompanionFacts {
   trust: number;
   fedToday: boolean;
@@ -395,6 +428,110 @@ export class CompanionState {
   familiar(): SavedCompanion | undefined {
     const standing = this.standingFamiliarRecord();
     return standing ? { ...standing } : undefined;
+  }
+
+  /**
+   * THE ROSTER READ (the roster dialog's data seat,
+   * Systems, 2026-11-07; Adam's design of 2026-11-05):
+   * one composed row per record — everyone she has
+   * touched, in record order (met order) — carrying
+   * the record's own facts (kind, bond, stance, trust,
+   * fedToday off the ONE fedOnDay derivation, origin)
+   * plus WHEREABOUTS, which the record does NOT carry:
+   * whereabouts composes from the actor runtime, so it
+   * is FACTS-IN (the factsFor precedent) — the shell
+   * supplies a projection and the row carries it
+   * verbatim, placeName included only when the shell
+   * honestly derives one; unsupplied, the row's
+   * whereabouts is null (the record alone cannot say).
+   * releasable + releaseEffect are the release law as
+   * facts: the roster's release act stands for every
+   * record, and its EFFECT steps down the ladder
+   * (Adam's law, 2026-11-07) — 'demote' for the
+   * standing familiar, 'free' for everyone else (see
+   * releaseFromRoster).
+   */
+  rosterList(
+    day: number,
+    whereaboutsFor?: (creatureId: string) => RosterWhereabouts | undefined,
+  ): RosterRow[] {
+    const familiarId = this.standingFamiliarRecord()?.creatureId;
+    return [...this.records.values()].map((record) => ({
+      creatureId: record.creatureId,
+      kind: record.kind,
+      bond: record.bond,
+      stance: record.stance,
+      trust: record.trust,
+      fedToday: fedOnDay(record, day),
+      origin: record.origin,
+      releasable: true,
+      releaseEffect: record.creatureId === familiarId ? 'demote' : 'free',
+      whereabouts: whereaboutsFor?.(record.creatureId) ?? null,
+    }));
+  }
+
+  /**
+   * THE RELEASE ACT, BY RECORD (2026-11-07) — the
+   * STEP-DOWN LADDER (Adam's law, defined 2026-11-07:
+   * 'Releasing a familiar makes it a companion.
+   * Releasing a companion lets it loose.'):
+   * - on a FAMILIAR: the record DEMOTES — bond
+   *   'familiar' -> 'companion', the record STANDS
+   *   (stance, origin, fed day kept) with its trust
+   *   seated AT THE BOND LINE (Adam, 2026-11-07: 'At
+   *   three pips' — TRUST_FOR_BOND: not zero, which
+   *   would unbond it, and not its familiar-era
+   *   height); the familiar seat stands empty
+   *   afterward. The caller runs NO departure on a
+   *   demote (the animal stays, a companion now).
+   * - on a COMPANION (or an unbonded courtship): the
+   *   record FREES — release() runs and the caller
+   *   runs the departure (or the cat's home-going) off
+   *   the returned record, as off release() today.
+   * This is THE act seat: the roster calls it, and
+   * the faced two-press act routes through it too
+   * (the shell's handleCompanionRelease). Raw
+   * release() keeps its removal contract for its
+   * internal riders (the departed-clear is a removal,
+   * not an act).
+   */
+  releaseFromRoster(creatureId: string): RosterReleaseResult {
+    const record = this.records.get(creatureId);
+    if (!record) return { ok: false, code: 'unknown' };
+    if (record.bond === 'familiar') {
+      record.bond = 'companion';
+      record.trust = TRUST_FOR_BOND;
+      return { ok: true, effect: 'demoted', record: { ...record } };
+    }
+    const freed = this.release(creatureId);
+    return freed
+      ? { ok: true, effect: 'freed', record: freed }
+      : { ok: false, code: 'unknown' };
+  }
+
+  /**
+   * RELEASE BY NUMBER OF A KIND (2026-11-07): frees
+   * up to `count` BONDED records of the kind, oldest
+   * first (record order), and returns the freed
+   * records in the order freed — the caller runs each
+   * departure off its return, as off release(). The
+   * standing familiar is never counted and never
+   * freed here (the roster guard); bond-'none'
+   * courtships are not swept by number (a courtship
+   * ends by record, not by quota). A count under 1
+   * frees nothing.
+   */
+  releaseByKind(kind: string, count: number): SavedCompanion[] {
+    const freed: SavedCompanion[] = [];
+    if (!Number.isFinite(count) || count < 1) return freed;
+    for (const record of [...this.records.values()]) {
+      if (freed.length >= Math.floor(count)) break;
+      if (record.kind !== kind) continue;
+      if (record.bond === 'none' || record.bond === 'familiar') continue;
+      const gone = this.release(record.creatureId);
+      if (gone) freed.push(gone);
+    }
+    return freed;
   }
 
   /** The STORED standing-familiar record (transitions mutate it). */
