@@ -3780,6 +3780,20 @@ export default function App() {
   // camp act, the read gate 2026-11-01) — no HUD door
   // of its own.
   const [journalOpen, setJournalOpen] = useState(false);
+  // THE JOURNAL'S ORDER (the Newest sort, 2026-11-06;
+  // Adam asked for the option — 'at least a Newest' —
+  // not a new default): 'standing' renders every page
+  // in its recorded order, exactly as the book has
+  // always read; 'newest' re-stamps the listing pages
+  // freshest-first at their mapping sites below.
+  // Session-only (DEV ruling): the book reopens on
+  // standing order each sitting, never saved. The
+  // quest log is EXCLUDED by ruling — its act/thread
+  // grouping IS its order; bases likewise keep their
+  // standing head (a travel enumeration, not entries).
+  const [journalSortOrder, setJournalSortOrder] = useState<
+    'standing' | 'newest'
+  >('standing');
   // The panel's mirror of CompanionState (records are
   // ref-state; the mirror is what renders). Refreshed at
   // boot and after every companion act.
@@ -9577,7 +9591,16 @@ export default function App() {
   // One row source, two doors, by construction (the
   // toggles build, 2026-11-06): the panel and the book
   // can never disagree about a charm's switch.
-  const journalCharmRows = charmEntries.map((charm) => ({
+  // NEWEST (charms): awakening order is all the book
+  // records — no day — so Newest reverses it
+  // (order-only, as priced). The Charms PANEL keeps
+  // the standing order in both states: the sort is
+  // the book's control, not the panel's.
+  const journalCharmRows = (
+    journalSortOrder === 'newest'
+      ? [...charmEntries].reverse()
+      : charmEntries
+  ).map((charm) => ({
     kind: charm.kind,
     name: charm.display,
     tier: charm.tier,
@@ -17378,9 +17401,28 @@ export default function App() {
   // reads as a word on a DRAFT scale.
   const fragmentBestWord = (best: number | null): string | null =>
     best === null ? null : best >= 0.75 ? 'clear' : best >= 0.4 ? 'worn' : 'faint';
-  const journalRows: JournalMarkRow[] = fragmentStateRef.current
-    .snapshot()
-    .map((progress) => {
+  const journalRows: JournalMarkRow[] = (() => {
+    const progresses = fragmentStateRef.current.snapshot();
+    // NEWEST (marks): a mark's freshness is its LATEST
+    // copy's recorded day — the day its tally last
+    // moved (a begun mark with no copy yet falls back
+    // to the day the pursuit began); ties settle by
+    // reverse begun order.
+    const ordered =
+      journalSortOrder === 'newest'
+        ? progresses
+            .map((progress, index) => ({
+              progress,
+              index,
+              freshDay:
+                progress.copies.length > 0
+                  ? Math.max(...progress.copies.map((copy) => copy.day))
+                  : (progress.seekingSinceDay ?? 0),
+            }))
+            .sort((a, b) => b.freshDay - a.freshDay || b.index - a.index)
+            .map((entry) => entry.progress)
+        : progresses;
+    return ordered.map((progress) => {
       const tally = fragmentStateRef.current.tallyFor(progress.mark);
       return {
         mark: progress.mark,
@@ -17392,6 +17434,7 @@ export default function App() {
         seekingSinceDay: progress.seekingSinceDay,
       };
     });
+  })();
 
   // The journal's NAMES page (the familiar road,
   // 2026-11-02): one row per kind whose true name a rite
@@ -17399,29 +17442,36 @@ export default function App() {
   // familiar's row carries its borrow posture for the
   // Recite door (FamiliarState owns the arithmetic; this
   // only reads it at render).
-  const journalNameRows = familiarStateRef.current
-    .knownKinds()
-    .map((kind) => {
-      const gift = giftFor(kind);
+  // NEWEST (names): no day is recorded for a learned
+  // name — the snapshot's first-look order is all the
+  // book honestly holds, so Newest reverses it
+  // (order-only, as priced).
+  const journalNameKinds = familiarStateRef.current.knownKinds();
+  const journalNameRows = (
+    journalSortOrder === 'newest'
+      ? [...journalNameKinds].reverse()
+      : journalNameKinds
+  ).map((kind) => {
+    const gift = giftFor(kind);
       const standingFamiliar = companionStateRef.current.familiar();
-      const isFamiliar = standingFamiliar?.kind === kind;
-      const nowSec = Date.now() / 1000;
-      return {
-        kind,
-        label: companionKindLabel(kind),
-        name: trueNameFor(kind) ?? kind,
-        gift: gift?.phrase ?? '—',
-        isFamiliar,
-        giftWorking: gift?.giftId != null,
-        borrowState: !isFamiliar
-          ? undefined
-          : familiarStateRef.current.activeBorrow(nowSec)
-            ? ('borrowed' as const)
-            : familiarStateRef.current.isResting(nowSec)
-              ? ('resting' as const)
-              : ('ready' as const),
-      };
-    });
+    const isFamiliar = standingFamiliar?.kind === kind;
+    const nowSec = Date.now() / 1000;
+    return {
+      kind,
+      label: companionKindLabel(kind),
+      name: trueNameFor(kind) ?? kind,
+      gift: gift?.phrase ?? '—',
+      isFamiliar,
+      giftWorking: gift?.giftId != null,
+      borrowState: !isFamiliar
+        ? undefined
+        : familiarStateRef.current.activeBorrow(nowSec)
+          ? ('borrowed' as const)
+          : familiarStateRef.current.isResting(nowSec)
+            ? ('resting' as const)
+            : ('ready' as const),
+    };
+  });
 
   // The journal's PLACES page (the naming build,
   // 2026-11-05): one row per named place — her current
@@ -17471,9 +17521,26 @@ export default function App() {
         day: place.day,
       };
     };
+    // NEWEST (places): within each dimension group —
+    // the current-dimension-first composition stands
+    // in both orders; it is a reading aid, not an
+    // entry order — the named places sort by their
+    // recorded naming day, freshest first, register
+    // order reversed for ties. (Bases are stamped
+    // separately and keep their standing head under
+    // both orders, by ruling.)
+    const orderGroup = (group: NamedPlace[]): NamedPlace[] =>
+      journalSortOrder === 'newest'
+        ? group
+            .map((place, index) => ({ place, index }))
+            .sort(
+              (a, b) => b.place.day - a.place.day || b.index - a.index,
+            )
+            .map((entry) => entry.place)
+        : group;
     return [
-      ...all.filter((pl) => pl.dimensionKey === activeKey).map(toRow),
-      ...all.filter((pl) => pl.dimensionKey !== activeKey).map(toRow),
+      ...orderGroup(all.filter((pl) => pl.dimensionKey === activeKey)).map(toRow),
+      ...orderGroup(all.filter((pl) => pl.dimensionKey !== activeKey)).map(toRow),
     ];
   })();
   // Her bases for the same page (the Returning
@@ -19496,6 +19563,8 @@ export default function App() {
         ) : null}
         {journalOpen ? (
           <JournalPanel theme={lookThemes.world}
+            sortOrder={journalSortOrder}
+            onSortChange={setJournalSortOrder}
             marks={journalRows}
             names={journalNameRows}
             onRecite={handleRecite}
