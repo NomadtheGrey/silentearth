@@ -273,7 +273,11 @@ function buildHomesteadPlan(
   // The great stone: the instance's hearth stone in the
   // yard, at the derivation's seat (free bearing — a
   // stone sits at its own angle). Solid: she walks around.
-  feat('hearthStone', greatStone.x, greatStone.z, 0, 1.25, theta);
+  // When the instance CARRIES (burnt === carrying in
+  // this derivation), the stone is the flat fragment
+  // stone (2026-11-07); a non-carrying yard keeps its
+  // plain hearth stone.
+  feat(burnt ? 'flatStone' : 'hearthStone', greatStone.x, greatStone.z, 0, 1.25, theta);
   box(greatStone.x, greatStone.z, 0.7, 0.7);
 
   return {

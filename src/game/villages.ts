@@ -389,7 +389,11 @@ function buildVillagePlan(
       // always stands in this family — sized to read at
       // a glance. No wall box (the farmhouse great
       // stone's precedent). No carrier fact moves.
-      feat('hearthStone', spot.x, spot.z, 0, 1.1, theta);
+      // THE FLAT STONE (2026-11-07): the stone at the
+      // hearth spot is the carrier's own flat fragment
+      // stone — its own object at the spot, not the
+      // hearth's slab (DEV's call).
+      feat('flatStone', spot.x, spot.z, 0, 1.1, theta);
     }
   };
 

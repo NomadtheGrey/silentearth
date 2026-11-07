@@ -711,14 +711,45 @@ export function caveLayoutForKey(worldSeed: string, key: string): CaveLayout {
     );
     const stands = isDeepest || (layers.length >= 2 && payRand() < chance);
     if (stands && layer.stoneSpot) {
-      layer.features.push({
-        kind: 'carvedStone',
-        x: layer.stoneSpot.x,
-        z: layer.stoneSpot.z,
-        y: 0,
-        scale: 1,
-        rotY: 0,
-      });
+      // THE SEAT CONSUMPTION (2026-11-07): the flat
+      // stone (Models' family) at the seat the seat
+      // derivation deals this floor — floor at the
+      // cell, wall on the adjacent face turned into
+      // the room, ceiling at the vault over the cell.
+      // The upright carvedStone leaves the cave
+      // register here (the gravestone is reserved);
+      // the grove keeps its own.
+      const seating = seatForDerivedLayer(worldSeed, key, layer);
+      const spot = layer.stoneSpot;
+      if (seating?.seat === 'wall' && seating.wallDir) {
+        const half = CAVE_CELL_M / 2;
+        layer.features.push({
+          kind: 'flatStoneWall',
+          x: spot.x + seating.wallDir.dx * (half - 0.08),
+          z: spot.z + seating.wallDir.dz * (half - 0.08),
+          y: 0,
+          scale: 1,
+          rotY: Math.atan2(-seating.wallDir.dx, -seating.wallDir.dz),
+        });
+      } else if (seating?.seat === 'ceiling') {
+        layer.features.push({
+          kind: 'flatStoneCeil',
+          x: spot.x,
+          z: spot.z,
+          y: FLATSTONE_CEIL_FEATURE_Y,
+          scale: 1,
+          rotY: 0,
+        });
+      } else {
+        layer.features.push({
+          kind: 'flatStone',
+          x: spot.x,
+          z: spot.z,
+          y: 0,
+          scale: 1,
+          rotY: 0,
+        });
+      }
     } else {
       layer.stoneSpot = null;
     }
@@ -819,6 +850,19 @@ function stoneCellWallDir(layer: CaveLayer): { dx: number; dz: number } | null {
   return null;
 }
 
+/** The seat over an already-derived layer (the
+ * derivation's own path — no cache, no recursion). */
+function seatForDerivedLayer(worldSeed: string, key: string, floor: CaveLayer): CaveStoneSeating | null {
+  if (!floor.stoneSpot) return null;
+  const wallDir = stoneCellWallDir(floor);
+  const roll = mulberry32(deriveSeed(worldSeed, `seat:${key}:L${floor.index}`))();
+  if (roll < CAVE_SEAT_FLOOR_SHARE) return { seat: 'floor', wallDir: null };
+  if (roll < CAVE_SEAT_FLOOR_SHARE + CAVE_SEAT_WALL_SHARE) {
+    return wallDir ? { seat: 'wall', wallDir } : { seat: 'floor', wallDir: null };
+  }
+  return { seat: 'ceiling', wallDir: null };
+}
+
 /**
  * One floor's fragment-stone seating, or null when the
  * floor carries no stone. Pure over the derived
@@ -832,15 +876,16 @@ export function caveStoneSeatForLayer(
 ): CaveStoneSeating | null {
   const layout = caveLayoutForKey(worldSeed, key);
   const floor = layout.layers[layer - 1];
-  if (!floor || !floor.stoneSpot) return null;
-  const wallDir = stoneCellWallDir(floor);
-  const roll = mulberry32(deriveSeed(worldSeed, `seat:${key}:L${layer}`))();
-  if (roll < CAVE_SEAT_FLOOR_SHARE) return { seat: 'floor', wallDir: null };
-  if (roll < CAVE_SEAT_FLOOR_SHARE + CAVE_SEAT_WALL_SHARE) {
-    return wallDir ? { seat: 'wall', wallDir } : { seat: 'floor', wallDir: null };
-  }
-  return { seat: 'ceiling', wallDir: null };
+  if (!floor) return null;
+  return seatForDerivedLayer(worldSeed, key, floor);
 }
+
+/** The ceiling-seated slab's feature height: the wall
+ * top line minus the kind's base lift (flatStoneCeil's
+ * baseY in objects.ts, 0.165 — if Models re-bases the
+ * kind, this follows). The slab's panel then hangs at
+ * ~3.05, its anchor shoulder rising into the vault. */
+export const FLATSTONE_CEIL_FEATURE_Y = CAVE_WALL_H_M - 0.165;
 
 export function caveLayoutFor(worldSeed: string): CaveLayout {
   return caveLayoutForKey(worldSeed, CAVE_DIMENSION_KEY);
