@@ -2125,6 +2125,7 @@ import {
   provisioningCatchesFor,
   snatchFish,
   type CompanionStance,
+  type RosterRow as SystemsRosterRow,
   type SavedCompanion,
 } from './systems/companions';
 import {
@@ -2173,7 +2174,11 @@ import { CrowArrows } from './ui/CrowArrows';
 import { RitualPanel } from './ui/RitualPanel';
 import { walkAwayShouldClose } from './ui/walkAway';
 import { CharmsPanel } from './ui/CharmsPanel';
-import { CompanionsPanel } from './ui/CompanionsPanel';
+import {
+  RosterPanel,
+  type RosterKindGroup,
+  type RosterRow,
+} from './ui/RosterPanel';
 import {
   JournalPanel,
   type JournalMarkRow,
@@ -3807,7 +3812,7 @@ export default function App() {
     SavedCompanion[]
   >([]);
   // Per-row note lines keyed by creatureId — the cat's
-  // theater lands here (CompanionsPanel renders them
+  // theater lands here (RosterPanel renders them
   // under the row). The All-row's note is its own state.
   const [companionNotes, setCompanionNotes] = useState<
     Record<string, string>
@@ -9669,23 +9674,61 @@ export default function App() {
   // the same item fact the transcribe gate reads. No
   // journal, no door, nothing teased.
   const hasJournalItem = inventory.count(ITEMS.journal) >= 1;
-  // THE FAMILIAR LEADS (Build 2, Piece 4): the standing
-  // familiar's row seats first in the panel — the
-  // one-standing law made visible in the list's order.
-  // The sort is stable, so companions keep their record
-  // order behind it (at most one familiar can stand).
-  const companionRows = [...bondedCompanions]
-    .sort(
-      (a, b) =>
-        (a.bond === 'familiar' ? 0 : 1) - (b.bond === 'familiar' ? 0 : 1),
-    )
-    .map((record) => ({
-      creatureId: record.creatureId,
-      kindLabel: companionKindLabel(record.kind),
-      bond: record.bond as 'companion' | 'familiar',
-      stance: record.stance,
-      isCat: record.kind === 'cat',
-    }));
+  // THE ROSTER'S GROUPS (the roster dialog, 2026-11-07;
+  // Adam's design of 2026-11-05): her company grouped by
+  // KIND with counts, stamped from Systems' rosterList
+  // (the composed read — the record's facts plus the
+  // release ladder's effect per row). The shell keeps
+  // the roster's STANDING door rule: the page lists the
+  // BONDED company (an unbonded courtship speaks at the
+  // animal, never in the book), so bond-'none' rows are
+  // filtered here. Groups compose in record order
+  // (first-met kind first), and within a kind THE
+  // FAMILIAR LEADS (Build 2, Piece 4's law, kept): the
+  // sort is stable, so the rest keep record order behind
+  // it (at most one familiar can stand). One composition,
+  // stamped once per render: the N door and the journal's
+  // Companions page render the SAME groups through the
+  // one RosterPanel — one row source, two doors. The
+  // whereabouts projection is NOT supplied in this cut
+  // (it rides the follow cut), so rows carry its null —
+  // the record alone cannot say, and the panel shows
+  // no whereabouts line for it.
+  const rosterGroups: RosterKindGroup[] = [];
+  {
+    const byKind = new Map<string, RosterRow[]>();
+    const rosterRows: SystemsRosterRow[] =
+      companionStateRef.current.rosterList(
+        rendererRef.current?.snapshotSky()?.daysElapsed ?? 0,
+      );
+    for (const record of rosterRows) {
+      if (record.bond === 'none') continue;
+      const row: RosterRow = {
+        creatureId: record.creatureId,
+        kindLabel: companionKindLabel(record.kind),
+        bond: record.bond as 'companion' | 'familiar',
+        stance: record.stance,
+        trust: record.trust,
+        releaseEffect: record.releaseEffect,
+        isCat: record.kind === 'cat',
+      };
+      const rows = byKind.get(record.kind);
+      if (rows) rows.push(row);
+      else byKind.set(record.kind, [row]);
+    }
+    for (const [kind, rows] of byKind) {
+      rows.sort(
+        (a, b) =>
+          (a.bond === 'familiar' ? 0 : 1) - (b.bond === 'familiar' ? 0 : 1),
+      );
+      rosterGroups.push({
+        kind,
+        kindLabel: companionKindLabel(kind),
+        count: rows.length,
+        rows,
+      });
+    }
+  }
   // THE HUNT NOTE (Piece 3): while the cat is out, its
   // panel row says so — a live read of the engine actor
   // composed over the notes map (renders tick with her
@@ -10029,8 +10072,29 @@ export default function App() {
     saveNow();
   };
   const handleCompanionRelease = (creatureId: string) => {
-    const removed = companionStateRef.current.release(creatureId);
-    if (removed === null) return;
+    // THE RELEASE ACT (the roster build, 2026-11-07):
+    // the panel's two-press AND the faced act route
+    // through Systems' releaseFromRoster — the
+    // STEP-DOWN LADDER (Adam's law: 'Releasing a
+    // familiar makes it a companion. Releasing a
+    // companion lets it loose.'). Raw release() keeps
+    // its removal contract for its internal riders
+    // (the departed-clear), never for this act.
+    const result = companionStateRef.current.releaseFromRoster(creatureId);
+    if (!result.ok) return;
+    if (result.effect === 'demoted') {
+      // A demote runs NO departure: the record stands,
+      // the animal stays — a companion now, its trust
+      // seated at the bond line by Systems' seat. THE
+      // CAT is the one engine fact to sync: the found
+      // familiar steps down to attending (its bond
+      // follows the record, as at boot).
+      if (result.record.kind === 'cat') setCatBond('attending');
+      refreshCompanions();
+      saveNow();
+      return;
+    }
+    const removed = result.record;
     // The shell speaks for Systems' return on the bus
     // (the emitter-layering rule): the runtime hears
     // the release and starts the departure leg. Its
@@ -19665,8 +19729,8 @@ export default function App() {
           />
         ) : null}
         {companionsOpen ? (
-          <CompanionsPanel theme={lookThemes.world}
-            companions={companionRows}
+          <RosterPanel theme={lookThemes.world}
+            groups={rosterGroups}
             onStance={handleCompanionStance}
             onStanceAll={handleCompanionStanceAll}
             onRelease={handleCompanionRelease}
@@ -19699,6 +19763,18 @@ export default function App() {
             nameMaxChars={NAME_MAX_CHARS}
             charms={journalCharmRows}
             onToggleCharm={handleToggleCharm}
+            companions={
+              <RosterPanel theme={lookThemes.world}
+                embedded
+                groups={rosterGroups}
+                onStance={handleCompanionStance}
+                onStanceAll={handleCompanionStanceAll}
+                onRelease={handleCompanionRelease}
+                notes={companionPanelNotes}
+                allNote={companionAllNote ?? undefined}
+                comfortable={isTouch}
+              />
+            }
             quests={questDisplay}
             onMarkQuest={toggleActiveQuestMark}
             onClose={() => setJournalOpen(false)}
