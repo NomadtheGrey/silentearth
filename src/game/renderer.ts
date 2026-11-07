@@ -566,6 +566,50 @@ export const TORCH_LIGHT_DISTANCE = 30;
 export const TORCH_LIGHT_DECAY = 2;
 export const TORCH_FLICKER_AMPLITUDE = 0.15;
 /**
+ * TORCH LIGHT PROFILES, keyed by the LIT ITEM ID (the
+ * pitch torch, 2026-11-07; Adam's design — a torch
+ * crafted with pitch burns BRIGHTER with greatly
+ * extended range, an upgrade, never a fuel: nothing
+ * burns out). The standing entry IS the pinned profile
+ * above, so an un-pitched torch is byte-identical. The
+ * pitch entry (DRAFT for Adam's pin pass): intensity
+ * 160 (2x), distance 48, decay 2 unchanged — the reach
+ * grows by brightness, not by bending the falloff —
+ * colour 0xff9040 (a deeper, hotter orange) and flicker
+ * ±20% (pitch flares; between the torch's 15 and the
+ * campfire's 22). In the standing profile's own terms
+ * the well-lit ring reaches ~8.5 m instead of 6, the
+ * 12 m ring reads ~1.1 instead of a dim 0.6, and light
+ * is still present past 20 m. An unknown kind reads the
+ * standing profile — a torch is a torch.
+ */
+export interface TorchLightProfile {
+  color: number;
+  intensity: number;
+  distance: number;
+  decay: number;
+  flickerAmplitude: number;
+}
+export const TORCH_LIGHT_PROFILES: Readonly<Record<string, TorchLightProfile>> = {
+  'lit-torch': {
+    color: TORCH_LIGHT_COLOR,
+    intensity: TORCH_LIGHT_INTENSITY,
+    distance: TORCH_LIGHT_DISTANCE,
+    decay: TORCH_LIGHT_DECAY,
+    flickerAmplitude: TORCH_FLICKER_AMPLITUDE,
+  },
+  'lit-pitch-torch': {
+    color: 0xff9040,
+    intensity: 160,
+    distance: 48,
+    decay: 2,
+    flickerAmplitude: 0.2,
+  },
+};
+export function torchLightProfileFor(kind: string): TorchLightProfile {
+  return TORCH_LIGHT_PROFILES[kind] ?? TORCH_LIGHT_PROFILES['lit-torch'];
+}
+/**
  * Placed-fire light tunables (Adam 2026-10-26 — lane-decided
  * starting values for his pin pass; same physical units as the
  * candle: a lit fire is a camp light, stronger and wider than
@@ -817,6 +861,8 @@ export class WorldRenderer {
   private torch: THREE.Group;
   /** Carried-torch point light (scene-level, like the candle's). */
   private torchLight: THREE.PointLight;
+  /** The carried lit kind whose profile the hand light wears (2026-11-07). */
+  private carriedTorchKind: string = 'lit-torch';
   /** Borrowed dark-sight light (the bat's gift — the familiar
    *  road, 2026-11-02; scene-level; on only while a borrowing
    *  of dark-sight stands, shell-driven via setBorrowedSight). */
@@ -1453,9 +1499,31 @@ export class WorldRenderer {
    * hidden and the candle carries the light (default).
    */
   setCarriesLitTorch(carried: boolean): void {
-    this.carriesLitTorch = carried;
-    if (this.torch) this.torch.visible = carried;
-    if (this.candle) this.candle.visible = !carried;
+    this.setLitTorchKind(carried ? 'lit-torch' : null);
+  }
+
+  /**
+   * Which lit torch is carried, by its lit item id
+   * (2026-11-07 — the pitch torch's carried seat): the
+   * hand light takes the kind's profile (colour,
+   * distance, decay at once; intensity + flicker ride
+   * the frame loop off the same profile). Null = no lit
+   * torch in hand — the candle carries the light, as
+   * before. setCarriesLitTorch(true) is this call with
+   * the standing kind, so the standing shell call is
+   * byte-identical.
+   */
+  setLitTorchKind(kind: string | null): void {
+    this.carriesLitTorch = kind !== null;
+    this.carriedTorchKind = kind ?? 'lit-torch';
+    if (this.torchLight) {
+      const profile = torchLightProfileFor(this.carriedTorchKind);
+      this.torchLight.color.setHex(profile.color);
+      this.torchLight.distance = profile.distance;
+      this.torchLight.decay = profile.decay;
+    }
+    if (this.torch) this.torch.visible = this.carriesLitTorch;
+    if (this.candle) this.candle.visible = !this.carriesLitTorch;
   }
 
   /**
@@ -3526,15 +3594,17 @@ export class WorldRenderer {
    * (80/30/2, flicker ±15%), now at a fixed position — it
    * lights an area or path instead of following her.
    */
-  private addTorchLight(x: number, z: number): void {
+  private addTorchLight(x: number, z: number, kind: string = 'lit-torch'): void {
+    const profile = torchLightProfileFor(kind);
     const light = new THREE.PointLight(
-      TORCH_LIGHT_COLOR,
-      TORCH_LIGHT_INTENSITY,
-      TORCH_LIGHT_DISTANCE,
-      TORCH_LIGHT_DECAY,
+      profile.color,
+      profile.intensity,
+      profile.distance,
+      profile.decay,
     );
     light.position.set(x, TORCH_FLAME_Y - PLACED_TORCH_SINK, z);
     light.userData.phase = flamePhase(x, z);
+    light.userData.profileKind = kind;
     this.scene.add(light);
     this.torchLights.push(light);
   }
@@ -3975,7 +4045,7 @@ export class WorldRenderer {
       tg.position.set(torch.x, -PLACED_TORCH_SINK, torch.z);
       tg.add(buildTorch());
       group.add(tg);
-      this.addTorchLight(torch.x, torch.z);
+      this.addTorchLight(torch.x, torch.z, torch.kind);
     }
     for (const altar of altarState.snapshot()) {
       // Made ritual altar (Adam 2026-10-27 — placeable +
@@ -5073,9 +5143,10 @@ export class WorldRenderer {
     // amplitude, each with its own position-hash phase so a
     // path of torches does not sync.
     for (const light of this.torchLights) {
+      const profile = torchLightProfileFor((light.userData.profileKind as string) ?? 'lit-torch');
       light.intensity =
-        TORCH_LIGHT_INTENSITY *
-        (1 + TORCH_FLICKER_AMPLITUDE * fireLightFlicker(this.flameTime, light.userData.phase as number));
+        profile.intensity *
+        (1 + profile.flickerAmplitude * fireLightFlicker(this.flameTime, light.userData.phase as number));
     }
     // Altar-candle lights flicker at the candle amplitude —
     // a set candle dances least of all.
@@ -5106,7 +5177,8 @@ export class WorldRenderer {
         this.player.z + oz,
       );
       const flick = (Math.sin(this.flameTime * 10) + Math.sin(this.flameTime * 23 + 1.7)) / 2;
-      this.torchLight.intensity = TORCH_LIGHT_INTENSITY * (1 + TORCH_FLICKER_AMPLITUDE * flick);
+      const carriedProfile = torchLightProfileFor(this.carriedTorchKind);
+      this.torchLight.intensity = carriedProfile.intensity * (1 + carriedProfile.flickerAmplitude * flick);
     } else {
       this.torchLight.intensity = 0;
       // Carried-candle light follows the flame's world position:
