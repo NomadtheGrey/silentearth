@@ -2738,22 +2738,49 @@ export function buildEdgeArrow(): THREE.Group {
  * the renderer supersedes the candle with it while a lit
  * torch is carried.
  */
-export function buildTorch(): THREE.Group {
+export function buildTorch(kind?: string): THREE.Group {
+  // The PITCH variant (2026-11-07; the pitch torch has
+  // worn the plain model since its items landed —
+  // Systems' pitch stack, Merge #96): keyed off the
+  // item kind at either seat (carried + planted), it
+  // reads as the upgraded torch at arm's length — a
+  // bigger near-black PITCH MASS where the plain head
+  // sits, a drip skirt where the pitch ran down, the
+  // tan wrap replaced by a dark pitch-soaked binding
+  // plus a second lower wrap, and a slightly larger,
+  // deeper flame. The flame anchor (TORCH_FLAME_Y) and
+  // the stick do not move, so no light seat drifts.
+  // The plain path is byte-identical (probe-proven).
+  const pitch = kind === 'lit-pitch-torch' || kind === 'pitch-torch';
   const g = new THREE.Group();
   const stick = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.04, 0.65, 8), meshMat(0x4a3220));
   stick.position.set(0, 0.325, 0);
   g.add(stick);
-  const binding = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.08, 8), meshMat(0x8a7a50));
+  const binding = new THREE.Mesh(
+    new THREE.CylinderGeometry(pitch ? 0.056 : 0.05, pitch ? 0.056 : 0.05, pitch ? 0.1 : 0.08, 8),
+    meshMat(pitch ? 0x2e2118 : 0x8a7a50),
+  );
   binding.position.set(0, 0.6, 0);
   g.add(binding);
-  const head = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.045, 0.1, 8), meshMat(0x1a1208));
-  head.position.set(0, 0.68, 0);
+  if (pitch) {
+    const wrap = new THREE.Mesh(new THREE.CylinderGeometry(0.048, 0.048, 0.06, 8), meshMat(0x1f150e));
+    wrap.position.set(0, 0.47, 0);
+    g.add(wrap);
+    const drip = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.07, 0.06, 8), meshMat(0x14100b));
+    drip.position.set(0, 0.62, 0);
+    g.add(drip);
+  }
+  const head = new THREE.Mesh(
+    new THREE.CylinderGeometry(pitch ? 0.068 : 0.055, pitch ? 0.052 : 0.045, pitch ? 0.13 : 0.1, 8),
+    meshMat(pitch ? 0x0d0a06 : 0x1a1208),
+  );
+  head.position.set(0, pitch ? 0.695 : 0.68, 0);
   g.add(head);
   const flameOuter = new THREE.Mesh(
-    new THREE.SphereGeometry(0.05, 8, 8),
-    new THREE.MeshBasicMaterial({ color: 0xffa030 }),
+    new THREE.SphereGeometry(pitch ? 0.058 : 0.05, 8, 8),
+    new THREE.MeshBasicMaterial({ color: pitch ? 0xff8c28 : 0xffa030 }),
   );
-  flameOuter.scale.set(1, 1.8, 1);
+  flameOuter.scale.set(1, pitch ? 2.0 : 1.8, 1);
   flameOuter.position.set(0, TORCH_FLAME_Y, 0);
   g.add(flameOuter);
   const flameInner = new THREE.Mesh(
