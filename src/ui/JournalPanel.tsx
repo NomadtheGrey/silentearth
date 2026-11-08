@@ -70,6 +70,53 @@
  * both, and the book never re-stamps them. Like the
  * quest log, the roster stands outside the sort
  * control — its grouping IS its order.
+ *
+ * THE BOOK (the restyle, 2026-11-08; Adam's shape in
+ * his words: swap the journal's green-background UI
+ * for the journal image and text and chapter tabs):
+ * the panel's skin is now the OPEN BOOK — aged-paper
+ * pages, a spine seam down the spread, and a row of
+ * BOOKMARK CHAPTER TABS along the top edge: General
+ * Info · Quests · Miniquests · Marks · Places ·
+ * Names · Charms · Companions. Every page is the
+ * standing content, ported unchanged — the swap is
+ * presentation only: no row, door, or fold moved its
+ * meaning. The dressing is pure CSS (no image asset
+ * ships): the reference photograph's table is NOT
+ * part of it, by Adam's note. On a narrow book the
+ * spread reads as a SINGLE PAGE under the same
+ * dressing (the spine seam drops away; the tabs
+ * stay). The tab state is the panel's own session
+ * state — the panel mounts per opening, so the book
+ * opens on its front page each time; nothing is
+ * saved. Contents the old stack showed only when
+ * non-empty (Names, Charms) keep their pages'
+ * standing empty lines rather than losing the tab —
+ * a chapter tab never vanishes.
+ *
+ * GENERAL INFO is the book's front page: the order
+ * control's home, the standing empty-book line as
+ * its frontispiece, and the caller's info node when
+ * one is stamped. No content is invented for it.
+ *
+ * MINIQUESTS get their own chapter (Adam: their own
+ * section, not jumbled with the quests): the caller
+ * splits its stamped quest rows by the definition's
+ * section and passes miniquests + an optional
+ * completion-note node per quest (the hearth's note
+ * names the brewing shelf once its seating step
+ * stands done — the caller's words; the panel only
+ * seats the note under its quest's steps).
+ *
+ * PLACES carries two gatherings on one page: the
+ * places she has FOUND (the gazetteer's records —
+ * the caller's rows: the place's name, its family,
+ * the day found, whether its carrier has been seen,
+ * and distance + bearing words read from where she
+ * stands, or its dimension's label when she is
+ * elsewhere) above the places she has NAMED (the
+ * standing section, unchanged). Found is discovery,
+ * never before: a place she has not found has no row.
  */
 
 import { Fragment, useState, type ReactNode } from 'react';
@@ -90,11 +137,20 @@ export interface JournalMarkRow {
   name: string;
   /** Copies held of this mark. */
   count: number;
-  /** Copies the first tier needs (Systems' tally). */
+  /**
+   * THE CLOCK READ (the clock law, 2026-11-08): the
+   * tally's hours still wanted to fill the CURRENT
+   * clock — the journal's progress line reads the
+   * clock, not the retired copy count.
+   */
   needed: number;
-  /** The first tier stands whole. */
+  /** The mark stands at its tier cap. */
   complete: boolean;
-  /** The kept-best copy's weathering as a word (caller's DRAFT scale). */
+  /** Clocks filled so far (tiers earned, caller's tally). */
+  fills: number;
+  /** Hours covered in the current clock (0–11). */
+  coveredHours: number;
+  /** The current clock's coverage as a word (caller's DRAFT scale). */
   bestWord: string | null;
   /** The day the pursuit of this mark began. */
   seekingSinceDay: number | null;
@@ -184,6 +240,122 @@ export interface JournalCharmRow {
   note: string;
   /** The toggle fact: true = the charm's effect is on. */
   enabled: boolean;
+}
+
+/**
+ * One place she has FOUND (the gazetteer surface —
+ * the book build, 2026-11-08): the register's record
+ * in the caller's words. `here` mirrors the named
+ * places' read: rows in her current dimension carry
+ * distance + bearing `detail`; rows elsewhere carry
+ * a `dimensionLabel` instead. `carrierNote` is the
+ * caller's fragment note: it stands only once she
+ * has SEEN the place's carrier (the discovery law —
+ * the book never flags a carrier by rumor), and is
+ * null before that.
+ */
+export interface JournalFoundRow {
+  /** The register's place key (the caller's key). */
+  placeKey: string;
+  /** The place's name, as the register keeps it. */
+  name: string;
+  /** The family's plain word (caller's). */
+  familyLabel: string;
+  /** The world-day she found it. */
+  dayFound: number;
+  /** Its carrier has stood in her faced read. */
+  carrierSeen: boolean;
+  /** The fragment note (stands only when seen). */
+  carrierNote: string | null;
+  /** Stands in the dimension she is in now. */
+  here: boolean;
+  /** Distance + bearing words (here rows). */
+  detail: string | null;
+  /** Dimension label (elsewhere rows). */
+  dimensionLabel: string | null;
+}
+
+/**
+ * One stamped miniquest step (the book build): the
+ * definition's component in the caller's live read —
+ * its label and whether it stands done. The panel
+ * prints steps; it derives none.
+ */
+export interface JournalMiniquestStep {
+  id: string;
+  label: string;
+  done: boolean;
+}
+
+/**
+ * One stamped miniquest row (the book build): the
+ * caller's quest row with its live steps attached.
+ */
+export interface JournalMiniquestRow extends QuestDisplay {
+  steps: JournalMiniquestStep[];
+}
+
+/**
+ * The Miniquests chapter's stamp (the book build):
+ * the caller composes it (live step reads +
+ * completion notes are the caller's facts) and the
+ * book seats the node in its chapter — the roster
+ * pattern, one component two doors' worth of truth.
+ * A quest's note seats under its steps when the
+ * caller supplies one (the hearth's names the
+ * brewing shelf once its cauldron stands seated).
+ */
+export function JournalMiniquests({
+  rows,
+  notes,
+  theme = 'mire',
+}: {
+  rows: JournalMiniquestRow[];
+  notes?: Readonly<Record<string, string>>;
+  theme?: UiThemeName;
+}) {
+  void theme;
+  if (rows.length === 0) {
+    return (
+      <p className="text-sm text-stone-300">
+        No small undertakings yet. What opens will be kept here.
+      </p>
+    );
+  }
+  return (
+    <ul className="flex flex-col gap-2">
+      {rows.map((quest) => (
+        <li
+          key={quest.id}
+          className="flex flex-col gap-y-0.5 rounded-xl bg-black/20 px-3 py-2"
+        >
+          <span className="flex flex-wrap items-baseline gap-x-2">
+            <span className="font-medium">{quest.title}</span>
+            <span className="text-xs text-stone-400">
+              {quest.done ? 'Done' : 'Underway'}
+            </span>
+          </span>
+          {quest.steps.length > 0 ? (
+            <ul className="mt-0.5 flex flex-col gap-y-0.5">
+              {quest.steps.map((step) => (
+                <li key={step.id} className="text-xs text-stone-400">
+                  {step.done ? '✓ ' : '· '}
+                  {step.label}
+                </li>
+              ))}
+            </ul>
+          ) : quest.hint ? (
+            <span className="text-xs text-stone-400">{quest.hint}</span>
+          ) : null}
+          {notes?.[quest.id] ? (
+            <span className="mt-1 text-xs italic text-stone-500">
+              {notes[quest.id]}
+            </span>
+          ) : null}
+        </li>
+      ))}
+    </ul>
+  );
 }
 
 export interface JournalPanelProps {
@@ -292,11 +464,40 @@ export interface JournalPanelProps {
    */
   quests?: QuestDisplay[];
   /**
+   * Her miniquests (the book build): the caller-
+   * rendered chapter node (the roster pattern — the
+   * stamp is the exported JournalMiniquests below,
+   * composed by the caller with live step reads and
+   * completion notes the panel cannot derive).
+   * Rendered as its OWN chapter — never inside the
+   * Quests chapter's act folds. Omitted = the
+   * chapter stands with its standing empty line.
+   */
+  miniquests?: ReactNode;
+  /**
    * The mark control for the book's quest log (the
    * HUD-card chunk): passed through to the QuestLogs.
    * Omitted = the log renders read-only.
    */
   onMarkQuest?: (questId: string) => void;
+  /**
+   * The places she has FOUND (the gazetteer surface —
+   * the book build): the caller's rows from the
+   * register's records, rendered at the head of the
+   * Places chapter above her named places. Newest
+   * re-stamps them freshest-found first (the caller's
+   * ordering, like every listing page). Omitted =
+   * no Found gathering.
+   */
+  found?: JournalFoundRow[];
+  /**
+   * The General Info chapter's stamped content (the
+   * book build): the caller's front-matter node, if
+   * any. Omitted = the chapter stands on its
+   * frontispiece line alone. No content is invented
+   * for this chapter.
+   */
+  info?: ReactNode;
   /** Called when the player closes the panel. Optional. */
   onClose?: () => void;
   /** Thumb-sized close button (44 px target) on touch. Default false. */
@@ -325,12 +526,42 @@ export function JournalPanel({
   onToggleCharm,
   companions,
   quests,
+  miniquests,
+  found,
+  info,
   onMarkQuest,
   onClose,
   comfortable = false,
   theme = 'mire',
 }: JournalPanelProps) {
   const t = UI_THEMES[theme];
+  // THE CHAPTERS (the book build): the open chapter
+  // is the panel's own session state — the panel
+  // mounts per opening, so the book opens on its
+  // front page (General Info) each time; the state
+  // is never saved. The tab order is Adam's set in
+  // DEV's proposed order, General Info first as the
+  // book's front page.
+  const [chapter, setChapter] = useState<
+    | 'info'
+    | 'quests'
+    | 'miniquests'
+    | 'marks'
+    | 'places'
+    | 'names'
+    | 'charms'
+    | 'companions'
+  >('info');
+  const CHAPTERS = [
+    { id: 'info', label: 'General Info' },
+    { id: 'quests', label: 'Quests' },
+    { id: 'miniquests', label: 'Miniquests' },
+    { id: 'marks', label: 'Marks' },
+    { id: 'places', label: 'Places' },
+    { id: 'names', label: 'Names' },
+    { id: 'charms', label: 'Charms' },
+    { id: 'companions', label: 'Companions' },
+  ] as const;
   // ACT FOLDS (accordion amendment, Adam via DEV
   // 2026-11-01): each act group is an INDEPENDENT fold —
   // the unification's class default, mirroring
@@ -417,33 +648,34 @@ export function JournalPanel({
   const btn = comfortable
     ? 'rounded px-3 py-2 text-sm min-h-[44px] '
     : 'rounded px-2 py-1 text-sm ';
+  // THE BOOK'S DRESSING (the restyle): aged-paper
+  // pages in place of the theme's panel skin — warm
+  // bone paper, darkened and foxed edges, ink text.
+  // The look is the book's own whichever theme the
+  // caller passes (a journal is a journal); the
+  // theme still voices the tab strip and the
+  // controls carried over from the old panel. Row
+  // cards sit on the paper as a paler wash; the
+  // standing text-stone-300/400 detail lines darken
+  // to ink by the page's own overrides below.
+  const bookSkin =
+    'border border-[#8a6d3b]/80 text-stone-800 shadow-2xl ' +
+    'bg-[linear-gradient(172deg,#f6efdb_0%,#efe3c2_55%,#e7d6ab_100%)] ' +
+    '[&_.text-stone-300]:text-stone-600 [&_.text-stone-400]:text-stone-500 ' +
+    '[&_[class~="bg-black/20"]]:bg-[#d9c48f]/60';
+  const tabBtn = (active: boolean) =>
+    'rounded-t-lg px-2.5 py-1.5 text-xs font-semibold tracking-wide ' +
+    (comfortable ? 'min-h-[44px] ' : '') +
+    (active
+      ? 'bg-[#f6efdb] text-stone-900 shadow-[0_-2px_6px_rgba(60,40,10,0.25)] outline outline-1 outline-[#8a6d3b]/70'
+      : 'bg-[#cbb37e] text-stone-700 hover:bg-[#dcc794] outline outline-1 outline-[#8a6d3b]/50');
   return (
     <section
       aria-label="Journal"
-      className={'@container rounded-2xl p-3 ' + t.panel}
+      className={'@container rounded-2xl p-3 ' + bookSkin}
     >
-      <div className="mb-2 flex items-center justify-between gap-2">
-        <h2 className={'text-base font-semibold ' + t.heading}>Journal</h2>
-        {onSortChange ? (
-          <span className="flex items-center gap-1" role="group" aria-label="Journal order">
-            <button
-              type="button"
-              aria-pressed={sortOrder !== 'newest'}
-              onClick={() => onSortChange('standing')}
-              className={btn + t.button}
-            >
-              Standing order
-            </button>
-            <button
-              type="button"
-              aria-pressed={sortOrder === 'newest'}
-              onClick={() => onSortChange('newest')}
-              className={btn + t.button}
-            >
-              Newest
-            </button>
-          </span>
-        ) : null}
+      <div className="mb-1 flex items-center justify-between gap-2">
+        <h2 className="text-base font-semibold text-stone-900">Journal</h2>
         {onClose ? (
           <button
             type="button"
@@ -455,6 +687,59 @@ export function JournalPanel({
           </button>
         ) : null}
       </div>
+      <div
+        className="mb-2 flex flex-wrap gap-1 border-b border-[#8a6d3b]/50 pb-0"
+        role="tablist"
+        aria-label="Journal chapters"
+      >
+        {CHAPTERS.map((entry) => (
+          <button
+            key={entry.id}
+            type="button"
+            role="tab"
+            aria-selected={chapter === entry.id}
+            data-chapter={entry.id}
+            onClick={() => setChapter(entry.id)}
+            className={tabBtn(chapter === entry.id)}
+          >
+            {entry.label}
+          </button>
+        ))}
+      </div>
+      <div className="relative rounded-xl bg-[linear-gradient(90deg,transparent_0%,rgba(120,90,40,0.14)_49.6%,rgba(90,65,25,0.38)_50%,rgba(120,90,40,0.14)_50.4%,transparent_100%)] px-1 py-1 @max-[640px]:bg-none">
+      {chapter === 'info' ? (
+        <div role="tabpanel" aria-label="General Info">
+          <p className="text-sm italic text-stone-600">
+            What you copy down will be kept here.
+          </p>
+          {info ?? null}
+          {onSortChange ? (
+            <div className="mt-3 flex items-center gap-1" role="group" aria-label="Journal order">
+              <span className="mr-1 text-xs text-stone-500">
+                The book&rsquo;s order:
+              </span>
+              <button
+                type="button"
+                aria-pressed={sortOrder !== 'newest'}
+                onClick={() => onSortChange('standing')}
+                className={btn + t.button}
+              >
+                Standing order
+              </button>
+              <button
+                type="button"
+                aria-pressed={sortOrder === 'newest'}
+                onClick={() => onSortChange('newest')}
+                className={btn + t.button}
+              >
+                Newest
+              </button>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+      {chapter === 'marks' ? (
+        <div role="tabpanel" aria-label="Marks">
       {marks.length === 0 ? (
         <p className="text-sm text-stone-300">
           No marks begun yet. What you copy down will be kept here.
@@ -470,27 +755,31 @@ export function JournalPanel({
                 <span className="font-medium">{row.name}</span>
                 <span className="text-xs text-stone-400">
                   {row.complete
-                    ? 'First tier whole'
-                    : `${row.count} of ${row.needed} toward the first tier`}
+                    ? 'The mark stands whole'
+                    : row.fills > 0
+                      ? `${row.fills} ${row.fills === 1 ? 'clock' : 'clocks'} filled · ${row.coveredHours} of 12 hours toward the next`
+                      : `${row.coveredHours} of 12 hours toward the first tier`}
                 </span>
               </span>
               <span className="text-xs text-stone-400">
                 {row.seekingSinceDay !== null
                   ? `Looking since day ${row.seekingSinceDay}`
                   : 'Looking'}
+                {` · ${row.count} ${row.count === 1 ? 'copy' : 'copies'} kept`}
                 {row.bestWord !== null
-                  ? ` · best copy ${row.bestWord}`
+                  ? ` · the clock reads ${row.bestWord}`
                   : ''}
               </span>
             </li>
           ))}
         </ul>
       )}
+        </div>
+      ) : null}
+      {chapter === 'names' ? (
+        <div role="tabpanel" aria-label="Names">
       {names && names.length > 0 ? (
-        <div className="mt-3">
-          <h3 className={'mb-2 text-sm font-semibold ' + t.heading}>
-            Names
-          </h3>
+        <div>
           <ul className="flex flex-col gap-2">
             {names.map((row) => (
               <li
@@ -530,11 +819,53 @@ export function JournalPanel({
             ))}
           </ul>
         </div>
+      ) : (
+        <p className="text-sm text-stone-300">
+          No names learned yet. The rites will teach them, and they
+          will be kept here.
+        </p>
+      )}
+        </div>
+      ) : null}
+      {chapter === 'places' ? (
+        <div role="tabpanel" aria-label="Places">
+      {found && found.length > 0 ? (
+        <div className="mb-3">
+          <h3 className={'mb-2 text-sm font-semibold ' + t.heading}>
+            Found
+          </h3>
+          <ul className="flex flex-col gap-2">
+            {found.map((row) => (
+              <li
+                key={row.placeKey}
+                className="flex flex-col gap-y-0.5 rounded-xl bg-black/20 px-3 py-2"
+              >
+                <span className="flex flex-wrap items-baseline gap-x-2">
+                  <span className="font-medium">{row.name}</span>
+                  <span className="text-xs text-stone-400">
+                    {row.familyLabel}
+                    {row.here
+                      ? row.detail
+                        ? ` · ${row.detail}`
+                        : ''
+                      : row.dimensionLabel
+                        ? ` · ${row.dimensionLabel}`
+                        : ''}
+                  </span>
+                </span>
+                <span className="text-xs text-stone-400">
+                  Found on day {row.dayFound}
+                  {row.carrierNote ? ` · ${row.carrierNote}` : ''}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
       ) : null}
       {places ? (
-        <div className="mt-3">
+        <div>
           <h3 className={'mb-2 text-sm font-semibold ' + t.heading}>
-            Places
+            Named
           </h3>
           {onNamePlace ? (
             namingOpen ? (
@@ -749,11 +1080,12 @@ export function JournalPanel({
           )}
         </div>
       ) : null}
+        </div>
+      ) : null}
+      {chapter === 'charms' ? (
+        <div role="tabpanel" aria-label="Charms">
       {charms && charms.length > 0 ? (
-        <div className="mt-3">
-          <h3 className={'mb-2 text-sm font-semibold ' + t.heading}>
-            Charms
-          </h3>
+        <div>
           <ul className="flex flex-col gap-2">
             {charms.map((row) => (
               <li
@@ -785,20 +1117,35 @@ export function JournalPanel({
             ))}
           </ul>
         </div>
+      ) : (
+        <p className="text-sm text-stone-300">
+          No charms awakened yet. What wakes will be kept here.
+        </p>
+      )}
+        </div>
       ) : null}
+      {chapter === 'companions' ? (
+        <div role="tabpanel" aria-label="Companions">
       {companions !== undefined && companions !== null ? (
-        <div className="mt-3">
-          <h3 className={'mb-2 text-sm font-semibold ' + t.heading}>
-            Companions
-          </h3>
+        <div>
           {companions}
         </div>
       ) : null}
+        </div>
+      ) : null}
+      {chapter === 'miniquests' ? (
+        <div role="tabpanel" aria-label="Miniquests">
+          {miniquests ?? (
+            <p className="text-sm text-stone-300">
+              No small undertakings yet. What opens will be kept here.
+            </p>
+          )}
+        </div>
+      ) : null}
+      {chapter === 'quests' ? (
+        <div role="tabpanel" aria-label="Quests">
       {quests ? (
-        <div className="mt-3">
-          <h3 className={'mb-2 text-sm font-semibold ' + t.heading}>
-            Quests
-          </h3>
+        <div>
           {quests.length === 0 ? (
             <QuestLog
               quests={quests}
@@ -875,6 +1222,9 @@ export function JournalPanel({
           )}
         </div>
       ) : null}
+        </div>
+      ) : null}
+      </div>
     </section>
   );
 }
