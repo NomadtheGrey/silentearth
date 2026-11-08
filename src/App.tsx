@@ -2146,7 +2146,12 @@ import {
 } from './systems/familiar';
 import { DiscoveryState } from './systems/discovery';
 import { GazetteerState } from './systems/gazetteer';
-import { FragmentState, markDisplayName } from './systems/fragments';
+import {
+  FragmentState,
+  markDisplayName,
+  deriveMarkClocks,
+  arcOfCopy,
+} from './systems/fragments';
 import {
   CUTTINGS_TO_LAY,
   HedgeState,
@@ -8497,7 +8502,29 @@ export default function App() {
           type: house.type,
         })),
         placedTorches: torchState.snapshot().length,
-        flags: questFlags,
+        // THE HEARTH FLAG, DERIVED (the acceptance case,
+        // Adam's field report 2026-11-08): the flag's craft
+        // seat was designed ('shell sets it at the craft
+        // seat') but never wired — no setter exists — and
+        // a hearth crafted BEFORE the miniquest existed
+        // could never set it at all. The flag therefore
+        // composes from the standing facts, exactly as
+        // kilnStanding does below: a hearth in the fire
+        // record IS a crafted hearth (fires enter the
+        // record only by crafting and placing), so a world
+        // whose hearth already stands reads the step done
+        // with no new crafting — built-ahead work stands
+        // done, for step one as for steps two and three.
+        // The craft seat in executeCraftNow now also sets
+        // the flag outright, so the record heals forward.
+        flags: {
+          ...questFlags,
+          hearthCrafted:
+            questFlags.hearthCrafted ||
+            fireState
+              .snapshot()
+              .some((fire) => fire.type === 'hearth'),
+        },
         // THE ALTAR FACTS (parity): a raised altar of
         // EITHER base for wake-charm's road; the most-
         // progressed base's additions and the any-base
@@ -8871,6 +8898,18 @@ export default function App() {
       // do not set it. saveNow below covers persistence.
       if (availableStations.includes('workstation')) {
         setQuestFlag('craftedAtStump');
+      }
+      // THE HEARTH FLAG'S SEAT (the acceptance case,
+      // 2026-11-08): a craft whose output is the hearth
+      // sets hearthCrafted — the seat Systems' design
+      // named ('shell sets it at the craft-completion
+      // seat, the craftedAtStump pattern') and the shell
+      // never built. questFacts ALSO derives the flag
+      // from a standing hearth, so worlds whose hearth
+      // predates the miniquest complete from facts alone;
+      // this seat keeps the saved record itself true.
+      if (recipe.output.item === ITEMS.hearth) {
+        setQuestFlag('hearthCrafted');
       }
     } catch (error) {
       setCraftNote(
@@ -18152,6 +18191,26 @@ export default function App() {
         : progresses;
     return ordered.map((progress) => {
       const tally = fragmentStateRef.current.tallyFor(progress.mark);
+      // THE UNION PICTURE'S ARCS (the portion cutting,
+      // 2026-11-08): the CURRENT clock's dealt stretches,
+      // read off Systems' own derivation — deriveMarkClocks
+      // assigns each copy its clock index in inscription
+      // order, so the current clock's copies are the ones
+      // whose index equals the fill count; arcOfCopy reads
+      // each copy's dealt (or bridged) arc. The shell does
+      // no arc arithmetic of its own. A complete mark's
+      // picture is the full clock — its last filled clock
+      // stands whole on the page.
+      const derived = deriveMarkClocks(progress.copies);
+      const pictureClock = tally.complete
+        ? Math.max(0, derived.fills - 1)
+        : derived.fills;
+      const sectors = progress.copies
+        .filter((copy, index) => derived.clocks[index] === pictureClock)
+        .map((copy) => {
+          const arc = arcOfCopy(copy);
+          return { startHour: arc.arcStart, lengthHours: arc.arcHours };
+        });
       return {
         mark: progress.mark,
         name: markDisplayName(progress.mark),
@@ -18162,6 +18221,7 @@ export default function App() {
         coveredHours: tally.coveredHours,
         bestWord: fragmentBestWord(tally.best),
         seekingSinceDay: progress.seekingSinceDay,
+        sectors,
       };
     });
   })();
