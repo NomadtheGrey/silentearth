@@ -2724,6 +2724,28 @@ export function deserializeSave(value: unknown): SaveData | null {
                 Number.isFinite(copy.completeness)
                   ? Math.min(1, Math.max(0, copy.completeness))
                   : 0,
+              ...(typeof copy.arcStart === 'number' &&
+              Number.isFinite(copy.arcStart)
+                ? {
+                    arcStart: Math.min(
+                      11,
+                      Math.max(0, Math.floor(copy.arcStart)),
+                    ),
+                  }
+                : {}),
+              ...(typeof copy.arcHours === 'number' &&
+              Number.isFinite(copy.arcHours)
+                ? {
+                    arcHours: Math.min(
+                      12,
+                      Math.max(0, Math.floor(copy.arcHours)),
+                    ),
+                  }
+                : {}),
+              ...(typeof copy.clock === 'number' &&
+              Number.isFinite(copy.clock)
+                ? { clock: Math.max(0, Math.floor(copy.clock)) }
+                : {}),
               day:
                 typeof copy.day === 'number' && Number.isFinite(copy.day)
                   ? Math.floor(copy.day)

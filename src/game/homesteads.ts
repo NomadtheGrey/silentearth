@@ -78,6 +78,8 @@ import {
 import { deriveSeed, mulberry32 } from './seed';
 import { caveInstancesInRect } from './caves';
 import type { FragmentCarrier } from './carriers';
+import { dealFragmentArc } from './fragmentArc';
+import { dealHomesteadMark } from './homeDeal';
 
 /** Per-cell presence draw (DRAFT). */
 export const HOMESTEAD_CELL_PRESENCE = 0.45;
@@ -119,8 +121,9 @@ export interface HomesteadInstance {
   /**
    * The carrier facts for Systems' inscribe() (the
    * carriers.ts field set): minted iff carrying — the
-   * TRAVEL mark, completeness in the burnt band (the
-   * stone's inscription went through the fire).
+   * mark dealt by the DEAL SHARE (Home alongside
+   * Travel, 2026-11-07), its arc dealt by the one
+   * mint range (Adam's mint, 2026-11-07).
    */
   fragmentCarrier: FragmentCarrier | null;
   /** Yard dressing richness 0..1 (the plan consumes). */
@@ -272,7 +275,11 @@ function buildHomesteadPlan(
   // The great stone: the instance's hearth stone in the
   // yard, at the derivation's seat (free bearing — a
   // stone sits at its own angle). Solid: she walks around.
-  feat('hearthStone', greatStone.x, greatStone.z, 0, 1.25, theta);
+  // When the instance CARRIES (burnt === carrying in
+  // this derivation), the stone is the flat fragment
+  // stone (2026-11-07); a non-carrying yard keeps its
+  // plain hearth stone.
+  feat(burnt ? 'flatStone' : 'hearthStone', greatStone.x, greatStone.z, 0, 1.25, theta);
   box(greatStone.x, greatStone.z, 0.7, 0.7);
 
   return {
@@ -369,15 +376,17 @@ function homesteadInstanceAt(
         z: z + lx * Math.sin(theta) + lz * Math.cos(theta),
       };
       // The carrier facts (minted here to keep the
-      // derivation self-contained; the band mirrors
-      // carriers.ts CARRIER_BAND_BURNT).
+      // derivation self-contained; the arc deal is the
+      // one mint range, carriers.ts).
       let fragmentCarrier: FragmentCarrier | null = null;
       if (carriesFragment) {
         const crand = mulberry32(deriveSeed(worldSeed, `carrier:${key}`));
         fragmentCarrier = {
           fragmentId: `${key}:fragment`,
-          mark: 'travel',
-          completeness: 0.35 + crand() * 0.4,
+          // THE DEAL SHARE (2026-11-07): Home alongside
+          // Travel, read off the share stream.
+          mark: dealHomesteadMark(worldSeed, key),
+          ...dealFragmentArc(crand),
         };
       }
       const plan = buildHomesteadPlan(worldSeed, key, cand.center, theta, carriesFragment, dressing, greatStone);

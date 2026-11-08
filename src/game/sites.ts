@@ -1333,7 +1333,11 @@ export function villageSite(
       // glance. No wall box (the farmhouse great stone's
       // precedent: low, and she steps to it). The carrier
       // point and every fact stay exactly where they were.
-      feat('hearthStoneCharred', spot.x, spot.z, 0, 1.1, theta);
+      // THE FLAT STONE (2026-11-07): the carrier's own
+      // stone at the spot is the flat fragment stone
+      // now (the upright register retired at carriers;
+      // the hearth house keeps its own furniture).
+      feat('flatStone', spot.x, spot.z, 0, 1.1, theta);
     }
   });
 
@@ -1750,7 +1754,11 @@ export function farmhouseSite(
   else box(hearthWorld.x, hearthWorld.z, 0.55, 0.85);
   const stoneLocal = { lx: -W / 2 + 1.05, lz: -1.85 };
   const stoneWorld = toWorld(stoneLocal.lx, stoneLocal.lz);
-  feat('hearthStone', stoneWorld.x, stoneWorld.z, 0, 1, theta + Math.PI / 5);
+  // The great stone is the CARRIER: the flat fragment
+  // stone (2026-11-07). The hearth beside it (above)
+  // keeps its hearthStone — two objects, honestly
+  // separate.
+  feat('flatStone', stoneWorld.x, stoneWorld.z, 0, 1, theta + Math.PI / 5);
 
   // The cellar door: an anchor only, at the back foundation
   // (the side opposite the door) — a staged cave-mouth host.
