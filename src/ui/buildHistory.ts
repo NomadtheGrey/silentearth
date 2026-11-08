@@ -43,11 +43,19 @@ export interface BuildRecord {
 
 const ALL_RECORDS: BuildRecord[] = [
   {
+    merge: 'Merge #98',
+    pr: 143,
+    sha: '1a0b6ad',
+    date: '2026-11-08',
+    what: 'Portion cutting and the hearth-flag fix, under their own record: the journal’s Marks chapter paints each mark’s dealt arcs — the union solid, the rest of the sign ghosted — from the new sign-art module, and the hearth miniquest’s crafted flag is derived from the standing fire record and set at the craft seat, so the miniquest can complete.',
+    why: 'Their code landed inside Merge #97’s completion when the drill’s hold and its merge crossed in the approval window; the hearth wiring completes the promise #97’s entry made, and the ledger stays honest when each merge carries its own history.',
+  },
+  {
     merge: 'Merge #97',
     pr: 141,
     sha: '7f869f3',
     date: '2026-11-08',
-    what: 'Fragments deal as arcs now — four to six hours of the sign at a dealt start — and tiers are filled clocks: copies union their arcs in the journal until a clock fills. The flat stones seat the fragments: slabs on cave floors, walls, and ceilings, and at the Home carriers on the surface, the groves keeping their carved uprights. Hunting cabins recur through the woods, each carrying a Home fragment at its hearth, and homesteads share their deal half Home — the four Home pillars now census whole at journey range. The pitch torch is finished whole: its head, its planted seat, and its carried seat. The journal is a book: eight bookmark chapter tabs, Found above Named in Places, the hearth miniquest fed its kiln and cauldron facts, transcriptions banking the dealt arcs, and the marks speaking in hours of twelve. The Marks chapter paints each mark’s dealt arcs, the union solid and the rest of the sign ghosted, and the hearth miniquest can complete at last — its crafted flag is derived from the standing fire record and set at the craft seat, where before no wire set it at all.',
+    what: 'Fragments deal as arcs now — four to six hours of the sign at a dealt start — and tiers are filled clocks: copies union their arcs in the journal until a clock fills. The flat stones seat the fragments: slabs on cave floors, walls, and ceilings, and at the Home carriers on the surface, the groves keeping their carved uprights. Hunting cabins recur through the woods, each carrying a Home fragment at its hearth, and homesteads share their deal half Home — the four Home pillars now census whole at journey range. The pitch torch is finished whole: its head, its planted seat, and its carried seat. The journal is a book: eight bookmark chapter tabs, Found above Named in Places, the hearth miniquest fed its kiln and cauldron facts, transcriptions banking the dealt arcs, and the marks speaking in hours of twelve.',
     why: 'Adam’s portion ruling made the fragment a piece of the whole sign, and the train carried it end to end — the deal, the tally, the stone, and the page — while the cabins opened the Home family’s first recurring house and closed the pillar shortage the census had named.',
   },
   {
