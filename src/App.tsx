@@ -2146,7 +2146,12 @@ import {
 } from './systems/familiar';
 import { DiscoveryState } from './systems/discovery';
 import { GazetteerState } from './systems/gazetteer';
-import { FragmentState, markDisplayName } from './systems/fragments';
+import {
+  FragmentState,
+  markDisplayName,
+  deriveMarkClocks,
+  arcOfCopy,
+} from './systems/fragments';
 import {
   CUTTINGS_TO_LAY,
   HedgeState,
@@ -18152,6 +18157,26 @@ export default function App() {
         : progresses;
     return ordered.map((progress) => {
       const tally = fragmentStateRef.current.tallyFor(progress.mark);
+      // THE UNION PICTURE'S ARCS (the portion cutting,
+      // 2026-11-08): the CURRENT clock's dealt stretches,
+      // read off Systems' own derivation — deriveMarkClocks
+      // assigns each copy its clock index in inscription
+      // order, so the current clock's copies are the ones
+      // whose index equals the fill count; arcOfCopy reads
+      // each copy's dealt (or bridged) arc. The shell does
+      // no arc arithmetic of its own. A complete mark's
+      // picture is the full clock — its last filled clock
+      // stands whole on the page.
+      const derived = deriveMarkClocks(progress.copies);
+      const pictureClock = tally.complete
+        ? Math.max(0, derived.fills - 1)
+        : derived.fills;
+      const sectors = progress.copies
+        .filter((copy, index) => derived.clocks[index] === pictureClock)
+        .map((copy) => {
+          const arc = arcOfCopy(copy);
+          return { startHour: arc.arcStart, lengthHours: arc.arcHours };
+        });
       return {
         mark: progress.mark,
         name: markDisplayName(progress.mark),
@@ -18162,6 +18187,7 @@ export default function App() {
         coveredHours: tally.coveredHours,
         bestWord: fragmentBestWord(tally.best),
         seekingSinceDay: progress.seekingSinceDay,
+        sectors,
       };
     });
   })();
