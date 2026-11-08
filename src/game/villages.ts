@@ -99,6 +99,7 @@ import { caveInstancesInRect } from './caves';
 import { homesteadInstancesInRect, HOMESTEAD_CLEAR_RADIUS_M } from './homesteads';
 import { farmhouseInstancesInRect, FARMHOUSE_CLEAR_RADIUS_M } from './farmhouses';
 import type { FragmentCarrier } from './carriers';
+import { dealFragmentArc } from './fragmentArc';
 
 /** Per-cell presence draw (DRAFT — priced against the
  *  taste's ~9% pass rate in the claim census). */
@@ -388,7 +389,11 @@ function buildVillagePlan(
       // always stands in this family — sized to read at
       // a glance. No wall box (the farmhouse great
       // stone's precedent). No carrier fact moves.
-      feat('hearthStone', spot.x, spot.z, 0, 1.1, theta);
+      // THE FLAT STONE (2026-11-07): the stone at the
+      // hearth spot is the carrier's own flat fragment
+      // stone — its own object at the spot, not the
+      // hearth's slab (DEV's call).
+      feat('flatStone', spot.x, spot.z, 0, 1.1, theta);
     }
   };
 
@@ -666,19 +671,19 @@ function villageInstanceAt(
       const key = `village:${cx},${cz}`;
       const plan = buildVillagePlan(worldSeed, key, cand.center, cand.structureCount, R);
       // The carrier facts (minted here to keep the
-      // derivation self-contained; the band mirrors
-      // carriers.ts CARRIER_BAND_BURNT). Structural: the
+      // derivation self-contained; the arc deal is the
+      // one mint range, carriers.ts). Structural: the
       // hearth house is forced, so every instance mints.
       // THE DEAL (Adam, 2026-11-05): the mark is dealt by
       // the instance's own hash (homeDeal.ts — its stream
       // is a sibling of this mint stream, so the
-      // completeness roll below is byte-identical to the
-      // pre-deal mint).
+      // arc roll below is the mint's two draws off
+      // this same stream (Adam's mint, 2026-11-07).
       const crand = mulberry32(deriveSeed(worldSeed, `carrier:${key}`));
       const fragmentCarrier: FragmentCarrier = {
         fragmentId: `${key}:fragment`,
         mark: dealHomeMark(worldSeed, key),
-        completeness: 0.35 + crand() * 0.4,
+        ...dealFragmentArc(crand),
       };
       result = {
         key,

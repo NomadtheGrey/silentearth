@@ -22,6 +22,7 @@ import { barnSite, caveMouthSite, chapelSite, distToSegment, drownedMillSite, fa
 import { CHUNK_SIZE, BASE_SCATTER_PER_CHUNK, GROUND_SEGMENTS } from '../constants';
 import { caveInstancesInRect } from './caves';
 import { homesteadInstancesInRect } from './homesteads';
+import { huntingCabinInstancesInRect } from './huntingCabins';
 import { farmhouseInstancesInRect } from './farmhouses';
 import { villageInstancesInRect } from './villages';
 import { groveInstancesInRect } from './groves';
@@ -466,6 +467,7 @@ export function createWorldGen(seed: string): WorldGen {
   const getInstancesNear = (rect: { minX: number; maxX: number; minZ: number; maxZ: number }): SiteFootprint[] => [
     ...caveInstancesInRect(seed, spawnOnce(), weightsAtPos, rect),
     ...homesteadInstancesInRect(seed, spawnOnce(), weightsAtPos, rect),
+    ...huntingCabinInstancesInRect(seed, spawnOnce(), weightsAtPos, rect),
     ...farmhouseInstancesInRect(seed, spawnOnce(), weightsAtPos, rect),
     ...villageInstancesInRect(seed, spawnOnce(), weightsAtPos, rect),
     ...groveInstancesInRect(seed, spawnOnce(), weightsAtPos, rect),

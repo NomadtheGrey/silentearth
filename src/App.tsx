@@ -2193,8 +2193,10 @@ import {
 } from './ui/RosterPanel';
 import {
   JournalPanel,
+  JournalMiniquests,
   type JournalMarkRow,
   type JournalBaseRow,
+  type JournalFoundRow,
   JournalPlaceRow,
 } from './ui/JournalPanel';
 import { QuestCard } from './ui/QuestCard';
@@ -4775,8 +4777,18 @@ export default function App() {
     // boolean, lit torch carried or not. The renderer owns
     // the model + light (left hand, supersedes the candle);
     // the shell only drives the boolean.
-    rendererRef.current?.setCarriesLitTorch(
-      inventory.count(ITEMS.litTorch) > 0,
+    // THE CARRIED TORCH'S KIND (the pitch rider, the
+    // book build): the renderer's kind setter supersedes
+    // the boolean — a carried lit PITCH torch leads when
+    // both kinds ride (DEV's ruling: pitch leads, the
+    // carried and placed reads agree), else the plain
+    // lit torch, else none.
+    rendererRef.current?.setLitTorchKind(
+      inventory.count(ITEMS.litPitchTorch) > 0
+        ? 'lit-pitch-torch'
+        : inventory.count(ITEMS.litTorch) > 0
+          ? 'lit-torch'
+          : null,
     );
   };
 
@@ -7231,8 +7243,17 @@ export default function App() {
     renderer.setCarriesUmbrella(carriesUmbrella(inventory));
     // TORCH DRIVING: initial visibility from the boot
     // inventory — a restored lit torch shows, no lit torch
-    // leaves the renderer's default hidden standing.
-    renderer.setCarriesLitTorch(inventory.count(ITEMS.litTorch) > 0);
+    // leaves the renderer's default hidden standing. THE
+    // KIND rides with it (the pitch rider, the book build):
+    // a restored pitch torch boots as a pitch torch, never
+    // a plain one — pitch leads when both kinds ride.
+    renderer.setLitTorchKind(
+      inventory.count(ITEMS.litPitchTorch) > 0
+        ? 'lit-pitch-torch'
+        : inventory.count(ITEMS.litTorch) > 0
+          ? 'lit-torch'
+          : null,
+    );
     // Hunger wiring (see the header): the engine reads the stage
     // through this query — movement slowdown + harvest lockout.
     player.setHungerStageQuery(() => hunger.stage());
@@ -8520,6 +8541,21 @@ export default function App() {
             .map((awakening) => awakening.kind),
           savedBoneAcquisitionsRef.current,
         ),
+        // THE HEARTH MINIQUEST'S FACTS (the book build;
+        // Systems' doc-comments name the sources): a kiln
+        // stands when the fire record carries one — the
+        // same feed the 'kiln' crafting station reads; a
+        // cauldron is seated when the placed-cauldron
+        // record is non-empty (each record is keyed to
+        // its hearth by construction). Absent until this
+        // build, the miniquest's steps could never stand
+        // done from the shell. (The kiln's saved type is
+        // the recipe id 'kiln' itself — verified against
+        // the placed-fire records, not assumed.)
+        kilnStanding: fireState
+          .snapshot()
+          .some((fire) => fire.type === 'kiln'),
+        cauldronSeated: cauldronState.snapshot().length > 0,
       }
     : undefined;
   // THE LATCH UNION (the latch law): whatever reads
@@ -8575,6 +8611,53 @@ export default function App() {
         active: quest.id === activeQuestId,
       }))
     : undefined;
+  // THE BOOK'S CHAPTER SPLIT (the book build, 2026-11-08):
+  // evaluateQuests drops the definition's section, so the
+  // split reads it back off the definition (questById) at
+  // the journal's seat — the Quests chapter takes every
+  // row whose section is not 'miniquests'; the Miniquests
+  // chapter takes its own stamped node (the roster
+  // pattern: the panel owns no quest facts). The HUD
+  // card's quest and Options' flat list keep the whole
+  // questDisplay, untouched — the split is the book's
+  // alone.
+  const journalQuestRows = questDisplay?.filter(
+    (quest) => questById(quest.id)?.section !== 'miniquests',
+  );
+  // THE MINIQUEST STAMP (the book build): the stamped
+  // rows + notes the chapter renders — a PLAIN VALUE, not
+  // a node. The chapter's component (JournalMiniquests)
+  // renders at the journal's seat below, because this
+  // derivation runs BEFORE lookThemes exists (the themes
+  // seat lower in the component) — composing JSX here
+  // would read an uninitialized binding at first render
+  // (a TDZ crash the boot smoke caught; the separation
+  // of concerns wants facts here and rendering there
+  // anyway).
+  const journalMiniquestStamp = (() => {
+    const minis = (questDisplay ?? []).filter(
+      (quest) => questById(quest.id)?.section === 'miniquests',
+    );
+    if (minis.length === 0 || !questFacts) return undefined;
+    const notes: Record<string, string> = {};
+    const rows = minis.map((quest) => {
+      const steps = questComponentsFor(quest.id, questFacts);
+      // THE HEARTH'S COMPLETION NOTE (Adam's design): the
+      // journal names the brewing shelf once the cauldron
+      // stands seated in the hearth — the note seats under
+      // the finished steps and names what the shelf holds.
+      // Copy DRAFT, like all journal copy until the pin pass.
+      if (
+        quest.id === 'the-hearth' &&
+        steps.some((step) => step.id === 'seat-cauldron' && step.done)
+      ) {
+        notes[quest.id] =
+          'With the cauldron seated, the hearth keeps a brewing shelf: salve for her hurts, the douse-ables for the wild kinds, and the unguents — warmth, wax, and kind-scents.';
+      }
+      return { ...quest, steps };
+    });
+    return { rows, notes };
+  })();
   // THE CARD'S QUEST (composition rule, DEV 2026-11-02,
   // on Adam's 'Eat When Hungry while fed' objection):
   // the MARKED quest while it stands incomplete,
@@ -15481,16 +15564,23 @@ export default function App() {
         kind: 'fragment';
         fragmentId: string;
         mark: string;
+        arcStart: number;
+        arcHours: number;
         completeness: number;
         distance: number;
       };
 
   // A fragment carrier as the winner consumes it: the
   // facts Background names on a faced inscription (its
-  // stable id, its mark, its weathering).
+  // stable id, its mark, its DEALT ARC — start hour +
+  // length, Adam's mint 2026-11-07 — and the arc's
+  // share, which the carriers keep under the name
+  // completeness).
   type FragmentCarrier = {
     fragmentId: string;
     mark: string;
+    arcStart: number;
+    arcHours: number;
     completeness: number;
     x: number;
     z: number;
@@ -15734,6 +15824,8 @@ export default function App() {
           kind: 'fragment',
           fragmentId: carrier.fragmentId,
           mark: carrier.mark,
+          arcStart: carrier.arcStart,
+          arcHours: carrier.arcHours,
           completeness: carrier.completeness,
           distance: f.distance,
         });
@@ -16224,16 +16316,26 @@ export default function App() {
   const handleTranscribe = (winner: {
     fragmentId: string;
     mark: string;
+    arcStart: number;
+    arcHours: number;
     completeness: number;
   }): void => {
     const state = fragmentStateRef.current;
     const day = rendererRef.current?.snapshotSky()?.daysElapsed ?? 0;
+    // THE ARC PASSTHROUGH (the clock law, 2026-11-08):
+    // the carrier's dealt arc rides into the record —
+    // without it every fresh copy bridged from its
+    // share (centred, nested) and the clock could
+    // never fill on dealt arcs. The share the call
+    // also passes stays the fallback for any caller
+    // without a dealt arc.
     const result = state.inscribe(
       winner.fragmentId,
       winner.mark,
       winner.completeness,
       inventory.count(ITEMS.journal) >= 1,
       day,
+      { arcStart: winner.arcStart, arcHours: winner.arcHours },
     );
     if (result.ok === false) {
       if (result.code === 'no-journal') {
@@ -16256,10 +16358,14 @@ export default function App() {
     // straggler).
     declareCarrierSeen(winner.fragmentId);
     const tally = state.tallyFor(winner.mark);
+    // THE TOAST READS THE CLOCK (the clock law, 2026-11-08):
+    // the copy's place is its hours in the current clock,
+    // and a copy that adds sign she did not have says so —
+    // the count-law prose retired with its law. Copy DRAFT.
     showFeedback(
-      `Copied into your journal — the ${name} mark, ${result.count} of ${tally.needed}.` +
+      `Copied into your journal — the ${name} mark, ${tally.coveredHours} of 12 hours.` +
         (result.bestImproved
-          ? ' A cleaner copy than the one you kept.'
+          ? ' New sign she did not have.'
           : ''),
       'gain',
     );
@@ -16273,15 +16379,20 @@ export default function App() {
         firstEver
           ? {
               title: `The ${name} mark`,
-              body: `A carved mark, copied into your journal. It is one piece of the ${name} mark — three fragments make its first tier whole. From now on you are looking for the rest, and your journal keeps the tally.`,
+              body: `A carved mark, copied into your journal. It is one stretch of the ${name} mark — fill its clock, hour by hour, and its first tier stands whole. From now on you are looking for the rest, and your journal keeps the tally.`,
             }
           : {
               title: `A new mark — ${name}`,
-              body: `The first piece of the ${name} mark, copied into your journal. Three fragments make its first tier whole.`,
+              body: `The first stretch of the ${name} mark, copied into your journal. Fill its clock and its first tier stands whole.`,
             },
       );
-    } else if (result.tierComplete && result.count === tally.needed) {
-      showFeedback(`The ${name} mark — its first tier is whole.`, 'gain');
+    } else if (result.tierComplete) {
+      showFeedback(
+        tally.fills <= 1
+          ? `The ${name} mark — its first tier is whole.`
+          : `The ${name} mark — another tier stands whole.`,
+        'gain',
+      );
     }
     saveNow();
   };
@@ -18005,8 +18116,19 @@ export default function App() {
   // begun marks only — the panel invents nothing),
   // composed from the tally; the kept-best weathering
   // reads as a word on a DRAFT scale.
+  // THE GRADE WORDS (Systems' proposal under the clock
+  // law, 2026-11-07 — DRAFT): the read is the CURRENT
+  // CLOCK's coverage fraction (the tally's best), so the
+  // word grades how full her clock stands: clear at
+  // 9/12 covered or better, worn from 5/12, else faint.
   const fragmentBestWord = (best: number | null): string | null =>
-    best === null ? null : best >= 0.75 ? 'clear' : best >= 0.4 ? 'worn' : 'faint';
+    best === null
+      ? null
+      : best >= 9 / 12
+        ? 'clear'
+        : best >= 5 / 12
+          ? 'worn'
+          : 'faint';
   const journalRows: JournalMarkRow[] = (() => {
     const progresses = fragmentStateRef.current.snapshot();
     // NEWEST (marks): a mark's freshness is its LATEST
@@ -18036,6 +18158,8 @@ export default function App() {
         count: tally.count,
         needed: tally.needed,
         complete: tally.complete,
+        fills: tally.fills,
+        coveredHours: tally.coveredHours,
         bestWord: fragmentBestWord(tally.best),
         seekingSinceDay: progress.seekingSinceDay,
       };
@@ -18149,6 +18273,91 @@ export default function App() {
       ...orderGroup(all.filter((pl) => pl.dimensionKey !== activeKey)).map(toRow),
     ];
   })();
+  // The journal's FOUND rows (the gazetteer surface —
+  // the book build, 2026-11-08): one row per place the
+  // register holds as FOUND, read from the register's
+  // snapshot at render — the same live read the named
+  // places below make of their register. Current
+  // dimension first with distance + bearing words;
+  // elsewhere rows carry the dimension label. The
+  // carrier note stands only on a SEEN carrier (the
+  // discovery law: the flag follows the faced read,
+  // never the rumor of the place). NEWEST re-stamps
+  // them freshest-found first, register order reversed
+  // for ties — the listing pages' order law.
+  const journalFoundRows: JournalFoundRow[] = (() => {
+    const activeKey = dimensionState.activeKey();
+    const records = gazetteerStateRef.current.snapshot();
+    const familyLabelFor = (family: string): string =>
+      family === 'cave'
+        ? 'Cave'
+        : family === 'grove'
+          ? 'Grove'
+          : family === 'village'
+            ? 'Village'
+            : family === 'homestead'
+              ? 'Homestead'
+              : family === 'farmhouse'
+                ? 'Farmhouse'
+                : family;
+    const ordered =
+      journalSortOrder === 'newest'
+        ? records
+            .map((record, index) => ({ record, index }))
+            .sort(
+              (a, b) =>
+                b.record.dayFound - a.record.dayFound ||
+                b.index - a.index,
+            )
+            .map((entry) => entry.record)
+        : records;
+    const here = ordered.filter(
+      (record) => record.dimensionKey === activeKey,
+    );
+    const elsewhere = ordered.filter(
+      (record) => record.dimensionKey !== activeKey,
+    );
+    const toRow = (record: (typeof records)[number]): JournalFoundRow => {
+      const carrierNote = record.carrierSeen
+        ? record.family === 'grove'
+          ? 'Its carved stone has been seen'
+          : 'Its fragment stone has been seen'
+        : null;
+      if (record.dimensionKey !== activeKey) {
+        return {
+          placeKey: record.placeKey,
+          name: record.name,
+          familyLabel: familyLabelFor(record.family),
+          dayFound: record.dayFound,
+          carrierSeen: record.carrierSeen,
+          carrierNote,
+          here: false,
+          detail: null,
+          dimensionLabel: dimensionLabelFor(record.dimensionKey),
+        };
+      }
+      const d = distanceM(position, record);
+      const wind =
+        COMPASS_WINDS[
+          Math.round(
+            bearingDegrees(position.x, position.z, record) / 45,
+          ) % 8
+        ];
+      return {
+        placeKey: record.placeKey,
+        name: record.name,
+        familyLabel: familyLabelFor(record.family),
+        dayFound: record.dayFound,
+        carrierSeen: record.carrierSeen,
+        carrierNote,
+        here: true,
+        detail: d < 1.5 ? 'Here' : `${Math.round(d)} m ${wind}`,
+        dimensionLabel: null,
+      };
+    };
+    return [...here.map(toRow), ...elsewhere.map(toRow)];
+  })();
+
   // Her bases for the same page (the Returning
   // build): Systems' enumeration in its own order —
   // last sleep first (the home destination), then
@@ -20176,6 +20385,7 @@ export default function App() {
             names={journalNameRows}
             onRecite={handleRecite}
             places={journalPlaceRows}
+            found={journalFoundRows}
             bases={journalBaseRows}
             onScryTarget={handleScryTarget}
             selectedPlaceId={selectedPlaceId}
@@ -20204,7 +20414,16 @@ export default function App() {
                 comfortable={isTouch}
               />
             }
-            quests={questDisplay}
+            quests={journalQuestRows}
+            miniquests={
+              journalMiniquestStamp ? (
+                <JournalMiniquests
+                  rows={journalMiniquestStamp.rows}
+                  notes={journalMiniquestStamp.notes}
+                  theme={lookThemes.world}
+                />
+              ) : undefined
+            }
             onMarkQuest={toggleActiveQuestMark}
             onClose={() => setJournalOpen(false)}
             comfortable={isTouch}
