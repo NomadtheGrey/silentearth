@@ -119,7 +119,8 @@
  * never before: a place she has not found has no row.
  */
 
-import { Fragment, useState, type ReactNode } from 'react';
+import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react';
+import { drawSign, type SignSector } from './signArt';
 
 import { UI_THEMES, type UiThemeName } from './themes';
 import {
@@ -154,6 +155,55 @@ export interface JournalMarkRow {
   bestWord: string | null;
   /** The day the pursuit of this mark began. */
   seekingSinceDay: number | null;
+  /**
+   * THE UNION PICTURE (the portion cutting, 2026-11-08):
+   * the CURRENT clock's arcs — the dealt stretches the
+   * mark's kept copies cover now, stamped by the caller
+   * from the clock derivation (a complete mark carries
+   * the full clock). The row paints them through
+   * drawSign: covered SOLID, the rest of the sign
+   * FADED — the union growing on the page. Marks whose
+   * sign is not cut (Circle) carry an empty list and
+   * paint no picture.
+   */
+  sectors: SignSector[];
+}
+
+/**
+ * One mark's union picture: a small canvas painted by
+ * drawSign (signArt.ts) — the mark's sign with its
+ * current clock's union solid and the rest faded, in
+ * the book's ink. Painted once per row state; the
+ * canvas carries the mark's name for the drive and
+ * the reader alike.
+ */
+function MarkSignPicture({ row }: { row: JournalMarkRow }) {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const sectorKey = row.sectors
+    .map((sector) => `${sector.startHour}+${sector.lengthHours}`)
+    .join(',');
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.save();
+    ctx.scale(canvas.width / 240, canvas.height / 240);
+    drawSign(ctx, row.mark, row.sectors, { ink: '#4a3421' });
+    ctx.restore();
+  }, [row.mark, sectorKey, row.sectors]);
+  if (row.sectors.length === 0 && !row.complete) return null;
+  return (
+    <canvas
+      ref={canvasRef}
+      width={96}
+      height={96}
+      data-mark-sign={row.mark}
+      aria-label={`The ${row.name} sign — ${row.coveredHours} of 12 hours covered`}
+      className="h-12 w-12 shrink-0"
+    />
+  );
 }
 
 /**
@@ -749,8 +799,10 @@ export function JournalPanel({
           {marks.map((row) => (
             <li
               key={row.mark}
-              className="flex flex-col gap-y-0.5 rounded-xl bg-black/20 px-3 py-2"
+              className="flex gap-x-3 rounded-xl bg-black/20 px-3 py-2"
             >
+              <MarkSignPicture row={row} />
+              <span className="flex flex-col gap-y-0.5">
               <span className="flex flex-wrap items-baseline gap-x-2">
                 <span className="font-medium">{row.name}</span>
                 <span className="text-xs text-stone-400">
@@ -769,6 +821,7 @@ export function JournalPanel({
                 {row.bestWord !== null
                   ? ` · the clock reads ${row.bestWord}`
                   : ''}
+              </span>
               </span>
             </li>
           ))}
