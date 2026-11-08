@@ -43,6 +43,14 @@ export interface BuildRecord {
 
 const ALL_RECORDS: BuildRecord[] = [
   {
+    merge: 'Merge #98',
+    pr: 143,
+    sha: '1a0b6ad',
+    date: '2026-11-08',
+    what: 'Portion cutting and the hearth-flag fix, under their own record: the journal’s Marks chapter paints each mark’s dealt arcs — the union solid, the rest of the sign ghosted — from the new sign-art module, and the hearth miniquest’s crafted flag is derived from the standing fire record and set at the craft seat, so the miniquest can complete.',
+    why: 'Their code landed inside Merge #97’s completion when the drill’s hold and its merge crossed in the approval window; the hearth wiring completes the promise #97’s entry made, and the ledger stays honest when each merge carries its own history.',
+  },
+  {
     merge: 'Merge #97',
     pr: 141,
     sha: '7f869f3',
