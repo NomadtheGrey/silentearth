@@ -50,7 +50,7 @@ import { recordItemUse } from './knowledge-register';
 /** One in-game day — pinned starting value (Adam). */
 export const SCENT_DURATION_S = 600;
 
-export type ScentKind = 'repellent' | 'attractor' | 'kind-scent';
+export type ScentKind = 'repellent' | 'attractor';
 
 export interface ScentFacts {
   kind: ScentKind | null;
@@ -108,10 +108,8 @@ export class ScentState {
    * the field side: an active attractor DRAWS its own
    * category and REPELS the other; the repellent
    * REPELS both (its shipped feral suppression,
-   * restated in this vocabulary); a kind-scent is
-   * neither lure nor repellent here (its field is the
-   * feed seat) and answers null, as do the unscented
-   * and the expired. This read supersedes the v1
+   * restated in this vocabulary); the unscented and
+   * the expired answer null. This read supersedes the v1
    * survey's 'an attractor never repels' — retired by
    * Adam's word.
    */
@@ -128,25 +126,11 @@ export class ScentState {
   apply(kind: ScentKind, category: string | null): void {
     this.current = {
       kind,
-      // The attractor carries its draw category; a
-      // kind-scent (2026-11-07) carries the creature
-      // KIND it smells of. The repellent carries none.
-      category: kind === 'attractor' || kind === 'kind-scent' ? category : null,
+      // The attractor carries its draw category; the
+      // repellent carries none.
+      category: kind === 'attractor' ? category : null,
       secondsLeft: SCENT_DURATION_S,
     };
-  }
-
-  /**
-   * The kind-scent read (2026-11-07): the creature
-   * kind she currently smells of, while the clock
-   * stands — null under any other scent (or none).
-   * The feed seat's ease reads it: a feeding offered
-   * to that kind lands warmer (companions' feed ease).
-   */
-  kindScentFor(): string | null {
-    return this.isActive() && this.current.kind === 'kind-scent'
-      ? this.current.category
-      : null;
   }
 
   /** Strip the standing scent (the wash; swimming). */
@@ -172,16 +156,14 @@ export class ScentState {
   restore(snapshot: ScentSnapshot | null | undefined): void {
     if (
       snapshot &&
-      (snapshot.kind === 'repellent' ||
-        snapshot.kind === 'attractor' ||
-        snapshot.kind === 'kind-scent') &&
+      (snapshot.kind === 'repellent' || snapshot.kind === 'attractor') &&
       Number.isFinite(snapshot.secondsLeft) &&
       snapshot.secondsLeft > 0
     ) {
       this.current = {
         kind: snapshot.kind,
         category:
-          (snapshot.kind === 'attractor' || snapshot.kind === 'kind-scent') &&
+          snapshot.kind === 'attractor' &&
           typeof snapshot.category === 'string'
             ? snapshot.category
             : null,
@@ -197,20 +179,6 @@ export class ScentState {
 // The douse-able goods + their acts
 // ---------------------------------------------------------------------------
 
-/**
- * The kinds a kind-scent can be brewed for: the
- * feedable kinds (companions' DIETS) that carry a
- * primal bone — the bone is the brew's material, so
- * the list is DIETS less the cat (no bone, by pin)
- * and less any kind the bone table does not name.
- */
-export const KIND_SCENT_KINDS: readonly string[] = [
-  'rabbit', 'squirrel', 'muskrat', 'mouse', 'vole',
-  'groundhog', 'opossum', 'raccoon', 'beaver', 'deer',
-  'fox', 'wolf', 'bear', 'crow', 'owl', 'snake',
-  'turtle', 'pigeon',
-];
-
 /** What each douse-able lays, by item. */
 export const DOUSE_SCENTS: Readonly<
   Record<string, { kind: ScentKind; category: string | null }>
@@ -218,18 +186,6 @@ export const DOUSE_SCENTS: Readonly<
   [ITEMS.repellent]: { kind: 'repellent', category: null },
   [ITEMS.preyLure]: { kind: 'attractor', category: 'prey' },
   [ITEMS.predatorLure]: { kind: 'attractor', category: 'predator' },
-  // THE KIND-SCENTS (2026-11-07): one bottle per kind,
-  // brewed from that kind's own primal bone (the
-  // recipes carry the rows). The category IS the kind.
-  // The cat stands absent — cats have no Waking and
-  // no bone (pinned), so no cat-scent can be brewed;
-  // the cat domesticated itself.
-  ...Object.fromEntries(
-    KIND_SCENT_KINDS.map((kind) => [
-      `${kind}-scent`,
-      { kind: 'kind-scent' as ScentKind, category: kind },
-    ]),
-  ),
 };
 
 export type DouseResult =

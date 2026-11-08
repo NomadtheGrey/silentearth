@@ -2946,7 +2946,7 @@ export default function App() {
     setInjuryUi({ stage: injury.stage() });
   };
   const [scentUi, setScentUi] = useState<{
-    kind: 'repellent' | 'attractor' | 'kind-scent' | null;
+    kind: 'repellent' | 'attractor' | null;
     category: string | null;
   }>(() => {
     const facts = scentState.scent();

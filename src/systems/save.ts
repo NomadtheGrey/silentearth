@@ -1421,6 +1421,30 @@ const RETIRED_ITEM_IDS: ReadonlySet<string> = new Set([
   // Salt (Adam, 2026-11-02): the flats are nowhere near
   // here — the item retires with its biome.
   'salt-crystal',
+  // The kind-scents (Adam, 2026-11-08): the bottled
+  // per-kind scents were never his design — his scent
+  // system is the two-sided pair + repellent + wash,
+  // closed. The recipes and the scent kind are gone;
+  // the registry rows stand per this pattern, and a
+  // saved bottle drops here like any retired stack.
+  'rabbit-scent',
+  'squirrel-scent',
+  'muskrat-scent',
+  'mouse-scent',
+  'vole-scent',
+  'groundhog-scent',
+  'opossum-scent',
+  'raccoon-scent',
+  'beaver-scent',
+  'deer-scent',
+  'fox-scent',
+  'wolf-scent',
+  'bear-scent',
+  'crow-scent',
+  'owl-scent',
+  'snake-scent',
+  'turtle-scent',
+  'pigeon-scent',
 ]);
 
 const SAVE_HOUSE_TYPES: ReadonlySet<string> = new Set([
@@ -1819,16 +1843,14 @@ export function serializeSave(draft: SaveDraft): SaveData {
     // writes the unscented record.
     scent:
       (draft.scent?.kind === 'repellent' ||
-        draft.scent?.kind === 'attractor' ||
-        draft.scent?.kind === 'kind-scent') &&
+        draft.scent?.kind === 'attractor') &&
       typeof draft.scent?.secondsLeft === 'number' &&
       Number.isFinite(draft.scent.secondsLeft) &&
       draft.scent.secondsLeft > 0
         ? {
             kind: draft.scent.kind,
             category:
-              (draft.scent.kind === 'attractor' ||
-                draft.scent.kind === 'kind-scent') &&
+              draft.scent.kind === 'attractor' &&
               typeof draft.scent.category === 'string'
                 ? draft.scent.category
                 : null,
@@ -2948,8 +2970,7 @@ export function deserializeSave(value: unknown): SaveData | null {
     if (
       isRecord(value.scent) &&
       (value.scent.kind === 'repellent' ||
-        value.scent.kind === 'attractor' ||
-        value.scent.kind === 'kind-scent') &&
+        value.scent.kind === 'attractor') &&
       typeof value.scent.secondsLeft === 'number' &&
       Number.isFinite(value.scent.secondsLeft) &&
       value.scent.secondsLeft > 0
@@ -2957,8 +2978,7 @@ export function deserializeSave(value: unknown): SaveData | null {
       scent = {
         kind: value.scent.kind,
         category:
-          (value.scent.kind === 'attractor' ||
-            value.scent.kind === 'kind-scent') &&
+          value.scent.kind === 'attractor' &&
           typeof value.scent.category === 'string'
             ? value.scent.category
             : null,
