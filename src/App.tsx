@@ -2946,7 +2946,7 @@ export default function App() {
     setInjuryUi({ stage: injury.stage() });
   };
   const [scentUi, setScentUi] = useState<{
-    kind: 'repellent' | 'attractor' | 'kind-scent' | null;
+    kind: 'repellent' | 'attractor' | null;
     category: string | null;
   }>(() => {
     const facts = scentState.scent();
@@ -8679,7 +8679,7 @@ export default function App() {
         steps.some((step) => step.id === 'seat-cauldron' && step.done)
       ) {
         notes[quest.id] =
-          'With the cauldron seated, the hearth keeps a brewing shelf: salve for her hurts, the douse-ables for the wild kinds, and the unguents — warmth, wax, and kind-scents.';
+          'With the cauldron seated, the hearth keeps a brewing shelf: salve for her hurts, the douse-ables — the repellent and the two lures — and the unguents, warmth and wax.';
       }
       return { ...quest, steps };
     });
