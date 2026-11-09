@@ -43,6 +43,14 @@ export interface BuildRecord {
 
 const ALL_RECORDS: BuildRecord[] = [
   {
+    merge: 'Merge #99',
+    pr: 144,
+    sha: '0d5f9de',
+    date: '2026-11-09',
+    what: 'The eighteen bottled kind-scents are gone: the scent system is the two-sided pair, the repellent, and the wash, and it is closed — the invented per-kind bottles, their cauldron recipes, and their trust ease are removed whole, their item ids retired as tombstones so old saves shed them gently. The journal’s shelf line is tightened to name what the shelf actually holds.',
+    why: 'The kind-scents were a lane’s invention under recipe latitude, never Adam’s design; his ruling takes them out whole, and the shelf copy now tells the same truth.',
+  },
+  {
     merge: 'Merge #98',
     pr: 143,
     sha: '1a0b6ad',
